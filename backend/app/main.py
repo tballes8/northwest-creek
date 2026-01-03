@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.config import get_settings
-from app.api.v1.endpoints import auth  # ADD THIS
+from app.api.v1.endpoints import auth  # ADD THIS LINE!
 
 settings = get_settings()
 
@@ -31,18 +31,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ADD THESE ROUTES
+# ADD THIS LINE - Connect auth routes!
 app.include_router(auth.router, prefix=f"/api/{settings.API_VERSION}/auth", tags=["auth"])
 
-@app.get("/api/v1/status")
-async def api_status():
-    return {
-        "status": "operational",
-        "version": "1.0.0",
-        "message": "Northwest Creek Stock Analyzer API",
-        "founder": "Tyrone Ballesteros",  # Your name!
-        "progress": "Day 1 Complete! 🚀"
-    }
 
 @app.get("/")
 async def root():
