@@ -3,15 +3,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.config import get_settings
+from app.api.v1.endpoints import auth  # ADD THIS
 
 settings = get_settings()
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     print("🚀 Northwest Creek API starting...")
     yield
-    # Shutdown
     print("👋 Northwest Creek API shutting down...")
 
 
@@ -23,7 +23,6 @@ app = FastAPI(
     redoc_url=f"/api/{settings.API_VERSION}/redoc"
 )
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -32,13 +31,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ADD THESE ROUTES
+app.include_router(auth.router, prefix=f"/api/{settings.API_VERSION}/auth", tags=["auth"])
+
 @app.get("/api/v1/status")
 async def api_status():
     return {
         "status": "operational",
         "version": "1.0.0",
         "message": "Northwest Creek Stock Analyzer API",
-        "founder": "Tyrone",  # Your name!
+        "founder": "Tyrone Ballesteros",  # Your name!
         "progress": "Day 1 Complete! 🚀"
     }
 
@@ -54,13 +56,3 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True
-    )
