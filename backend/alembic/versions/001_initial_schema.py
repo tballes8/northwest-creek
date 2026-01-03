@@ -28,8 +28,9 @@ def upgrade():
         sa.Column('email', sa.String(255), unique=True, nullable=False),
         sa.Column('password_hash', sa.String(255), nullable=False),
         sa.Column('full_name', sa.String(255)),
-        sa.Column('is_active', sa.Boolean(), default=True),
-        sa.Column('is_verified', sa.Boolean(), default=False),
+        sa.Column('is_active', sa.Boolean(), default=True, server_default='true'),
+        sa.Column('is_verified', sa.Boolean(), default=False, server_default='false'),
+        sa.Column('subscription_tier', sa.String(50), default='free', server_default='free'),  # ADD THIS!
         sa.Column('created_at', sa.DateTime(timezone=True), 
                   server_default=sa.text('CURRENT_TIMESTAMP')),
         sa.Column('updated_at', sa.DateTime(timezone=True), 
