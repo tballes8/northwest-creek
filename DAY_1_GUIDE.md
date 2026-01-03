@@ -331,7 +331,7 @@ cd app
 # From backend/ directory
 python -m app.main
 ```
-
+<!-- 
 **Expected output:**
 ```
 🚀 Northwest Creek API starting...
@@ -348,9 +348,9 @@ Press `Ctrl+C` to stop.
 
 ---
 
-## TONIGHT'S HOMEWORK (2-3 hours)
+## TONIGHT'S HOMEWORK (2-3 hours) -->
 
-### Task 1: Set Up GitHub Repository
+<!-- ### Task 1: Set Up GitHub Repository
 
 ```bash
 # From northwest-creek/ directory
@@ -362,9 +362,9 @@ git commit -m "Initial project setup"
 git remote add origin https://github.com/YOUR_USERNAME/northwest-creek.git
 git branch -M main
 git push -u origin main
-```
+``` -->
 
-### Task 2: Install PostgreSQL & Redis (Local Development)
+<!-- ### Task 2: Install PostgreSQL & Redis (Local Development)
 
 **Option A: Docker (Recommended)**
 ```bash
@@ -405,7 +405,7 @@ docker ps
 
 **Option B: Install Locally**
 - PostgreSQL: https://www.postgresql.org/download/
-- Redis: https://redis.io/download
+- Redis: https://redis.io/download -->
 
 ### Task 3: Create Database Schema
 
@@ -416,8 +416,8 @@ cd backend
 alembic init alembic
 
 # Edit alembic.ini
-# Change: sqlalchemy.url = driver://user:pass@localhost/dbname
-# To: sqlalchemy.url = postgresql://postgres:postgres@localhost:5432/northwest_creek
+Change: sqlalchemy.url = driver://user:pass@localhost/dbname
+To: sqlalchemy.url = postgresql://postgres:postgres@localhost:5432/northwest_creek
 ```
 
 Create first migration:

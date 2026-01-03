@@ -6,7 +6,6 @@ from app.config import get_settings
 
 settings = get_settings()
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -33,6 +32,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/api/v1/status")
+async def api_status():
+    return {
+        "status": "operational",
+        "version": "1.0.0",
+        "message": "Northwest Creek Stock Analyzer API",
+        "founder": "Tyrone",  # Your name!
+        "progress": "Day 1 Complete! 🚀"
+    }
 
 @app.get("/")
 async def root():
