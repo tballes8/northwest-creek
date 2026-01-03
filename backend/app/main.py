@@ -1,15 +1,58 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 
-app = FastAPI(title="Northwest Creek API")
+from app.config import get_settings
+
+settings = get_settings()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    print("🚀 Northwest Creek API starting...")
+    yield
+    # Shutdown
+    print("👋 Northwest Creek API shutting down...")
+
+
+app = FastAPI(
+    title=settings.APP_NAME,
+    version=settings.API_VERSION,
+    lifespan=lifespan,
+    docs_url=f"/api/{settings.API_VERSION}/docs",
+    redoc_url=f"/api/{settings.API_VERSION}/redoc"
+)
+
+# CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to Northwest Creek! 🚀"}
+    return {
+        "message": "Welcome to Northwest Creek Stock Analyzer API",
+        "version": settings.API_VERSION,
+        "status": "operational"
+    }
+
 
 @app.get("/health")
-async def health():
+async def health_check():
     return {"status": "healthy"}
+
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True
+    )
