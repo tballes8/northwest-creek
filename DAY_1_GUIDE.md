@@ -1,4 +1,4 @@
-# Northwest Creek - DAY 1 BUILD GUIDE 🚀
+<!-- # Northwest Creek - DAY 1 BUILD GUIDE 🚀
 
 **STATUS:** ✅ Company registered | ✅ Domain owned | ✅ Logo ready | ⚡ BUILDING NOW
 
@@ -78,117 +78,117 @@ EOF
 
 echo "✅ Project structure created!"
 ```
-
+-->
 ### Step 2: Set Up Backend (20 minutes)
 
 ```bash
 cd backend
-
+ 
 # Create Python virtual environment
 python3.11 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Create requirements.txt
-cat > requirements.txt << 'EOF'
-# Core Framework
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-python-multipart==0.0.6
+# # Create requirements.txt
+# cat > requirements.txt << 'EOF'
+# # Core Framework
+# fastapi==0.104.1
+# uvicorn[standard]==0.24.0
+# python-multipart==0.0.6
 
-# Database
-sqlalchemy==2.0.23
-asyncpg==0.29.0
-alembic==1.12.1
-psycopg2-binary==2.9.9
+# # Database
+# sqlalchemy==2.0.23
+# asyncpg==0.29.0
+# alembic==1.12.1
+# psycopg2-binary==2.9.9
 
-# Authentication
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-python-multipart==0.0.6
+# # Authentication
+# python-jose[cryptography]==3.3.0
+# passlib[bcrypt]==1.7.4
+# python-multipart==0.0.6
 
-# API & Data
-massive==2.0.0
-httpx==0.25.1
-aiohttp==3.9.1
-redis==5.0.1
-hiredis==2.2.3
+# # API & Data
+# massive==2.0.0
+# httpx==0.25.1
+# aiohttp==3.9.1
+# redis==5.0.1
+# hiredis==2.2.3
 
-# Data Processing
-pandas==2.1.3
-numpy==1.26.2
+# # Data Processing
+# pandas==2.1.3
+# numpy==1.26.2
 
-# Payments
-stripe==7.6.0
+# # Payments
+# stripe==7.6.0
 
-# Email
-sendgrid==6.11.0
+# # Email
+# sendgrid==6.11.0
 
-# Environment
-python-dotenv==1.0.0
-pydantic==2.5.2
-pydantic-settings==2.1.0
+# # Environment
+# python-dotenv==1.0.0
+# pydantic==2.5.2
+# pydantic-settings==2.1.0
 
-# Monitoring
-prometheus-client==0.19.0
+# # Monitoring
+# prometheus-client==0.19.0
 
-# Development
-pytest==7.4.3
-pytest-asyncio==0.21.1
-pytest-cov==4.1.0
-black==23.11.0
-ruff==0.1.6
-EOF
+# # Development
+# pytest==7.4.3
+# pytest-asyncio==0.21.1
+# pytest-cov==4.1.0
+# black==23.11.0
+# ruff==0.1.6
+# EOF
 
-# Install dependencies
-pip install -r requirements.txt
+# # Install dependencies
+# pip install -r requirements.txt
 
-echo "✅ Backend dependencies installed!"
-```
+# echo "✅ Backend dependencies installed!"
+# ```
 
 ### Step 3: Create Environment Configuration (5 minutes)
 
 ```bash
-# Create .env file
-cat > .env << 'EOF'
-# Application
-APP_NAME="Northwest Creek Stock Analyzer"
-DEBUG=True
-SECRET_KEY=your-secret-key-change-this-in-production-use-openssl-rand-hex-32
-API_VERSION=v1
+# # Create .env file
+# cat > .env << 'EOF'
+# # Application
+# APP_NAME="Northwest Creek Stock Analyzer"
+# DEBUG=True
+# SECRET_KEY=your-secret-key-change-this-in-production-use-openssl-rand-hex-32
+# API_VERSION=v1
 
-# Database
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/northwest_creek
+# # Database
+# DATABASE_URL=postgresql://postgres:postgres@localhost:5432/northwest_creek
 
-# Redis
-REDIS_URL=redis://localhost:6379
+# # Redis
+# REDIS_URL=redis://localhost:6379
 
-# Massive API
-MASSIVE_API_KEY=Vu377TX0oKEohsfLJjFXRXJjeA6yj7sA
+# # Massive API
+# MASSIVE_API_KEY=Vu377TX0oKEohsfLJjFXRXJjeA6yj7sA
 
-# Stripe (get from stripe.com)
-STRIPE_SECRET_KEY=sk_test_your_key_here
-STRIPE_PUBLISHABLE_KEY=pk_live_51SlLiwJ7exDXzzCXpcB69usQ0FHrzEhtn7n3bdkqhPKsxU8Ji8tPrhIhJdxMVEZgs5XKK7m2sEnjn7i5L7R4lwQ200dtzTWKQs
-STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
-STRIPE_PRO_PRICE_ID=price_your_pro_price_id
-STRIPE_ENTERPRISE_PRICE_ID=price_your_enterprise_price_id
+# # Stripe (get from stripe.com)
+# STRIPE_SECRET_KEY=sk_test_your_key_here
+# STRIPE_PUBLISHABLE_KEY=pk_live_51SlLiwJ7exDXzzCXpcB69usQ0FHrzEhtn7n3bdkqhPKsxU8Ji8tPrhIhJdxMVEZgs5XKK7m2sEnjn7i5L7R4lwQ200dtzTWKQs
+# STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
+# STRIPE_PRO_PRICE_ID=price_your_pro_price_id
+# STRIPE_ENTERPRISE_PRICE_ID=price_your_enterprise_price_id
 
-# SendGrid (get from sendgrid.com)
-SENDGRID_API_KEY=SG.your_key_here
+# # SendGrid (get from sendgrid.com)
+# SENDGRID_API_KEY=SG.your_key_here
 
-# Frontend URL
-FRONTEND_URL=http://localhost:3000
-BACKEND_URL=http://localhost:8000
+# # Frontend URL
+# FRONTEND_URL=http://localhost:3000
+# BACKEND_URL=http://localhost:8000
 
-# CORS
-CORS_ORIGINS=["http://localhost:3000","http://localhost:8000"]
+# # CORS
+# CORS_ORIGINS=["http://localhost:3000","http://localhost:8000"]
 
-# JWT
-ACCESS_TOKEN_EXPIRE_MINUTES=30
-REFRESH_TOKEN_EXPIRE_DAYS=7
-EOF
+# # JWT
+# ACCESS_TOKEN_EXPIRE_MINUTES=30
+# REFRESH_TOKEN_EXPIRE_DAYS=7
+# EOF
 
-echo "✅ Environment file created!"
-echo "⚠️  IMPORTANT: Update these values before production!"
+# echo "✅ Environment file created!"
+# echo "⚠️  IMPORTANT: Update these values before production!"
 ```
 
 ### Step 4: Create Basic Backend Structure (10 minutes)
@@ -196,133 +196,133 @@ echo "⚠️  IMPORTANT: Update these values before production!"
 ```bash
 cd app
 
-# Create __init__.py files
-touch __init__.py
-touch api/__init__.py
-touch api/v1/__init__.py
-touch api/v1/endpoints/__init__.py
-touch core/__init__.py
-touch models/__init__.py
-touch services/__init__.py
-touch utils/__init__.py
+# # Create __init__.py files
+# touch __init__.py
+# touch api/__init__.py
+# touch api/v1/__init__.py
+# touch api/v1/endpoints/__init__.py
+# touch core/__init__.py
+# touch models/__init__.py
+# touch services/__init__.py
+# touch utils/__init__.py
 
 # Create config.py
-cat > config.py << 'EOF'
-from pydantic_settings import BaseSettings
-from typing import List
-from functools import lru_cache
+# cat > config.py << 'EOF'
+# from pydantic_settings import BaseSettings
+# from typing import List
+# from functools import lru_cache
 
 
-class Settings(BaseSettings):
-    # App
-    APP_NAME: str = "Northwest Creek"
-    DEBUG: bool = True
-    SECRET_KEY: str
-    API_VERSION: str = "v1"
+# class Settings(BaseSettings):
+#     # App
+#     APP_NAME: str = "Northwest Creek"
+#     DEBUG: bool = True
+#     SECRET_KEY: str
+#     API_VERSION: str = "v1"
     
-    # Database
-    DATABASE_URL: str
+#     # Database
+#     DATABASE_URL: str
     
-    # Redis
-    REDIS_URL: str
+#     # Redis
+#     REDIS_URL: str
     
-    # APIs
-    MASSIVE_API_KEY: str
+#     # APIs
+#     MASSIVE_API_KEY: str
     
-    # Stripe
-    STRIPE_SECRET_KEY: str
-    STRIPE_PUBLISHABLE_KEY: str
-    STRIPE_WEBHOOK_SECRET: str
-    STRIPE_PRO_PRICE_ID: str = ""
-    STRIPE_ENTERPRISE_PRICE_ID: str = ""
+#     # Stripe
+#     STRIPE_SECRET_KEY: str
+#     STRIPE_PUBLISHABLE_KEY: str
+#     STRIPE_WEBHOOK_SECRET: str
+#     STRIPE_PRO_PRICE_ID: str = ""
+#     STRIPE_ENTERPRISE_PRICE_ID: str = ""
     
-    # SendGrid
-    SENDGRID_API_KEY: str = ""
+#     # SendGrid
+#     SENDGRID_API_KEY: str = ""
     
-    # URLs
-    FRONTEND_URL: str
-    BACKEND_URL: str
+#     # URLs
+#     FRONTEND_URL: str
+#     BACKEND_URL: str
     
-    # CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+#     # CORS
+#     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
     
-    # JWT
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+#     # JWT
+#     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+#     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     
-    class Config:
-        env_file = "../.env"
-        case_sensitive = True
+#     class Config:
+#         env_file = "../.env"
+#         case_sensitive = True
 
 
-@lru_cache()
-def get_settings() -> Settings:
-    return Settings()
-EOF
+# @lru_cache()
+# def get_settings() -> Settings:
+#     return Settings()
+# EOF
 
 # Create main.py
-cat > main.py << 'EOF'
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
+# cat > main.py << 'EOF'
+# from fastapi import FastAPI
+# from fastapi.middleware.cors import CORSMiddleware
+# from contextlib import asynccontextmanager
 
-from app.config import get_settings
+# from app.config import get_settings
 
-settings = get_settings()
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    print("🚀 Northwest Creek API starting...")
-    yield
-    # Shutdown
-    print("👋 Northwest Creek API shutting down...")
+# settings = get_settings()
 
 
-app = FastAPI(
-    title=settings.APP_NAME,
-    version=settings.API_VERSION,
-    lifespan=lifespan,
-    docs_url=f"/api/{settings.API_VERSION}/docs",
-    redoc_url=f"/api/{settings.API_VERSION}/redoc"
-)
-
-# CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     # Startup
+#     print("🚀 Northwest Creek API starting...")
+#     yield
+#     # Shutdown
+#     print("👋 Northwest Creek API shutting down...")
 
 
-@app.get("/")
-async def root():
-    return {
-        "message": "Welcome to Northwest Creek Stock Analyzer API",
-        "version": settings.API_VERSION,
-        "status": "operational"
-    }
+# app = FastAPI(
+#     title=settings.APP_NAME,
+#     version=settings.API_VERSION,
+#     lifespan=lifespan,
+#     docs_url=f"/api/{settings.API_VERSION}/docs",
+#     redoc_url=f"/api/{settings.API_VERSION}/redoc"
+# )
+
+# # CORS
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=settings.CORS_ORIGINS,
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
 
 
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
+# @app.get("/")
+# async def root():
+#     return {
+#         "message": "Welcome to Northwest Creek Stock Analyzer API",
+#         "version": settings.API_VERSION,
+#         "status": "operational"
+#     }
 
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True
-    )
-EOF
+# @app.get("/health")
+# async def health_check():
+#     return {"status": "healthy"}
 
-echo "✅ Backend structure created!"
+
+# if __name__ == "__main__":
+#     import uvicorn
+#     uvicorn.run(
+#         "app.main:app",
+#         host="0.0.0.0",
+#         port=8000,
+#         reload=True
+#     )
+# EOF
+
+# echo "✅ Backend structure created!"
 ```
 
 ### Step 5: Test Your Backend (2 minutes)
