@@ -1,6 +1,7 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
+from uuid import UUID
 
 
 class UserCreate(BaseModel):
@@ -20,11 +21,10 @@ class Token(BaseModel):
 
 
 class UserResponse(BaseModel):
-    id: str
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: str  # Will convert UUID to string automatically
     email: str
     full_name: Optional[str]
     subscription_tier: str
     created_at: datetime
-    
-    class Config:
-        from_attributes = True

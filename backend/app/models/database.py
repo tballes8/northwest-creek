@@ -1,17 +1,10 @@
-from sqlalchemy import Column, String, Boolean, DateTime, Enum as SQLEnum
+from sqlalchemy import Column, String, Boolean, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.ext.declarative import declarative_base
 import uuid
-import enum
 
 Base = declarative_base()
-
-
-class SubscriptionTier(str, enum.Enum):
-    FREE = "free"
-    PRO = "pro"
-    ENTERPRISE = "enterprise"
 
 
 class User(Base):
@@ -23,10 +16,6 @@ class User(Base):
     full_name = Column(String(255))
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
-    subscription_tier = Column(
-        SQLEnum(SubscriptionTier),
-        default=SubscriptionTier.FREE,
-        nullable=False
-    )
+    subscription_tier = Column(String(50), default='free', nullable=False)  # Changed from Enum to String!
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

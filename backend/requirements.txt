@@ -1,6 +1,22 @@
 # Core Framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
+
+# Database
+sqlalchemy==2.0.23
+asyncpg==0.29.0
+alembic==1.12.1
+
+# Authentication - SPECIFIC VERSIONS!
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+
+# ... rest of your requirements
+
+# Core Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 
 # Database
@@ -13,6 +29,7 @@ psycopg2-binary==2.9.9
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.6
+bcrypt==4.0.0
 
 # API & Data
 massive
