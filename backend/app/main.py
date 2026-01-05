@@ -3,7 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.config import get_settings
-from app.api.v1.endpoints import auth  # ADD THIS LINE!
+from app.api.v1.endpoints import auth
+from app.api.v1.endpoints import stocks  # ADD THIS LINE!
 
 settings = get_settings()
 
@@ -31,9 +32,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ADD THIS LINE - Connect auth routes!
-app.include_router(auth.router, prefix=f"/api/{settings.API_VERSION}/auth", tags=["auth"])
-
 
 @app.get("/")
 async def root():
@@ -47,3 +45,16 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("🚀 Northwest Creek API starting...")
+    await market_data_service.init_redis()  # ADD THIS
+    yield
+    print("👋 Northwest Creek API shutting down...")
+
+
+# Include routers
+app.include_router(auth.router, prefix=f"/api/{settings.API_VERSION}/auth", tags=["auth"])
+app.include_router(stocks.router, prefix=f"/api/{settings.API_VERSION}/stocks", tags=["stocks"])  # ADD THIS LINE!
