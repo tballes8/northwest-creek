@@ -3,9 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.config import get_settings
-from app.api.v1.endpoints import auth
-from app.api.v1.endpoints import stocks  # ADD THIS LINE!
-from app.api.v1.endpoints import watchlist  # ADD THIS LINE!
+from app.api.v1.endpoints import auth, stocks, watchlist, indicators
 
 settings = get_settings()
 
@@ -52,3 +50,4 @@ async def health_check():
 app.include_router(auth.router, prefix=f"/api/{settings.API_VERSION}/auth", tags=["auth"])
 app.include_router(stocks.router, prefix=f"/api/{settings.API_VERSION}/stocks", tags=["stocks"])
 app.include_router(watchlist.router, prefix=f"/api/{settings.API_VERSION}/watchlist", tags=["watchlist"])
+app.include_router(indicators.router, prefix=f"/api/{settings.API_VERSION}/indicators", tags=["indicators"])
