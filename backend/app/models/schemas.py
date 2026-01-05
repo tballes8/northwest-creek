@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_serializer
 from typing import Optional
 from datetime import datetime
 from uuid import UUID
@@ -23,8 +23,13 @@ class Token(BaseModel):
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     
-    id: str  # Will convert UUID to string automatically
+    id: UUID  # Keep as UUID type
     email: str
     full_name: Optional[str]
     subscription_tier: str
     created_at: datetime
+    
+    @field_serializer('id')
+    def serialize_id(self, value: UUID) -> str:
+        """Convert UUID to string for JSON serialization"""
+        return str(value)
