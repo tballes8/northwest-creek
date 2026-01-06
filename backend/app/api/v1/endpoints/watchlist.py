@@ -51,9 +51,17 @@ async def add_to_watchlist(
     # Check limit
     limit = WATCHLIST_LIMITS.get(current_user.subscription_tier, 5)
     if current_count >= limit:
+        # Get upgrade info
+        if current_user.subscription_tier == "free":
+            upgrade_msg = "Upgrade to Pro for 50 stocks ($29/month) or Enterprise for unlimited stocks ($99/month)!"
+        elif current_user.subscription_tier == "pro":
+            upgrade_msg = "Upgrade to Enterprise for unlimited stocks ($99/month)!"
+        else:
+            upgrade_msg = "Contact support for custom limits."
+        
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Watchlist limit reached. {current_user.subscription_tier.title()} tier allows {limit} stocks. Upgrade to add more!"
+            detail=f"Watchlist limit reached! You have {current_count}/{limit} stocks tracked. {upgrade_msg}"
         )
     
     # Check if ticker already exists for this user
@@ -89,7 +97,30 @@ async def add_to_watchlist(
     await db.commit()
     await db.refresh(watchlist_item)
     
-    return watchlist_item
+    # Create response
+    response = WatchlistItem(
+        id=str(watchlist_item.id),
+        user_id=str(watchlist_item.user_id),
+        ticker=watchlist_item.ticker,
+        added_at=watchlist_item.added_at,
+        notes=watchlist_item.notes
+    )
+    
+    # Add warning if near limit
+    new_count = current_count + 1
+    remaining = limit - new_count
+    
+    if remaining > 0 and remaining <= 2:  # Warning at 2 or fewer remaining
+        if current_user.subscription_tier == "free":
+            warning = f"⚠️ Warning: Only {remaining} stock{'s' if remaining != 1 else ''} remaining in watchlist! Upgrade to Pro for 50 stocks ($29/month)."
+        elif current_user.subscription_tier == "pro":
+            warning = f"⚠️ Warning: Only {remaining} stock{'s' if remaining != 1 else ''} remaining in watchlist! Upgrade to Enterprise for unlimited stocks ($99/month)."
+        else:
+            warning = None
+        
+        response.warning = warning
+    
+    return response
 
 
 @router.get("/", response_model=WatchlistResponse)

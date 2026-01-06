@@ -25,6 +25,8 @@ class WatchlistItem(BaseModel):
     ticker: str
     added_at: datetime
     notes: Optional[str] = None
+    warning: Optional[str] = None  # ADD THIS LINE!
+
     
     @field_serializer('id', 'user_id')
     def serialize_uuid(self, value: UUID) -> str:
