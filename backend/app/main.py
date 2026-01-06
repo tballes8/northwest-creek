@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.config import get_settings
-from app.api.v1.endpoints import auth, stocks, watchlist, indicators, portfolio, alerts
+from app.api.v1.endpoints import auth, stocks, watchlist, indicators, portfolio, alerts, screener
 
 settings = get_settings()
 
@@ -51,4 +51,5 @@ app.include_router(stocks.router, prefix=f"/api/{settings.API_VERSION}/stocks", 
 app.include_router(watchlist.router, prefix=f"/api/{settings.API_VERSION}/watchlist", tags=["watchlist"])
 app.include_router(indicators.router, prefix=f"/api/{settings.API_VERSION}/indicators", tags=["indicators"])
 app.include_router(portfolio.router, prefix=f"/api/{settings.API_VERSION}/portfolio", tags=["portfolio"])
-app.include_router(alerts.router, prefix=f"/api/{settings.API_VERSION}/alerts", tags=["alerts"])  # ADD THIS!
+app.include_router(alerts.router, prefix=f"/api/{settings.API_VERSION}/alerts", tags=["alerts"])
+app.include_router(screener.router, prefix=f"/api/{settings.API_VERSION}/screener", tags=["screener"])
