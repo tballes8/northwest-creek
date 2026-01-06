@@ -24,6 +24,7 @@ class User(Base):
     # Relationship to watchlists
     watchlists = relationship("Watchlist", back_populates="user", cascade="all, delete-orphan")
     portfolio = relationship("Portfolio", back_populates="user", cascade="all, delete-orphan")
+    alerts = relationship("PriceAlert", back_populates="user", cascade="all, delete-orphan")
 
 
 class Watchlist(Base):
@@ -54,4 +55,21 @@ class Portfolio(Base):
     
     # Relationship to user
     user = relationship("User", back_populates="portfolio")
+
+
+class PriceAlert(Base):
+    __tablename__ = "price_alerts"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    ticker = Column(String(10), nullable=False)
+    target_price = Column(Numeric(precision=18, scale=2), nullable=False)
+    condition = Column(String(10), nullable=False)  # 'above' or 'below'
+    is_active = Column(Boolean, default=True)
+    triggered_at = Column(DateTime(timezone=True), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationship to user
+    user = relationship("User", back_populates="alerts")
 
