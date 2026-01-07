@@ -34,4 +34,61 @@ export const authAPI = {
     api.get('/auth/me'),
 };
 
+// Stocks API
+export const stocksAPI = {
+  getQuote: (ticker: string) =>
+    api.get(`/stocks/${ticker}/quote`),
+  
+  getCompany: (ticker: string) =>
+    api.get(`/stocks/${ticker}/company`),
+  
+  getAnalysis: (ticker: string) =>
+    api.get(`/indicators/${ticker}/analysis`),
+};
+
+// Watchlist API
+export const watchlistAPI = {
+  getAll: () =>
+    api.get('/watchlist/'),
+  
+  add: (data: { ticker: string; notes?: string }) =>
+    api.post('/watchlist/', data),
+  
+  remove: (ticker: string) =>
+    api.delete(`/watchlist/${ticker}`),
+};
+
+// Portfolio API
+export const portfolioAPI = {
+  getAll: () =>
+    api.get('/portfolio/'),
+  
+  add: (data: { 
+    ticker: string; 
+    quantity: number; 
+    buy_price: number; 
+    buy_date: string;
+    notes?: string;
+  }) => api.post('/portfolio/', data),
+  
+  remove: (id: string) =>
+    api.delete(`/portfolio/${id}`),
+};
+
+// Alerts API
+export const alertsAPI = {
+  getAll: () =>
+    api.get('/alerts/'),
+  
+  create: (data: {
+    ticker: string;
+    target_price: number;
+    condition: 'above' | 'below';
+    notes?: string;
+  }) => api.post('/alerts/', data),
+  
+  remove: (id: string) =>
+    api.delete(`/alerts/${id}`),
+};
+
 export default api;
