@@ -78,6 +78,7 @@ export const portfolioAPI = {
 // Alerts API
 export const alertsAPI = {
   getAll: () =>
+    
     api.get('/alerts/'),
   
   create: (data: {
