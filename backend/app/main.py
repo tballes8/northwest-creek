@@ -40,9 +40,15 @@ async def root():
     }
 
 
-@app.get("/health")
+# Health check endpoint
+@app.get("/api/v1/health")
 async def health_check():
-    return {"status": "healthy"}
+    """Simple health check endpoint"""
+    return {
+        "status": "healthy",
+        "service": "Northwest Creek API",
+        "version": "1.0.0"
+    }
 
 
 # Include routers
