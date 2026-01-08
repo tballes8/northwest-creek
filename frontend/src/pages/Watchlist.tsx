@@ -344,14 +344,16 @@ const Watchlist: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {stock.price_vs_target !== undefined && stock.price_vs_target !== null ? (
+                      {stock.price_vs_target !== undefined && stock.price_vs_target !== null && stock.target_price ? (
                         <div className={`text-sm font-semibold ${
                           stock.price_vs_target >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                         }`}>
                           {stock.price_vs_target >= 0 ? '+' : ''}${stock.price_vs_target.toFixed(2)}
-                          <div className="text-xs">
-                            ({stock.price_vs_target_percent >= 0 ? '+' : ''}{stock.price_vs_target_percent?.toFixed(2)}%)
-                          </div>
+                          {stock.price_vs_target_percent !== undefined && stock.price_vs_target_percent !== null && (
+                            <div className="text-xs">
+                              ({stock.price_vs_target_percent >= 0 ? '+' : ''}{stock.price_vs_target_percent.toFixed(2)}%)
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="text-sm text-gray-600 dark:text-gray-400">-</div>

@@ -8,7 +8,7 @@ from typing import List
 
 from app.db.session import get_db
 from app.core.security import get_current_user
-from app.db.models import User, WatchlistItem  # ← SQLAlchemy models
+from app.db.models import User, Watchlist  # ← SQLAlchemy models
 from app.schemas import watchlist as schemas  # ← Pydantic schemas
 from app.services.market_data import market_data_service
 
@@ -32,7 +32,7 @@ async def check_watchlist_limit(user: User, current_count: int) -> None:
         )
 
 
-async def enrich_watchlist_with_prices(items: List[WatchlistItem]) -> List[schemas.WatchlistItemResponse]:
+async def enrich_watchlist_with_prices(items: List[Watchlist]) -> List[schemas.WatchlistItemResponse]:
     """Enrich watchlist items with current market data"""
     enriched_items = []
     
@@ -81,9 +81,9 @@ async def get_watchlist(
 ):
     """Get user's watchlist with current prices"""
     result = await db.execute(
-        select(WatchlistItem)
-        .where(WatchlistItem.user_id == current_user.id)
-        .order_by(WatchlistItem.created_at.desc())
+        select(Watchlist)
+        .where(Watchlist.user_id == current_user.id)
+        .order_by(Watchlist.created_at.desc())
     )
     items = result.scalars().all()
     
@@ -103,10 +103,10 @@ async def add_to_watchlist(
 ):
     """Add a stock to watchlist"""
     result = await db.execute(
-        select(WatchlistItem).where(
+        select(Watchlist).where(
             and_(
-                WatchlistItem.user_id == current_user.id,
-                WatchlistItem.ticker == item_data.ticker.upper()
+                Watchlist.user_id == current_user.id,
+                Watchlist.ticker == item_data.ticker.upper()
             )
         )
     )
@@ -119,8 +119,8 @@ async def add_to_watchlist(
         )
     
     count_result = await db.execute(
-        select(WatchlistItem)
-        .where(WatchlistItem.user_id == current_user.id)
+        select(Watchlist)
+        .where(Watchlist.user_id == current_user.id)
     )
     current_count = len(count_result.scalars().all())
     await check_watchlist_limit(current_user, current_count)
@@ -133,7 +133,7 @@ async def add_to_watchlist(
             detail=f"Invalid ticker symbol: {item_data.ticker}"
         )
     
-    db_item = WatchlistItem(
+    db_item = Watchlist(
         user_id=current_user.id,
         ticker=item_data.ticker.upper(),
         notes=item_data.notes,
@@ -157,10 +157,10 @@ async def update_watchlist_item(
 ):
     """Update watchlist item (notes and/or target price)"""
     result = await db.execute(
-        select(WatchlistItem).where(
+        select(Watchlist).where(
             and_(
-                WatchlistItem.id == item_id,
-                WatchlistItem.user_id == current_user.id
+                Watchlist.id == item_id,
+                Watchlist.user_id == current_user.id
             )
         )
     )
@@ -192,10 +192,10 @@ async def remove_from_watchlist(
 ):
     """Remove a stock from watchlist"""
     result = await db.execute(
-        select(WatchlistItem).where(
+        select(Watchlist).where(
             and_(
-                WatchlistItem.id == item_id,
-                WatchlistItem.user_id == current_user.id
+                Watchlist.id == item_id,
+                Watchlist.user_id == current_user.id
             )
         )
     )
