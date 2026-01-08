@@ -25,7 +25,8 @@ class WatchlistItem(BaseModel):
     ticker: str
     added_at: datetime
     notes: Optional[str] = None
-    warning: Optional[str] = None  # ADD THIS LINE!
+    warning: Optional[str] = None
+    target_price: Optional[float] = None  
 
     
     @field_serializer('id', 'user_id')

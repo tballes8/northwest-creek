@@ -8,9 +8,12 @@ interface WatchlistStock {
   id: number;
   ticker: string;
   notes?: string;
+  target_price?: number;
   price?: number;
   change?: number;
   change_percent?: number;
+  price_vs_target?: number;
+  price_vs_target_percent?: number;
   created_at: string;
 }
 
@@ -22,6 +25,7 @@ const Watchlist: React.FC = () => {
   const [addingStock, setAddingStock] = useState(false);
   const [newTicker, setNewTicker] = useState('');
   const [newNotes, setNewNotes] = useState('');
+  const [newTargetPrice, setNewTargetPrice] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -30,11 +34,9 @@ const Watchlist: React.FC = () => {
 
   const loadData = async () => {
     try {
-      // Get current user
       const userResponse = await authAPI.getCurrentUser();
       setUser(userResponse.data);
 
-      // Get watchlist with quotes
       const watchlistResponse = await watchlistAPI.getAll();
       setWatchlist(watchlistResponse.data.items || []);
     } catch (error) {
@@ -57,7 +59,6 @@ const Watchlist: React.FC = () => {
       return;
     }
 
-    // Check tier limits
     const limits = {
       free: 5,
       pro: 50,
@@ -71,19 +72,27 @@ const Watchlist: React.FC = () => {
     }
 
     try {
-      await watchlistAPI.add({
+      const payload: any = {
         ticker: newTicker.toUpperCase().trim(),
-        notes: newNotes.trim() || undefined
-      });
+      };
+      
+      if (newNotes.trim()) {
+        payload.notes = newNotes.trim();
+      }
+      
+      if (newTargetPrice && parseFloat(newTargetPrice) > 0) {
+        payload.target_price = parseFloat(newTargetPrice);
+      }
 
-      // Reload watchlist
+      await watchlistAPI.add(payload);
       await loadData();
 
-      // Reset form
       setNewTicker('');
       setNewNotes('');
+      setNewTargetPrice('');
       setAddingStock(false);
     } catch (err: any) {
+      console.error('Add stock error:', err.response?.data);
       setError(err.response?.data?.detail || 'Failed to add stock. Please check the ticker symbol.');
     }
   };
@@ -109,9 +118,9 @@ const Watchlist: React.FC = () => {
 
   const getTierBadge = (tier: string) => {
     const badges = {
-      free: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Free' },
-      pro: { bg: 'bg-primary-100', text: 'text-primary-800', label: 'Pro' },
-      enterprise: { bg: 'bg-purple-100', text: 'text-purple-800', label: 'Enterprise' },
+      free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
+      pro: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Pro' },
+      enterprise: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Enterprise' },
     };
     const badge = badges[tier as keyof typeof badges] || badges.free;
     return (
@@ -143,49 +152,30 @@ const Watchlist: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Top Navigation */}
+      {/* Navigation - Same as before */}
       <nav className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <img 
-                src="/images/logo.png" 
-                alt="Northwest Creek" 
-                className="h-10 w-10 mr-3"
-              />
+              <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
               <span className="text-xl font-bold text-primary-600 dark:text-primary-400">Northwest Creek</span>
             </div>
             
-            {/* Navigation Links */}
             <div className="hidden md:flex items-center space-x-8">
-              <Link to="/dashboard" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
-                Dashboard
-              </Link>
-              <Link to="/watchlist" className="text-primary-600 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">
-                Watchlist
-              </Link>
-              <Link to="/portfolio" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
-                Portfolio
-              </Link>
-              <Link to="/alerts" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
-                Alerts
-              </Link>
+              <Link to="/dashboard" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
+              <Link to="/watchlist" className="text-primary-600 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">Watchlist</Link>
+              <Link to="/portfolio" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
+              <Link to="/alerts" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
               {user?.subscription_tier === 'enterprise' && (
-                <Link to="/screener" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
-                  Screener
-                </Link>
+                <Link to="/screener" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Screener</Link>
               )}
             </div>
 
-            {/* User Menu */}
             <div className="flex items-center space-x-4">
               <ThemeToggle />
               <span className="text-sm text-gray-600 dark:text-gray-300">{user?.email}</span>
               {user && getTierBadge(user.subscription_tier)}
-              <button
-                onClick={handleLogout}
-                className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium"
-              >
+              <button onClick={handleLogout} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium">
                 Logout
               </button>
             </div>
@@ -195,7 +185,6 @@ const Watchlist: React.FC = () => {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
         <div className="mb-8">
           <div className="flex justify-between items-center">
             <div>
@@ -228,19 +217,36 @@ const Watchlist: React.FC = () => {
             )}
 
             <form onSubmit={handleAddStock} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Ticker Symbol *
-                </label>
-                <input
-                  type="text"
-                  value={newTicker}
-                  onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
-                  placeholder="AAPL"
-                  maxLength={10}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  required
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Ticker Symbol *
+                  </label>
+                  <input
+                    type="text"
+                    value={newTicker}
+                    onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
+                    placeholder="AAPL"
+                    maxLength={10}
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Started watching when price was
+                  </label>
+                  <input
+                    type="number"
+                    value={newTargetPrice}
+                    onChange={(e) => setNewTargetPrice(e.target.value)}
+                    placeholder="150.00"
+                    step="0.01"
+                    min="0"
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
               </div>
 
               <div>
@@ -269,6 +275,7 @@ const Watchlist: React.FC = () => {
                     setAddingStock(false);
                     setNewTicker('');
                     setNewNotes('');
+                    setNewTargetPrice('');
                     setError('');
                   }}
                   className="px-6 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-medium transition-colors"
@@ -304,35 +311,20 @@ const Watchlist: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
               <thead className="bg-gray-50 dark:bg-gray-800">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Ticker
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Price
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Change
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Change %
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Notes
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Actions
-                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ticker</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Current Price</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Day Change</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Started At</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">vs Start</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Notes</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-700 divide-y divide-gray-200 dark:divide-gray-600">
                 {watchlist.map((stock) => (
                   <tr key={stock.id} className="hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="text-sm font-bold text-gray-900 dark:text-white">
-                          {stock.ticker}
-                        </div>
-                      </div>
+                      <div className="text-sm font-bold text-gray-900 dark:text-white">{stock.ticker}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -341,21 +333,29 @@ const Watchlist: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className={`text-sm font-semibold ${
-                        stock.change && stock.change >= 0 
-                          ? 'text-green-600 dark:text-green-400' 
-                          : 'text-red-600 dark:text-red-400'
+                        stock.change && stock.change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                       }`}>
-                        {stock.change ? `${stock.change >= 0 ? '+' : ''}$${stock.change.toFixed(2)}` : '-'}
+                        {stock.change ? `${stock.change >= 0 ? '+' : ''}$${stock.change.toFixed(2)} (${stock.change_percent?.toFixed(2)}%)` : '-'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className={`text-sm font-semibold ${
-                        stock.change_percent && stock.change_percent >= 0 
-                          ? 'text-green-600 dark:text-green-400' 
-                          : 'text-red-600 dark:text-red-400'
-                      }`}>
-                        {stock.change_percent ? `${stock.change_percent >= 0 ? '+' : ''}${stock.change_percent.toFixed(2)}%` : '-'}
+                      <div className="text-sm text-gray-600 dark:text-gray-400">
+                        {stock.target_price ? `$${stock.target_price.toFixed(2)}` : '-'}
                       </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      {stock.price_vs_target !== undefined && stock.price_vs_target !== null ? (
+                        <div className={`text-sm font-semibold ${
+                          stock.price_vs_target >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                        }`}>
+                          {stock.price_vs_target >= 0 ? '+' : ''}${stock.price_vs_target.toFixed(2)}
+                          <div className="text-xs">
+                            ({stock.price_vs_target_percent >= 0 ? '+' : ''}{stock.price_vs_target_percent?.toFixed(2)}%)
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-600 dark:text-gray-400">-</div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
