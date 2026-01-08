@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Optional
 
-from app.models.database import User, Watchlist
+from backend.app.db.models import User, Watchlist
 from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.services.market_data import market_data_service

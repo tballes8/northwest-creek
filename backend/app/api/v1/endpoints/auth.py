@@ -3,8 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from app.models.database import User
-from app.models.schemas import UserCreate, UserLogin, Token, UserResponse
+from backend.app.db.models import User
+from app.schemas import UserCreate, UserLogin, Token, UserResponse
 from app.core.security import (
     get_password_hash,
     verify_password,

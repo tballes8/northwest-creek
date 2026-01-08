@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 from datetime import datetime
 
-from app.models.indicator_schemas import (
+from backend.app.schemas.indicator import (
     RSIResponse,
     MACDResponse,
     MovingAveragesResponse,

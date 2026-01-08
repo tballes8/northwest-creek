@@ -1,6 +1,6 @@
 import asyncio
 from sqlalchemy import select
-from app.models.database import User
+from backend.app.db.models import User
 from app.db.session import async_session
 
 async def check_users():

@@ -7,8 +7,8 @@ from sqlalchemy import select, func
 from typing import List
 from decimal import Decimal
 
-from app.models.database import User, PriceAlert
-from app.models.alert_schemas import (
+from app.db.models import User, PriceAlert
+from app.schemas.alert import (
     AlertCreate,
     AlertUpdate,
     AlertResponse,

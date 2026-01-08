@@ -5,19 +5,17 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from typing import List
-from redis.asyncio import Redis
 
 from app.db.session import get_db
-from app.db.cache import get_cache
 from app.core.security import get_current_user
-from app.db import models
-from app.schemas import watchlist as schemas
+from app.db.models import User, WatchlistItem  # ← SQLAlchemy models
+from app.schemas import watchlist as schemas  # ← Pydantic schemas
 from app.services.market_data import market_data_service
 
 router = APIRouter()
 
 
-async def check_watchlist_limit(user: models.User, current_count: int) -> None:
+async def check_watchlist_limit(user: User, current_count: int) -> None:
     """Check if user has reached their watchlist limit"""
     limits = {
         "free": 5,
@@ -34,7 +32,7 @@ async def check_watchlist_limit(user: models.User, current_count: int) -> None:
         )
 
 
-async def enrich_watchlist_with_prices(items: List[models.WatchlistItem]) -> List[schemas.WatchlistItemResponse]:
+async def enrich_watchlist_with_prices(items: List[WatchlistItem]) -> List[schemas.WatchlistItemResponse]:
     """Enrich watchlist items with current market data"""
     enriched_items = []
     
@@ -64,7 +62,6 @@ async def enrich_watchlist_with_prices(items: List[models.WatchlistItem]) -> Lis
             ))
         except Exception as e:
             print(f"Error fetching quote for {item.ticker}: {e}")
-            # If quote fetch fails, return item without price data
             enriched_items.append(schemas.WatchlistItemResponse(
                 id=item.id,
                 user_id=item.user_id,
@@ -79,20 +76,17 @@ async def enrich_watchlist_with_prices(items: List[models.WatchlistItem]) -> Lis
 
 @router.get("", response_model=schemas.WatchlistResponse)
 async def get_watchlist(
-    current_user: models.User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    cache: Redis = Depends(get_cache)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """Get user's watchlist with current prices"""
-    # Get watchlist items
     result = await db.execute(
-        select(models.WatchlistItem)
-        .where(models.WatchlistItem.user_id == current_user.id)
-        .order_by(models.WatchlistItem.created_at.desc())
+        select(WatchlistItem)
+        .where(WatchlistItem.user_id == current_user.id)
+        .order_by(WatchlistItem.created_at.desc())
     )
     items = result.scalars().all()
     
-    # Enrich with current prices
     enriched_items = await enrich_watchlist_with_prices(items)
     
     return schemas.WatchlistResponse(
@@ -104,16 +98,15 @@ async def get_watchlist(
 @router.post("", response_model=schemas.WatchlistItemResponse, status_code=status.HTTP_201_CREATED)
 async def add_to_watchlist(
     item_data: schemas.WatchlistItemCreate,
-    current_user: models.User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Add a stock to watchlist"""
-    # Check if already in watchlist
     result = await db.execute(
-        select(models.WatchlistItem).where(
+        select(WatchlistItem).where(
             and_(
-                models.WatchlistItem.user_id == current_user.id,
-                models.WatchlistItem.ticker == item_data.ticker.upper()
+                WatchlistItem.user_id == current_user.id,
+                WatchlistItem.ticker == item_data.ticker.upper()
             )
         )
     )
@@ -125,15 +118,13 @@ async def add_to_watchlist(
             detail=f"{item_data.ticker} is already in your watchlist"
         )
     
-    # Check watchlist limit
     count_result = await db.execute(
-        select(models.WatchlistItem)
-        .where(models.WatchlistItem.user_id == current_user.id)
+        select(WatchlistItem)
+        .where(WatchlistItem.user_id == current_user.id)
     )
     current_count = len(count_result.scalars().all())
     await check_watchlist_limit(current_user, current_count)
     
-    # Verify ticker is valid by fetching quote
     try:
         quote = await market_data_service.get_quote(item_data.ticker)
     except Exception as e:
@@ -142,8 +133,7 @@ async def add_to_watchlist(
             detail=f"Invalid ticker symbol: {item_data.ticker}"
         )
     
-    # Create watchlist item
-    db_item = models.WatchlistItem(
+    db_item = WatchlistItem(
         user_id=current_user.id,
         ticker=item_data.ticker.upper(),
         notes=item_data.notes,
@@ -154,7 +144,6 @@ async def add_to_watchlist(
     await db.commit()
     await db.refresh(db_item)
     
-    # Return with current price data
     enriched = await enrich_watchlist_with_prices([db_item])
     return enriched[0]
 
@@ -163,15 +152,15 @@ async def add_to_watchlist(
 async def update_watchlist_item(
     item_id: int,
     item_data: schemas.WatchlistItemUpdate,
-    current_user: models.User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Update watchlist item (notes and/or target price)"""
     result = await db.execute(
-        select(models.WatchlistItem).where(
+        select(WatchlistItem).where(
             and_(
-                models.WatchlistItem.id == item_id,
-                models.WatchlistItem.user_id == current_user.id
+                WatchlistItem.id == item_id,
+                WatchlistItem.user_id == current_user.id
             )
         )
     )
@@ -183,7 +172,6 @@ async def update_watchlist_item(
             detail="Watchlist item not found"
         )
     
-    # Update fields
     if item_data.notes is not None:
         db_item.notes = item_data.notes
     if item_data.target_price is not None:
@@ -192,7 +180,6 @@ async def update_watchlist_item(
     await db.commit()
     await db.refresh(db_item)
     
-    # Return with current price data
     enriched = await enrich_watchlist_with_prices([db_item])
     return enriched[0]
 
@@ -200,15 +187,15 @@ async def update_watchlist_item(
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_from_watchlist(
     item_id: int,
-    current_user: models.User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Remove a stock from watchlist"""
     result = await db.execute(
-        select(models.WatchlistItem).where(
+        select(WatchlistItem).where(
             and_(
-                models.WatchlistItem.id == item_id,
-                models.WatchlistItem.user_id == current_user.id
+                WatchlistItem.id == item_id,
+                WatchlistItem.user_id == current_user.id
             )
         )
     )

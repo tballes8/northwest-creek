@@ -4,7 +4,7 @@ Stock API Endpoints
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 
-from app.models.stock_schemas import (
+from app.schemas.stock import (
     StockQuote,
     CompanyInfo,
     HistoricalData,
