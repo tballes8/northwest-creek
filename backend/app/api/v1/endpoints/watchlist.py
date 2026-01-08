@@ -1,241 +1,226 @@
 """
-Watchlist API Endpoints
+Watchlist endpoints - Track stocks you're interested in
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, and_
 from typing import List
+from redis.asyncio import Redis
 
-from app.models.database import User, Watchlist
-from app.models.watchlist_schemas import (
-    WatchlistAdd,
-    WatchlistUpdate,
-    WatchlistItem,
-    WatchlistResponse,
-    WatchlistWithQuote
-)
-from app.api.dependencies import get_current_user
 from app.db.session import get_db
+from app.db.cache import get_cache
+from app.core.security import get_current_user
+from app.db import models
+from app.schemas import watchlist as schemas
 from app.services.market_data import market_data_service
 
 router = APIRouter()
 
-# Subscription limits
-WATCHLIST_LIMITS = {
-    "free": 5,
-    "pro": 50,
-    "enterprise": 999999  # Unlimited
-}
 
-
-@router.post("/", response_model=WatchlistItem, status_code=status.HTTP_201_CREATED)
-async def add_to_watchlist(
-    item: WatchlistAdd,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Add a stock to your watchlist
+async def check_watchlist_limit(user: models.User, current_count: int) -> None:
+    """Check if user has reached their watchlist limit"""
+    limits = {
+        "free": 5,
+        "pro": 50,
+        "enterprise": float('inf')
+    }
     
-    **Limits by subscription tier:**
-    - Free: 5 stocks
-    - Pro: 50 stocks
-    - Enterprise: Unlimited
-    """
-    # Check current count
-    count_result = await db.execute(
-        select(func.count(Watchlist.id)).where(Watchlist.user_id == current_user.id)
-    )
-    current_count = count_result.scalar()
+    limit = limits.get(user.subscription_tier, 5)
     
-    # Check limit
-    limit = WATCHLIST_LIMITS.get(current_user.subscription_tier, 5)
     if current_count >= limit:
-        # Get upgrade info
-        if current_user.subscription_tier == "free":
-            upgrade_msg = "Upgrade to Pro for 50 stocks ($29/month) or Enterprise for unlimited stocks ($99/month)!"
-        elif current_user.subscription_tier == "pro":
-            upgrade_msg = "Upgrade to Enterprise for unlimited stocks ($99/month)!"
-        else:
-            upgrade_msg = "Contact support for custom limits."
-        
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Watchlist limit reached! You have {current_count}/{limit} stocks tracked. {upgrade_msg}"
+            detail=f"Watchlist limit reached. {user.subscription_tier.capitalize()} tier allows {int(limit)} stocks."
         )
-    
-    # Check if ticker already exists for this user
-    existing = await db.execute(
-        select(Watchlist).where(
-            Watchlist.user_id == current_user.id,
-            Watchlist.ticker == item.ticker.upper()
-        )
-    )
-    if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"{item.ticker.upper()} is already in your watchlist"
-        )
-    
-    # Verify ticker exists (optional - call Massive API)
-    try:
-        await market_data_service.get_quote(item.ticker)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Ticker '{item.ticker.upper()}' not found"
-        )
-    
-    # Create watchlist item
-    watchlist_item = Watchlist(
-        user_id=current_user.id,
-        ticker=item.ticker.upper(),
-        notes=item.notes
-    )
-    
-    db.add(watchlist_item)
-    await db.commit()
-    await db.refresh(watchlist_item)
-    
-    # Create response
-    response = WatchlistItem(
-        id=str(watchlist_item.id),
-        user_id=str(watchlist_item.user_id),
-        ticker=watchlist_item.ticker,
-        added_at=watchlist_item.added_at,
-        notes=watchlist_item.notes
-    )
-    
-    # Add warning if near limit
-    new_count = current_count + 1
-    remaining = limit - new_count
-    
-    if remaining > 0 and remaining <= 2:  # Warning at 2 or fewer remaining
-        if current_user.subscription_tier == "free":
-            warning = f"⚠️ Warning: Only {remaining} stock{'s' if remaining != 1 else ''} remaining in watchlist! Upgrade to Pro for 50 stocks ($29/month)."
-        elif current_user.subscription_tier == "pro":
-            warning = f"⚠️ Warning: Only {remaining} stock{'s' if remaining != 1 else ''} remaining in watchlist! Upgrade to Enterprise for unlimited stocks ($99/month)."
-        else:
-            warning = None
-        
-        response.warning = warning
-    
-    return response
 
 
-@router.get("/", response_model=WatchlistResponse)
+async def enrich_watchlist_with_prices(items: List[models.WatchlistItem]) -> List[schemas.WatchlistItemResponse]:
+    """Enrich watchlist items with current market data"""
+    enriched_items = []
+    
+    for item in items:
+        try:
+            quote = await market_data_service.get_quote(item.ticker)
+            
+            # Calculate price vs target if target_price is set
+            price_vs_target = None
+            price_vs_target_percent = None
+            if item.target_price and quote.get('price'):
+                price_vs_target = quote['price'] - item.target_price
+                price_vs_target_percent = (price_vs_target / item.target_price) * 100
+            
+            enriched_items.append(schemas.WatchlistItemResponse(
+                id=item.id,
+                user_id=item.user_id,
+                ticker=item.ticker,
+                notes=item.notes,
+                target_price=item.target_price,
+                created_at=item.created_at,
+                price=quote.get('price'),
+                change=quote.get('change'),
+                change_percent=quote.get('change_percent'),
+                price_vs_target=price_vs_target,
+                price_vs_target_percent=price_vs_target_percent
+            ))
+        except Exception as e:
+            print(f"Error fetching quote for {item.ticker}: {e}")
+            # If quote fetch fails, return item without price data
+            enriched_items.append(schemas.WatchlistItemResponse(
+                id=item.id,
+                user_id=item.user_id,
+                ticker=item.ticker,
+                notes=item.notes,
+                target_price=item.target_price,
+                created_at=item.created_at
+            ))
+    
+    return enriched_items
+
+
+@router.get("", response_model=schemas.WatchlistResponse)
 async def get_watchlist(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    current_user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    cache: Redis = Depends(get_cache)
 ):
-    """
-    Get your complete watchlist with current prices
-    """
-    # Get all watchlist items
+    """Get user's watchlist with current prices"""
+    # Get watchlist items
     result = await db.execute(
-        select(Watchlist)
-        .where(Watchlist.user_id == current_user.id)
-        .order_by(Watchlist.added_at.desc())
+        select(models.WatchlistItem)
+        .where(models.WatchlistItem.user_id == current_user.id)
+        .order_by(models.WatchlistItem.created_at.desc())
     )
     items = result.scalars().all()
     
-    # Fetch current quotes for all tickers
-    watchlist_with_quotes = []
-    for item in items:
-        try:
-            # Get current quote
-            quote = await market_data_service.get_quote(item.ticker)
-            company = await market_data_service.get_company_info(item.ticker)
-            
-            watchlist_with_quotes.append(WatchlistWithQuote(
-                id=str(item.id),
-                ticker=item.ticker,
-                added_at=item.added_at,
-                notes=item.notes,
-                current_price=quote.get("price"),
-                change_percent=quote.get("change_percent"),
-                company_name=company.get("name")
-            ))
-        except Exception as e:
-            # If quote fails, still show the watchlist item
-            watchlist_with_quotes.append(WatchlistWithQuote(
-                id=str(item.id),
-                ticker=item.ticker,
-                added_at=item.added_at,
-                notes=item.notes,
-                current_price=None,
-                change_percent=None,
-                company_name=None
-            ))
+    # Enrich with current prices
+    enriched_items = await enrich_watchlist_with_prices(items)
     
-    limit = WATCHLIST_LIMITS.get(current_user.subscription_tier, 5)
-    
-    return WatchlistResponse(
-        items=watchlist_with_quotes,
-        count=len(items),
-        limit=limit,
-        subscription_tier=current_user.subscription_tier
+    return schemas.WatchlistResponse(
+        items=enriched_items,
+        count=len(enriched_items)
     )
 
 
-@router.delete("/{ticker}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_from_watchlist(
-    ticker: str,
-    current_user: User = Depends(get_current_user),
+@router.post("", response_model=schemas.WatchlistItemResponse, status_code=status.HTTP_201_CREATED)
+async def add_to_watchlist(
+    item_data: schemas.WatchlistItemCreate,
+    current_user: models.User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Remove a stock from your watchlist
-    """
+    """Add a stock to watchlist"""
+    # Check if already in watchlist
     result = await db.execute(
-        select(Watchlist).where(
-            Watchlist.user_id == current_user.id,
-            Watchlist.ticker == ticker.upper()
+        select(models.WatchlistItem).where(
+            and_(
+                models.WatchlistItem.user_id == current_user.id,
+                models.WatchlistItem.ticker == item_data.ticker.upper()
+            )
         )
     )
-    item = result.scalar_one_or_none()
+    existing = result.scalar_one_or_none()
     
-    if not item:
+    if existing:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"{ticker.upper()} not found in your watchlist"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{item_data.ticker} is already in your watchlist"
         )
     
-    await db.delete(item)
+    # Check watchlist limit
+    count_result = await db.execute(
+        select(models.WatchlistItem)
+        .where(models.WatchlistItem.user_id == current_user.id)
+    )
+    current_count = len(count_result.scalars().all())
+    await check_watchlist_limit(current_user, current_count)
+    
+    # Verify ticker is valid by fetching quote
+    try:
+        quote = await market_data_service.get_quote(item_data.ticker)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid ticker symbol: {item_data.ticker}"
+        )
+    
+    # Create watchlist item
+    db_item = models.WatchlistItem(
+        user_id=current_user.id,
+        ticker=item_data.ticker.upper(),
+        notes=item_data.notes,
+        target_price=item_data.target_price
+    )
+    
+    db.add(db_item)
+    await db.commit()
+    await db.refresh(db_item)
+    
+    # Return with current price data
+    enriched = await enrich_watchlist_with_prices([db_item])
+    return enriched[0]
+
+
+@router.put("/{item_id}", response_model=schemas.WatchlistItemResponse)
+async def update_watchlist_item(
+    item_id: int,
+    item_data: schemas.WatchlistItemUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update watchlist item (notes and/or target price)"""
+    result = await db.execute(
+        select(models.WatchlistItem).where(
+            and_(
+                models.WatchlistItem.id == item_id,
+                models.WatchlistItem.user_id == current_user.id
+            )
+        )
+    )
+    db_item = result.scalar_one_or_none()
+    
+    if not db_item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Watchlist item not found"
+        )
+    
+    # Update fields
+    if item_data.notes is not None:
+        db_item.notes = item_data.notes
+    if item_data.target_price is not None:
+        db_item.target_price = item_data.target_price
+    
+    await db.commit()
+    await db.refresh(db_item)
+    
+    # Return with current price data
+    enriched = await enrich_watchlist_with_prices([db_item])
+    return enriched[0]
+
+
+@router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_from_watchlist(
+    item_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Remove a stock from watchlist"""
+    result = await db.execute(
+        select(models.WatchlistItem).where(
+            and_(
+                models.WatchlistItem.id == item_id,
+                models.WatchlistItem.user_id == current_user.id
+            )
+        )
+    )
+    db_item = result.scalar_one_or_none()
+    
+    if not db_item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Watchlist item not found"
+        )
+    
+    await db.delete(db_item)
     await db.commit()
     
     return None
-
-
-@router.patch("/{ticker}", response_model=WatchlistItem)
-async def update_watchlist_item(
-    ticker: str,
-    update_data: WatchlistUpdate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Update notes for a watchlist item
-    """
-    result = await db.execute(
-        select(Watchlist).where(
-            Watchlist.user_id == current_user.id,
-            Watchlist.ticker == ticker.upper()
-        )
-    )
-    item = result.scalar_one_or_none()
-    
-    if not item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"{ticker.upper()} not found in your watchlist"
-        )
-    
-    # Update notes
-    if update_data.notes is not None:
-        item.notes = update_data.notes
-    
-    await db.commit()
-    await db.refresh(item)
-    
-    return item

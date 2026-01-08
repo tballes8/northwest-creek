@@ -2,16 +2,13 @@ import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:8000/api/v1';
 
-// Create axios instance
-const api = axios.create({
+// Create axios instance with interceptor for auth token
+const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
-// Add token to requests
-api.interceptors.request.use(
+// Add token to all requests
+axiosInstance.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token');
     if (token) {
@@ -19,77 +16,78 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    return Promise.reject(error);
+  }
 );
 
 // Auth API
 export const authAPI = {
-  register: (data: { email: string; password: string; full_name?: string }) =>
-    api.post('/auth/register', data),
+  register: (data: { email: string; password: string; full_name: string }) =>
+    axiosInstance.post('/auth/register', data),
   
   login: (data: { email: string; password: string }) =>
-    api.post('/auth/login', data),
+    axiosInstance.post('/auth/login', data),
   
   getCurrentUser: () =>
-    api.get('/auth/me'),
-};
-
-// Stocks API
-export const stocksAPI = {
-  getQuote: (ticker: string) =>
-    api.get(`/stocks/${ticker}/quote`),
-  
-  getCompany: (ticker: string) =>
-    api.get(`/stocks/${ticker}/company`),
-  
-  getAnalysis: (ticker: string) =>
-    api.get(`/indicators/${ticker}/analysis`),
+    axiosInstance.get('/auth/me'),
 };
 
 // Watchlist API
 export const watchlistAPI = {
   getAll: () =>
-    api.get('/watchlist/'),
+    axiosInstance.get('/watchlist'),
   
-  add: (data: { ticker: string; notes?: string }) =>
-    api.post('/watchlist/', data),
+  add: (data: { ticker: string; notes?: string; target_price?: number }) =>
+    axiosInstance.post('/watchlist', data),
   
-  remove: (ticker: string) =>
-    api.delete(`/watchlist/${ticker}`),
+  remove: (id: number) =>
+    axiosInstance.delete(`/watchlist/${id}`),
+  
+  update: (id: number, data: { notes?: string; target_price?: number }) =>
+    axiosInstance.put(`/watchlist/${id}`, data),
 };
 
 // Portfolio API
 export const portfolioAPI = {
   getAll: () =>
-    api.get('/portfolio/'),
+    axiosInstance.get('/portfolio'),
   
-  add: (data: { 
-    ticker: string; 
-    quantity: number; 
-    buy_price: number; 
-    buy_date: string;
-    notes?: string;
-  }) => api.post('/portfolio/', data),
+  add: (data: any) =>
+    axiosInstance.post('/portfolio/positions', data),
   
-  remove: (id: string) =>
-    api.delete(`/portfolio/${id}`),
+  remove: (id: number) =>
+    axiosInstance.delete(`/portfolio/positions/${id}`),
+  
+  update: (id: number, data: any) =>
+    axiosInstance.put(`/portfolio/positions/${id}`, data),
 };
 
 // Alerts API
 export const alertsAPI = {
   getAll: () =>
-    
-    api.get('/alerts/'),
+    axiosInstance.get('/alerts'),
   
-  create: (data: {
-    ticker: string;
-    target_price: number;
-    condition: 'above' | 'below';
-    notes?: string;
-  }) => api.post('/alerts/', data),
+  create: (data: any) =>
+    axiosInstance.post('/alerts', data),
   
-  remove: (id: string) =>
-    api.delete(`/alerts/${id}`),
+  delete: (id: number) =>
+    axiosInstance.delete(`/alerts/${id}`),
+  
+  update: (id: number, data: any) =>
+    axiosInstance.put(`/alerts/${id}`, data),
 };
 
-export default api;
+// Stocks API
+export const stocksAPI = {
+  getQuote: (ticker: string) =>
+    axiosInstance.get(`/stocks/quote/${ticker}`),
+  
+  getCompanyInfo: (ticker: string) =>
+    axiosInstance.get(`/stocks/company/${ticker}`),
+  
+  getHistoricalPrices: (ticker: string, days: number = 30) =>
+    axiosInstance.get(`/stocks/historical/${ticker}`, { params: { days } }),
+};
+
+export default axiosInstance;
