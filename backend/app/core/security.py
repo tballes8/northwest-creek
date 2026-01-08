@@ -78,19 +78,7 @@ async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db)
 ) -> User:
-    """
-    Get the current authenticated user from JWT token
-    
-    Args:
-        token: JWT token from Authorization header
-        db: Database session
-        
-    Returns:
-        Current user object
-        
-    Raises:
-        HTTPException: If token is invalid or user not found
-    """
+    """Get the current authenticated user from JWT token"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -100,21 +88,30 @@ async def get_current_user(
     try:
         # Decode JWT token
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id: int = payload.get("sub")
+        user_id_str: str = payload.get("sub")  # ← Get as string
         
-        if user_id is None:
+        if user_id_str is None:
+            raise credentials_exception
+        
+        # Convert string to UUID
+        try:
+            from uuid import UUID
+            user_id = UUID(user_id_str)  # ← Convert to UUID object
+        except (ValueError, AttributeError):
             raise credentials_exception
             
-    except JWTError:
+    except JWTError as e:
+        print(f"JWT Error: {e}")  # ← Add logging
         raise credentials_exception
     
-    # Get user from database
+    # Get user from database using UUID
     result = await db.execute(
-        select(User).where(User.id == user_id)
+        select(User).where(User.id == user_id)  # ← Use UUID object
     )
     user = result.scalar_one_or_none()
     
     if user is None:
+        print(f"User not found for ID: {user_id}")  # ← Add logging
         raise credentials_exception
     
     if not user.is_active:
@@ -124,7 +121,6 @@ async def get_current_user(
         )
     
     return user
-
 
 async def get_current_active_user(
     current_user: User = Depends(get_current_user)
