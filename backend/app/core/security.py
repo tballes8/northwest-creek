@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from app.config import get_settings
 from app.db.session import get_db
-from app import models
+from app.db.models import User
 
 settings = get_settings()
 
@@ -34,22 +34,50 @@ def get_password_hash(password: str) -> str:
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta  # FIXED!
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)  # FIXED!
+    """
+    Create a JWT access token
     
-    to_encode.update({"exp": expire, "type": "access"})
+    Args:
+        data: Data to encode in the token
+        expires_delta: Optional expiration time delta
+        
+    Returns:
+        Encoded JWT token
+    """
+    to_encode = data.copy()
+    
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    
+    to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     
     return encoded_jwt
 
 
+def decode_token(token: str) -> Optional[dict]:
+    """
+    Decode a JWT token
+    
+    Args:
+        token: JWT token string
+        
+    Returns:
+        Decoded token payload or None if invalid
+    """
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        return payload
+    except JWTError:
+        return None
+
+
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db)
-) -> models.User:
+) -> User:
     """
     Get the current authenticated user from JWT token
     
@@ -82,7 +110,7 @@ async def get_current_user(
     
     # Get user from database
     result = await db.execute(
-        select(models.User).where(models.User.id == user_id)
+        select(User).where(User.id == user_id)
     )
     user = result.scalar_one_or_none()
     
@@ -99,8 +127,8 @@ async def get_current_user(
 
 
 async def get_current_active_user(
-    current_user: models.User = Depends(get_current_user)
-) -> models.User:
+    current_user: User = Depends(get_current_user)
+) -> User:
     """
     Get current active user (wrapper for additional checks if needed)
     

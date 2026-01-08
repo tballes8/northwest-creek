@@ -10,6 +10,15 @@ from app.schemas import (
     watchlist,
 )
 
+# Export commonly used schemas for convenience
+from app.schemas.auth import (
+    UserCreate,
+    UserLogin,
+    UserResponse,
+    Token,
+    TokenData,
+)
+
 __all__ = [
     "alert",
     "auth",
@@ -17,4 +26,10 @@ __all__ = [
     "portfolio",
     "stock",
     "watchlist",
+    # Auth schemas
+    "UserCreate",
+    "UserLogin",
+    "UserResponse",
+    "Token",
+    "TokenData",
 ]

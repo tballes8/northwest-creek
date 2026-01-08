@@ -7,7 +7,7 @@ from sqlalchemy import select, func
 from typing import List
 from decimal import Decimal
 
-from backend.app.db.models import User, Portfolio
+from app.db.models import User, Portfolio
 from app.schemas.portfolio import (
     PortfolioAdd,
     PortfolioUpdate,
