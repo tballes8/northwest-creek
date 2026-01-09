@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
+from uuid import UUID  # ← Add this
 
 
 class WatchlistItemBase(BaseModel):
@@ -23,9 +24,9 @@ class WatchlistItemUpdate(BaseModel):
 
 class WatchlistItemInDB(WatchlistItemBase):
     """Watchlist item as stored in database"""
-    id: int
-    user_id: int
-    created_at: datetime
+    id: UUID  # ← Changed from int to UUID
+    user_id: UUID  # ← Changed from int to UUID
+    added_at: datetime  # ← Changed from created_at to match your model
     
     class Config:
         from_attributes = True
@@ -36,12 +37,11 @@ class WatchlistItemResponse(WatchlistItemInDB):
     price: Optional[float] = None
     change: Optional[float] = None
     change_percent: Optional[float] = None
-    price_vs_target: Optional[float] = None  # Current price - target price
-    price_vs_target_percent: Optional[float] = None  # % change from target
+    price_vs_target: Optional[float] = None
+    price_vs_target_percent: Optional[float] = None
 
 
 class WatchlistResponse(BaseModel):
     """Response containing all watchlist items"""
     items: list[WatchlistItemResponse]
     count: int
-    

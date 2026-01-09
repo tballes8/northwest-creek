@@ -4,6 +4,7 @@ Authentication and User schemas
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from datetime import datetime
+from uuid import UUID  # ← Add this import
 
 
 class UserBase(BaseModel):
@@ -31,7 +32,7 @@ class UserUpdate(BaseModel):
 
 class UserInDB(UserBase):
     """User as stored in database"""
-    id: int
+    id: UUID  # ← Changed from int to UUID
     is_active: bool
     subscription_tier: str
     created_at: datetime
@@ -53,4 +54,4 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     """Token payload data"""
-    user_id: Optional[int] = None
+    user_id: Optional[UUID] = None  # ← Changed from int to UUID
