@@ -33,9 +33,10 @@ class Watchlist(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     ticker = Column(String(10), nullable=False)
-    target_price = Column(Numeric(precision=18, scale=2), nullable=True)  # ← ADD THIS LINE!
+    target_price = Column(Numeric(precision=18, scale=2), nullable=True)
     added_at = Column(DateTime(timezone=True), server_default=func.now())
     notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationship to user
     user = relationship("User", back_populates="watchlists")

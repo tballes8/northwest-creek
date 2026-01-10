@@ -1,7 +1,8 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
-from uuid import UUID  # ← Add this
+from uuid import UUID
+from decimal import Decimal
 
 
 class WatchlistItemBase(BaseModel):
@@ -24,9 +25,10 @@ class WatchlistItemUpdate(BaseModel):
 
 class WatchlistItemInDB(WatchlistItemBase):
     """Watchlist item as stored in database"""
-    id: UUID  # ← Changed from int to UUID
-    user_id: UUID  # ← Changed from int to UUID
-    added_at: datetime  # ← Changed from created_at to match your model
+    id: UUID
+    user_id: UUID
+    added_at: datetime
+    created_at: datetime
     
     class Config:
         from_attributes = True

@@ -35,6 +35,19 @@ export const authAPI = {
 };
 
 // Watchlist API
+// export const watchlistAPI = {
+//   getAll: () =>
+//     axiosInstance.get('/watchlist'),
+  
+//   add: (data: { ticker: string; notes?: string; target_price?: number }) =>
+//     axiosInstance.post('/watchlist', data),
+  
+//   remove: (id: number) =>
+//     axiosInstance.delete(`/watchlist/${id}`),
+  
+//   update: (id: number, data: { notes?: string; target_price?: number }) =>
+//     axiosInstance.put(`/watchlist/${id}`, data),
+// };
 export const watchlistAPI = {
   getAll: () =>
     axiosInstance.get('/watchlist'),
@@ -42,10 +55,10 @@ export const watchlistAPI = {
   add: (data: { ticker: string; notes?: string; target_price?: number }) =>
     axiosInstance.post('/watchlist', data),
   
-  remove: (id: number) =>
+  remove: (id: string) =>  // ← Changed from number to string
     axiosInstance.delete(`/watchlist/${id}`),
   
-  update: (id: number, data: { notes?: string; target_price?: number }) =>
+  update: (id: string, data: { notes?: string; target_price?: number }) =>  // ← Changed from number to string
     axiosInstance.put(`/watchlist/${id}`, data),
 };
 

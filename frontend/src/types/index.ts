@@ -12,7 +12,7 @@ export interface User {
 }
 
 export interface WatchlistItem {
-  id: number;
+  id: string;
   ticker: string;
   notes?: string;
   target_price?: number;
@@ -25,7 +25,7 @@ export interface WatchlistItem {
 }
 
 export interface PortfolioPosition {
-  id: number;
+  id: string;
   ticker: string;
   quantity: number;
   average_cost: number;
@@ -38,7 +38,7 @@ export interface PortfolioPosition {
 }
 
 export interface Alert {
-  id: number;
+  id: string;
   ticker: string;
   condition: 'above' | 'below';
   target_price: number;

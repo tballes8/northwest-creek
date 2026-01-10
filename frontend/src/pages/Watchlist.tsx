@@ -3,24 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { authAPI, watchlistAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
+import { WatchlistItem } from '../types';
 
-interface WatchlistStock {
-  id: number;
-  ticker: string;
-  notes?: string;
-  target_price?: number;
-  price?: number;
-  change?: number;
-  change_percent?: number;
-  price_vs_target?: number;
-  price_vs_target_percent?: number;
-  created_at: string;
-}
 
 const Watchlist: React.FC = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
-  const [watchlist, setWatchlist] = useState<WatchlistStock[]>([]);
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [addingStock, setAddingStock] = useState(false);
   const [newTicker, setNewTicker] = useState('');
@@ -97,17 +86,20 @@ const Watchlist: React.FC = () => {
     }
   };
 
-  const handleRemoveStock = async (id: number) => {
+  const handleRemoveStock = async (id: string) => {  // ← Changed from number to string
     if (!window.confirm('Remove this stock from your watchlist?')) {
       return;
     }
 
     try {
       await watchlistAPI.remove(id);
-      await loadData();
+      // Immediately update local state to remove the item
+      setWatchlist(prevList => prevList.filter(stock => stock.id !== id));
     } catch (err) {
       console.error('Failed to remove stock:', err);
       setError('Failed to remove stock');
+      // Reload data in case of error
+      await loadData();
     }
   };
 
