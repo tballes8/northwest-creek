@@ -82,13 +82,13 @@ export const alertsAPI = {
   getAll: () =>
     axiosInstance.get('/alerts'),
   
-  create: (data: any) =>
+  create: (data: { ticker: string; condition: 'above' | 'below'; target_price: number; notes?: string }) =>
     axiosInstance.post('/alerts', data),
   
-  delete: (id: number) =>
+  delete: (id: string) =>
     axiosInstance.delete(`/alerts/${id}`),
   
-  update: (id: number, data: any) =>
+  update: (id: string, data: { is_active?: boolean; notes?: string }) =>
     axiosInstance.put(`/alerts/${id}`, data),
 };
 

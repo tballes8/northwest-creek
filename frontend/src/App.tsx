@@ -6,6 +6,7 @@ import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Watchlist from './pages/Watchlist';
 import Portfolio from './pages/Portfolio';
+import Alerts from './pages/Alerts';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -51,8 +52,19 @@ function App() {
           } 
         />
 
-        {/* Placeholder routes */}
+        {/* Placeholder routes 
         <Route path="/alerts" element={<ProtectedRoute><div className="p-8 text-white">Alerts page coming soon!</div></ProtectedRoute>} />
+        */}
+
+        <Route 
+          path="/alerts" 
+          element={
+            <ProtectedRoute>
+              <Alerts />
+            </ProtectedRoute>
+          } 
+        />
+
       </Routes>
     </Router>
   );
