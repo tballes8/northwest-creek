@@ -5,6 +5,7 @@ import aiohttp
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from app.config import get_settings
+from app.utils.cache import quote_cache
 
 settings = get_settings()
 
@@ -12,47 +13,11 @@ settings = get_settings()
 class MarketDataService:
     """Service for fetching stock market data from Alpha Vantage API"""
     
-    BASE_URL = "https://www.alphavantage.co/query"
-    
     def __init__(self):
+        self.base_url = "https://www.alphavantage.co/query"
         self.api_key = settings.ALPHA_VANTAGE_API_KEY
-    
-    async def get_quote(self, ticker: str) -> Dict[str, Any]:
-        """
-        Get current stock quote (15-minute delayed)
+        self.timeout = 10.0
         
-        Args:
-            ticker: Stock symbol (e.g., 'AAPL', 'TSLA')
-            
-        Returns:
-            Dict with price, change, volume, etc.
-        """
-        params = {
-            "function": "GLOBAL_QUOTE",
-            "symbol": ticker.upper(),
-            "apikey": self.api_key
-        }
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.get(self.BASE_URL, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    
-                    # Check for API error messages
-                    if "Error Message" in data:
-                        raise ValueError(f"Ticker '{ticker}' not found")
-                    if "Note" in data:
-                        raise Exception("API rate limit exceeded. Please wait a moment.")
-                    if "Global Quote" not in data or not data["Global Quote"]:
-                        raise ValueError(f"No data available for ticker '{ticker}'")
-                    
-                    return self._format_quote(data, ticker.upper())
-                elif response.status == 401 or response.status == 403:
-                    raise ValueError("Invalid API key or unauthorized access")
-                else:
-                    error_text = await response.text()
-                    raise Exception(f"API error: {response.status} - {error_text}")
-    
     async def get_company_info(self, ticker: str) -> Dict[str, Any]:
         """
         Get company information

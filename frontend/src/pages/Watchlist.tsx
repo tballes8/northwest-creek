@@ -16,6 +16,7 @@ const Watchlist: React.FC = () => {
   const [newNotes, setNewNotes] = useState('');
   const [newTargetPrice, setNewTargetPrice] = useState('');
   const [error, setError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);  
 
   useEffect(() => {
     loadData();
