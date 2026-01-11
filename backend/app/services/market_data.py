@@ -1,194 +1,155 @@
 """
-Market Data Service - Integrates with Alpha Vantage API for stock data
+Market data service - Polygon.io integration
 """
-import aiohttp
-from typing import Optional, Dict, Any, List
-from datetime import datetime, timedelta
+import httpx
+from typing import Dict, Any, Optional
+from datetime import datetime, timezone, timedelta
 from app.config import get_settings
-from app.utils.cache import quote_cache
 
 settings = get_settings()
 
 
 class MarketDataService:
-    """Service for fetching stock market data from Alpha Vantage API"""
-    
     def __init__(self):
-        self.base_url = "https://www.alphavantage.co/query"
-        self.api_key = settings.ALPHA_VANTAGE_API_KEY
+        self.base_url = "https://api.massive.com"
+        self.api_key = settings.MASSIVE_API_KEY
         self.timeout = 10.0
-        
+    
+    async def get_quote(self, ticker: str) -> Dict[str, Any]:
+        """
+        Get real-time quote for a stock using Polygon.io
+        """
+        try:
+            async with httpx.AsyncClient() as client:
+                # Get previous day's data
+                url = f"{self.base_url}/v2/aggs/ticker/{ticker}/prev"
+                params = {"apiKey": self.api_key}
+                
+                response = await client.get(url, params=params, timeout=self.timeout)
+                response.raise_for_status()
+                data = response.json()
+                
+                if "results" not in data or not data["results"]:
+                    raise ValueError(f"No data available for ticker '{ticker}'")
+                
+                result = data["results"][0]
+                
+                # Calculate change
+                open_price = result.get("o", 0)
+                close_price = result.get("c", 0)
+                change = close_price - open_price
+                change_percent = (change / open_price * 100) if open_price > 0 else 0
+                
+                return {
+                    "ticker": ticker,
+                    "price": close_price,
+                    "change": change,
+                    "change_percent": change_percent,
+                    "volume": result.get("v", 0),
+                    "high": result.get("h", 0),
+                    "low": result.get("l", 0),
+                    "open": open_price,
+                    "previous_close": open_price,
+                    "timestamp": datetime.fromtimestamp(result.get("t", 0) / 1000, tz=timezone.utc).isoformat()
+                }
+                
+        except httpx.TimeoutException:
+            raise ValueError(f"Timeout fetching data for {ticker}")
+        except httpx.HTTPError as e:
+            raise ValueError(f"HTTP error fetching data for {ticker}: {str(e)}")
+        except Exception as e:
+            raise ValueError(f"Error fetching quote for {ticker}: {str(e)}")
+    
     async def get_company_info(self, ticker: str) -> Dict[str, Any]:
         """
-        Get company information
-        
-        Args:
-            ticker: Stock symbol
-            
-        Returns:
-            Dict with company name, sector, description, etc.
+        Get company information using Polygon.io
         """
-        params = {
-            "function": "OVERVIEW",
-            "symbol": ticker.upper(),
-            "apikey": self.api_key
-        }
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.get(self.BASE_URL, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    
-                    # Check for errors
-                    if "Error Message" in data:
-                        raise ValueError(f"Company info for '{ticker}' not found")
-                    if "Note" in data:
-                        raise Exception("API rate limit exceeded. Please wait a moment.")
-                    if not data or "Symbol" not in data:
-                        raise ValueError(f"No company info available for '{ticker}'")
-                    
-                    return self._format_company_info(data)
-                else:
-                    error_text = await response.text()
-                    raise Exception(f"API error: {response.status} - {error_text}")
+        try:
+            async with httpx.AsyncClient() as client:
+                url = f"{self.base_url}/v3/reference/tickers/{ticker}"
+                params = {"apiKey": self.api_key}
+                
+                response = await client.get(url, params=params, timeout=self.timeout)
+                response.raise_for_status()
+                data = response.json()
+                
+                if "results" not in data:
+                    raise ValueError(f"No company info available for '{ticker}'")
+                
+                result = data["results"]
+                
+                return {
+                    "ticker": result.get("ticker", ticker),
+                    "name": result.get("name", ""),
+                    "description": result.get("description", ""),
+                    "sector": result.get("sic_description", ""),
+                    "industry": result.get("sic_description", ""),
+                    "website": result.get("homepage_url", ""),
+                    "exchange": result.get("primary_exchange", ""),
+                    "market_cap": result.get("market_cap"),
+                    "phone": result.get("phone_number", ""),
+                    "employees": result.get("total_employees"),
+                    "country": result.get("locale", "US")
+                }
+                
+        except httpx.TimeoutException:
+            raise ValueError(f"Timeout fetching company info for {ticker}")
+        except httpx.HTTPError as e:
+            raise ValueError(f"HTTP error fetching company info for {ticker}: {str(e)}")
+        except Exception as e:
+            raise ValueError(f"Error fetching company info for {ticker}: {str(e)}")
     
     async def get_historical_prices(
-        self, 
-        ticker: str, 
+        self,
+        ticker: str,
         days: int = 30
-    ) -> List[Dict[str, Any]]:
+    ) -> list[Dict[str, Any]]:
         """
-        Get historical price data
-        
-        Args:
-            ticker: Stock symbol
-            days: Number of days of history (default 30)
+        Get historical price data using Polygon.io
+        """
+        try:
+            # Calculate date range
+            end_date = datetime.now(timezone.utc)
+            start_date = end_date - timedelta(days=days)
             
-        Returns:
-            List of price data by date
-        """
-        # Use TIME_SERIES_DAILY for up to 100 days
-        # Use TIME_SERIES_DAILY with outputsize=full for more
-        outputsize = "compact" if days <= 100 else "full"
-        
-        params = {
-            "function": "TIME_SERIES_DAILY",
-            "symbol": ticker.upper(),
-            "outputsize": outputsize,
-            "apikey": self.api_key
-        }
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.get(self.BASE_URL, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    
-                    # Check for errors
-                    if "Error Message" in data:
-                        raise ValueError(f"Historical data for '{ticker}' not found")
-                    if "Note" in data:
-                        raise Exception("API rate limit exceeded. Please wait a moment.")
-                    if "Time Series (Daily)" not in data:
-                        raise ValueError(f"No historical data available for '{ticker}'")
-                    
-                    return self._format_historical_data(data, days)
-                else:
-                    error_text = await response.text()
-                    raise Exception(f"API error: {response.status} - {error_text}")
-    
-    def _format_quote(self, data: Dict[str, Any], ticker: str) -> Dict[str, Any]:
-        """Format quote data from Alpha Vantage API response"""
-        quote = data.get("Global Quote", {})
-        
-        # Alpha Vantage quote fields
-        price = float(quote.get("05. price", 0))
-        change = float(quote.get("09. change", 0))
-        change_percent_str = quote.get("10. change percent", "0%").replace("%", "")
-        change_percent = float(change_percent_str)
-        
-        previous_close = float(quote.get("08. previous close", 0))
-        high = float(quote.get("03. high", 0))
-        low = float(quote.get("04. low", 0))
-        open_price = float(quote.get("02. open", 0))
-        volume = int(quote.get("06. volume", 0))
-        
-        # Get timestamp or use current time
-        timestamp_str = quote.get("07. latest trading day", "")
-        if timestamp_str:
-            timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d").isoformat()
-        else:
-            timestamp = datetime.now().isoformat()
-        
-        return {
-            "ticker": ticker,
-            "price": price,
-            "change": change,
-            "change_percent": change_percent,
-            "volume": volume,
-            "high": high,
-            "low": low,
-            "open": open_price,
-            "previous_close": previous_close,
-            "timestamp": timestamp
-        }
-    
-    def _format_company_info(self, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Format company info from Alpha Vantage API response"""
-        
-        # Convert market cap string to integer (e.g., "2450000000" or "2.45B")
-        market_cap_str = data.get("MarketCapitalization", "0")
-        try:
-            market_cap = int(market_cap_str) if market_cap_str.isdigit() else None
-        except:
-            market_cap = None
-        
-        # Convert employees string to integer
-        employees_str = data.get("FullTimeEmployees", "0")
-        try:
-            employees = int(employees_str) if employees_str else None
-        except:
-            employees = None
-        
-        return {
-            "ticker": data.get("Symbol", "").upper(),
-            "name": data.get("Name", ""),
-            "description": data.get("Description", ""),
-            "sector": data.get("Sector", ""),
-            "industry": data.get("Industry", ""),
-            "website": data.get("OfficialSite", ""),
-            "exchange": data.get("Exchange", ""),
-            "market_cap": market_cap,
-            "phone": data.get("Phone", ""),
-            "employees": employees,
-            "country": data.get("Country", "USA"),
-            "address": data.get("Address", ""),
-            "fiscal_year_end": data.get("FiscalYearEnd", ""),
-            "currency": data.get("Currency", "USD")
-        }
-    
-    def _format_historical_data(self, data: Dict[str, Any], days: int) -> List[Dict[str, Any]]:
-        """Format historical data from Alpha Vantage API response"""
-        time_series = data.get("Time Series (Daily)", {})
-        
-        formatted = []
-        
-        # Get the most recent N days
-        # Time series is already sorted by date (newest first)
-        for date_str, values in list(time_series.items())[:days]:
-            formatted.append({
-                "date": date_str,
-                "open": float(values.get("1. open", 0)),
-                "high": float(values.get("2. high", 0)),
-                "low": float(values.get("3. low", 0)),
-                "close": float(values.get("4. close", 0)),
-                "volume": int(values.get("5. volume", 0))
-            })
-        
-        # Sort by date ascending (oldest first)
-        formatted.sort(key=lambda x: x["date"])
-        
-        return formatted
+            from_date = start_date.strftime("%Y-%m-%d")
+            to_date = end_date.strftime("%Y-%m-%d")
+            
+            async with httpx.AsyncClient() as client:
+                url = f"{self.base_url}/v2/aggs/ticker/{ticker}/range/1/day/{from_date}/{to_date}"
+                params = {"apiKey": self.api_key}
+                
+                response = await client.get(url, params=params, timeout=self.timeout)
+                response.raise_for_status()
+                data = response.json()
+                
+                if "results" not in data or not data["results"]:
+                    raise ValueError(f"No historical data available for '{ticker}'")
+                
+                results = []
+                for item in data["results"]:
+                    date = datetime.fromtimestamp(item["t"] / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
+                    results.append({
+                        "date": date,
+                        "open": item.get("o", 0),
+                        "high": item.get("h", 0),
+                        "low": item.get("l", 0),
+                        "close": item.get("c", 0),
+                        "volume": item.get("v", 0)
+                    })
+                
+                # Sort by date ascending
+                results.sort(key=lambda x: x["date"])
+                
+                return results
+                
+        except httpx.TimeoutException:
+            raise ValueError(f"Timeout fetching historical data for {ticker}")
+        except httpx.HTTPError as e:
+            raise ValueError(f"HTTP error fetching historical data for {ticker}: {str(e)}")
+        except Exception as e:
+            raise ValueError(f"Error fetching historical data for {ticker}: {str(e)}")
 
 
-# Global instance
+# Singleton instance
 market_data_service = MarketDataService()
