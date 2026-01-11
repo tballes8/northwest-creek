@@ -43,6 +43,127 @@ class ScreenerResult:
         self.match_reason = match_reason
 
 
+@router.get("/analyze/{ticker}")
+async def analyze_stock(
+    ticker: str,
+    days: int = Query(60, ge=30, le=365, description="Days of historical data"),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get complete technical analysis for a stock
+    
+    **Returns:**
+    - Current price and basic info
+    - RSI (Relative Strength Index)
+    - MACD (Moving Average Convergence Divergence)
+    - Moving Averages (20-day, 50-day, 200-day)
+    - Bollinger Bands
+    - Trading signals and recommendations
+    - Historical price data for charting
+    """
+    try:
+        # Get company info
+        company = await market_data_service.get_company_info(ticker)
+        
+        # Get historical prices
+        historical = await market_data_service.get_historical_prices(ticker, days)
+        prices = [float(day["close"]) for day in historical]
+        current_price = prices[-1]
+        
+        # Calculate all indicators
+        rsi = technical_indicators.calculate_rsi(prices)
+        macd_data = technical_indicators.calculate_macd(prices)
+        ma_data = technical_indicators.calculate_moving_averages(prices)
+        bb_data = technical_indicators.calculate_bollinger_bands(prices)
+        
+        # Generate trading signals
+        signals = []
+        if rsi and rsi < 30:
+            signals.append({"type": "buy", "indicator": "RSI", "message": "Oversold - potential buying opportunity"})
+        elif rsi and rsi > 70:
+            signals.append({"type": "sell", "indicator": "RSI", "message": "Overbought - consider taking profits"})
+        
+        if macd_data and macd_data["trend"] == "bullish":
+            signals.append({"type": "buy", "indicator": "MACD", "message": "Bullish momentum"})
+        elif macd_data and macd_data["trend"] == "bearish":
+            signals.append({"type": "sell", "indicator": "MACD", "message": "Bearish momentum"})
+        
+        if bb_data and bb_data["position"] == "below_lower":
+            signals.append({"type": "buy", "indicator": "Bollinger Bands", "message": "Below lower band - potential bounce"})
+        elif bb_data and bb_data["position"] == "above_upper":
+            signals.append({"type": "sell", "indicator": "Bollinger Bands", "message": "Above upper band - overbought"})
+        
+        return {
+            "ticker": ticker,
+            "company_name": company.get("name", ticker),
+            "current_price": round(current_price, 2),
+            "analysis_date": historical[-1]["date"],
+            "indicators": {
+                "rsi": {
+                    "value": round(rsi, 2) if rsi else None,
+                    "signal": "oversold" if rsi and rsi < 30 else "overbought" if rsi and rsi > 70 else "neutral",
+                    "description": "RSI measures momentum. Below 30 = oversold (buy signal), Above 70 = overbought (sell signal)"
+                },
+                "macd": {
+                    "macd_line": round(macd_data["macd_line"], 4) if macd_data else None,
+                    "signal_line": round(macd_data["signal_line"], 4) if macd_data else None,
+                    "histogram": round(macd_data["histogram"], 4) if macd_data else None,
+                    "trend": macd_data["trend"] if macd_data else None,
+                    "description": "MACD shows trend direction. Bullish = upward momentum, Bearish = downward momentum"
+                },
+                "moving_averages": {
+                    "sma_20": round(ma_data["sma_20"], 2) if ma_data["sma_20"] else None,
+                    "sma_50": round(ma_data["sma_50"], 2) if ma_data["sma_50"] else None,
+                    "sma_200": round(ma_data["sma_200"], 2) if ma_data["sma_200"] else None,
+                    "above_sma_20": current_price > ma_data["sma_20"] if ma_data["sma_20"] else None,
+                    "above_sma_50": current_price > ma_data["sma_50"] if ma_data["sma_50"] else None,
+                    "description": "Price above MA = uptrend, Price below MA = downtrend"
+                },
+                "bollinger_bands": {
+                    "upper_band": round(bb_data["upper_band"], 2) if bb_data else None,
+                    "middle_band": round(bb_data["middle_band"], 2) if bb_data else None,
+                    "lower_band": round(bb_data["lower_band"], 2) if bb_data else None,
+                    "position": bb_data["position"] if bb_data else None,
+                    "description": "Bands show volatility. Price at edges = potential reversal opportunity"
+                }
+            },
+            "signals": signals,
+            "chart_data": historical,  # Full historical data for charting
+            "summary": _generate_summary(rsi, macd_data, ma_data, bb_data, current_price)
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Could not analyze {ticker}: {str(e)}"
+        )
+
+
+def _generate_summary(rsi, macd_data, ma_data, bb_data, current_price):
+    """Generate overall trading summary"""
+    bullish_signals = 0
+    bearish_signals = 0
+    
+    if rsi and rsi < 30: bullish_signals += 1
+    if rsi and rsi > 70: bearish_signals += 1
+    
+    if macd_data and macd_data["trend"] == "bullish": bullish_signals += 1
+    if macd_data and macd_data["trend"] == "bearish": bearish_signals += 1
+    
+    if ma_data["sma_20"] and current_price > ma_data["sma_20"]: bullish_signals += 1
+    if ma_data["sma_20"] and current_price < ma_data["sma_20"]: bearish_signals += 1
+    
+    if bb_data and bb_data["position"] == "below_lower": bullish_signals += 1
+    if bb_data and bb_data["position"] == "above_upper": bearish_signals += 1
+    
+    if bullish_signals > bearish_signals:
+        return {"outlook": "bullish", "strength": bullish_signals, "message": "Multiple bullish indicators detected"}
+    elif bearish_signals > bullish_signals:
+        return {"outlook": "bearish", "strength": bearish_signals, "message": "Multiple bearish indicators detected"}
+    else:
+        return {"outlook": "neutral", "strength": 0, "message": "Mixed signals - wait for clearer trend"}
+    
+
 @router.get("/watchlist")
 async def screen_watchlist(
     rsi_below: Optional[float] = Query(None, ge=0, le=100, description="RSI below this value"),
