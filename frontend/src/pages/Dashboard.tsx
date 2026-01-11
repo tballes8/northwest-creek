@@ -70,9 +70,21 @@ const Dashboard: React.FC = () => {
 
   const getTierBadge = (tier: string) => {
     const badges = {
-      free: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Free' },
-      pro: { bg: 'bg-primary-100', text: 'text-primary-800', label: 'Pro' },
-      enterprise: { bg: 'bg-purple-100', text: 'text-purple-800', label: 'Enterprise' },
+      free: { 
+        bg: 'bg-gray-100 dark:bg-gray-600', 
+        text: 'text-gray-800 dark:text-gray-200', 
+        label: 'Free' 
+      },
+      pro: { 
+        bg: 'bg-primary-100 dark:bg-primary-900/50', 
+        text: 'text-primary-800 dark:text-primary-200', 
+        label: 'Pro' 
+      },
+      enterprise: { 
+        bg: 'bg-purple-100 dark:bg-purple-900/50', 
+        text: 'text-purple-800 dark:text-purple-200', 
+        label: 'Enterprise' 
+      },
     };
     const badge = badges[tier as keyof typeof badges] || badges.free;
     return (
@@ -94,9 +106,9 @@ const Dashboard: React.FC = () => {
   }
 
 return (
-  <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+  <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
     {/* Top Navigation */}
-    <nav className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+    <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
           <div className="flex items-center">
@@ -105,25 +117,25 @@ return (
               alt="Northwest Creek" 
               className="h-10 w-10 mr-3"
             />
-            <span className="text-xl font-bold text-primary-600 dark:text-primary-400">Northwest Creek</span>
+            <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
           </div>
           
           {/* Navigation Links */}
           <div className="hidden md:flex items-center space-x-8">
-            <Link to="/dashboard" className="text-primary-600 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">
+            <Link to="/dashboard" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">
               Dashboard
             </Link>
-            <Link to="/watchlist" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+            <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
               Watchlist
             </Link>
-            <Link to="/portfolio" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+            <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
               Portfolio
             </Link>
-            <Link to="/alerts" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+            <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
               Alerts
             </Link>
             {user?.subscription_tier === 'enterprise' && (
-              <Link to="/screener" className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
+              <Link to="/screener" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
                 Screener
               </Link>
             )}
