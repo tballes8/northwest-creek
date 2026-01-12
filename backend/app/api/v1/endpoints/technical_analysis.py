@@ -58,7 +58,7 @@ def _determine_bb_position(price: float, upper: float | None, lower: float | Non
 @router.get("/analyze/{ticker}")
 async def analyze_stock(
     ticker: str,
-    days: int = Query(60, ge=30, le=365, description="Days of historical data"),
+    days: int = Query(360, ge=30, le=365, description="Days of historical data"),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -80,6 +80,9 @@ async def analyze_stock(
                 detail=f"No historical data available for {ticker}"
             )
         
+        # ADD THIS DEBUG LINE
+        print(f"DEBUG: Fetched {len(historical)} days of data for {ticker}")
+
         prices = [float(day["close"]) for day in historical]
         current_price = prices[-1]
         

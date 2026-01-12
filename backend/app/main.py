@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.config import get_settings
-from app.api.v1.endpoints import alerts, auth, indicators, portfolio, stocks, watchlist, technical_analysis
+from app.api.v1.endpoints import alerts, auth, indicators, portfolio, stocks, watchlist, technical_analysis, dcf_valuation
 
 
 settings = get_settings()
@@ -70,3 +70,4 @@ app.include_router(indicators.router, prefix=f"/api/{settings.API_VERSION}/indic
 app.include_router(portfolio.router, prefix=f"/api/{settings.API_VERSION}/portfolio", tags=["portfolio"])
 app.include_router(alerts.router, prefix=f"/api/{settings.API_VERSION}/alerts", tags=["alerts"])
 app.include_router(technical_analysis.router, prefix="/api/v1/technical-analysis", tags=["Technical Analysis"])
+app.include_router(dcf_valuation.router, prefix="/api/v1/dcf", tags=["DCF Valuation"])
