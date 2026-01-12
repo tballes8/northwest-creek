@@ -83,21 +83,39 @@ async def get_portfolio(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get user's portfolio with current prices and P&L"""
-    # Get portfolio positions
+    """Get user's portfolio with current market data and totals"""
+    # Get all positions from database
     result = await db.execute(
         select(Portfolio)
         .where(Portfolio.user_id == current_user.id)
         .order_by(Portfolio.created_at.desc())
     )
-    items = result.scalars().all()
+    positions = result.scalars().all()  # Extract list from Result
     
-    # Enrich with current prices
-    enriched_items = await enrich_portfolio_with_prices(items)
+    # Enrich positions with current prices
+    enriched_positions = await enrich_portfolio_with_prices(positions)  # Use your existing function
     
-    return schemas.PortfolioResponse(
-        positions=enriched_items,
-        count=len(enriched_items)
+    # Calculate totals from enriched data
+    total_current_value = 0.0
+    total_cost_basis = 0.0
+    
+    for position in enriched_positions:
+        if position.total_value is not None:
+            total_current_value += position.total_value
+        cost_basis = position.quantity * position.buy_price
+        total_cost_basis += cost_basis
+    
+    # Calculate profit/loss
+    total_profit_loss = total_current_value - total_cost_basis
+    total_profit_loss_percent = (
+        (total_profit_loss / total_cost_basis * 100) if total_cost_basis > 0 else 0
+    )
+    
+    return schemas.PortfolioResponse(  # Return proper typed response
+        positions=enriched_positions,
+        total_current_value=total_current_value,
+        total_profit_loss=total_profit_loss,
+        total_profit_loss_percent=total_profit_loss_percent
     )
 
 

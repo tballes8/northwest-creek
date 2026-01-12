@@ -43,10 +43,12 @@ class PortfolioPositionResponse(PortfolioPositionInDB):
     current_price: Optional[float] = None
     total_value: Optional[float] = None
     profit_loss: Optional[float] = None
-    profit_loss_percent: Optional[float] = None
+    profit_loss_percent: Optional[float] = None 
 
 
 class PortfolioResponse(BaseModel):
     """Response containing all portfolio positions"""
     positions: list[PortfolioPositionResponse]
-    count: int
+    total_current_value: float
+    total_profit_loss: float
+    total_profit_loss_percent: float
