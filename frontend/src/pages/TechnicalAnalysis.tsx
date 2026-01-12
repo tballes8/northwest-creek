@@ -77,6 +77,16 @@ interface TechnicalAnalysisData {
     low: number;
     close: number;
     volume: number;
+    sma_20: number | null;
+    sma_50: number | null;
+    sma_200: number | null;
+    bb_upper: number | null;
+    bb_middle: number | null;
+    bb_lower: number | null;
+    rsi: number | null;
+    macd_line: number | null;
+    macd_signal: number | null;
+    macd_histogram: number | null;
   }>;
   summary: {
     outlook: string;
@@ -165,65 +175,99 @@ const TechnicalAnalysis: React.FC = () => {
 
     const dates = analysisData.chart_data.map(d => d.date);
     const prices = analysisData.chart_data.map(d => d.close);
-    
-    const datasets: any[] = [
-      {
-        label: 'Price',
-        data: prices,
-        borderColor: 'rgb(59, 130, 246)',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        fill: true,
-        tension: 0.1,
-      }
-    ];
-
-    // Add Bollinger Bands
-    if (analysisData.indicators.bollinger_bands) {
-      const bb = analysisData.indicators.bollinger_bands;
-      datasets.push({
-        label: 'Upper Band',
-        data: Array(prices.length).fill(bb.upper_band),
-        borderColor: 'rgba(239, 68, 68, 0.5)',
-        borderDash: [5, 5],
-        fill: false,
-        pointRadius: 0,
-      });
-      datasets.push({
-        label: 'Lower Band',
-        data: Array(prices.length).fill(bb.lower_band),
-        borderColor: 'rgba(34, 197, 94, 0.5)',
-        borderDash: [5, 5],
-        fill: false,
-        pointRadius: 0,
-      });
-    }
-
-    // Add Moving Averages
-    if (analysisData.indicators.moving_averages.sma_20) {
-      datasets.push({
-        label: '20-day SMA',
-        data: Array(prices.length).fill(analysisData.indicators.moving_averages.sma_20),
-        borderColor: 'rgba(234, 179, 8, 0.8)',
-        borderDash: [3, 3],
-        fill: false,
-        pointRadius: 0,
-      });
-    }
-
-    if (analysisData.indicators.moving_averages.sma_50) {
-      datasets.push({
-        label: '50-day SMA',
-        data: Array(prices.length).fill(analysisData.indicators.moving_averages.sma_50),
-        borderColor: 'rgba(168, 85, 247, 0.8)',
-        borderDash: [3, 3],
-        fill: false,
-        pointRadius: 0,
-      });
-    }
+    const volumes = analysisData.chart_data.map(d => d.volume);
+    const sma20 = analysisData.chart_data.map(d => d.sma_20);
+    const sma50 = analysisData.chart_data.map(d => d.sma_50);
+    const bbUpper = analysisData.chart_data.map(d => d.bb_upper);
+    const bbLower = analysisData.chart_data.map(d => d.bb_lower);
 
     return {
-      labels: dates,
-      datasets: datasets
+        labels: dates,
+        datasets: [
+        {
+            label: 'Close Price',
+            data: prices,
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            fill: false,
+            tension: 0.1,
+            pointRadius: 0,
+            borderWidth: 2,
+            yAxisID: 'y',
+        },
+        {
+            label: 'SMA 20',
+            data: sma20,
+            borderColor: 'rgba(234, 179, 8, 0.8)',
+            fill: false,
+            pointRadius: 0,
+            borderWidth: 2,
+            yAxisID: 'y',
+            spanGaps: true,
+        },
+        {
+            label: 'SMA 50',
+            data: sma50,
+            borderColor: 'rgba(168, 85, 247, 0.8)',
+            fill: false,
+            pointRadius: 0,
+            borderWidth: 2,
+            yAxisID: 'y',
+            spanGaps: true,
+        },
+        {
+            label: 'BB Upper',
+            data: bbUpper,
+            borderColor: 'rgba(239, 68, 68, 0.87)',
+            borderDash: [5, 5],
+            fill: false,
+            pointRadius: 0,
+            borderWidth: 1,
+            yAxisID: 'y',
+            spanGaps: true,
+        },
+        {
+            label: 'BB Lower',
+            data: bbLower,
+            borderColor: 'rgba(24, 228, 58, 0.78)',
+            borderDash: [5, 5],
+            fill: '+1',
+            backgroundColor: 'rgba(156, 163, 175, 0.1)',
+            pointRadius: 0,
+            borderWidth: 1,
+            yAxisID: 'y',
+            spanGaps: true,
+        },
+        {
+            type: 'bar' as const,
+            label: 'Volume',
+            data: volumes,
+            backgroundColor: 'rgba(156, 163, 175, 0.3)',
+            borderColor: 'rgba(156, 163, 175, 0.5)',
+            borderWidth: 1,
+            yAxisID: 'y1',
+        }
+        ]
+    };
+  };
+
+  const getVolumeChartData = () => {
+    if (!analysisData) return null;
+
+    const dates = analysisData.chart_data.map(d => d.date);
+    const volumes = analysisData.chart_data.map(d => d.volume);
+
+    return {
+        labels: dates,
+        datasets: [
+        {
+            label: 'Volume',
+            data: volumes,
+            backgroundColor: 'rgba(99, 102, 241, 0.5)',
+            borderColor: 'rgba(99, 102, 241, 0.8)',
+            borderWidth: 1,
+        }
+        ]
     };
   };
 
@@ -231,35 +275,43 @@ const TechnicalAnalysis: React.FC = () => {
     if (!analysisData?.indicators.rsi) return null;
 
     const dates = analysisData.chart_data.map(d => d.date);
-    const rsiValue = analysisData.indicators.rsi.value;
+    const rsiValues = analysisData.chart_data.map(d => d.rsi);
+
+    // Debug logging
+    console.log('RSI values:', rsiValues.filter(v => v !== null).length, 'non-null values');
 
     return {
-      labels: dates,
-      datasets: [
+        labels: dates,
+        datasets: [
         {
-          label: 'RSI',
-          data: Array(dates.length).fill(rsiValue),
-          borderColor: 'rgb(99, 102, 241)',
-          backgroundColor: 'rgba(99, 102, 241, 0.1)',
-          fill: true,
+            label: 'RSI',
+            data: rsiValues,
+            borderColor: 'rgb(99, 102, 241)',
+            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+            fill: true,
+            pointRadius: 0,
+            borderWidth: 2,
+            spanGaps: true,
         },
         {
-          label: 'Overbought (70)',
-          data: Array(dates.length).fill(70),
-          borderColor: 'rgba(239, 68, 68, 0.5)',
-          borderDash: [5, 5],
-          fill: false,
-          pointRadius: 0,
+            label: 'Overbought (70)',
+            data: Array(dates.length).fill(70),
+            borderColor: 'rgba(239, 108, 68, 0.99)',
+            borderDash: [5, 5],
+            fill: false,
+            pointRadius: 0,
+            borderWidth: 1,
         },
         {
-          label: 'Oversold (30)',
-          data: Array(dates.length).fill(30),
-          borderColor: 'rgba(34, 197, 94, 0.5)',
-          borderDash: [5, 5],
-          fill: false,
-          pointRadius: 0,
+            label: 'Oversold (30)',
+            data: Array(dates.length).fill(30),
+            borderColor: 'rgb(171, 236, 18)',
+            borderDash: [5, 5],
+            fill: false,
+            pointRadius: 0,
+            borderWidth: 1,
         }
-      ]
+        ]
     };
   };
 
@@ -267,7 +319,19 @@ const TechnicalAnalysis: React.FC = () => {
     if (!analysisData?.indicators.macd) return null;
 
     const dates = analysisData.chart_data.map(d => d.date);
-    const macd = analysisData.indicators.macd;
+    const macdLine = analysisData.chart_data.map(d => d.macd_line);
+    const signalLine = analysisData.chart_data.map(d => d.macd_signal);
+    const histogram = analysisData.chart_data.map(d => d.macd_histogram);
+
+    // Debug logging
+    console.log('MACD Line values:', macdLine.filter(v => v !== null).length, 'non-null values');
+    console.log('Signal Line values:', signalLine.filter(v => v !== null).length, 'non-null values');
+    console.log('Histogram values:', histogram.filter(v => v !== null).length, 'non-null values');
+
+    // Color histogram bars based on positive/negative
+    const histogramColors = histogram.map(val => 
+        val && val > 0 ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'
+    );
 
     return {
         labels: dates,
@@ -275,87 +339,160 @@ const TechnicalAnalysis: React.FC = () => {
         {
             type: 'line' as const,
             label: 'MACD Line',
-            data: Array(dates.length).fill(macd.macd_line),
+            data: macdLine,
             borderColor: 'rgb(59, 130, 246)',
             backgroundColor: 'transparent',
             fill: false,
             pointRadius: 0,
+            borderWidth: 2,
+            spanGaps: true,
         },
         {
             type: 'line' as const,
             label: 'Signal Line',
-            data: Array(dates.length).fill(macd.signal_line),
+            data: signalLine,
             borderColor: 'rgb(239, 68, 68)',
             backgroundColor: 'transparent',
             fill: false,
             pointRadius: 0,
+            borderWidth: 2,
+            spanGaps: true,
         },
         {
             type: 'bar' as const,
             label: 'Histogram',
-            data: Array(dates.length).fill(macd.histogram),
-            backgroundColor: macd.histogram > 0 ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)',
+            data: histogram,
+            backgroundColor: histogramColors,
+            borderWidth: 0,
         }
         ]
     };
+  };
+
+  const priceChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+        mode: 'index' as const,
+        intersect: false,
+    },
+    plugins: {
+        legend: {
+        position: 'top' as const,
+        labels: {
+            color: '#9CA3AF',
+            usePointStyle: true,
+            boxWidth: 6,
+        }
+        },
+        tooltip: {
+        mode: 'index' as const,
+        intersect: false,
+        }
+    },
+    scales: {
+        x: {
+        ticks: {
+            color: '#9CA3AF',
+            maxTicksLimit: 10,
+        },
+        grid: {
+            color: 'rgba(156, 163, 175, 0.1)',
+        }
+        },
+        y: {
+        type: 'linear' as const,
+        display: true,
+        position: 'left' as const,
+        title: {
+            display: true,
+            text: 'Price ($)',
+            color: '#9CA3AF',
+        },
+        ticks: {
+            color: '#9CA3AF',
+        },
+        grid: {
+            color: 'rgba(156, 163, 175, 0.1)',
+        }
+        },
+        y1: {
+        type: 'linear' as const,
+        display: true,
+        position: 'right' as const,
+        title: {
+            display: true,
+            text: 'Volume',
+            color: '#9CA3AF',
+        },
+        ticks: {
+            color: '#9CA3AF',
+        },
+        grid: {
+            drawOnChartArea: false,
+        }
+        }
+    }
   };
 
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: {
+        legend: {
         position: 'top' as const,
         labels: {
-          color: '#9CA3AF',
+            color: '#9CA3AF',
         }
-      },
+        },
     },
     scales: {
-      x: {
+        x: {
         ticks: {
-          color: '#9CA3AF',
-          maxTicksLimit: 10,
+            color: '#9CA3AF',
+            maxTicksLimit: 10,
         },
         grid: {
-          color: 'rgba(156, 163, 175, 0.1)',
+            color: 'rgba(156, 163, 175, 0.1)',
         }
-      },
-      y: {
+        },
+        y: {
         ticks: {
-          color: '#9CA3AF',
+            color: '#9CA3AF',
         },
         grid: {
-          color: 'rgba(156, 163, 175, 0.1)',
+            color: 'rgba(156, 163, 175, 0.1)',
         }
-      }
+        }
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
       {/* Navigation */}
-      <nav className="bg-gray-800 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
+      <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
-              <span className="text-xl font-bold text-primary-400">Northwest Creek</span>
+              <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
             </div>
             
             <div className="hidden md:flex items-center space-x-8">
-              <Link to="/dashboard" className="text-gray-300 hover:text-white">Dashboard</Link>
-              <Link to="/watchlist" className="text-gray-300 hover:text-white">Watchlist</Link>
-              <Link to="/portfolio" className="text-gray-300 hover:text-white">Portfolio</Link>
-              <Link to="/alerts" className="text-gray-300 hover:text-white">Alerts</Link>
-              <Link to="/technical-analysis" className="text-primary-400 font-medium border-b-2 border-primary-400 pb-1">Technical Analysis</Link>
+              <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
+              <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
+              <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
+              <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
+              {user?.subscription_tier === 'enterprise' && (
+                <Link to="/technical-analysis" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">Technical Analysis</Link>
+              )}
             </div>
 
             <div className="flex items-center space-x-4">
               <ThemeToggle />
-              <span className="text-sm text-gray-300">{user?.email}</span>
+              <span className="text-sm text-gray-600 dark:text-gray-300">{user?.email}</span>
               {user && getTierBadge(user.subscription_tier)}
-              <button onClick={handleLogout} className="text-gray-300 hover:text-white text-sm font-medium">
+              <button onClick={handleLogout} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium">
                 Logout
               </button>
             </div>
@@ -480,34 +617,52 @@ const TechnicalAnalysis: React.FC = () => {
               </div>
             )}
 
-            {/* Price Chart with Bollinger Bands and Moving Averages */}
+            {/* Price Chart with Bollinger Bands, Moving Averages, and Volume */}
             <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Price Chart with Indicators</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                📊 <strong>How to read:</strong> Green dashed line = Lower Bollinger Band (potential buy zone), 
-                Red dashed line = Upper Bollinger Band (potential sell zone), 
-                Yellow line = 20-day MA (short-term trend), Purple line = 50-day MA (medium-term trend)
-              </p>
-              <div style={{ height: '400px' }}>
-                {getPriceChartData() && (
-                  <Line data={getPriceChartData()!} options={chartOptions} />
-                )}
-              </div>
-            </div>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Price Chart with Indicators</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    📊 <strong>How to read:</strong> Green dashed line = Lower Bollinger Band (potential buy zone), 
+                    Red dashed line = Upper Bollinger Band (potential sell zone), 
+                    Yellow line = 20-day MA (short-term trend), Purple line = 50-day MA (medium-term trend). 
+                    Volume bars on right axis show trading activity.
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    <strong>Situations to Look For:</strong> Breakout likely: BB squeeze + expanding volume
+                </p>
+                <div style={{ height: '500px' }}>
+                    {getPriceChartData() && (
+                    <Chart type="line" data={getPriceChartData()!} options={priceChartOptions} />
+                    )}
+                </div>
+            </div>        
 
             {/* RSI Chart */}
             <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">RSI (Relative Strength Index)</h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                Current RSI: <strong className={analysisData.indicators.rsi.value < 30 ? 'text-green-500' : analysisData.indicators.rsi.value > 70 ? 'text-red-500' : 'text-gray-900 dark:text-white'}>
-                  {analysisData.indicators.rsi.value.toFixed(2)}
-                </strong> - {analysisData.indicators.rsi.description}
-              </p>
-              <div style={{ height: '300px' }}>
-                {getRSIChartData() && (
-                  <Line data={getRSIChartData()!} options={{...chartOptions, scales: {...chartOptions.scales, y: {min: 0, max: 100, ticks: {color: '#9CA3AF'}, grid: {color: 'rgba(156, 163, 175, 0.1)'}}}}} />
-                )}
-              </div>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">RSI (Relative Strength Index)</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    Current RSI: <strong className={analysisData.indicators.rsi.value && analysisData.indicators.rsi.value < 30 ? 'text-green-500' : analysisData.indicators.rsi.value && analysisData.indicators.rsi.value > 70 ? 'text-red-500' : 'text-gray-900 dark:text-white'}>
+                    {analysisData.indicators.rsi.value?.toFixed(2) || 'N/A'}
+                    </strong> - {analysisData.indicators.rsi.description}
+                </p>
+                <div style={{ height: '300px' }}>
+                    {getRSIChartData() && (
+                    <Line 
+                        data={getRSIChartData()!} 
+                        options={{
+                        ...chartOptions, 
+                        scales: {
+                            ...chartOptions.scales, 
+                            y: {
+                            min: 0, 
+                            max: 100, 
+                            ticks: {color: '#9CA3AF'}, 
+                            grid: {color: 'rgba(156, 163, 175, 0.1)'}
+                            }
+                        }
+                        }} 
+                    />
+                    )}
+                </div>
             </div>
 
             {/* MACD Chart */}

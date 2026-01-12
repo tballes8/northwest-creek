@@ -106,56 +106,44 @@ const Dashboard: React.FC = () => {
   }
 
 return (
-  <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
-    {/* Top Navigation */}
-    <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
-          <div className="flex items-center">
-            <img 
-              src="/images/logo.png" 
-              alt="Northwest Creek" 
-              className="h-10 w-10 mr-3"
-            />
-            <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
-          </div>
-          
-          {/* Navigation Links */}
-          <div className="hidden md:flex items-center space-x-8">
-            <Link to="/dashboard" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">Dashboard</Link>
-            <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
-            <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
-            <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
-            <Link to="/technical-analysis" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
-            {user?.subscription_tier === 'enterprise' && (
-              <Link to="/screener" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">
-                Screener
-              </Link>
-            )}
-          </div>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
+      {/* Navigation */}
+      <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center">
+              <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
+              <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
+            </div>
+            
+            <div className="hidden md:flex items-center space-x-8">
+              <Link to="/dashboard" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">Dashboard</Link>
+              <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
+              <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
+              <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
+              {user?.subscription_tier === 'enterprise' && (
+                <Link to="/technical-analysis" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
+              )}
+            </div>
 
-          {/* User Menu */}
-          <div className="flex items-center space-x-4">
-            <ThemeToggle />
-            <span className="text-sm text-gray-600 dark:text-gray-300">{user?.email}</span>
-            {user && getTierBadge(user.subscription_tier)}
-            <button
-              onClick={handleLogout}
-              className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium"
-            >
-              Logout
-            </button>
+            <div className="flex items-center space-x-4">
+              <ThemeToggle />
+              <span className="text-sm text-gray-600 dark:text-gray-300">{user?.email}</span>
+              {user && getTierBadge(user.subscription_tier)}
+              <button onClick={handleLogout} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium">
+                Logout
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-    </nav>
+      </nav>
 
     {/* Main Content */}
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Welcome Section */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          Welcome back, {user?.full_name || 'Investor'}! 👋
+          Welcome back, {user?.full_name || 'Investor'}! {/*👋 */}
         </h1>
         <p className="text-gray-600 dark:text-gray-400 mt-1">Here's your portfolio overview</p>
       </div>
