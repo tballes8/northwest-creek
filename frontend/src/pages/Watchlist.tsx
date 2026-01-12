@@ -162,6 +162,10 @@ const Watchlist: React.FC = () => {
               {user?.subscription_tier === 'enterprise' && (
                 <Link to="/technical-analysis" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
               )}
+              {user?.subscription_tier === 'enterprise' && (
+                <Link to="/dcf-valuation" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">DCF Valuation</Link>
+              )}
+
             </div>
 
             <div className="flex items-center space-x-4">

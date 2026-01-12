@@ -8,6 +8,7 @@ import Watchlist from './pages/Watchlist';
 import Portfolio from './pages/Portfolio';
 import Alerts from './pages/Alerts';
 import TechnicalAnalysis from './pages/TechnicalAnalysis';
+import DCFValuation from './pages/DCFValuation';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -67,6 +68,15 @@ function App() {
           element={
             <ProtectedRoute>
               <TechnicalAnalysis />
+            </ProtectedRoute>
+          } 
+        />
+
+        <Route 
+          path="/dcf-valuation" 
+          element={
+            <ProtectedRoute>
+              <DCFValuation />
             </ProtectedRoute>
           } 
         />
