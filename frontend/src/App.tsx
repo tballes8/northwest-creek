@@ -9,6 +9,7 @@ import Portfolio from './pages/Portfolio';
 import Alerts from './pages/Alerts';
 import TechnicalAnalysis from './pages/TechnicalAnalysis';
 import DCFValuation from './pages/DCFValuation';
+import VerifyEmail from './pages/VerifyEmail';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -28,16 +29,15 @@ function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        <Route 
-          path="/dashboard" 
+        <Route path="/dashboard" 
           element={
             <ProtectedRoute>
               <Dashboard />
             </ProtectedRoute>
           } 
         />
-        <Route 
-          path="/watchlist" 
+
+        <Route path="/watchlist" 
           element={
             <ProtectedRoute>
               <Watchlist />
@@ -45,8 +45,7 @@ function App() {
           } 
         />
 
-        <Route 
-          path="/portfolio" 
+        <Route path="/portfolio" 
           element={
             <ProtectedRoute>
               <Portfolio />
@@ -54,8 +53,7 @@ function App() {
           } 
         />
 
-        <Route 
-          path="/alerts" 
+        <Route path="/alerts" 
           element={
             <ProtectedRoute>
               <Alerts />
@@ -63,8 +61,7 @@ function App() {
           } 
         />
 
-        <Route 
-          path="/technical-analysis" 
+        <Route path="/technical-analysis" 
           element={
             <ProtectedRoute>
               <TechnicalAnalysis />
@@ -72,14 +69,15 @@ function App() {
           } 
         />
 
-        <Route 
-          path="/dcf-valuation" 
+        <Route path="/dcf-valuation" 
           element={
             <ProtectedRoute>
               <DCFValuation />
             </ProtectedRoute>
           } 
         />
+
+        <Route path="/verify-email" element={<VerifyEmail />} />
       </Routes>
     </Router>
   );

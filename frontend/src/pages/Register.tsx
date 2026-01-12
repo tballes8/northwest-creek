@@ -11,6 +11,7 @@ const Register: React.FC = () => {
     full_name: '',
   });
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -38,20 +39,46 @@ const Register: React.FC = () => {
         full_name: formData.full_name,
       });
       
-      // Auto-login after registration
-      const loginResponse = await authAPI.login({
-        email: formData.email,
-        password: formData.password,
-      });
-      
-      localStorage.setItem('access_token', loginResponse.data.access_token);
-      navigate('/dashboard');
+      setSuccess(true);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
+
+  if (success) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+        <div className="sm:mx-auto sm:w-full sm:max-w-md">
+          <div className="bg-white dark:bg-gray-700 py-8 px-4 shadow-xl dark:shadow-gray-200/20 sm:rounded-lg sm:px-10 border dark:border-gray-500">
+            <div className="text-center">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/50">
+                <svg className="h-6 w-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+              </div>
+              <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">Check Your Email!</h3>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                We've sent a verification link to <strong>{formData.email}</strong>
+              </p>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                Click the link in the email to verify your account and start using Northwest Creek.
+              </p>
+              <div className="mt-6">
+                <Link
+                  to="/login"
+                  className="text-primary-600 dark:text-primary-400 hover:text-primary-500 dark:hover:text-primary-300 font-medium"
+                >
+                  Go to Login
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
@@ -60,7 +87,7 @@ const Register: React.FC = () => {
           <img 
             src="/images/logo.png" 
             alt="Northwest Creek" 
-            className="h-100 w-100"
+            className="h-50 w-50"
           />
         </Link>
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
@@ -181,7 +208,7 @@ const Register: React.FC = () => {
                 <p className="text-xs text-gray-500 dark:text-gray-400">✓ 5 stocks</p>
               </div>
               <div className="text-center">
-                <p className="text-xs text-gray-500 dark:text-gray-400">✓ 5 entries</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">✓ 3 entries</p>
               </div>
               <div className="text-center">
                 <p className="text-xs text-gray-500 dark:text-gray-400">✓ 5 alerts</p>

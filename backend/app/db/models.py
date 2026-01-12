@@ -16,6 +16,8 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     full_name = Column(String(255))
     is_active = Column(Boolean, default=True)
+    verification_token = Column(String(255), nullable=True)
+    verification_token_expires = Column(DateTime(timezone=True), nullable=True)
     is_verified = Column(Boolean, default=False)
     subscription_tier = Column(String(50), default='free', nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

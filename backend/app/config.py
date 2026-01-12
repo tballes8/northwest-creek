@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     
     # CORS
     CORS_ORIGINS: List[str] = Field(default=["http://localhost:3000"], env="CORS_ORIGINS")
+
+    # SendGrid Email Settings
+    SENDGRID_API_KEY: str = Field(default="", env="SENDGRID_API_KEY")
+    FROM_EMAIL: str = Field(default="", env="FROM_EMAIL")
+    FROM_NAME: str = Field(default="Northwest Creek", env="FROM_NAME")
+    FRONTEND_URL: str = "http://localhost:3000"
     
     class Config:
         env_file = ".env"
@@ -39,11 +45,11 @@ class Settings(BaseSettings):
 
 
 # Singleton pattern
-_settings = None
+settings = None
 
 def get_settings() -> Settings:
     """Get settings instance (singleton)"""
-    global _settings
-    if _settings is None:
-        _settings = Settings()
-    return _settings
+    global settings
+    if settings is None:
+        settings = Settings()
+    return settings
