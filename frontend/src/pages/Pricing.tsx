@@ -36,28 +36,29 @@ const Pricing: React.FC = () => {
     }
   };
 
-  const handleUpgrade = async (tierSlug: string, priceId: string) => {
+  const handleUpgrade = async (tier: string, priceId: string) => {
     try {
-      const token = localStorage.getItem('access_token');
-      if (!token) {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
         navigate('/login');
         return;
-      }
+        }
 
-      const response = await axios.post(
+        const response = await axios.post(
         'http://localhost:8000/api/v1/stripe/create-checkout-session',
         { price_id: priceId },
         { headers: { Authorization: `Bearer ${token}` } }
-      );
+        );
 
-      window.location.href = response.data.checkout_url;
-    } catch (error) {
-      console.error('Failed to create checkout session:', error);
-      alert('Failed to start checkout. Please try again.');
-    }
-  };
+        // Redirect to Stripe Checkout
+        window.location.href = response.data.checkout_url;
+        } catch (error) {
+            console.error('Failed to create checkout session:', error);
+            alert('Failed to start checkout. Please try again.');
+        }
+    };
 
-  const handleLogout = () => {
+    const handleLogout = () => {
     localStorage.removeItem('access_token');
     navigate('/');
   };
@@ -295,37 +296,32 @@ const Pricing: React.FC = () => {
 
                 {/* CTA Button */}
                 {tier.current ? (
-                  <button
+                <button
                     disabled
                     className="w-full px-6 py-3 bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-400 font-semibold rounded-lg cursor-not-allowed"
-                  >
+                >
                     Current Plan
-                  </button>
+                </button>
                 ) : tier.priceId ? (
-                  <button
-                    onClick={() => {
-                      const stripePriceId = tier.tierSlug === 'casual' 
-                        ? stripeConfig?.casual_price_id 
-                        : tier.tierSlug === 'active'
-                        ? stripeConfig?.active_price_id
-                        : stripeConfig?.unlimited_price_id;
-                      handleUpgrade(tier.tierSlug, stripePriceId);
-                    }}
+                <button
+                    onClick={() => handleUpgrade(tier.name, 
+                    tier.priceId === 'pro' ? stripeConfig?.pro_price_id : stripeConfig?.enterprise_price_id
+                    )}
                     className={`w-full px-6 py-3 font-semibold rounded-lg transition-colors ${
-                      tier.highlight
+                    tier.highlight
                         ? 'bg-primary-600 hover:bg-primary-700 text-white'
                         : 'bg-gray-900 hover:bg-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 text-white'
                     }`}
-                  >
+                >
                     {tier.buttonText}
-                  </button>
+                </button>
                 ) : (
-                  <Link
+                <Link
                     to="/register"
                     className="block w-full px-6 py-3 text-center bg-gray-900 hover:bg-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 text-white font-semibold rounded-lg transition-colors"
-                  >
+                >
                     Get Started
-                  </Link>
+                </Link>
                 )}
               </div>
             </div>

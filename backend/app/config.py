@@ -37,6 +37,14 @@ class Settings(BaseSettings):
     FROM_EMAIL: str = Field(default="", env="FROM_EMAIL")
     FROM_NAME: str = Field(default="Northwest Creek", env="FROM_NAME")
     FRONTEND_URL: str = "http://localhost:3000"
+
+    # Stripe Settings
+    STRIPE_SECRET_KEY: str = Field(default="", env="STRIPE_SECRET_KEY")
+    STRIPE_PUBLISHABLE_KEY: str = Field(default="", env="STRIPE_PUBLISHABLE_KEY")
+    STRIPE_WEBHOOK_SECRET: str = Field(default="", env="STRIPE_WEBHOOK_SECRET")
+    STRIPE_CASUAL_PRICE_ID: str = Field(default="", env="STRIPE_CASUAL_PRICE_ID")
+    STRIPE_ACTIVE_PRICE_ID: str = Field(default="", env="STRIPE_ACTIVE_PRICE_ID")
+    STRIPE_UNLIMITED_PRICE_ID: str = Field(default="", env="STRIPE_UNLIMITED_PRICE_ID")
     
     class Config:
         env_file = ".env"

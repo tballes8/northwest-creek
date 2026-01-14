@@ -11,6 +11,8 @@ import TechnicalAnalysis from './pages/TechnicalAnalysis';
 import DCFValuation from './pages/DCFValuation';
 import VerifyEmail from './pages/VerifyEmail';
 import Pricing from './pages/Pricing';
+import PaymentSuccess from './pages/PaymentSuccess';
+
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -32,6 +34,7 @@ function App() {
         <Route path="/register" element={<Register />} />
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/payment-success" element={<PaymentSuccess />} />
 
         <Route path="/dashboard" 
           element={
