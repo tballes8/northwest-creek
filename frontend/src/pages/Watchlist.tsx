@@ -112,8 +112,9 @@ const Watchlist: React.FC = () => {
   const getTierBadge = (tier: string) => {
     const badges = {
       free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
-      pro: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Pro' },
-      enterprise: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Enterprise' },
+      casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
+      active: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Active' },
+      unlimited: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Unlimited' },
     };
     const badge = badges[tier as keyof typeof badges] || badges.free;
     return (
@@ -126,8 +127,9 @@ const Watchlist: React.FC = () => {
   const getTierLimit = () => {
     const limits = {
       free: 5,
-      pro: 50,
-      enterprise: 'Unlimited'
+      casual: 20,
+      active: 45,
+      unlimited: 'Unlimited'
     };
     return limits[user?.subscription_tier as keyof typeof limits] || 5;
   };
@@ -159,10 +161,10 @@ const Watchlist: React.FC = () => {
               <Link to="/watchlist" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">Watchlist</Link>
               <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
               <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
-              {user?.subscription_tier === 'enterprise' && (
+              {user?.subscription_tier === 'active' && (
                 <Link to="/technical-analysis" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
               )}
-              {user?.subscription_tier === 'enterprise' && (
+              {user?.subscription_tier === 'unlimited' && (
                 <Link to="/dcf-valuation" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">DCF Valuation</Link>
               )}
 

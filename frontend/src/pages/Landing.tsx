@@ -121,7 +121,7 @@ const Landing: React.FC = () => {
             Start free, upgrade when you need more
           </p>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 max-w-25xl mx-auto">
             {/* Free Tier */}
             <div className="bg-white dark:bg-gray-600 p-8 rounded-xl shadow-lg dark:shadow-gray-200/50 hover:shadow-xl transition-shadow border dark:border-gray-300">
               <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Free</h3>
@@ -146,27 +146,27 @@ const Landing: React.FC = () => {
                   <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="text-gray-700 dark:text-gray-300">All technical indicators</span>
+                  <span className="text-gray-700 dark:text-gray-300">5 technical indicators</span>
                 </li>
               </ul>
               <Link
                 to="/register"
                 className="block w-full text-center bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold py-3 rounded-lg transition-colors"
               >
-                Get Started
+                Try For Free
               </Link>
             </div>
 
-            {/* Pro Tier */}
+            {/* Casual Investor Tier */}
             <div className="bg-white dark:bg-gray-600 p-8 rounded-xl shadow-lg dark:shadow-gray-200/50 hover:shadow-xl transition-shadow border dark:border-gray-300 relative transform scale-105">
               <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
                 <span className="bg-primary-600 dark:bg-primary-500 text-white text-sm font-bold px-4 py-1 rounded-full">
                   POPULAR
                 </span>
               </div>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Pro</h3>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Casual Investor</h3>
               <div className="mb-6">
-                <span className="text-4xl font-bold text-gray-900 dark:text-white">$29</span>
+                <span className="text-4xl font-bold text-gray-900 dark:text-white">$20</span>
                 <span className="text-gray-600 dark:text-gray-400">/month</span>
               </div>
               <ul className="space-y-3 mb-8">
@@ -174,14 +174,26 @@ const Landing: React.FC = () => {
                   <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="text-gray-700 dark:text-gray-300">50 watchlist stocks</span>
+                  <span className="text-gray-700 dark:text-gray-300">20 watchlist stocks</span>
                 </li>
                 <li className="flex items-start">
                   <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="text-gray-700 dark:text-gray-300">50 portfolio entries</span>
+                  <span className="text-gray-700 dark:text-gray-300">20 portfolio entries</span>
                 </li>
+                <li className="flex items-start">
+                  <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-gray-700 dark:text-gray-300">5 Stock Technical Analysis Data per week</span>
+                </li>
+                <li className="flex items-start">
+                  <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-gray-700 dark:text-gray-300">5 DCF Valuations per week</span>
+                </li>                
                 <li className="flex items-start">
                   <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -193,15 +205,15 @@ const Landing: React.FC = () => {
                 to="/register"
                 className="block w-full text-center bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold py-3 rounded-lg transition-colors"
               >
-                Start Pro Trial
+                Get Started Now
               </Link>
             </div>
 
-            {/* Enterprise Tier */}
+            {/* Active Investor Tier */}
             <div className="bg-white dark:bg-gray-600 p-8 rounded-xl shadow-lg dark:shadow-gray-200/50 hover:shadow-xl transition-shadow border dark:border-gray-300">
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Enterprise</h3>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Active Investor</h3>
               <div className="mb-6">
-                <span className="text-4xl font-bold text-gray-900 dark:text-white">$99</span>
+                <span className="text-4xl font-bold text-gray-900 dark:text-white">$40</span>
                 <span className="text-gray-600 dark:text-gray-400">/month</span>
               </div>
               <ul className="space-y-3 mb-8">
@@ -209,26 +221,97 @@ const Landing: React.FC = () => {
                   <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="text-gray-700 dark:text-gray-300"><strong>Unlimited</strong> everything</span>
+                  <span className="text-gray-700 dark:text-gray-300">45 watchlist stocks</span>
                 </li>
                 <li className="flex items-start">
                   <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="text-gray-700 dark:text-gray-300"><strong>Stock screener</strong></span>
+                  <span className="text-gray-700 dark:text-gray-300">45 portfolio entries</span>
                 </li>
                 <li className="flex items-start">
                   <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="text-gray-700 dark:text-gray-300">Priority phone support</span>
+                  <span className="text-gray-700 dark:text-gray-300">45 Price Alerts</span>
                 </li>
-              </ul>
+                <li className="flex items-start">
+                  <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-gray-700 dark:text-gray-300">5 Stock Technical Analysis Data per day</span>
+                </li>
+                <li className="flex items-start">
+                  <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-gray-700 dark:text-gray-300">5 DCF Valuations per day</span>
+                </li>
+                <li className="flex items-start">
+                  <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-gray-700 dark:text-gray-300">Priority support</span>
+                </li>
+              </ul>              
               <Link
                 to="/register"
                 className="block w-full text-center bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold py-3 rounded-lg transition-colors"
               >
-                Go Enterprise
+                Get Active
+              </Link>
+            </div>
+
+            {/* Unlimited Investor Tier */}
+            <div className="bg-white dark:bg-gray-600 p-8 rounded-xl shadow-lg dark:shadow-gray-200/50 hover:shadow-xl transition-shadow border dark:border-gray-300">
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Unlimited</h3>
+              <div className="mb-6">
+                <span className="text-4xl font-bold text-gray-900 dark:text-white">$100</span>
+                <span className="text-gray-600 dark:text-gray-400">/month</span>
+              </div>
+              <ul className="space-y-3 mb-8">
+                <li className="flex items-start">
+                  <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-gray-700 dark:text-gray-300">Unlimited watchlist stocks</span>
+                </li>
+                <li className="flex items-start">
+                  <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-gray-700 dark:text-gray-300">Unlimited portfolio entries</span>
+                </li>
+                <li className="flex items-start">
+                  <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-gray-700 dark:text-gray-300">Unlimited Stock Technical Analysis Data</span>
+                </li>
+                <li className="flex items-start">
+                  <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-gray-700 dark:text-gray-300">Unlimited DCF Valuations</span>
+                </li>                
+                <li className="flex items-start">
+                  <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-gray-700 dark:text-gray-300">Unlimited Price Alerts</span>
+                </li>                
+                <li className="flex items-start">
+                  <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-gray-700 dark:text-gray-300">Priority support</span>
+                </li>
+              </ul>              
+              <Link
+                to="/register"
+                className="block w-full text-center bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold py-3 rounded-lg transition-colors"
+              >
+                Go Unlimited
               </Link>
             </div>
           </div>
