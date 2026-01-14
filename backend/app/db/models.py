@@ -19,7 +19,9 @@ class User(Base):
     verification_token = Column(String(255), nullable=True)
     verification_token_expires = Column(DateTime(timezone=True), nullable=True)
     is_verified = Column(Boolean, default=False)
-    subscription_tier = Column(String(50), default='free', nullable=False)
+    
+    # Subscription tiers: free, casual, active, unlimited
+    subscription_tier = Column(String(50), default="free")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     

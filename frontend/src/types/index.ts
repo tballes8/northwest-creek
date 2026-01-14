@@ -7,7 +7,7 @@ export interface User {
   email: string;
   full_name: string;
   is_active: boolean;
-  subscription_tier: 'free' | 'pro' | 'enterprise';
+  subscription_tier: 'free' | 'casual' | 'active' | 'unlimited';
   created_at: string;
 }
 

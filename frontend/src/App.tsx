@@ -10,6 +10,7 @@ import Alerts from './pages/Alerts';
 import TechnicalAnalysis from './pages/TechnicalAnalysis';
 import DCFValuation from './pages/DCFValuation';
 import VerifyEmail from './pages/VerifyEmail';
+import Pricing from './pages/Pricing';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -29,6 +30,9 @@ function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/pricing" element={<Pricing />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
+
         <Route path="/dashboard" 
           element={
             <ProtectedRoute>
@@ -76,8 +80,6 @@ function App() {
             </ProtectedRoute>
           } 
         />
-
-        <Route path="/verify-email" element={<VerifyEmail />} />
       </Routes>
     </Router>
   );
