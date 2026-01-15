@@ -15,16 +15,15 @@ from app.services.technical_indicators import technical_indicators
 
 router = APIRouter()
 
-
-def require_enterprise(current_user: User = Depends(get_current_user)):
-    """Require Enterprise tier for screener access"""
-    if current_user.subscription_tier != "enterprise":
+def require_paid_tier(current_user: User = Depends(get_current_user)):
+    """Require paid tier (Casual, Active, or Unlimited) for Technical Analysis access"""
+    allowed_tiers = ["casual", "active", "unlimited"]
+    if current_user.subscription_tier not in allowed_tiers:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Stock Screener is an Enterprise-only feature! Current tier: {current_user.subscription_tier.title()}. Upgrade to Enterprise ($99/month) for unlimited screening capabilities, unlimited watchlists, and unlimited alerts!"
+            detail=f"Technical Analysis requires a paid subscription! Current tier: {current_user.subscription_tier.title()}. Upgrade to access this feature!"
         )
     return current_user
-
 
 class ScreenerResult:
     """Screener result item"""
@@ -58,8 +57,9 @@ def _determine_bb_position(price: float, upper: float | None, lower: float | Non
 @router.get("/analyze/{ticker}")
 async def analyze_stock(
     ticker: str,
-    days: int = Query(360, ge=30, le=365, description="Days of historical data"),
-    current_user: User = Depends(get_current_user)
+    days: int = Query(250, ge=30, le=365),
+    current_user: User = Depends(require_paid_tier),  # ← Changed
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Get complete technical analysis for a stock
