@@ -205,13 +205,13 @@ const Register: React.FC = () => {
 
             <div className="mt-6 grid grid-cols-3 gap-3">
               <div className="text-center">
-                <p className="text-xs text-gray-500 dark:text-gray-400">✓ 5 stocks</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">✓ 5 stocks reviews</p>
               </div>
               <div className="text-center">
-                <p className="text-xs text-gray-500 dark:text-gray-400">✓ 3 entries</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">✓ 5 watchlist entries</p>
               </div>
               <div className="text-center">
-                <p className="text-xs text-gray-500 dark:text-gray-400">✓ 5 alerts</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">✓ 5 portfolio entries</p>
               </div>
             </div>
           </div>

@@ -361,13 +361,13 @@ return (
       {user?.subscription_tier === 'free' && (
         <div className="mt-8 bg-gradient-to-r from-primary-600 to-primary-700 dark:from-primary-700 dark:to-primary-800 rounded-lg shadow-lg p-8 text-center">
           <h3 className="text-2xl font-bold text-white mb-2">
-            Unlock More Power with Pro
+            Upgrade to Casual Investor to unlock more features
           </h3>
           <p className="text-primary-100 dark:text-primary-200 mb-6">
-            Track 50 stocks, 50 positions, and 50 alerts. Only $29/month.
+            Track 20 stocks, 20 positions, and 5 alerts. Only $20/month.
           </p>
           <button className="bg-white text-primary-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors">
-            Upgrade to Pro
+            Upgrade to Casual Investor
           </button>
         </div>
       )}
