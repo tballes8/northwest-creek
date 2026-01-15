@@ -21,8 +21,9 @@ async def check_watchlist_limit(user: User, current_count: int) -> None:
     """Check if user has reached their watchlist limit"""
     limits = {
         "free": 5,
-        "pro": 50,
-        "enterprise": float('inf')
+        "casual": 20,
+        "active": 45,
+        "unlimited": float('inf')
     }
     
     limit = limits.get(user.subscription_tier, 5)

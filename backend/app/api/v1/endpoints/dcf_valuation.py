@@ -14,12 +14,13 @@ from app.services.market_data import market_data_service
 router = APIRouter()
 
 
-def require_enterprise(current_user: User = Depends(get_current_user)):
-    """Require Enterprise tier for DCF Valuation access"""
-    if current_user.subscription_tier != "enterprise":
+def require_paid_tier(current_user: User = Depends(get_current_user)):
+    """Require paid tier (Casual, Active, or Unlimited) for Technical Analysis access"""
+    allowed_tiers = ["casual", "active", "unlimited"]
+    if current_user.subscription_tier not in allowed_tiers:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"DCF Valuation is an Enterprise-only feature! Current tier: {current_user.subscription_tier.title()}. Upgrade to Enterprise ($99/month) for unlimited DCF valuations, technical analysis, screening, and more!"
+            detail=f"Technical Analysis requires a paid subscription! Current tier: {current_user.subscription_tier.title()}. Upgrade to access this feature!"
         )
     return current_user
 
@@ -31,11 +32,11 @@ async def calculate_dcf(
     terminal_growth: float = Query(0.025, ge=0, le=0.10, description="Terminal growth rate (decimal)"),
     discount_rate: float = Query(0.10, ge=0.01, le=0.30, description="Discount rate / WACC (decimal)"),
     projection_years: int = Query(5, ge=3, le=10, description="Years to project"),
-    current_user: User = Depends(require_enterprise),
+    current_user: User = Depends(require_paid_tier),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    🔒 ENTERPRISE ONLY - Calculate DCF Valuation for a stock
+    🔒 PAID TIERS ONLY - Calculate DCF Valuation for a stock
     
     **Discounted Cash Flow (DCF) Analysis:**
     

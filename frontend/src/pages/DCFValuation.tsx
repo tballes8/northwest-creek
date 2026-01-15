@@ -131,12 +131,12 @@ const DCFValuation: React.FC = () => {
 
   const getTierLimit = () => {
     const limits = {
-      free: 5,
+      free: 0,
       casual: 20,
       active: 45,
       unlimited: 'Unlimited'
     };
-    return limits[user?.subscription_tier as keyof typeof limits] || 5;
+    return limits[user?.subscription_tier as keyof typeof limits] || 0;
   };
 
   const formatCurrency = (value: number) => {
@@ -184,9 +184,6 @@ const DCFValuation: React.FC = () => {
         <div className="mb-8">
           <div className="flex items-center mb-2">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">DCF Valuation</h1>
-            <span className="ml-3 px-3 py-1 bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-200 text-sm font-semibold rounded-full">
-              ⭐ ENTERPRISE
-            </span>
           </div>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
             Discounted Cash Flow analysis - Estimate intrinsic value based on projected future cash flows

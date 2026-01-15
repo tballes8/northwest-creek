@@ -419,7 +419,7 @@ async def screen_watchlist(
     above_sma_50: Optional[bool] = Query(None, description="Price above 50-day SMA"),
     bollinger_oversold: Optional[bool] = Query(None, description="Below lower Bollinger Band"),
     bollinger_overbought: Optional[bool] = Query(None, description="Above upper Bollinger Band"),
-    current_user: User = Depends(require_enterprise),  # CHANGED THIS LINE!
+    current_user: User = Depends(require_paid_tier),  # CHANGED THIS LINE!
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -581,7 +581,7 @@ async def screen_watchlist(
 
 @router.get("/presets/oversold")
 async def screen_oversold(
-    current_user: User = Depends(require_enterprise),  # CHANGED!
+    current_user: User = Depends(require_paid_tier),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -603,7 +603,7 @@ async def screen_oversold(
 
 @router.get("/presets/overbought")
 async def screen_overbought(
-    current_user: User = Depends(require_enterprise),  # CHANGED!
+    current_user: User = Depends(require_paid_tier),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -625,7 +625,7 @@ async def screen_overbought(
 
 @router.get("/presets/strong-uptrend")
 async def screen_strong_uptrend(
-    current_user: User = Depends(require_enterprise),  # CHANGED!
+    current_user: User = Depends(require_paid_tier),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -649,7 +649,7 @@ async def screen_strong_uptrend(
 
 @router.get("/presets/reversal-candidates")
 async def screen_reversal_candidates(
-    current_user: User = Depends(require_enterprise),  # CHANGED!
+    current_user: User = Depends(require_paid_tier),
     db: AsyncSession = Depends(get_db)
 ):
     """
