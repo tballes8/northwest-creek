@@ -28,11 +28,11 @@ app = FastAPI(
 
 
 # Configure CORS
-origins = settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else ["http://localhost:3000"]
+# origins = settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else ["http://localhost:3000"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins="https://northwest-creek.up.railway.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
