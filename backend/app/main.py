@@ -28,11 +28,17 @@ app = FastAPI(
 
 
 # Configure CORS
-# origins = settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else ["http://localhost:3000"]
+# CORS - Allow both development and production origins
+origins = [
+    "http://localhost:3000",  # Local development
+    "http://localhost:5173",  # Vite local dev
+    # Add your production frontend URL here after deployment
+    "https://northwest-creek.up.railway.app",
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins="https://northwest-creek.up.railway.app",
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
