@@ -1,0 +1,35 @@
+**Add this to `backend/.gitignore`:**
+```
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+
+# Environment variables
+.env
+*.env
+
+# Database
+*.db
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Alembic
+alembic/versions/__pycache__/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
