@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 
 const PaymentSuccess: React.FC = () => {
@@ -7,7 +7,7 @@ const PaymentSuccess: React.FC = () => {
   const sessionId = searchParams.get('session_id');
 
   useEffect(() => {
-    // Redirect to dashboard after 5 seconds
+    // Redirect to verify email page or dashboard
     const timer = setTimeout(() => {
       navigate('/dashboard');
     }, 5000);
@@ -33,6 +33,12 @@ const PaymentSuccess: React.FC = () => {
             <p className="text-gray-600 dark:text-gray-400 mb-4">
               Your subscription has been activated successfully.
             </p>
+
+            <div className="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4 mb-6">
+              <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                <strong>Important:</strong> Please check your email and verify your account to start using all features.
+              </p>
+            </div>
             
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
               You now have access to all premium features!

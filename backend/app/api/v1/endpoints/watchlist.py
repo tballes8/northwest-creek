@@ -26,7 +26,7 @@ async def check_watchlist_limit(user: User, current_count: int) -> None:
         "unlimited": float('inf')
     }
     
-    limit = limits.get(user.subscription_tier, 5)
+    limit = limits.get(user.subscription_tier, 0)
     
     if current_count >= limit:
         raise HTTPException(
