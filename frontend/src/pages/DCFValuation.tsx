@@ -66,22 +66,26 @@ interface DCFData {
 const DCFValuation: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const urlTicker = searchParams.get('ticker') || '';  
-  
+  const urlTicker = searchParams.get('ticker') || '';
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [user, setUser] = useState<User | null>(null);
-  const [ticker, setTicker] = useState('');
+  const [ticker, setTicker] = useState(urlTicker);
   const [growthRate, setGrowthRate] = useState(5);
   const [terminalGrowth, setTerminalGrowth] = useState(2.5);
   const [discountRate, setDiscountRate] = useState(10);
   const [projectionYears, setProjectionYears] = useState(5);
   const [loading, setLoading] = useState(false);
   const [dcfData, setDcfData] = useState<DCFData | null>(null);
+  const [suggestions, setSuggestions] = useState<DCFSuggestions | null>(null);
   const [error, setError] = useState('');
-  const nav_class = "text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-
+  
   React.useEffect(() => {
     loadUser();
-  }, []);
+    if (urlTicker) {
+      setTicker(urlTicker);
+      loadSuggestions(urlTicker);
+    }
+  }, [urlTicker]);
 
   const loadUser = async () => {
     try {
@@ -95,6 +99,31 @@ const DCFValuation: React.FC = () => {
       }
     }
   };
+
+  const loadSuggestions = async (symbol: string) => {
+    if (!symbol.trim()) return;
+
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await axios.get(
+        `http://localhost:8000/api/v1/dcf/suggestions/${symbol.toUpperCase()}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      setSuggestions(response.data);
+      
+      // Auto-fill with suggestions
+      setGrowthRate(response.data.suggestions.growth_rate * 100);
+      setTerminalGrowth(response.data.suggestions.terminal_growth * 100);
+      setDiscountRate(response.data.suggestions.discount_rate * 100);
+      setProjectionYears(response.data.suggestions.projection_years);
+      setShowSuggestions(true);
+      
+    } catch (err: any) {
+      console.error('Failed to load suggestions:', err);
+      // Don't show error, just use defaults
+    }
+  };  
 
   const handleCalculate = async (e: React.FormEvent) => {
     e.preventDefault();
