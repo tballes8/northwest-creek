@@ -265,7 +265,7 @@ return (
           </Link>
 
           <Link
-            to="/search"
+            to="/stocks"
             className="flex items-center p-4 border-2 border-gray-200 dark:border-gray-700 rounded-lg hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
           >
             <div className="bg-blue-100 dark:bg-blue-900/30 rounded-lg p-2 mr-3">

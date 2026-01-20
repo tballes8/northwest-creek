@@ -1,9 +1,29 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import axios from 'axios';
+
+interface DCFSuggestions {
+  ticker: string;
+  company_name: string;
+  sector: string;
+  industry: string;
+  current_price: number;
+  suggestions: {
+    growth_rate: number;
+    terminal_growth: number;
+    discount_rate: number;
+    projection_years: number;
+  };
+  reasoning: {
+    growth_rate: string;
+    terminal_growth: string;
+    discount_rate: string;
+    projection_years: string;
+  };
+}
 
 interface DCFData {
   ticker: string;
@@ -45,6 +65,9 @@ interface DCFData {
 
 const DCFValuation: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const urlTicker = searchParams.get('ticker') || '';  
+  
   const [user, setUser] = useState<User | null>(null);
   const [ticker, setTicker] = useState('');
   const [growthRate, setGrowthRate] = useState(5);

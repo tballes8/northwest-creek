@@ -202,7 +202,7 @@ const Landing: React.FC = () => {
                 </li>
               </ul>
               <Link
-                to="/register"
+                to="/registerwithpayment"
                 className="block w-full text-center bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold py-3 rounded-lg transition-colors"
               >
                 Get Started Now
@@ -255,7 +255,7 @@ const Landing: React.FC = () => {
                 </li>
               </ul>              
               <Link
-                to="/register"
+                to="/registerwithpayment"
                 className="block w-full text-center bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold py-3 rounded-lg transition-colors"
               >
                 Get Active
@@ -308,7 +308,7 @@ const Landing: React.FC = () => {
                 </li>
               </ul>              
               <Link
-                to="/register"
+                to="/registerwithpayment"
                 className="block w-full text-center bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold py-3 rounded-lg transition-colors"
               >
                 Go Unlimited
