@@ -1,5 +1,3 @@
-**Add this to `backend/.gitignore`:**
-```
 # Python
 __pycache__/
 *.py[cod]
