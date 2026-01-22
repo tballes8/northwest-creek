@@ -123,7 +123,7 @@ const DCFValuation: React.FC = () => {
       console.error('Failed to load suggestions:', err);
       // Don't show error, just use defaults
     }
-  };  
+  };
 
   const handleCalculate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -153,6 +153,7 @@ const DCFValuation: React.FC = () => {
       );
       
       setDcfData(response.data);
+	  setShowSuggestions(false);
     } catch (err: any) {
       console.error('DCF calculation error:', err);
       setError(err.response?.data?.detail || 'Failed to calculate DCF. Please check the ticker symbol and try again.');
@@ -161,6 +162,13 @@ const DCFValuation: React.FC = () => {
     }
   };
 
+  const handleTickerChange = async (value: string) => {
+    setTicker(value);
+    if (value.length >= 1) {
+      await loadSuggestions(value);
+    }
+  };
+  
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     navigate('/');
@@ -214,6 +222,7 @@ const DCFValuation: React.FC = () => {
               <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
               <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
               <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
+              <Link to="/stocks" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Stocks</Link>
               <Link to="/technical-analysis" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
               <Link to="/dcf-valuation" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">DCF Valuation</Link>
             </div>
