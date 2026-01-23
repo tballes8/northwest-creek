@@ -2,7 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.config import get_settings
-from app.api.v1.endpoints import alerts, auth, indicators, portfolio, stocks, watchlist, technical_analysis, dcf_valuation
+from app.api.v1.endpoints import (alerts, auth, dcf_valuation, indicators, portfolio, 
+    stocks, watchlist, technical_analysis, stripe_payments
+)
 
 settings = get_settings()
 
@@ -21,6 +23,7 @@ app = FastAPI(
     docs_url=f"/api/{settings.API_VERSION}/docs",
     redoc_url=f"/api/{settings.API_VERSION}/redoc"
 )
+
 
 # Configure CORS
 # CORS - Allow both development and production origins
