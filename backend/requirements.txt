@@ -44,7 +44,7 @@ propcache==0.4.1
 psycopg2-binary==2.9.9
 pyasn1==0.6.1
 pycparser==2.23
-pydantic==2.5.2
+pydantic==2.5.0
 pydantic-settings==2.1.0
 pydantic_core
 pytest==7.4.3
