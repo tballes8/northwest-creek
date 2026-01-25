@@ -7,7 +7,7 @@ from app.api.v1.endpoints import (alerts, auth, dcf_valuation, indicators, portf
 )
 
 settings = get_settings()
-
+FRONTEND_URL = "https://modest-caring-production-7307.up.railway.app"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -23,7 +23,7 @@ app = FastAPI(
     docs_url=f"/api/{settings.API_VERSION}/docs",
     redoc_url=f"/api/{settings.API_VERSION}/redoc"
 )
-
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 # Configure CORS
 # CORS - Allow both development and production origins
@@ -31,12 +31,12 @@ origins = [
     "http://localhost:3000",  # Local development
     "http://localhost:5173",  # Vite local dev
     # Add your production frontend URL here after deployment
-    "https://northwest-creek.up.railway.app",
+    "https://modest-caring-production-7307.up.railway.app",
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=frontend_url,"https://modest-caring-production.up.railway.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
