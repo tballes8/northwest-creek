@@ -1,9 +1,29 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import axios from 'axios';
+
+interface DCFSuggestions {
+  ticker: string;
+  company_name: string;
+  sector: string;
+  industry: string;
+  current_price: number;
+  suggestions: {
+    growth_rate: number;
+    terminal_growth: number;
+    discount_rate: number;
+    projection_years: number;
+  };
+  reasoning: {
+    growth_rate: string;
+    terminal_growth: string;
+    discount_rate: string;
+    projection_years: string;
+  };
+}
 
 interface DCFData {
   ticker: string;
@@ -45,20 +65,27 @@ interface DCFData {
 
 const DCFValuation: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const urlTicker = searchParams.get('ticker') || '';
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [user, setUser] = useState<User | null>(null);
-  const [ticker, setTicker] = useState('');
+  const [ticker, setTicker] = useState(urlTicker);
   const [growthRate, setGrowthRate] = useState(5);
   const [terminalGrowth, setTerminalGrowth] = useState(2.5);
   const [discountRate, setDiscountRate] = useState(10);
   const [projectionYears, setProjectionYears] = useState(5);
   const [loading, setLoading] = useState(false);
   const [dcfData, setDcfData] = useState<DCFData | null>(null);
+  const [suggestions, setSuggestions] = useState<DCFSuggestions | null>(null);
   const [error, setError] = useState('');
-  const nav_class = "text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-
+  
   React.useEffect(() => {
     loadUser();
-  }, []);
+    if (urlTicker) {
+      setTicker(urlTicker);
+      loadSuggestions(urlTicker);
+    }
+  }, [urlTicker]);
 
   const loadUser = async () => {
     try {
@@ -70,6 +97,31 @@ const DCFValuation: React.FC = () => {
         localStorage.removeItem('access_token');
         navigate('/login');
       }
+    }
+  };
+
+  const loadSuggestions = async (symbol: string) => {
+    if (!symbol.trim()) return;
+
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await axios.get(
+        `http://localhost:8000/api/v1/dcf/suggestions/${symbol.toUpperCase()}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      setSuggestions(response.data);
+      
+      // Auto-fill with suggestions
+      setGrowthRate(response.data.suggestions.growth_rate * 100);
+      setTerminalGrowth(response.data.suggestions.terminal_growth * 100);
+      setDiscountRate(response.data.suggestions.discount_rate * 100);
+      setProjectionYears(response.data.suggestions.projection_years);
+      setShowSuggestions(true);
+      
+    } catch (err: any) {
+      console.error('Failed to load suggestions:', err);
+      // Don't show error, just use defaults
     }
   };
 
@@ -101,6 +153,7 @@ const DCFValuation: React.FC = () => {
       );
       
       setDcfData(response.data);
+	  setShowSuggestions(false);
     } catch (err: any) {
       console.error('DCF calculation error:', err);
       setError(err.response?.data?.detail || 'Failed to calculate DCF. Please check the ticker symbol and try again.');
@@ -109,6 +162,13 @@ const DCFValuation: React.FC = () => {
     }
   };
 
+  const handleTickerChange = async (value: string) => {
+    setTicker(value);
+    if (value.length >= 1) {
+      await loadSuggestions(value);
+    }
+  };
+  
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     navigate('/');
@@ -162,6 +222,7 @@ const DCFValuation: React.FC = () => {
               <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
               <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
               <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
+              <Link to="/stocks" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Stocks</Link>
               <Link to="/technical-analysis" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
               <Link to="/dcf-valuation" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">DCF Valuation</Link>
             </div>

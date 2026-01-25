@@ -12,6 +12,9 @@ import DCFValuation from './pages/DCFValuation';
 import VerifyEmail from './pages/VerifyEmail';
 import Pricing from './pages/Pricing';
 import PaymentSuccess from './pages/PaymentSuccess';
+import RegisterWithPayment from './pages/RegisterWithPayment';
+import Stocks from './pages/Stocks';
+
 
 
 // Protected Route Component
@@ -35,22 +38,10 @@ function App() {
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
         <Route path="/payment-success" element={<PaymentSuccess />} />
-
-        <Route path="/dashboard" 
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          } 
-        />
-
-        <Route path="/watchlist" 
-          element={
-            <ProtectedRoute>
-              <Watchlist />
-            </ProtectedRoute>
-          } 
-        />
+        <Route path="/registerwithpayment" element={<RegisterWithPayment />} />
+        <Route path="/stocks" element={<ProtectedRoute><Stocks /></ProtectedRoute>} />
+        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/watchlist" element={<ProtectedRoute><Watchlist /></ProtectedRoute>} />
 
         <Route path="/portfolio" 
           element={

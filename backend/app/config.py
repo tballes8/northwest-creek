@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     # JWT Settings
     SECRET_KEY: str = Field(..., env="SECRET_KEY")
     ALGORITHM: str = Field(default="HS256", env="ALGORITHM")
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=90, env="ACCESS_TOKEN_EXPIRE_MINUTES")
     
     # Alpha Vantage API
     MASSIVE_API_KEY: str = Field(..., env="MASSIVE_API_KEY")

@@ -2,9 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.config import get_settings
-from app.api.v1.endpoints import alerts, auth, indicators, portfolio, stocks, watchlist, technical_analysis, dcf_valuation
-from app.api.v1.endpoints import (
-    alerts, auth, dcf_valuation, indicators, portfolio, 
+from app.api.v1.endpoints import (alerts, auth, dcf_valuation, indicators, portfolio, 
     stocks, watchlist, technical_analysis, stripe_payments
 )
 
@@ -28,7 +26,13 @@ app = FastAPI(
 
 
 # Configure CORS
-origins = settings.CORS_ORIGINS if isinstance(settings.CORS_ORIGINS, list) else ["http://localhost:3000"]
+# CORS - Allow both development and production origins
+origins = [
+    "http://localhost:3000",  # Local development
+    "http://localhost:5173",  # Vite local dev
+    # Add your production frontend URL here after deployment
+    "https://northwest-creek.up.railway.app",
+]
 
 app.add_middleware(
     CORSMiddleware,

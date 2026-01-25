@@ -1,1 +1,0 @@
-# Northwest Creek Stock Analyzer
