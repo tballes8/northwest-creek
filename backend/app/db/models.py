@@ -40,7 +40,7 @@ class Watchlist(Base):
     target_price = Column(Numeric(precision=18, scale=2), nullable=True)
     added_at = Column(DateTime(timezone=True), server_default=func.now())
     notes = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationship to user
     user = relationship("User", back_populates="watchlists")
