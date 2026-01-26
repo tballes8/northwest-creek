@@ -33,6 +33,7 @@ const Dashboard: React.FC = () => {
 
       // Get portfolio data
       const portfolioResponse = await portfolioAPI.getAll();
+      console.log('🔍 Portfolio API Response:', portfolioResponse.data);
       const portfolioData = portfolioResponse.data;
       const portfolioCount = portfolioData.positions?.length || 0;
       const portfolioValue = portfolioData.total_current_value || 0;
@@ -50,6 +51,13 @@ const Dashboard: React.FC = () => {
         portfolioValue,
         portfolioPL,
         portfolioPLPercent,
+      });
+
+      console.log('✅ Stats set to:', {  // ← ADD THIS
+        portfolioCount,
+        portfolioValue,
+        portfolioPL,
+        portfolioPLPercent
       });
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
