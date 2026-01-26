@@ -20,7 +20,7 @@ const VerifyEmail: React.FC = () => {
 
       try {
         const response = await axios.get(
-          `http://localhost:8000/api/v1/auth/verify-email?token=${token}`
+          `${process.env.REACT_APP_API_URL}/api/v1/auth/verify-email?token=${token}`
         );
         
         setStatus('success');
