@@ -11,6 +11,8 @@ const RegisterWithPayment: React.FC = () => {
   const [step, setStep] = useState<Step>('account');
   const [selectedTier, setSelectedTier] = useState<Tier>('free');
   const [stripeConfig, setStripeConfig] = useState<any>(null);
+
+  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
   
   const [formData, setFormData] = useState({
     email: '',
@@ -28,7 +30,7 @@ const RegisterWithPayment: React.FC = () => {
 
   const loadStripeConfig = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/api/v1/stripe/config');
+      const response = await axios.get('${API_URL}/api/v1/stripe/config');
       setStripeConfig(response.data);
     } catch (error) {
       console.error('Failed to load Stripe config:', error);
