@@ -1,20 +1,20 @@
+import os  # ← ADD THIS IMPORT
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.config import get_settings
-from app.api.v1.endpoints import (alerts, auth, dcf_valuation, indicators, portfolio, 
+from app.api.v1.endpoints import (
+    alerts, auth, dcf_valuation, indicators, portfolio, 
     stocks, watchlist, technical_analysis, stripe_payments
 )
 
 settings = get_settings()
-FRONTEND_URL = "https://modest-caring-production-7307.up.railway.app"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 Northwest Creek API starting...")
     yield
     print("👋 Northwest Creek API shutting down...")
-
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -23,20 +23,18 @@ app = FastAPI(
     docs_url=f"/api/{settings.API_VERSION}/docs",
     redoc_url=f"/api/{settings.API_VERSION}/redoc"
 )
-frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
-# Configure CORS
-# CORS - Allow both development and production origins
-origins = [
-    "http://localhost:3000",  # Local development
-    "http://localhost:5173",  # Vite local dev
-    # Add your production frontend URL here after deployment
-    "https://modest-caring-production-7307.up.railway.app",
-]
+# Get frontend URL from environment (Railway will provide this)
+frontend_url = os.getenv("FRONTEND_URL", "http://modest-caring-production-7307.up.railway.app")
 
+# Configure CORS - Allow frontend to make requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=frontend_url,"https://modest-caring-production.up.railway.app"],
+    allow_origins=[
+        frontend_url,  # Production frontend from environment
+        "http://localhost:3000",  # Local React dev
+        "http://localhost:5173",  # Local Vite dev
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -50,7 +48,6 @@ async def root():
         "status": "operational"
     }
 
-
 # Health check endpoint
 @app.get("/api/v1/health")
 async def health_check():
@@ -60,7 +57,6 @@ async def health_check():
         "service": "Northwest Creek API",
         "version": "1.0.0"
     }
-
 
 # Include routers
 app.include_router(auth.router, prefix=f"/api/{settings.API_VERSION}/auth", tags=["auth"])
