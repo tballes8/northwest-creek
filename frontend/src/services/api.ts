@@ -34,6 +34,9 @@ export const authAPI = {
   
   getCurrentUser: () =>
     axiosInstance.get('/auth/me'),
+
+  verifyEmail: (token: string) => 
+    axiosInstance.get(`/auth/verify-email?token=${token}`),
 };
 
 export const watchlistAPI = {
