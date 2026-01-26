@@ -25,7 +25,7 @@ app = FastAPI(
 )
 
 # Get frontend URL from environment (Railway will provide this)
-frontend_url = os.getenv("FRONTEND_URL", "http://modest-caring-production-7307.up.railway.app")
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 # Configure CORS - Allow frontend to make requests
 app.add_middleware(
