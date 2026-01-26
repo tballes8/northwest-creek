@@ -30,13 +30,13 @@ class Settings(BaseSettings):
     MASSIVE_API_KEY: str = Field(..., env="MASSIVE_API_KEY")
     
     # CORS
-    CORS_ORIGINS: List[str] = Field(default=["http://localhost:3000"], env="CORS_ORIGINS")
+    CORS_ORIGINS: List[str] = Field(default=["FRONTEND_URL"], env="CORS_ORIGINS")
 
     # SendGrid Email Settings
     SENDGRID_API_KEY: str = Field(default="", env="SENDGRID_API_KEY")
     FROM_EMAIL: str = Field(default="", env="FROM_EMAIL")
     FROM_NAME: str = Field(default="Northwest Creek", env="FROM_NAME")
-    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str = "FRONTEND_URL"
 
     # Stripe Settings
     STRIPE_SECRET_KEY: str = Field(default="", env="STRIPE_SECRET_KEY")
