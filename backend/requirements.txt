@@ -29,7 +29,7 @@ httpx==0.28.1
 requests==2.32.3
 
 # Data Processing (skip pandas if not needed)
-# pandas==2.2.3  # Only if you actually use it
+pandas==2.2.3  # Only if you actually use it
 # numpy==2.2.1   # Only if you actually use it
 
 # Utilities
@@ -37,4 +37,5 @@ python-dateutil==2.9.0
 pytz==2024.2
 email-validator==2.3.0
 sendgrid
+
 
