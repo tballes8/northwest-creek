@@ -51,8 +51,9 @@ const Watchlist: React.FC = () => {
 
     const limits = {
       free: 5,
-      pro: 50,
-      enterprise: Infinity
+      casual: 20,
+      active: 45,
+      unlimited: Infinity
     };
     const limit = limits[user?.subscription_tier as keyof typeof limits] || 5;
 
