@@ -71,7 +71,7 @@ export const portfolioAPI = {
 // Alerts API
 export const alertsAPI = {
   getAll: () =>
-    axiosInstance.get('/alerts/'),
+    axiosInstance.get('/alerts'),
   
   create: (data: { ticker: string; condition: 'above' | 'below'; target_price: number; notes?: string }) =>
     axiosInstance.post('/alerts', data),
