@@ -71,16 +71,16 @@ export const portfolioAPI = {
 // Alerts API
 export const alertsAPI = {
   getAll: () =>
-    axiosInstance.get('/alerts'),
+    axiosInstance.get('/alerts/'),  // ← Added trailing slash
   
   create: (data: { ticker: string; condition: 'above' | 'below'; target_price: number; notes?: string }) =>
-    axiosInstance.post('/alerts', data),
+    axiosInstance.post('/alerts/', data),  // ← Added trailing slash
   
   delete: (id: string) =>
-    axiosInstance.delete(`/alerts/${id}`),
+    axiosInstance.delete(`/alerts/${id}/`),  // ← Fixed syntax + added trailing slash
   
   update: (id: string, data: { is_active?: boolean; notes?: string }) =>
-    axiosInstance.put(`/alerts/${id}`, data),
+    axiosInstance.put(`/alerts/${id}/`, data),  // ← Fixed syntax + added trailing slash
 };
 
 // Stocks API
