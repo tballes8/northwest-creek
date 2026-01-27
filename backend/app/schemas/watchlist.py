@@ -28,7 +28,7 @@ class WatchlistItemInDB(WatchlistItemBase):
     id: UUID
     user_id: UUID
     added_at: datetime
-    created_at: datetime
+    # created_at: datetime
     
     class Config:
         from_attributes = True
