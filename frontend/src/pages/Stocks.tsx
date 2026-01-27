@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { authAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import axios from 'axios';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { Line } from 'react-chartjs-2';
+import { authAPI, stocksAPI } from '../services/api'; 
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 // Register Chart.js components
@@ -90,14 +90,11 @@ const Stocks: React.FC = () => {
     setTicker(symbol.toUpperCase());
 
     try {
-      const token = localStorage.getItem('access_token');
-      const headers = { Authorization: `Bearer ${token}` };
-
       // Fetch quote, company info, and historical data
       const [quoteRes, companyRes, historicalRes] = await Promise.all([
-        axios.get(`${API_URL}/api/v1/stocks/${symbol.toUpperCase()}/quote`, { headers }),
-        axios.get(`${API_URL}/api/v1/stocks/${symbol.toUpperCase()}/company`, { headers }),
-        axios.get(`${API_URL}/api/v1/stocks/${symbol.toUpperCase()}/historical?days=${historyDays}`, { headers }),
+        stocksAPI.getQuote(symbol.toUpperCase()),
+        stocksAPI.getCompany(symbol.toUpperCase()),
+        stocksAPI.getHistorical(symbol.toUpperCase(), historyDays),
       ]);
 
       setQuote(quoteRes.data);
