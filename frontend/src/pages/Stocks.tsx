@@ -94,9 +94,9 @@ const Stocks: React.FC = () => {
 
       // Fetch quote, company info, and historical data
       const [quoteRes, companyRes, historicalRes] = await Promise.all([
-        axios.get(`http://localhost:8000/api/v1/stocks/${symbol.toUpperCase()}/quote`, { headers }),
-        axios.get(`http://localhost:8000/api/v1/stocks/${symbol.toUpperCase()}/company`, { headers }),
-        axios.get(`http://localhost:8000/api/v1/stocks/${symbol.toUpperCase()}/historical?days=${historyDays}`, { headers }),
+        axios.get(`${API_URL}/api/v1/stocks/${symbol.toUpperCase()}/quote`, { headers }),
+        axios.get(`${API_URL}/api/v1/stocks/${symbol.toUpperCase()}/company`, { headers }),
+        axios.get(`${API_URL}/api/v1/stocks/${symbol.toUpperCase()}/historical?days=${historyDays}`, { headers }),
       ]);
 
       setQuote(quoteRes.data);
