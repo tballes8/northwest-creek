@@ -92,7 +92,7 @@ async def get_watchlist(
     result = await db.execute(
         select(Watchlist)
         .where(Watchlist.user_id == current_user.id)
-        .order_by(Watchlist.created_at.desc())
+        .order_by(Watchlist.added_at.desc())
     )
     items = result.scalars().all()
     
