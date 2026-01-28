@@ -122,7 +122,7 @@ const DCFValuation: React.FC = () => {
 
   const handleCalculate = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+  
     if (!ticker.trim()) {
       setError('Please enter a ticker symbol');
       return;
@@ -133,22 +133,15 @@ const DCFValuation: React.FC = () => {
     setDcfData(null);
 
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await axios.get(
-        `http://localhost:8000/api/v1/dcf/calculate/${ticker.toUpperCase()}`,
-        {
-          params: {
-            growth_rate: growthRate / 100,
-            terminal_growth: terminalGrowth / 100,
-            discount_rate: discountRate / 100,
-            projection_years: projectionYears
-          },
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
-      
+      const response = await dcfAPI.calculate(ticker.toUpperCase(), {
+        growth_rate: growthRate / 100,
+        terminal_growth: terminalGrowth / 100,
+        discount_rate: discountRate / 100,
+        projection_years: projectionYears
+      });
+    
       setDcfData(response.data);
-	  setShowSuggestions(false);
+      setShowSuggestions(false);
     } catch (err: any) {
       console.error('DCF calculation error:', err);
       setError(err.response?.data?.detail || 'Failed to calculate DCF. Please check the ticker symbol and try again.');
@@ -156,7 +149,7 @@ const DCFValuation: React.FC = () => {
       setLoading(false);
     }
   };
-
+	
   const handleTickerChange = async (value: string) => {
     setTicker(value);
     if (value.length >= 1) {
