@@ -99,26 +99,21 @@ const DCFValuation: React.FC = () => {
       }
     }
   };
-
   const loadSuggestions = async (symbol: string) => {
     if (!symbol.trim()) return;
 
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await axios.get(
-        `http://localhost:8000/api/v1/dcf/suggestions/${symbol.toUpperCase()}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      
+      const response = await dcfAPI.getSuggestions(symbol.toUpperCase());
+    
       setSuggestions(response.data);
-      
+    
       // Auto-fill with suggestions
       setGrowthRate(response.data.suggestions.growth_rate * 100);
       setTerminalGrowth(response.data.suggestions.terminal_growth * 100);
       setDiscountRate(response.data.suggestions.discount_rate * 100);
       setProjectionYears(response.data.suggestions.projection_years);
       setShowSuggestions(true);
-      
+    
     } catch (err: any) {
       console.error('Failed to load suggestions:', err);
       // Don't show error, just use defaults
