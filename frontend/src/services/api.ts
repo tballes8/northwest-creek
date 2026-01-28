@@ -95,4 +95,23 @@ export const stocksAPI = {
     axiosInstance.get(`/stocks/historical/${ticker}`, { params: { days } }),
 };
 
+// DCF API
+export const dcfAPI = {
+  getSuggestions: (ticker: string) =>
+    axiosInstance.get(`/dcf/suggestions/${ticker}`),
+  
+  calculate: (ticker: string, params: {
+    growth_rate: number;
+    terminal_growth: number;
+    discount_rate: number;
+    projection_years: number;
+  }) =>
+    axiosInstance.get(`/dcf/calculate/${ticker}`, { params }),
+};
+
+// Technical Analysis API
+export const technicalAPI = {
+  analyze: (ticker: string) =>
+    axiosInstance.get(`/technical-analysis/analyze/${ticker}`),
+};
 export default axiosInstance;
