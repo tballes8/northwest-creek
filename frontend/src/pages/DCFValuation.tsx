@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { authAPI } from '../services/api';
+import { authAPI, dcfAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import axios from 'axios';
+
 
 interface DCFSuggestions {
   ticker: string;
