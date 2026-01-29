@@ -3,8 +3,6 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI, dcfAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
-import axios from 'axios';
-
 
 interface DCFSuggestions {
   ticker: string;
@@ -100,24 +98,20 @@ const DCFValuation: React.FC = () => {
       }
     }
   };
+
   const loadSuggestions = async (symbol: string) => {
     if (!symbol.trim()) return;
 
     try {
       const response = await dcfAPI.getSuggestions(symbol.toUpperCase());
-    
       setSuggestions(response.data);
-    
-      // Auto-fill with suggestions
       setGrowthRate(response.data.suggestions.growth_rate * 100);
       setTerminalGrowth(response.data.suggestions.terminal_growth * 100);
       setDiscountRate(response.data.suggestions.discount_rate * 100);
       setProjectionYears(response.data.suggestions.projection_years);
       setShowSuggestions(true);
-    
     } catch (err: any) {
       console.error('Failed to load suggestions:', err);
-      // Don't show error, just use defaults
     }
   };
 
