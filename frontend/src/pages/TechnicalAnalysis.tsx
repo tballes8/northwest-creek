@@ -122,7 +122,7 @@ const TechnicalAnalysis: React.FC = () => {
 
   const handleAnalyze = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+  
     if (!ticker.trim()) {
       setError('Please enter a ticker symbol');
       return;
@@ -133,14 +133,7 @@ const TechnicalAnalysis: React.FC = () => {
     setAnalysisData(null);
 
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await axios.get(
-        `http://localhost:8000/api/v1/technical-analysis/analyze/${ticker.toUpperCase()}`,
-        {
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
-      
+      const response = await technicalAPI.analyze(ticker.toUpperCase());
       setAnalysisData(response.data);
     } catch (err: any) {
       console.error('Analysis error:', err);
@@ -149,7 +142,6 @@ const TechnicalAnalysis: React.FC = () => {
       setLoading(false);
     }
   };
-
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     navigate('/');
