@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { authAPI, technicalAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
-import axios from 'axios';
 import {
   Chart as ChartJS,
   CategoryScale,
