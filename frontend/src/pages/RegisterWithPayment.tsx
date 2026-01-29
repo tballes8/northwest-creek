@@ -30,7 +30,7 @@ const RegisterWithPayment: React.FC = () => {
 
   const loadStripeConfig = async () => {
     try {
-      const response = await axios.get('${API_URL}/api/v1/stripe/config');
+      const response = await axios.get(`${API_URL}/api/v1/stripe/config`);
       setStripeConfig(response.data);
     } catch (error) {
       console.error('Failed to load Stripe config:', error);
