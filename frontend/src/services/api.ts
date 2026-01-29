@@ -39,6 +39,7 @@ export const authAPI = {
     axiosInstance.get(`/auth/verify-email?token=${token}`),
 };
 
+// Watchlist API
 export const watchlistAPI = {
   getAll: () =>
     axiosInstance.get('/watchlist'),
@@ -88,10 +89,10 @@ export const stocksAPI = {
   getQuote: (ticker: string) =>
     axiosInstance.get(`/stocks/quote/${ticker}`),
   
-  getCompanyInfo: (ticker: string) =>
+  getCompany: (ticker: string) =>
     axiosInstance.get(`/stocks/company/${ticker}`),
   
-  getHistoricalPrices: (ticker: string, days: number = 30) =>
+  getHistorical: (ticker: string, days: number = 30) =>
     axiosInstance.get(`/stocks/historical/${ticker}`, { params: { days } }),
 };
 
