@@ -16,7 +16,7 @@ from app.services.market_data import market_data_service
 router = APIRouter()
 
 
-@router.get("/{ticker}/quote", response_model=StockQuote)
+@router.get("/quote/{ticker}", response_model=StockQuote)
 async def get_stock_quote(ticker: str):
     """
     Get current stock quote
@@ -36,7 +36,7 @@ async def get_stock_quote(ticker: str):
         raise HTTPException(status_code=500, detail=f"Error fetching quote: {str(e)}")
 
 
-@router.get("/{ticker}/company", response_model=CompanyInfo)
+@router.get("/company/{ticker}", response_model=CompanyInfo)
 async def get_company_info(ticker: str):
     """
     Get company information
@@ -56,7 +56,7 @@ async def get_company_info(ticker: str):
         raise HTTPException(status_code=500, detail=f"Error fetching company info: {str(e)}")
 
 
-@router.get("/{ticker}/historical", response_model=HistoricalData)
+@router.get("/historical/{ticker}", response_model=HistoricalData)
 async def get_historical_data(
     ticker: str,
     days: int = Query(default=30, ge=1, le=365, description="Number of days of historical data")
