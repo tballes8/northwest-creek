@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { authAPI, watchlistAPI, portfolioAPI, alertsAPI } from '../services/api';
 import { User, WatchlistItem, PortfolioPosition, Alert } from '../types';
@@ -8,6 +9,7 @@ const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const location = useLocation();
   const [stats, setStats] = useState({
     watchlistCount: 0,
     portfolioCount: 0,
@@ -17,9 +19,11 @@ const Dashboard: React.FC = () => {
     portfolioPLPercent: 0,
   });
 
+
+
   useEffect(() => {
     loadDashboardData();
-  }, []);
+  }, [location.pathname]);
 
   const loadDashboardData = async () => {
     try {

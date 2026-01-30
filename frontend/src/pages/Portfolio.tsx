@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import { authAPI, portfolioAPI } from '../services/api';
 import { User } from '../types';
@@ -30,10 +31,11 @@ const Portfolio: React.FC = () => {
   const [newBuyDate, setNewBuyDate] = useState('');
   const [newNotes, setNewNotes] = useState('');
   const [error, setError] = useState('');
+  const location = useLocation();
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [location.pathname]);
 
   const loadData = async () => {
     try {
