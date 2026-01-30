@@ -197,7 +197,7 @@ return (
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Watchlist</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">{stats.watchlistCount} stocks</p>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                {user?.subscription_tier === 'free' ? '5 max' : user?.subscription_tier === 'casual' ? '20 max' : user.subscription_tier === 'active' ? '45 max' : user.subscription_tier === 'professional' ? '75 max'}
+                {user?.subscription_tier === 'free' ? '5 max' : user?.subscription_tier === 'casual' ? '20 max' : user?.subscription_tier === 'active' ? '45 max' : user?.subscription_tier === 'professional' ? '75 max' :}
               </p>
             </div>
             <div className="bg-yellow-100 dark:bg-yellow-900/30 rounded-full p-3">
