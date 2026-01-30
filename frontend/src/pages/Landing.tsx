@@ -262,9 +262,9 @@ const Landing: React.FC = () => {
               </Link>
             </div>
 
-            {/* Unlimited Investor Tier */}
+            {/* Professional Investor Tier */}
             <div className="bg-white dark:bg-gray-600 p-8 rounded-xl shadow-lg dark:shadow-gray-200/50 hover:shadow-xl transition-shadow border dark:border-gray-300">
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Unlimited</h3>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Professional</h3>
               <div className="mb-6">
                 <span className="text-4xl font-bold text-gray-900 dark:text-white">$100</span>
                 <span className="text-gray-600 dark:text-gray-400">/month</span>
@@ -274,31 +274,31 @@ const Landing: React.FC = () => {
                   <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="text-gray-700 dark:text-gray-300">Unlimited watchlist stocks</span>
+                  <span className="text-gray-700 dark:text-gray-300">75 watchlist stocks</span>
                 </li>
                 <li className="flex items-start">
                   <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="text-gray-700 dark:text-gray-300">Unlimited portfolio entries</span>
+                  <span className="text-gray-700 dark:text-gray-300">75 portfolio entries</span>
                 </li>
                 <li className="flex items-start">
                   <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="text-gray-700 dark:text-gray-300">Unlimited Stock Technical Analysis Data</span>
+                  <span className="text-gray-700 dark:text-gray-300">20 Technical Analysis Data Daily</span>
                 </li>
                 <li className="flex items-start">
                   <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="text-gray-700 dark:text-gray-300">Unlimited DCF Valuations</span>
+                  <span className="text-gray-700 dark:text-gray-300">20 DCF Valuations Daily</span>
                 </li>                
                 <li className="flex items-start">
                   <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  <span className="text-gray-700 dark:text-gray-300">Unlimited Price Alerts</span>
+                  <span className="text-gray-700 dark:text-gray-300">50 Price Alerts</span>
                 </li>                
                 <li className="flex items-start">
                   <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -311,7 +311,7 @@ const Landing: React.FC = () => {
                 to="/registerwithpayment"
                 className="block w-full text-center bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold py-3 rounded-lg transition-colors"
               >
-                Go Unlimited
+                Go Professional
               </Link>
             </div>
           </div>

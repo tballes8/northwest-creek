@@ -4,7 +4,7 @@ import { authAPI } from '../services/api';
 import axios from 'axios';
 
 type Step = 'account' | 'plan' | 'success';
-type Tier = 'free' | 'casual' | 'active' | 'unlimited';
+type Tier = 'free' | 'casual' | 'active' | 'professional';
 
 const RegisterWithPayment: React.FC = () => {
   const navigate = useNavigate();
@@ -95,7 +95,7 @@ const RegisterWithPayment: React.FC = () => {
           ? stripeConfig?.casual_price_id
           : tier === 'active'
           ? stripeConfig?.active_price_id
-          : stripeConfig?.unlimited_price_id;
+          : stripeConfig?.professional_price_id;
 
         const checkoutResponse = await axios.post(
           'http://localhost:8000/api/v1/stripe/create-checkout-session',
@@ -159,16 +159,16 @@ const RegisterWithPayment: React.FC = () => {
       highlight: false,
     },
     {
-      name: 'Unlimited Investor',
-      tier: 'unlimited' as Tier,
+      name: 'Professional Investor',
+      tier: 'professional' as Tier,
       price: '$100',
       period: '/month',
       features: [
-        'Unlimited watchlist stocks',
-        'Unlimited portfolio entries',
-        'Unlimited stock reviews',
-        'Unlimited DCF valuations',
-        'API access',
+        '75 watchlist stocks',
+        '75 portfolio entries',
+        '50 alerts',
+        '20 DCF valuations daily',
+        '20 Technical Analysis daily',
       ],
       highlight: false,
     },

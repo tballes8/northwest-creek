@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str = Field(default="", env="STRIPE_WEBHOOK_SECRET")
     STRIPE_CASUAL_PRICE_ID: str = Field(default="", env="STRIPE_CASUAL_PRICE_ID")
     STRIPE_ACTIVE_PRICE_ID: str = Field(default="", env="STRIPE_ACTIVE_PRICE_ID")
-    STRIPE_UNLIMITED_PRICE_ID: str = Field(default="", env="STRIPE_UNLIMITED_PRICE_ID")
+    STRIPE_PROFESSIONAL_PRICE_ID: str = Field(default="", env="STRIPE_PROFESSIONAL_PRICE_ID")
     
     class Config:
         env_file = ".env"

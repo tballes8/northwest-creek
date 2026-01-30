@@ -73,7 +73,7 @@ const Dashboard: React.FC = () => {
       free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
       casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
       active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
-      unlimited: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Unlimited' },
+      professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
     };
     const badge = badges[tier as keyof typeof badges] || badges.free;
     return (
@@ -88,7 +88,7 @@ const Dashboard: React.FC = () => {
       free: 5,
       casual: 20,
       active: 45,
-      unlimited: 'Unlimited'
+      professional: 75
     };
     return limits[user?.subscription_tier as keyof typeof limits] || 5;
   };
@@ -197,7 +197,7 @@ return (
               <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Watchlist</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">{stats.watchlistCount} stocks</p>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                {user?.subscription_tier === 'free' ? '5 max' : user?.subscription_tier === 'active' ? '45 max' : 'Unlimited'}
+                {user?.subscription_tier === 'free' ? '5 max' : user?.subscription_tier === 'active' ? '45 max' : user.subscription_tier === 'professional' ? '75 max'}
               </p>
             </div>
             <div className="bg-yellow-100 dark:bg-yellow-900/30 rounded-full p-3">

@@ -1,6 +1,6 @@
 """
 DCF Valuation API Endpoints - Discounted Cash Flow Analysis
-⭐ ENTERPRISE TIER ONLY ⭐
+⭐ PAID TIERS ONLY ⭐
 """
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,8 +15,8 @@ router = APIRouter()
 
 
 def require_paid_tier(current_user: User = Depends(get_current_user)):
-    """Require paid tier (Casual, Active, or Unlimited) for Technical Analysis access"""
-    allowed_tiers = ["casual", "active", "unlimited"]
+    """Require paid tier (Casual, Active, or Professsional) for Technical Analysis access"""
+    allowed_tiers = ["casual", "active", "professional"]
     if current_user.subscription_tier not in allowed_tiers:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -57,7 +57,7 @@ async def calculate_dcf(
     - Current price vs intrinsic value comparison
     - Buy/Hold/Sell recommendation
     
-    ⭐ **Enterprise Feature:** Unlimited DCF valuations with customizable assumptions!
+    ⭐ **Professional Feature:** 20 DCF valuations daily with customizable assumptions!
     """
     try:
         # Get current stock price and company info

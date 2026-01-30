@@ -36,8 +36,8 @@ async def create_checkout_session(
             plan_name = "Casual Retail Investor"
         elif price_id == settings.STRIPE_ACTIVE_PRICE_ID:
             plan_name = "Active Retail Investor"
-        elif price_id == settings.STRIPE_UNLIMITED_PRICE_ID:
-            plan_name = "Unlimited Investor"
+        elif price_id == settings.STRIPE_PROFESSIONAL_PRICE_ID:
+            plan_name = "Professional Investor"
         else:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -150,8 +150,8 @@ async def handle_checkout_session_completed(session, db: AsyncSession):
             new_tier = 'casual'
         elif price_id == settings.STRIPE_ACTIVE_PRICE_ID:
             new_tier = 'active'
-        elif price_id == settings.STRIPE_UNLIMITED_PRICE_ID:
-            new_tier = 'unlimited'
+        elif price_id == settings.STRIPE_PROFESSIONAL_PRICE_ID:
+            new_tier = 'professional'
         else:
             new_tier = 'free'
         
@@ -182,8 +182,8 @@ async def handle_subscription_updated(subscription, db: AsyncSession):
         new_tier = 'casual'
     elif price_id == settings.STRIPE_ACTIVE_PRICE_ID:
         new_tier = 'active'
-    elif price_id == settings.STRIPE_UNLIMITED_PRICE_ID:
-        new_tier = 'unlimited'
+    elif price_id == settings.STRIPE_PROFESSIONAL_PRICE_ID:
+        new_tier = 'professional'
     else:
         new_tier = 'free'
     
@@ -243,5 +243,5 @@ async def get_stripe_config():
         "publishable_key": settings.STRIPE_PUBLISHABLE_KEY,
         "casual_price_id": settings.STRIPE_CASUAL_PRICE_ID,
         "active_price_id": settings.STRIPE_ACTIVE_PRICE_ID,
-        "unlimited_price_id": settings.STRIPE_UNLIMITED_PRICE_ID
+        "professional_price_id": settings.STRIPE_PROFESSIONAL_PRICE_ID
     }

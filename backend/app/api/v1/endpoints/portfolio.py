@@ -23,7 +23,7 @@ async def check_portfolio_limit(user: User, current_count: int) -> None:
         "free": 5,
         "casual": 20,
         "active": 45,
-        "unlimited": float('inf')
+        "professional": 75
     }
     
     limit = limits.get(user.subscription_tier, 3)

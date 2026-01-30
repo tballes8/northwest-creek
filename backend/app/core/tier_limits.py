@@ -27,12 +27,12 @@ TIER_LIMITS = {
         "dcf_valuations": 5,  # per day
         "technical_analysis": True,
     },
-    "unlimited": {
-        "watchlist_stocks": float('inf'),
-        "portfolio_entries": float('inf'),
-        "alerts": float('inf'),
-        "stock_reviews": float('inf'),
-        "dcf_valuations": float('inf'),
+    "professional": {
+        "watchlist_stocks": 75,
+        "portfolio_entries": 75,
+        "alerts": 50,
+        "stock_reviews": 20, # per day
+        "dcf_valuations": 20, # per day
         "technical_analysis": True,
     },
 }

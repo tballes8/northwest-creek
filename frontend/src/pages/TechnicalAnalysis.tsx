@@ -153,7 +153,7 @@ const TechnicalAnalysis: React.FC = () => {
       free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
       casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
       active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
-      unlimited: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Unlimited' },
+      professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
     };
     const badge = badges[tier as keyof typeof badges] || badges.free;
     return (
@@ -168,7 +168,7 @@ const TechnicalAnalysis: React.FC = () => {
       free: 5,
       casual: 20,
       active: 45,
-      unlimited: 'Unlimited'
+      professional: 75
     };
     return limits[user?.subscription_tier as keyof typeof limits] || 5;
   };

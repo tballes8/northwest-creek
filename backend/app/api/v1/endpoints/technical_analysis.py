@@ -1,6 +1,6 @@
 """
 Stock Screener API Endpoints - Filter stocks by technical indicators
-⭐ ENTERPRISE TIER ONLY ⭐
+⭐ PAID TIERS ONLY ⭐
 """
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,8 +16,8 @@ from app.services.technical_indicators import technical_indicators
 router = APIRouter()
 
 def require_paid_tier(current_user: User = Depends(get_current_user)):
-    """Require paid tier (Casual, Active, or Unlimited) for Technical Analysis access"""
-    allowed_tiers = ["casual", "active", "unlimited"]
+    """Require paid tier (Casual, Active, or Professional) for Technical Analysis access"""
+    allowed_tiers = ["casual", "active", "professional"]
     if current_user.subscription_tier not in allowed_tiers:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -423,7 +423,7 @@ async def screen_watchlist(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    🔒 ENTERPRISE ONLY - Screen your watchlist by technical indicators
+    🔒 PAID TIERS ONLY - Screen your watchlist by technical indicators
     
     **Find trading opportunities in your watchlist:**
     
@@ -448,9 +448,9 @@ async def screen_watchlist(
     - `/screener/watchlist?macd_bullish=true&above_sma_50=true` → Strong uptrends
     - `/screener/watchlist?bollinger_oversold=true` → Potential bounce opportunities
     
-    ⭐ **Enterprise Feature:** Unlimited screening on unlimited watchlist stocks!
+    ⭐ **Professional Feature:** 20 stock screenings daily and 75 watchlist stocks!
     """
-    # Get user's watchlist (no limit for Enterprise!)
+    # Get user's watchlist
     result = await db.execute(
         select(Watchlist)
         .where(Watchlist.user_id == current_user.id)
@@ -574,8 +574,8 @@ async def screen_watchlist(
             rsi_below, rsi_above, macd_bullish, macd_bearish,
             above_sma_20, above_sma_50, bollinger_oversold, bollinger_overbought
         ),
-        "subscription_tier": "Enterprise",
-        "enterprise_perks": "✅ Unlimited screening ✅ Unlimited watchlist ✅ Unlimited alerts"
+        "subscription_tier": "professional",
+        "professional_perks": "✅ 20 stock screenings daily ✅ 75 watchlist entries ✅  50 alerts"
     }
 
 
@@ -585,7 +585,7 @@ async def screen_oversold(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    🔒 ENTERPRISE ONLY - Find oversold stocks in your watchlist
+    🔒 PROFESSIONL ONLY - Find oversold stocks in your watchlist
     
     **Criteria:**
     - RSI < 30 (oversold)
@@ -607,7 +607,7 @@ async def screen_overbought(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    🔒 ENTERPRISE ONLY - Find overbought stocks in your watchlist
+    🔒 PAID TIERS ONLY - Find overbought stocks in your watchlist
     
     **Criteria:**
     - RSI > 70 (overbought)
@@ -629,7 +629,7 @@ async def screen_strong_uptrend(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    🔒 ENTERPRISE ONLY - Find stocks in strong uptrends
+    🔒 PAID TIERS ONLY - Find stocks in strong uptrends
     
     **Criteria:**
     - MACD bullish
@@ -653,7 +653,7 @@ async def screen_reversal_candidates(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    🔒 ENTERPRISE ONLY - Find potential reversal candidates
+    🔒 PAID TIERS ONLY - Find potential reversal candidates
     
     **Criteria:**
     - RSI < 30 (oversold)
