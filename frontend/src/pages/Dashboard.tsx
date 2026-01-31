@@ -158,10 +158,10 @@ return (
         <button
           onClick={handleRefresh}
           disabled={refreshing}
-          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <svg 
-            className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} 
+            className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} 
             fill="none" 
             viewBox="0 0 24 24" 
             stroke="currentColor"
@@ -172,85 +172,66 @@ return (
         </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {/* Portfolio Value */}
-        <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 hover:shadow-xl dark:hover:shadow-gray-200/30 transition-shadow p-6 border dark:border-gray-500">
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Portfolio Value</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Portfolio Value</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">
                 ${stats.portfolioValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+              <p className={`text-sm font-medium mt-1 ${stats.portfolioPL >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {stats.portfolioPL >= 0 ? '+' : ''}{stats.portfolioPL.toFixed(2)} ({stats.portfolioPLPercent >= 0 ? '+' : ''}{stats.portfolioPLPercent.toFixed(2)}%)
               </p>
             </div>
             <div className="bg-green-100 dark:bg-green-900/30 rounded-lg p-3">
-              <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
           </div>
         </div>
 
-        {/* Profit/Loss */}
-        <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 hover:shadow-xl dark:hover:shadow-gray-200/30 transition-shadow p-6 border dark:border-gray-500">
+        <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Profit/Loss</p>
-              <p className={`text-2xl font-bold mt-2 ${
-                stats.portfolioPL >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-              }`}>
-                {stats.portfolioPL >= 0 ? '+' : ''}${stats.portfolioPL.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </p>
-              <p className={`text-sm mt-1 ${
-                stats.portfolioPLPercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-              }`}>
-                {stats.portfolioPLPercent >= 0 ? '+' : ''}{stats.portfolioPLPercent.toFixed(2)}%
-              </p>
-            </div>
-            <div className={`${
-              stats.portfolioPL >= 0 ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
-            } rounded-lg p-3`}>
-              <svg className={`w-8 h-8 ${
-                stats.portfolioPL >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-              }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={
-                  stats.portfolioPL >= 0 
-                    ? "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                    : "M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"
-                } />
-              </svg>
-            </div>
-          </div>
-        </div>
-
-        {/* Watchlist */}
-        <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 hover:shadow-xl dark:hover:shadow-gray-200/30 transition-shadow p-6 border dark:border-gray-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Watchlist Stocks</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
-                {stats.watchlistCount}
-              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Watchlist</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.watchlistCount}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">of {getTierLimit()} stocks</p>
             </div>
             <div className="bg-primary-100 dark:bg-primary-900/30 rounded-lg p-3">
-              <svg className="w-8 h-8 text-primary-600 dark:text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-6 h-6 text-primary-600 dark:text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
               </svg>
             </div>
           </div>
         </div>
 
-        {/* Active Alerts */}
-        <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 hover:shadow-xl dark:hover:shadow-gray-200/30 transition-shadow p-6 border dark:border-gray-500">
+        <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Active Alerts</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
-                {stats.alertsCount}
-              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Positions</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.portfolioCount}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">of {getTierLimit()} positions</p>
             </div>
             <div className="bg-purple-100 dark:bg-purple-900/30 rounded-lg p-3">
-              <svg className="w-8 h-8 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Active Alerts</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.alertsCount}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">monitoring</p>
+            </div>
+            <div className="bg-yellow-100 dark:bg-yellow-900/30 rounded-lg p-3">
+              <svg className="w-6 h-6 text-yellow-600 dark:text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
               </svg>
             </div>
@@ -261,7 +242,7 @@ return (
       {/* Quick Actions */}
       <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg p-6 border dark:border-gray-500">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <Link
             to="/watchlist"
             className="flex items-center p-4 border-2 border-gray-200 dark:border-gray-700 rounded-lg hover:border-primary-500 dark:hover:border-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
@@ -308,6 +289,19 @@ return (
               </svg>
             </div>
             <span className="font-medium text-gray-700 dark:text-gray-300">Search Stocks</span>
+          </Link>
+
+          {/* NEW TOP GAINERS BUTTON */}
+          <Link
+            to="/stocks?showTopGainers=true"
+            className="flex items-center p-4 border-2 border-gray-200 dark:border-gray-700 rounded-lg hover:border-orange-500 dark:hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors"
+          >
+            <div className="bg-orange-100 dark:bg-orange-900/30 rounded-lg p-2 mr-3">
+              <svg className="w-5 h-5 text-orange-600 dark:text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+            </div>
+            <span className="font-medium text-gray-700 dark:text-gray-300">Top Gainers</span>
           </Link>
         </div>
       </div>
