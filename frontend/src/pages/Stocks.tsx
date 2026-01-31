@@ -60,7 +60,7 @@ const Stocks: React.FC = () => {
   const [historical, setHistorical] = useState<HistoricalPrice[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [historyDays, setHistoryDays] = useState(30);
+  const [historyDays, setHistoryDays] = useState(90);
 
   useEffect(() => {
     loadUser();
