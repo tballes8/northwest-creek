@@ -56,3 +56,69 @@ class StockError(BaseModel):
     """Error response"""
     error: str
     detail: Optional[str] = None
+
+
+class NewsInsight(BaseModel):
+    """Sentiment insight for a news article"""
+    ticker: str = Field(..., description="Stock ticker")
+    sentiment: str = Field(..., description="Sentiment: positive, negative, or neutral")
+    sentiment_reasoning: str = Field(..., description="Reasoning for the sentiment")
+
+
+class NewsArticle(BaseModel):
+    """News article data"""
+    title: str = Field(..., description="Article title")
+    publisher: str = Field(..., description="Publisher name")
+    published_utc: str = Field(..., description="Publication date/time in ISO format")
+    article_url: str = Field(..., description="URL to full article")
+    summary: Optional[str] = Field(None, description="Article summary/description")
+    insights: Optional[List[NewsInsight]] = Field(None, description="Sentiment insights")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "title": "Apple Announces Record Quarterly Earnings",
+                "publisher": "Financial Times",
+                "published_utc": "2025-01-31T14:30:00Z",
+                "article_url": "https://example.com/article",
+                "summary": "Apple Inc. reported record revenue driven by strong iPhone sales.",
+                "insights": [
+                    {
+                        "ticker": "AAPL",
+                        "sentiment": "positive",
+                        "sentiment_reasoning": "Strong quarterly earnings beat analyst expectations"
+                    }
+                ]
+            }
+        }
+
+
+class NewsData(BaseModel):
+    """News data response"""
+    ticker: str = Field(..., description="Stock ticker")
+    data: List[NewsArticle] = Field(..., description="Array of news articles")
+    count: int = Field(..., description="Number of articles returned")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "ticker": "AAPL",
+                "data": [
+                    {
+                        "title": "Apple Announces Record Quarterly Earnings",
+                        "publisher": "Financial Times",
+                        "published_utc": "2025-01-31T14:30:00Z",
+                        "article_url": "https://example.com/article",
+                        "summary": "Apple Inc. reported record revenue.",
+                        "insights": [
+                            {
+                                "ticker": "AAPL",
+                                "sentiment": "positive",
+                                "sentiment_reasoning": "Strong earnings"
+                            }
+                        ]
+                    }
+                ],
+                "count": 1
+            }
+        }

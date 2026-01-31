@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
-import axios from 'axios';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import { authAPI, stocksAPI } from '../services/api'; 
@@ -47,6 +46,19 @@ interface HistoricalPrice {
   volume: number;
 }
 
+interface NewsArticle {
+  title: string;
+  publisher: string;
+  published_utc: string;
+  article_url: string;
+  summary?: string;
+  insights?: Array<{
+    ticker: string;
+    sentiment: string;
+    sentiment_reasoning: string;
+  }>;
+}
+
 const Stocks: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -61,11 +73,14 @@ const Stocks: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [historyDays, setHistoryDays] = useState(90);
+  const [news, setNews] = useState<NewsArticle[]>([]);
+  const [newsLoading, setNewsLoading] = useState(false);
 
   useEffect(() => {
     loadUser();
     if (initialTicker) {
       loadStockData(initialTicker);
+      loadNews(initialTicker);
     }
   }, [initialTicker]);
 
@@ -110,11 +125,27 @@ const Stocks: React.FC = () => {
     }
   };
 
+  const loadNews = async (symbol: string) => {
+    if (!symbol.trim()) return;
+
+    setNewsLoading(true);
+    try {
+      const response = await stocksAPI.getNews(symbol.toUpperCase(), 3); // Get only 3 articles
+      setNews(response.data.data || []);
+    } catch (err: any) {
+      console.error('Failed to fetch news:', err);
+      setNews([]);
+    } finally {
+      setNewsLoading(false);
+    }
+  };
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchInput.trim()) {
       navigate(`/stocks?ticker=${searchInput.toUpperCase()}`);
       loadStockData(searchInput);
+      loadNews(searchInput);
     }
   };
 
@@ -397,6 +428,67 @@ const Stocks: React.FC = () => {
                   {company.description || 'No description available.'}
                 </p>
               </div>
+            </div>
+
+            {/* News Section */}
+            <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Latest News</h3>
+              {newsLoading ? (
+                <div className="text-center py-8 text-gray-600 dark:text-gray-400">
+                  Loading news...
+                </div>
+              ) : news.length > 0 ? (
+                <div className="space-y-4">
+                  {news.map((article, index) => (
+                    <div key={index} className="border-b border-gray-200 dark:border-gray-600 last:border-b-0 pb-4 last:pb-0">
+                      <a 
+                        href={article.article_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-lg font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                      >
+                        {article.title}
+                      </a>
+                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        {article.publisher} • {new Date(article.published_utc).toLocaleDateString('en-US', { 
+                          month: 'short', 
+                          day: 'numeric', 
+                          year: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit'
+                        })}
+                      </div>
+                      {article.summary && (
+                        <p className="text-gray-600 dark:text-gray-400 mt-2 text-sm leading-relaxed">
+                          {article.summary}
+                        </p>
+                      )}
+                      {article.insights && article.insights.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {article.insights.slice(0, 3).map((insight, idx) => (
+                            <span 
+                              key={idx}
+                              className={`text-xs px-2 py-1 rounded-full font-medium ${
+                                insight.sentiment === 'positive' 
+                                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                                  : insight.sentiment === 'negative'
+                                  ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                                  : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+                              }`}
+                            >
+                              {insight.sentiment === 'positive' ? '📈' : insight.sentiment === 'negative' ? '📉' : '➖'} {insight.ticker}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-600 dark:text-gray-400">
+                  No recent news available for {ticker}
+                </div>
+              )}
             </div>
 
             {/* Action Buttons */}
