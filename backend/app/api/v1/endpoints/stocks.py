@@ -3,7 +3,7 @@ Stock API Endpoints
 """
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
-
+from app.services.market_data import market_data_service
 from app.schemas.stock import (
     StockQuote,
     CompanyInfo,
@@ -13,7 +13,7 @@ from app.schemas.stock import (
     NewsData,
     NewsArticle
 )
-from app.services.market_data import market_data_service
+
 
 router = APIRouter()
 
@@ -141,3 +141,4 @@ async def get_stock_news(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching news: {str(e)}")
+    
