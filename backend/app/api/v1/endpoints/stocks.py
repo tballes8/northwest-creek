@@ -131,7 +131,7 @@ async def get_stock_news(
     - Array of news articles with titles, publishers, dates, URLs, and sentiment insights
     """
     try:
-        news = await market_data_service.get_stock_news(ticker, limit)
+        news = await market_data_service.get_stock_news_rest(ticker, limit)
         return {
             "ticker": ticker.upper(),
             "data": news,
