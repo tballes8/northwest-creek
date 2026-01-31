@@ -5,7 +5,7 @@ import httpx, os
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone, timedelta
 from app.config import get_settings
-from polygon import RESTClient
+from massive import RESTClient
 
 
 settings = get_settings()
