@@ -7,7 +7,6 @@ from datetime import datetime, timezone, timedelta
 from app.config import get_settings
 from massive import RESTClient
 
-
 settings = get_settings()
 
 
@@ -163,7 +162,8 @@ class MarketDataService:
                 raise ValueError("Ticker symbol is required")
             
             # Initialize client (you might already have this)
-            api_key = os.getenv("POLYGON_API_KEY")
+            api_key = self.api_key
+            # api_key = os.getenv("POLYGON_API_KEY")
             if not api_key:
                 raise ValueError("POLYGON_API_KEY not configured")
             
@@ -223,98 +223,6 @@ class MarketDataService:
             print(f"Error fetching news: {str(e)}")
             raise Exception(f"Failed to fetch news: {str(e)}")
         
-    async def get_stock_news(self, ticker: str, limit: int = 3) -> List[Dict[str, Any]]:
-        """
-        Fetch latest news articles for a stock ticker from Polygon.io
-        
-        Args:
-            ticker: Stock symbol
-            limit: Number of articles to return (default 3)
-            
-        Returns:
-            List of news article dictionaries
-            
-        Raises:
-            ValueError: If ticker is invalid
-            Exception: If API request fails
-        """
-        try:
-            ticker = ticker.upper().strip()
-            if not ticker:
-                raise ValueError("Ticker symbol is required")
-            
-            # Calculate date range (last 6 months)
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=180)
-            start_date_str = start_date.strftime("%Y-%m-%d")
-            
-            # Fetch news from Polygon.io
-            # Note: Replace 'self.polygon_client' with your actual Polygon client instance
-            news_results = self.polygon_client.list_ticker_news(
-                ticker,
-                published_utc_gte=start_date_str,
-                order="desc",
-                limit=limit * 3  # Fetch more than needed to filter
-            )
-            
-            articles = []
-            count = 0
-            
-            for article in news_results:
-                if count >= limit:
-                    break
-                    
-                # Parse publication date
-                pub_str = article.published_utc or ""
-                if pub_str:
-                    try:
-                        # Handle ISO format with Z suffix
-                        dt = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
-                        published_utc = dt.isoformat()
-                    except Exception:
-                        # Fallback to original string
-                        published_utc = pub_str
-                else:
-                    published_utc = datetime.now().isoformat()
-                
-                # Build article data
-                article_data = {
-                    "title": article.title or "No title available",
-                    "publisher": article.publisher.name if hasattr(article, 'publisher') and article.publisher else "Unknown",
-                    "published_utc": published_utc,
-                    "article_url": article.article_url or "",
-                    "summary": getattr(article, 'description', None) or getattr(article, 'summary', None),
-                }
-                
-                # Add sentiment insights if available
-                if hasattr(article, "insights") and article.insights:
-                    insights = []
-                    for insight in article.insights[:4]:  # Top 4 insights
-                        insight_data = {
-                            "ticker": insight.ticker if hasattr(insight, 'ticker') else ticker,
-                            "sentiment": insight.sentiment if hasattr(insight, 'sentiment') else "neutral",
-                            "sentiment_reasoning": insight.sentiment_reasoning if hasattr(insight, 'sentiment_reasoning') else ""
-                        }
-                        insights.append(insight_data)
-                    article_data["insights"] = insights
-                else:
-                    article_data["insights"] = None
-                
-                articles.append(article_data)
-                count += 1
-            
-            if not articles:
-                # Return empty list if no news found (not an error)
-                return []
-            
-            return articles
-            
-        except Exception as e:
-            # Log the error
-            print(f"Error fetching news for {ticker}: {str(e)}")
-            raise Exception(f"Failed to fetch news: {str(e)}")
-
-
 
 # Singleton instance
 market_data_service = MarketDataService()
