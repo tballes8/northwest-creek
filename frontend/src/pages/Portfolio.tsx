@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
-import { Link, useNavigate } from 'react-router-dom';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { authAPI, portfolioAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
@@ -32,6 +31,8 @@ const Portfolio: React.FC = () => {
   const [newNotes, setNewNotes] = useState('');
   const [error, setError] = useState('');
   const location = useLocation();
+  const [refreshing, setRefreshing] = useState(false);
+
 
   useEffect(() => {
     loadData();
@@ -52,7 +53,13 @@ const Portfolio: React.FC = () => {
       }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
   };
 
   const calculateTotals = () => {
@@ -207,6 +214,23 @@ const Portfolio: React.FC = () => {
                 {portfolio.length} of {getTierLimit()} positions
               </p>
             </div>
+
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <svg 
+                className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} 
+                fill="none" 
+                viewBox="0 0 24 24" 
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {refreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+
             <button
               onClick={() => setAddingPosition(!addingPosition)}
               className="px-6 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors flex items-center"
