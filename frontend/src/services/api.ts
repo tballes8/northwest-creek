@@ -94,6 +94,9 @@ export const stocksAPI = {
   
   getHistorical: (ticker: string, days: number = 30) =>
     axiosInstance.get(`/stocks/historical/${ticker}`, { params: { days } }),
+
+  getNews: (ticker: string, limit: number = 3) =>
+    axiosInstance.get(`/stocks/news/${ticker}`, { params: { limit }}),
 };
 
 // DCF API
