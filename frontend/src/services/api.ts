@@ -97,6 +97,9 @@ export const stocksAPI = {
 
   getNews: (ticker: string, limit: number = 3) =>
     axiosInstance.get(`/stocks/news/${ticker}`, { params: { limit }}),
+
+  getTopGainers: (limit: number = 10) =>
+    axios.Instance.get(`/stocks/top-gainers`, {params: {limit}}),
 };
 
 // DCF API
