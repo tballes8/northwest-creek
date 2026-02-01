@@ -160,7 +160,7 @@ const Stocks: React.FC = () => {
     try {
       const response = await stocksAPI.getTopGainers();
 
-      const data = await response.json();
+      const data = await response.data;
       setTopGainers(data.top_gainers || []);
     } catch (error) {
       console.error('Failed to load top gainers:', error);
