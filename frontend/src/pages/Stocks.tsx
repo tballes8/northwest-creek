@@ -115,7 +115,7 @@ const Stocks: React.FC = () => {
     setGainersLoading(true);
     try {
       // const response = await fetch(`${API_URL}/api/top-gainers`);
-      const response = await fetch(`${API_URL}/api/stocks/top-gainers`);
+      const response = await fetch(`${API_URL}/api/v1/endpoints/stocks/top-gainers`);
       
       const data = await response.json();
       setTopGainers(data.top_gainers || []);
