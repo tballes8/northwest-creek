@@ -91,9 +91,10 @@ const Stocks: React.FC = () => {
     if (initialTicker) {
       loadStockData(initialTicker);
       loadNews(initialTicker);
+      loadTopGainers();
     }
     // Load top gainers when component mounts or when showTopGainers is true
-    if (showTopGainers || !initialTicker) {
+    if (showTopGainers || initialTicker) {
       loadTopGainers();
     }
   }, [initialTicker, showTopGainers]);
@@ -114,9 +115,8 @@ const Stocks: React.FC = () => {
   const loadTopGainers = async () => {
     setGainersLoading(true);
     try {
-      // const response = await fetch(`${API_URL}/api/top-gainers`);
       const response = await fetch(`${API_URL}/api/v1/top-gainers`);
-      
+
       const data = await response.json();
       setTopGainers(data.top_gainers || []);
     } catch (error) {

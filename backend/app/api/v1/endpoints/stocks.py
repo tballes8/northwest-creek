@@ -146,7 +146,8 @@ async def get_stock_news(
 async def get_top_gainers(limit: int = 10):
     """Get top stock gainers"""
     try:
-        return await market_data_service.get_top_gainers(limit)
+        result = await market_data_service.get_top_gainers(limit)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -157,3 +158,4 @@ async def get_top_losers(limit: int = 10):
         return await market_data_service.get_top_losers(limit)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
