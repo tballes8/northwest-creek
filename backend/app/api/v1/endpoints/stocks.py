@@ -142,3 +142,18 @@ async def get_stock_news(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching news: {str(e)}")
     
+@router.get("/top-gainers")
+async def get_top_gainers(limit: int = 10):
+    """Get top stock gainers"""
+    try:
+        return await market_data_service.get_top_gainers(limit)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/top-losers")
+async def get_top_losers(limit: int = 10):
+    """Get top stock losers"""
+    try:
+        return await market_data_service.get_top_losers(limit)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

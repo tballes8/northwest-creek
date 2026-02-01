@@ -6,6 +6,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone, timedelta
 from app.config import get_settings
 from massive import RESTClient
+from massive.rest.models import TickerSnapshot, Agg
 
 settings = get_settings()
 
@@ -15,6 +16,8 @@ class MarketDataService:
         self.base_url = "https://api.massive.com"
         self.api_key = settings.MASSIVE_API_KEY
         self.timeout = 10.0
+        # Initialize Massive REST client for snapshot data
+        self.rest_client = RESTClient(self.api_key)
     
     async def get_quote(self, ticker: str) -> Dict[str, Any]:
         """
@@ -253,13 +256,8 @@ class MarketDataService:
             if not ticker:
                 raise ValueError("Ticker symbol is required")
             
-            # Initialize client (you might already have this)
-            api_key = self.api_key
-            # api_key = os.getenv("POLYGON_API_KEY")
-            if not api_key:
-                raise ValueError("POLYGON_API_KEY not configured")
-            
-            client = RESTClient(api_key)
+            # Use the initialized REST client
+            client = self.rest_client
             
             # Calculate date range
             end_date = datetime.now()
@@ -314,6 +312,120 @@ class MarketDataService:
         except Exception as e:
             print(f"Error fetching news: {str(e)}")
             raise Exception(f"Failed to fetch news: {str(e)}")
+    
+    async def get_top_gainers(self, limit: int = 10) -> Dict[str, Any]:
+        """
+        Get top stock gainers from Massive API
+        
+        Args:
+            limit: Number of top gainers to return (default: 10, max: 50)
+        
+        Returns:
+            dict: Response containing timestamp and list of top gainers
+            
+        Raises:
+            ValueError: If limit is invalid
+            Exception: If API request fails
+        """
+        try:
+            # Validate limit
+            if limit < 1 or limit > 50:
+                raise ValueError("Limit must be between 1 and 50")
+            
+            # Fetch stock snapshots using the initialized REST client
+            snapshot = self.rest_client.get_snapshot_all("stocks")
+            results = []
+            
+            # Process snapshots
+            for item in snapshot:
+                if isinstance(item, TickerSnapshot):
+                    if isinstance(item.prev_day, Agg):
+                        if isinstance(item.prev_day.open, float) and isinstance(item.prev_day.close, float):
+                            # Avoid division by zero
+                            if item.prev_day.open != 0:
+                                percent_change = (
+                                    (item.prev_day.close - item.prev_day.open)
+                                    / item.prev_day.open
+                                    * 100
+                                )
+                                results.append({
+                                    'ticker': item.ticker,
+                                    'open': round(item.prev_day.open, 2),
+                                    'close': round(item.prev_day.close, 2),
+                                    'change_percent': round(percent_change, 2)
+                                })
+            
+            # Sort by percentage change (biggest gainers first)
+            results.sort(key=lambda x: x['change_percent'], reverse=True)
+            
+            # Get top gainers
+            top_gainers = results[:limit]
+            
+            return {
+                'timestamp': datetime.now().isoformat(),
+                'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'top_gainers': top_gainers
+            }
+            
+        except Exception as e:
+            raise Exception(f"Failed to fetch top gainers: {str(e)}")
+    
+    async def get_top_losers(self, limit: int = 10) -> Dict[str, Any]:
+        """
+        Get top stock losers from Massive API
+        
+        Args:
+            limit: Number of top losers to return (default: 10, max: 50)
+        
+        Returns:
+            dict: Response containing timestamp and list of top losers
+            
+        Raises:
+            ValueError: If limit is invalid
+            Exception: If API request fails
+        """
+        try:
+            # Validate limit
+            if limit < 1 or limit > 50:
+                raise ValueError("Limit must be between 1 and 50")
+            
+            # Fetch stock snapshots using the initialized REST client
+            snapshot = self.rest_client.get_snapshot_all("stocks")
+            results = []
+            
+            # Process snapshots
+            for item in snapshot:
+                if isinstance(item, TickerSnapshot):
+                    if isinstance(item.prev_day, Agg):
+                        if isinstance(item.prev_day.open, float) and isinstance(item.prev_day.close, float):
+                            # Avoid division by zero
+                            if item.prev_day.open != 0:
+                                percent_change = (
+                                    (item.prev_day.close - item.prev_day.open)
+                                    / item.prev_day.open
+                                    * 100
+                                )
+                                results.append({
+                                    'ticker': item.ticker,
+                                    'open': round(item.prev_day.open, 2),
+                                    'close': round(item.prev_day.close, 2),
+                                    'change_percent': round(percent_change, 2)
+                                })
+            
+            # Sort by percentage change (biggest losers first)
+            results.sort(key=lambda x: x['change_percent'])
+            
+            # Get top losers
+            top_losers = results[:limit]
+            
+            return {
+                'timestamp': datetime.now().isoformat(),
+                'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'top_losers': top_losers
+            }
+            
+        except Exception as e:
+            raise Exception(f"Failed to fetch top losers: {str(e)}")
         
 
 # Singleton instance
