@@ -112,26 +112,6 @@ const Stocks: React.FC = () => {
     }
   };
 
-  const loadTopGainers = async () => {
-    setGainersLoading(true);
-    try {
-      const response = await fetch(`${API_URL}/api/v1/stocks/top-gainers`);
-
-      const data = await response.json();
-      setTopGainers(data.top_gainers || []);
-    } catch (error) {
-      console.error('Failed to load top gainers:', error);
-      // Fallback to default tickers if fetch fails
-      setTopGainers([
-        { ticker: 'AAPL', open: 0, close: 0, change_percent: 0 },
-        { ticker: 'TSLA', open: 0, close: 0, change_percent: 0 },
-        { ticker: 'MSFT', open: 0, close: 0, change_percent: 0 },
-      ]);
-    } finally {
-      setGainersLoading(false);
-    }
-  };
-
   const loadStockData = async (symbol: string) => {
     if (!symbol.trim()) return;
 
@@ -172,6 +152,26 @@ const Stocks: React.FC = () => {
       setNews([]);
     } finally {
       setNewsLoading(false);
+    }
+  };
+
+  const loadTopGainers = async () => {
+    setGainersLoading(true);
+    try {
+      const response = await stocksAPI.getTopGainers();
+
+      const data = await response.json();
+      setTopGainers(data.top_gainers || []);
+    } catch (error) {
+      console.error('Failed to load top gainers:', error);
+      // Fallback to default tickers if fetch fails
+      setTopGainers([
+        { ticker: 'AAPL', open: 0, close: 0, change_percent: 0 },
+        { ticker: 'TSLA', open: 0, close: 0, change_percent: 0 },
+        { ticker: 'MSFT', open: 0, close: 0, change_percent: 0 },
+      ]);
+    } finally {
+      setGainersLoading(false);
     }
   };
 
