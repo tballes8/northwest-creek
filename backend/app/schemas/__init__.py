@@ -18,7 +18,11 @@ from app.schemas.auth import (
     UserResponse,
     Token,
     TokenData,
-    DailySnapshot,
+)
+
+from app.schemas.daily_snapshot import (
+    DailySnapshotItem,
+    DailySnapshotResponse,
 )
 
 __all__ = [
@@ -28,11 +32,15 @@ __all__ = [
     "portfolio",
     "stock",
     "watchlist",
+    "daily_snapshot",
     # Auth schemas
     "UserCreate",
     "UserLogin",
     "UserResponse",
     "Token",
     "TokenData",
-    "DailySnapshot",
+    # Daily snapshot schemas
+    "DailySnapshotItem",
+    "DailySnapshotResponse",    
+
 ]
