@@ -84,10 +84,10 @@ class DailyStockSnapshot(Base):
     
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     ticker = Column(String(10), nullable=False, index=True)
-    open_price = Column(float, nullable=False)
-    close_price = Column(float, nullable=False)
-    change_percent = Column(float, nullable=False)
-    snapshot_date = Column(Date, nullable=False, index=True)
+    open_price = Column(Numeric(precision=18, scale=2), nullable=False)
+    close_price = Column(Numeric(precision=18, scale=2), nullable=False)
+    change_percent = Column(Numeric(precision=18, scale=2), nullable=False)
+    snapshot_date = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     __table_args__ = (
