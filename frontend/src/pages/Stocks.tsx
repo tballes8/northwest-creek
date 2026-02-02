@@ -550,9 +550,39 @@ const Stocks: React.FC = () => {
             <div className="text-6xl mb-4">📊</div>
             <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Search for a Stock</h3>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Enter a ticker symbol above to view detailed stock information, charts, and analysis tools.
-            </p>
-            
+              Enter a ticker symbol above to view detailed stock information, charts, and analysis tools. Or, select from the list below.
+              {gainersLoading ? (
+              <div className="text-center py-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2"></div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Loading top gainers...</p>
+              </div>
+            ) : (
+              <>
+                {topGainers.length > 0 && (
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                    {topGainers[0].change_percent > 0 ? "📈 Today's Top Gainers:" : "Quick Start:"}
+                  </p>
+                )}
+                <div className="flex flex-wrap justify-center gap-3">
+                  {topGainers.map((gainer, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleTickerClick(gainer.ticker)}
+                      className="group px-4 py-2.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-primary-600 hover:text-white dark:hover:bg-primary-500 transition-all duration-200 transform hover:scale-105"
+                      title={gainer.change_percent > 0 ? `${gainer.change_percent.toFixed(2)}% gain` : gainer.ticker}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{gainer.ticker}</span>
+                        {gainer.change_percent > 0 && (
+                          <span className="text-xs font-medium text-green-600 dark:text-green-400 group-hover:text-green-200">
+                            +{gainer.change_percent.toFixed(2)}%
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+            </p>            
             {/* Dynamic Top Gainers Buttons */}
             {gainersLoading ? (
               <div className="text-center py-4">
