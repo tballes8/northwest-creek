@@ -1,8 +1,8 @@
 """add daily stock snapshots table
 
-Revision ID: [auto-generated]
-Revises: [previous_revision]
-Create Date: [auto-generated]
+Revision ID: 007
+Revises: 006
+Create Date: 2026-02-02
 """
 from alembic import op
 import sqlalchemy as sa
@@ -10,8 +10,8 @@ from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
 # revision identifiers, used by Alembic.
-revision = '[auto-generated]'
-down_revision = '[previous_revision]'
+revision = '007'
+down_revision = '006'
 branch_labels = None
 depends_on = None
 
