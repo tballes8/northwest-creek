@@ -2,9 +2,12 @@
 Stock API Endpoints
 """
 from fastapi import APIRouter, HTTPException, Query, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func, Date
 from datetime import date
 from typing import Optional
 from app.services.market_data import market_data_service
+from app.db.session import get_db
 from app.schemas.daily_snapshot import DailySnapshotItem, DailySnapshotResponse
 from app.db.models import DailyStockSnapshot
 from app.schemas.stock import (
