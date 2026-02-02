@@ -613,71 +613,7 @@ const Stocks: React.FC = () => {
                   </div>
                 </>
               )}
-              
             </p>
-            
-            {/* Dynamic Top Gainers Buttons */}
-            {gainersLoading ? (
-              <div className="text-center py-4">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2"></div>
-                <p className="text-sm text-gray-600 dark:text-gray-400">Loading top gainers...</p>
-              </div>
-            ) : (
-              <>
-                {topGainers.length > 0 && (
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-                    {topGainers[0].change_percent > 0 ? "📈 Today's Top Gainers:" : "Quick Start:"}
-                  </p>
-                )}
-                <div className="flex flex-wrap justify-center gap-3">
-                  {topGainers.map((gainer, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleTickerClick(gainer.ticker)}
-                      className="group px-4 py-2.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-primary-600 hover:text-white dark:hover:bg-primary-500 transition-all duration-200 transform hover:scale-105"
-                      title={gainer.change_percent > 0 ? `${gainer.change_percent.toFixed(2)}% gain` : gainer.ticker}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">{gainer.ticker}</span>
-                        {gainer.change_percent > 0 && (
-                          <span className="text-xs font-medium text-green-600 dark:text-green-400 group-hover:text-green-200">
-                            +{gainer.change_percent.toFixed(2)}%
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-                <div>
-                  {/* Update the empty state section with daily snapshots */}
-                  {!ticker && dailySnapshots.length > 0 && (
-                    <div className="mb-8">
-                      <h3 className="text-xl font-semibold mb-4">Today's Market Movers</h3>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-                        {dailySnapshots.map((snap) => (
-                          <button
-                            key={snap.ticker}
-                            onClick={() => handleSearch(snap.ticker)}
-                            className="p-4 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors text-left"
-                          >
-                            <div className="font-semibold text-lg">{snap.ticker}</div>
-                            <div className={`text-sm ${snap.change_percent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                              {snap.change_percent >= 0 ? '+' : ''}{snap.change_percent.toFixed(2)}%
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                      <button
-                        onClick={loadDailySnapshots}
-                        className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm"
-                      >
-                        🔄 Load Different Stocks
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
           </div>
         )}
       </div>
