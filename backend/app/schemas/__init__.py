@@ -8,6 +8,7 @@ from app.schemas import (
     portfolio,
     stock,
     watchlist,
+    daily_snapshot,
 )
 
 # Export commonly used schemas for convenience
@@ -17,6 +18,7 @@ from app.schemas.auth import (
     UserResponse,
     Token,
     TokenData,
+    DailySnapshot,
 )
 
 __all__ = [
@@ -32,4 +34,5 @@ __all__ = [
     "UserResponse",
     "Token",
     "TokenData",
+    "DailySnapshot",
 ]

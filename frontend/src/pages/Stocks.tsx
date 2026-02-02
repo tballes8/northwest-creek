@@ -84,6 +84,7 @@ const Stocks: React.FC = () => {
   const [newsLoading, setNewsLoading] = useState(false);
   const [topGainers, setTopGainers] = useState<TopGainer[]>([]);
   const [gainersLoading, setGainersLoading] = useState(false);
+  const [dailySnapshots, setDailySnapshots] = useState<any[]>([]);
 
 
   useEffect(() => {
@@ -92,12 +93,23 @@ const Stocks: React.FC = () => {
       loadStockData(initialTicker);
       loadNews(initialTicker);
       loadTopGainers();
+      loadDailySnapshots();
     }
     // Load top gainers when component mounts or when showTopGainers is true
     if (showTopGainers || initialTicker) {
       loadTopGainers();
     }
   }, [initialTicker, showTopGainers]);
+
+  // Add function to load daily snapshots
+  const loadDailySnapshots = async () => {
+    try {
+      const response = await stocksAPI.getDailySnapshot(10);
+      setDailySnapshots(response.data.snapshots || []);
+    } catch (error) {
+      console.error('Failed to load daily snapshots:', error);
+    }
+  };
 
   const loadUser = async () => {
     try {
@@ -576,6 +588,34 @@ const Stocks: React.FC = () => {
               </>
             )}
           </div>
+          <div>
+              {/* Update the empty state section with daily snapshots */}
+              {!ticker && dailySnapshots.length > 0 && (
+                <div className="mb-8">
+                  <h3 className="text-xl font-semibold mb-4">Today's Market Movers</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                    {dailySnapshots.map((snap) => (
+                      <button
+                        key={snap.ticker}
+                        onClick={() => handleSearch(snap.ticker)}
+                        className="p-4 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors text-left"
+                      >
+                        <div className="font-semibold text-lg">{snap.ticker}</div>
+                        <div className={`text-sm ${snap.change_percent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {snap.change_percent >= 0 ? '+' : ''}{snap.change_percent.toFixed(2)}%
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={loadDailySnapshots}
+                    className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm"
+                  >
+                    🔄 Load Different Stocks
+                  </button>
+                </div>
+              )}
+            </div>
         )}
       </div>
     </div>

@@ -1,9 +1,12 @@
 """
 Stock API Endpoints
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
+from datetime import date
 from typing import Optional
 from app.services.market_data import market_data_service
+from app.schemas.daily_snapshot import DailySnapshotItem, DailySnapshotResponse
+from app.db.models import DailyStockSnapshot
 from app.schemas.stock import (
     StockQuote,
     CompanyInfo,
@@ -11,11 +14,62 @@ from app.schemas.stock import (
     HistoricalPrice,
     StockError,
     NewsData,
-    NewsArticle
+    NewsArticle,
 )
 
 
 router = APIRouter()
+@router.get("/daily-snapshot", response_model=DailySnapshotResponse)
+async def get_daily_snapshot(
+    limit: int = Query(default=10, ge=1, le=50),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get random stocks from today's daily snapshot
+    
+    **Parameters:**
+    - **limit**: Number of random stocks to return (1-50, default 10)
+    
+    **Returns:**
+    - Random selection of stocks from today's snapshot with change percentages
+    """
+    try:
+        # Get today's date
+        today = date.today()
+        
+        # Get total count for today
+        count_query = select(func.count(DailyStockSnapshot.id)).where(
+            DailyStockSnapshot.snapshot_date == today
+        )
+        count_result = await db.execute(count_query)
+        total_count = count_result.scalar() or 0
+        
+        if total_count == 0:
+            return {
+                "snapshots": [],
+                "total_count": 0,
+                "snapshot_date": today
+            }
+        
+        # Get random snapshots using ORDER BY RANDOM()
+        query = (
+            select(DailyStockSnapshot)
+            .where(DailyStockSnapshot.snapshot_date == today)
+            .order_by(func.random())
+            .limit(limit)
+        )
+        
+        result = await db.execute(query)
+        snapshots = result.scalars().all()
+        
+        return {
+            "snapshots": snapshots,
+            "total_count": total_count,
+            "snapshot_date": today
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching daily snapshot: {str(e)}")
 
 @router.get("/top-gainers")
 async def get_top_gainers(limit: int = 10):

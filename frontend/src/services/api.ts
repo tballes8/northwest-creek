@@ -100,6 +100,9 @@ export const stocksAPI = {
 
   getTopGainers: (limit: number = 10) =>
     axiosInstance.get(`/stocks/top-gainers`, {params: {limit}}),
+
+  getDailySnapshot: (limit: number = 10) =>
+    axiosInstance.get(`/stocks/daily-snapshot`, { params: { limit } }),
 };
 
 // DCF API

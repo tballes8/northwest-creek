@@ -1,0 +1,10 @@
+[[jobs]]
+name = "Daily Stock Snapshot"
+schedule = "0 6 * * *"  # Run at 6 AM UTC every day (after market close)
+command = "python -m app.tasks.fetch_daily_snapshots"
+```
+
+**OR create `backend/Procfile`:**
+```
+web: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+worker: python -m app.tasks.fetch_daily_snapshots
