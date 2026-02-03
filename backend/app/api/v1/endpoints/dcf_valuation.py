@@ -197,18 +197,6 @@ async def get_dcf_suggestions(
             "discount_reasoning": "Moderate risk assessment",
             "years_reasoning": "Standard projection period"
         })
-
-        profile = sector_profiles.get(sector, sector_profiles.get("Industrials", {
-            "growth": 0.06,
-            "terminal": 0.025,
-            "discount": 0.10,
-            "years": 5,
-            "growth_reasoning": "Conservative growth estimate",
-            "terminal_reasoning": "Standard terminal growth near GDP growth",
-            "discount_reasoning": "Moderate risk assessment",
-            "years_reasoning": "Standard projection period"
-        }))
-        
         # Adjust for company size
         size_adjustments = {
             "mega_cap": {"growth": -0.01, "discount": -0.01, "growth_note": "adjusted down for large cap stability"},
