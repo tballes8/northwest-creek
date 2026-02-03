@@ -1,6 +1,6 @@
 """
 DCF Valuation API Endpoints - Discounted Cash Flow Analysis
-⭐ PAID TIERS ONLY ⭐
+⭐ PAID TIERS ONLY 
 """
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession

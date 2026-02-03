@@ -4,6 +4,7 @@ import { authAPI, dcfAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 
+
 interface DCFSuggestions {
   ticker: string;
   company_name: string;

@@ -18,6 +18,7 @@ import {
 } from 'chart.js';
 import { Line, Chart } from 'react-chartjs-2';
 
+
 // Register Chart.js components
 ChartJS.register(
   CategoryScale,
