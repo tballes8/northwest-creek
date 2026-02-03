@@ -18,6 +18,101 @@ class MarketDataService:
         self.timeout = 10.0
         # Initialize Massive REST client for snapshot data
         self.rest_client = RESTClient(self.api_key)
+
+    def _map_sic_to_sector(self, sic_description: str) -> str:
+        """
+        Map Polygon SIC description to standard sector categories
+        
+        Args:
+            sic_description: SIC description from Polygon API
+            
+        Returns:
+            Standardized sector name
+        """
+        sic_lower = sic_description.lower()
+        
+        # Technology sector keywords
+        if any(keyword in sic_lower for keyword in [
+            'computer', 'software', 'technology', 'semiconductor', 
+            'internet', 'electronic', 'data processing', 'telecommunications',
+            'information', 'tech'
+        ]):
+            return "Technology"
+        
+        # Healthcare sector keywords
+        elif any(keyword in sic_lower for keyword in [
+            'pharmaceutical', 'medical', 'health', 'biotechnology',
+            'drug', 'hospital', 'surgical', 'dental', 'biotech'
+        ]):
+            return "Healthcare"
+        
+        # Financial Services sector keywords
+        elif any(keyword in sic_lower for keyword in [
+            'bank', 'finance', 'insurance', 'investment', 'securities',
+            'credit', 'mortgage', 'financial', 'trust', 'asset management'
+        ]):
+            return "Financial Services"
+        
+        # Consumer Cyclical sector keywords
+        elif any(keyword in sic_lower for keyword in [
+            'retail', 'automobile', 'apparel', 'restaurant', 'hotel',
+            'leisure', 'entertainment', 'travel', 'consumer durables',
+            'home building', 'automotive'
+        ]):
+            return "Consumer Cyclical"
+        
+        # Consumer Defensive sector keywords
+        elif any(keyword in sic_lower for keyword in [
+            'food', 'beverage', 'tobacco', 'household', 'personal care',
+            'consumer staples', 'grocery', 'packaged foods'
+        ]):
+            return "Consumer Defensive"
+        
+        # Energy sector keywords
+        elif any(keyword in sic_lower for keyword in [
+            'oil', 'gas', 'petroleum', 'energy', 'coal', 'fuel',
+            'pipeline', 'exploration', 'drilling'
+        ]):
+            return "Energy"
+        
+        # Industrials sector keywords
+        elif any(keyword in sic_lower for keyword in [
+            'manufacturing', 'industrial', 'machinery', 'aerospace',
+            'defense', 'construction', 'engineering', 'transportation',
+            'logistics', 'shipping', 'freight'
+        ]):
+            return "Industrials"
+        
+        # Real Estate sector keywords
+        elif any(keyword in sic_lower for keyword in [
+            'real estate', 'reit', 'property', 'housing'
+        ]):
+            return "Real Estate"
+        
+        # Utilities sector keywords
+        elif any(keyword in sic_lower for keyword in [
+            'utility', 'utilities', 'electric', 'water', 'gas distribution',
+            'power'
+        ]):
+            return "Utilities"
+        
+        # Communication Services sector keywords
+        elif any(keyword in sic_lower for keyword in [
+            'communication', 'broadcasting', 'media', 'publishing',
+            'advertising', 'cable', 'wireless', 'telecom'
+        ]):
+            return "Communication Services"
+        
+        # Materials sector keywords
+        elif any(keyword in sic_lower for keyword in [
+            'chemical', 'metals', 'mining', 'paper', 'forest products',
+            'steel', 'aluminum', 'copper', 'materials'
+        ]):
+            return "Materials"
+        
+        # Default to "Other" if no match
+        else:
+            return "Other"        
     
     async def get_quote(self, ticker: str) -> Dict[str, Any]:
         """
@@ -82,11 +177,14 @@ class MarketDataService:
                 
                 result = data["results"]
                 
+                sic_description = result.get("sic_description", "").lower()
+                sector = self._map_sic_to_sector(sic_description)
+
                 return {
                     "ticker": result.get("ticker", ticker),
                     "name": result.get("name", ""),
                     "description": result.get("description", ""),
-                    "sector": result.get("sic_description", ""),
+                    "sector": sector,
                     "industry": result.get("sic_description", ""),
                     "website": result.get("homepage_url", ""),
                     "exchange": result.get("primary_exchange", ""),
@@ -94,15 +192,14 @@ class MarketDataService:
                     "phone": result.get("phone_number", ""),
                     "employees": result.get("total_employees"),
                     "country": result.get("locale", "US")
-                }
-                
+                }                
         except httpx.TimeoutException:
             raise ValueError(f"Timeout fetching company info for {ticker}")
         except httpx.HTTPError as e:
             raise ValueError(f"HTTP error fetching company info for {ticker}: {str(e)}")
         except Exception as e:
             raise ValueError(f"Error fetching company info for {ticker}: {str(e)}")
-    
+                
     async def get_historical_prices(
         self,
         ticker: str,

@@ -185,18 +185,29 @@ async def get_dcf_suggestions(
                 "years_reasoning": "Captures commodity cycle"
             }
         }
-        
-        # Get sector profile or use default
+
+        # Get profile for sector, or use default profile for unknown sectors
         profile = sector_profiles.get(sector, {
             "growth": 0.06,
             "terminal": 0.025,
             "discount": 0.10,
             "years": 5,
-            "growth_reasoning": "Standard growth rate for diversified companies",
-            "terminal_reasoning": "Terminal growth approximates long-term GDP",
-            "discount_reasoning": "Standard discount rate for average risk",
+            "growth_reasoning": "Conservative growth estimate for unclassified sector",
+            "terminal_reasoning": "Standard terminal growth near GDP growth",
+            "discount_reasoning": "Moderate risk assessment",
             "years_reasoning": "Standard projection period"
         })
+
+        profile = sector_profiles.get(sector, sector_profiles.get("Industrials", {
+            "growth": 0.06,
+            "terminal": 0.025,
+            "discount": 0.10,
+            "years": 5,
+            "growth_reasoning": "Conservative growth estimate",
+            "terminal_reasoning": "Standard terminal growth near GDP growth",
+            "discount_reasoning": "Moderate risk assessment",
+            "years_reasoning": "Standard projection period"
+        }))
         
         # Adjust for company size
         size_adjustments = {
