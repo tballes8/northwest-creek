@@ -10,6 +10,8 @@ interface DCFSuggestions {
   sector: string;
   industry: string;
   current_price: number;
+  market_cap: number;
+  size_category: string;
   suggestions: {
     growth_rate: number;
     terminal_growth: number;
@@ -66,6 +68,7 @@ const DCFValuation: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const urlTicker = searchParams.get('ticker') || '';
+  
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [ticker, setTicker] = useState(urlTicker);
@@ -74,17 +77,24 @@ const DCFValuation: React.FC = () => {
   const [discountRate, setDiscountRate] = useState(10);
   const [projectionYears, setProjectionYears] = useState(5);
   const [loading, setLoading] = useState(false);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [dcfData, setDcfData] = useState<DCFData | null>(null);
   const [suggestions, setSuggestions] = useState<DCFSuggestions | null>(null);
   const [error, setError] = useState('');
+  const [hasLoadedInitialSuggestions, setHasLoadedInitialSuggestions] = useState(false);
   
-  React.useEffect(() => {
+  useEffect(() => {
     loadUser();
-    if (urlTicker) {
+  }, []);
+
+  // Separate useEffect for handling URL ticker parameter
+  useEffect(() => {
+    if (urlTicker && !hasLoadedInitialSuggestions) {
       setTicker(urlTicker);
+      setHasLoadedInitialSuggestions(true);
       loadSuggestions(urlTicker);
     }
-  }, [urlTicker]);
+  }, [urlTicker, hasLoadedInitialSuggestions]);
 
   const loadUser = async () => {
     try {
@@ -102,9 +112,14 @@ const DCFValuation: React.FC = () => {
   const loadSuggestions = async (symbol: string) => {
     if (!symbol.trim()) return;
 
+    setLoadingSuggestions(true);
+    setError('');
+    
     try {
       const response = await dcfAPI.getSuggestions(symbol.toUpperCase());
       setSuggestions(response.data);
+      
+      // Set the suggested parameters
       setGrowthRate(response.data.suggestions.growth_rate * 100);
       setTerminalGrowth(response.data.suggestions.terminal_growth * 100);
       setDiscountRate(response.data.suggestions.discount_rate * 100);
@@ -112,6 +127,10 @@ const DCFValuation: React.FC = () => {
       setShowSuggestions(true);
     } catch (err: any) {
       console.error('Failed to load suggestions:', err);
+      // Don't show error to user, just use default values
+      setShowSuggestions(false);
+    } finally {
+      setLoadingSuggestions(false);
     }
   };
 
@@ -145,10 +164,13 @@ const DCFValuation: React.FC = () => {
     }
   };
 	
-  const handleTickerChange = async (value: string) => {
+  const handleTickerChange = (value: string) => {
     setTicker(value);
-    if (value.length >= 1) {
-      await loadSuggestions(value);
+  };
+
+  const handleGetSuggestions = () => {
+    if (ticker.trim()) {
+      loadSuggestions(ticker);
     }
   };
   
@@ -172,17 +194,8 @@ const DCFValuation: React.FC = () => {
     );
   };
 
-  const getTierLimit = () => {
-    const limits = {
-      free: 0,
-      casual: 20,
-      active: 45,
-      professional: 75
-    };
-    return limits[user?.subscription_tier as keyof typeof limits] || 0;
-  };
-
   const formatCurrency = (value: number) => {
+    if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
     if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
     if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
     if (value >= 1e3) return `$${(value / 1e3).toFixed(2)}K`;
@@ -192,14 +205,14 @@ const DCFValuation: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Navigation */}
-      <nav className="bg-gray-800 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
+      <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
-              <span className="text-xl font-bold text-primary-400">Northwest Creek</span>
+              <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
             </div>
-            
+
             <div className="hidden md:flex items-center space-x-8">
               <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
               <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
@@ -208,13 +221,13 @@ const DCFValuation: React.FC = () => {
               <Link to="/stocks?showTopGainers=true" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Stocks</Link>
               <Link to="/technical-analysis" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
               <Link to="/dcf-valuation" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">DCF Valuation</Link>
-            </div>
+            </div>            
 
             <div className="flex items-center space-x-4">
               <ThemeToggle />
-              <span className="text-sm text-gray-300">{user?.email}</span>
+              <span className="text-sm text-gray-600 dark:text-gray-300">{user?.email}</span>
               {user && getTierBadge(user.subscription_tier)}
-              <button onClick={handleLogout} className="text-gray-300 hover:text-white text-sm font-medium">
+              <button onClick={handleLogout} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium">
                 Logout
               </button>
             </div>
@@ -224,190 +237,252 @@ const DCFValuation: React.FC = () => {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center mb-2">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">DCF Valuation</h1>
-          </div>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Discounted Cash Flow analysis - Estimate intrinsic value based on projected future cash flows
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">DCF Valuation</h1>
+          <p className="text-gray-600 dark:text-gray-400">
+            💰 Calculate intrinsic value using Discounted Cash Flow analysis
           </p>
         </div>
 
         {/* Input Form */}
-        <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500 mb-8">
-          <form onSubmit={handleCalculate}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              {/* Ticker */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Ticker Symbol
-                </label>
+        <form onSubmit={handleCalculate} className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 mb-6 border dark:border-gray-500">
+          <div className="space-y-4">
+            {/* Ticker Input with Get Suggestions Button */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Stock Symbol
+              </label>
+              <div className="flex gap-2">
                 <input
                   type="text"
                   value={ticker}
-                  onChange={(e) => setTicker(e.target.value.toUpperCase())}
-                  placeholder="e.g., AAPL"
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  maxLength={10}
+                  onChange={(e) => handleTickerChange(e.target.value.toUpperCase())}
+                  placeholder="Enter ticker (e.g., AAPL, TSLA, MSFT)"
+                  className="flex-1 px-4 py-3 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
+                <button
+                  type="button"
+                  onClick={handleGetSuggestions}
+                  disabled={loadingSuggestions || !ticker.trim()}
+                  className="px-6 py-3 bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  {loadingSuggestions ? '🔄' : '💡'} Get Smart Defaults
+                </button>
               </div>
+            </div>
 
-              {/* Growth Rate */}
+            {/* Assumptions Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Growth Rate (%)
                 </label>
                 <input
                   type="number"
+                  step="0.1"
                   value={growthRate}
                   onChange={(e) => setGrowthRate(parseFloat(e.target.value))}
-                  step="0.1"
-                  min="-50"
-                  max="100"
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full px-4 py-2 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Expected annual FCF growth</p>
               </div>
 
-              {/* Terminal Growth */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Terminal Growth (%)
                 </label>
                 <input
                   type="number"
+                  step="0.1"
                   value={terminalGrowth}
                   onChange={(e) => setTerminalGrowth(parseFloat(e.target.value))}
-                  step="0.1"
-                  min="0"
-                  max="10"
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full px-4 py-2 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Perpetual growth rate</p>
               </div>
 
-              {/* Discount Rate */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Discount Rate / WACC (%)
+                  Discount Rate (%)
                 </label>
                 <input
                   type="number"
+                  step="0.1"
                   value={discountRate}
                   onChange={(e) => setDiscountRate(parseFloat(e.target.value))}
-                  step="0.1"
-                  min="1"
-                  max="30"
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full px-4 py-2 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Required rate of return</p>
               </div>
 
-              {/* Projection Years */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Projection Years
                 </label>
-                <select
+                <input
+                  type="number"
                   value={projectionYears}
                   onChange={(e) => setProjectionYears(parseInt(e.target.value))}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                >
-                  <option value={3}>3 Years</option>
-                  <option value={5}>5 Years</option>
-                  <option value={7}>7 Years</option>
-                  <option value={10}>10 Years</option>
-                </select>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Forecast horizon</p>
+                  min="3"
+                  max="10"
+                  className="w-full px-4 py-2 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                />
               </div>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full px-8 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+              className="w-full px-6 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? 'Calculating...' : 'Calculate DCF Valuation'}
+              {loading ? 'Calculating...' : 'Calculate DCF'}
             </button>
-          </form>
+          </div>
+        </form>
 
-          {error && (
-            <div className="mt-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg">
-              {error}
+        {/* Suggestions Card */}
+        {showSuggestions && suggestions && (
+          <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-6 mb-6">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">
+                  💡 AI-Suggested Parameters for {suggestions.company_name}
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {suggestions.sector} • {suggestions.industry} • {suggestions.size_category.replace('_', ' ').toUpperCase()}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowSuggestions(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                ✕
+              </button>
             </div>
-          )}
-        </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div className="bg-white dark:bg-purple-900/30 p-3 rounded-lg">
+                <div className="flex items-center justify-between mb-1">
+                  <strong className="text-gray-900 dark:text-white">Growth Rate:</strong>
+                  <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                    {(suggestions.suggestions.growth_rate * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <p className="text-gray-600 dark:text-gray-400 text-xs">{suggestions.reasoning.growth_rate}</p>
+              </div>
+              
+              <div className="bg-white dark:bg-purple-900/30 p-3 rounded-lg">
+                <div className="flex items-center justify-between mb-1">
+                  <strong className="text-gray-900 dark:text-white">Terminal Growth:</strong>
+                  <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                    {(suggestions.suggestions.terminal_growth * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <p className="text-gray-600 dark:text-gray-400 text-xs">{suggestions.reasoning.terminal_growth}</p>
+              </div>
+              
+              <div className="bg-white dark:bg-purple-900/30 p-3 rounded-lg">
+                <div className="flex items-center justify-between mb-1">
+                  <strong className="text-gray-900 dark:text-white">Discount Rate:</strong>
+                  <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                    {(suggestions.suggestions.discount_rate * 100).toFixed(1)}%
+                  </span>
+                </div>
+                <p className="text-gray-600 dark:text-gray-400 text-xs">{suggestions.reasoning.discount_rate}</p>
+              </div>
+              
+              <div className="bg-white dark:bg-purple-900/30 p-3 rounded-lg">
+                <div className="flex items-center justify-between mb-1">
+                  <strong className="text-gray-900 dark:text-white">Projection Period:</strong>
+                  <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
+                    {suggestions.suggestions.projection_years} years
+                  </span>
+                </div>
+                <p className="text-gray-600 dark:text-gray-400 text-xs">{suggestions.reasoning.projection_years}</p>
+              </div>
+            </div>
+            
+            <div className="mt-4 p-3 bg-purple-100 dark:bg-purple-900/40 rounded-lg">
+              <p className="text-xs text-gray-700 dark:text-gray-300">
+                <strong>💡 Tip:</strong> These parameters have been automatically populated based on {suggestions.company_name}'s sector 
+                and market characteristics. You can adjust them before calculating.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg mb-6">
+            {error}
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-12 border dark:border-gray-500 text-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-600 mx-auto mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-400">Calculating DCF for {ticker}...</p>
+          </div>
+        )}
 
         {/* DCF Results */}
-        {dcfData && (
-          <div className="space-y-8">
-            {/* Company Header */}
+        {dcfData && !loading && (
+          <div className="space-y-6">
+            {/* Valuation Summary */}
             <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-              <div className="flex justify-between items-start mb-6">
+              <div className="flex items-start justify-between mb-6">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{dcfData.ticker}</h2>
-                  <p className="text-gray-600 dark:text-gray-400 mt-1">{dcfData.company_name}</p>
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
+                    {dcfData.company_name} ({dcfData.ticker})
+                  </h2>
+                  <p className="text-gray-600 dark:text-gray-400">DCF Valuation Analysis</p>
                 </div>
-                <div className="text-right">
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Current Price</div>
-                  <div className="text-3xl font-bold text-gray-900 dark:text-white">
+                <div className={`px-6 py-3 rounded-lg text-center ${
+                  dcfData.recommendation.color === 'green' 
+                    ? 'bg-green-100 dark:bg-green-900/30' 
+                    : dcfData.recommendation.color === 'red'
+                    ? 'bg-red-100 dark:bg-red-900/30'
+                    : 'bg-yellow-100 dark:bg-yellow-900/30'
+                }`}>
+                  <div className={`text-xl font-bold ${
+                    dcfData.recommendation.color === 'green' 
+                      ? 'text-green-700 dark:text-green-300' 
+                      : dcfData.recommendation.color === 'red'
+                      ? 'text-red-700 dark:text-red-300'
+                      : 'text-yellow-700 dark:text-yellow-300'
+                  }`}>
+                    {dcfData.recommendation.rating}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Current Price</div>
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
                     ${dcfData.current_price.toFixed(2)}
                   </div>
                 </div>
-              </div>
 
-              {/* Recommendation */}
-              <div className={`p-4 rounded-lg border-2 ${
-                dcfData.recommendation.color === 'green'
-                  ? 'bg-green-50 dark:bg-green-900/20 border-green-500'
-                  : dcfData.recommendation.color === 'red'
-                  ? 'bg-red-50 dark:bg-red-900/20 border-red-500'
-                  : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-500'
-              }`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      Recommendation: {dcfData.recommendation.rating}
-                    </h3>
-                    <p className="text-gray-600 dark:text-gray-400 mt-1">{dcfData.recommendation.message}</p>
+                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Intrinsic Value</div>
+                  <div className="text-2xl font-bold text-primary-600 dark:text-primary-400">
+                    ${dcfData.valuation.intrinsic_value_per_share.toFixed(2)}
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm text-gray-600 dark:text-gray-400">Margin of Safety</div>
-                    <div className={`text-2xl font-bold ${
-                      dcfData.valuation.margin_of_safety > 0 ? 'text-green-600' : 'text-red-600'
-                    }`}>
-                      {dcfData.valuation.margin_of_safety > 0 ? '+' : ''}{dcfData.valuation.margin_of_safety.toFixed(1)}%
-                    </div>
+                </div>
+
+                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
+                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Margin of Safety</div>
+                  <div className={`text-2xl font-bold ${
+                    dcfData.valuation.margin_of_safety > 0 
+                      ? 'text-green-600 dark:text-green-400' 
+                      : 'text-red-600 dark:text-red-400'
+                  }`}>
+                    {dcfData.valuation.margin_of_safety.toFixed(2)}%
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Valuation Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Intrinsic Value</h3>
-                <div className="text-3xl font-bold text-primary-600 dark:text-primary-400">
-                  ${dcfData.valuation.intrinsic_value_per_share.toFixed(2)}
-                </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">Per Share</p>
-              </div>
-
-              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Enterprise Value</h3>
-                <div className="text-3xl font-bold text-gray-900 dark:text-white">
-                  {formatCurrency(dcfData.valuation.enterprise_value)}
-                </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">Total Value</p>
-              </div>
-
-              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">Terminal Value</h3>
-                <div className="text-3xl font-bold text-gray-900 dark:text-white">
-                  {formatCurrency(dcfData.terminal_value.present_value)}
-                </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">Present Value</p>
+              <div className="mt-6 p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800">
+                <p className="text-gray-700 dark:text-gray-300">{dcfData.recommendation.message}</p>
               </div>
             </div>
 
