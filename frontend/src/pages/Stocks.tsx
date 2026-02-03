@@ -584,33 +584,32 @@ const Stocks: React.FC = () => {
                     ))}
                   </div>
                   <div>
-                    {/* Update the empty state section with daily snapshots */}
-                    {!ticker && dailySnapshots.length > 0 && (
-                      <div className="mb-8">
-                        <h3 className="text-xl font-semibold mb-4">Today's Market Movers</h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-                          {dailySnapshots.map((snap) => (
-                            <button
-                              key={snap.ticker}
-                              onClick={() => handleSearch(snap.ticker)}
-                              className="p-4 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors text-left"
-                            >
-                              <div className="font-semibold text-lg">{snap.ticker}</div>
-                              <div className={`text-sm ${snap.change_percent >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                                {snap.change_percent >= 0 ? '+' : ''}{snap.change_percent.toFixed(2)}%
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                        <button
-                          onClick={loadDailySnapshots}
-                          className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm"
-                        >
-                          🔄 Load Different Stocks
-                        </button>
+                    {/* Today's Market Movers */}
+                  {!ticker && dailySnapshots.length > 0 && (
+                    <div className="mt-6">
+                      <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Today's Market Movers</h3>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                        {dailySnapshots.map((snap) => (
+                          <button
+                            key={snap.ticker}
+                            onClick={() => handleTickerClick(snap.ticker)}
+                            className="p-4 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-lg transition-colors text-left"
+                          >
+                            <div className="font-semibold text-lg text-gray-900 dark:text-white">{snap.ticker}</div>
+                            <div className={`text-sm ${snap.change_percent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                              {snap.change_percent >= 0 ? '+' : ''}{snap.change_percent.toFixed(2)}%
+                            </div>
+                          </button>
+                        ))}
                       </div>
-                    )}
-                  </div>
+                      <button
+                        onClick={loadDailySnapshots}
+                        className="mt-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg text-sm transition-colors"
+                      >
+                        🔄 Load Different Stocks
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
             </p>
