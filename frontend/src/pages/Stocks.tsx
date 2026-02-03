@@ -551,6 +551,7 @@ const Stocks: React.FC = () => {
             <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Search for a Stock</h3>
             <p className="text-gray-600 dark:text-gray-400 mb-6">
               Enter a ticker symbol above to view detailed stock information, charts, and analysis tools. Or, select from the list below.
+            </p>
               {/* Dynamic Top Gainers Buttons */}
               {gainersLoading ? (
                 <div className="text-center py-4">
@@ -583,8 +584,7 @@ const Stocks: React.FC = () => {
                       </button>
                     ))}
                   </div>
-                  <div>
-                    {/* Today's Market Movers */}
+                  {/* Today's Market Movers */}
                   {!ticker && dailySnapshots.length > 0 && (
                     <div className="mt-6">
                       <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Today's Market Movers</h3>
@@ -612,7 +612,6 @@ const Stocks: React.FC = () => {
                   )}
                 </>
               )}
-            </p>
           </div>
         )}
       </div>
