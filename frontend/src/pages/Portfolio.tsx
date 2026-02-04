@@ -3,6 +3,7 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { authAPI, portfolioAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
+import IntradayModal from '../components/IntradayModal';
 
 interface PortfolioPosition {
   id: string;
@@ -32,6 +33,10 @@ const Portfolio: React.FC = () => {
   const [error, setError] = useState('');
   const location = useLocation();
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Intraday modal state
+  const [showIntradayModal, setShowIntradayModal] = useState(false);
+  const [selectedTicker, setSelectedTicker] = useState<string>('');
 
 
   useEffect(() => {
@@ -128,6 +133,11 @@ const Portfolio: React.FC = () => {
     }
   };
 
+  const handleTickerClick = (ticker: string) => {
+    setSelectedTicker(ticker);
+    setShowIntradayModal(true);
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     navigate('/');
@@ -181,6 +191,7 @@ const Portfolio: React.FC = () => {
               <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
               <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
             </div>
+
             <div className="hidden md:flex items-center space-x-8">
               <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
               <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
@@ -192,7 +203,7 @@ const Portfolio: React.FC = () => {
             </div>            
 
             <div className="flex items-center space-x-4">
-              <ThemeToggle />
+              <ThemeToggle /> 
               <span className="text-sm text-gray-600 dark:text-gray-300">{user?.email}</span>
               {user && getTierBadge(user.subscription_tier)}
               <button onClick={handleLogout} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium">
@@ -203,138 +214,70 @@ const Portfolio: React.FC = () => {
         </div>
       </nav>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header with Summary */}
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Portfolio</h1>
-              <p className="text-gray-600 dark:text-gray-400 mt-1">
-                {portfolio.length} of {getTierLimit()} positions
-              </p>
-            </div>
-
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <svg 
-                className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} 
-                fill="none" 
-                viewBox="0 0 24 24" 
-                stroke="currentColor"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              {refreshing ? 'Refreshing...' : 'Refresh'}
-            </button>
-
-            <button
-              onClick={() => setAddingPosition(!addingPosition)}
-              className="px-6 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors flex items-center"
-            >
-              <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Position
-            </button>
+      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        {/* Portfolio Summary */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Positions</div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{portfolio.length} / {getTierLimit()}</div>
           </div>
-
-          {/* Portfolio Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 hover:shadow-xl dark:hover:shadow-gray-200/30 transition-shadow p-6 border dark:border-gray-500">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Total Value</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                    ${totals.totalValue.toFixed(2)}
-                  </p>
-                </div>
-                <div className="bg-primary-100 dark:bg-primary-900/30 p-3 rounded-full">
-                  <svg className="w-6 h-6 text-primary-600 dark:text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-              </div>
+          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Value</div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">${totals.totalValue.toFixed(2)}</div>
+          </div>
+          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total P&L</div>
+            <div className={`text-2xl font-bold ${
+              totals.totalPL >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+            }`}>
+              {totals.totalPL >= 0 ? '+' : ''}${totals.totalPL.toFixed(2)}
             </div>
-
-            <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 hover:shadow-xl dark:hover:shadow-gray-200/30 transition-shadow p-6 border dark:border-gray-500">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Total Cost</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                    ${totals.totalCost.toFixed(2)}
-                  </p>
-                </div>
-                <div className="bg-gray-100 dark:bg-gray-600 p-3 rounded-full">
-                  <svg className="w-6 h-6 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 hover:shadow-xl dark:hover:shadow-gray-200/30 transition-shadow p-6 border dark:border-gray-500">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Total P&L</p>
-                  <p className={`text-2xl font-bold mt-1 ${
-                    totals.totalPL >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                  }`}>
-                    {totals.totalPL >= 0 ? '+' : ''}${totals.totalPL.toFixed(2)}
-                  </p>
-                </div>
-                <div className={`p-3 rounded-full ${
-                  totals.totalPL >= 0 ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
-                }`}>
-                  <svg className={`w-6 h-6 ${
-                    totals.totalPL >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                  }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={totals.totalPL >= 0 ? "M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" : "M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"} />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 hover:shadow-xl dark:hover:shadow-gray-200/30 transition-shadow p-6 border dark:border-gray-500">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Return %</p>
-                  <p className={`text-2xl font-bold mt-1 ${
-                    totals.totalPLPercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                  }`}>
-                    {totals.totalPLPercent >= 0 ? '+' : ''}{totals.totalPLPercent.toFixed(2)}%
-                  </p>
-                </div>
-                <div className={`p-3 rounded-full ${
-                  totals.totalPLPercent >= 0 ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
-                }`}>
-                  <svg className={`w-6 h-6 ${
-                    totals.totalPLPercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                  }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                </div>
-              </div>
+          </div>
+          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total P&L %</div>
+            <div className={`text-2xl font-bold ${
+              totals.totalPLPercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+            }`}>
+              {totals.totalPLPercent >= 0 ? '+' : ''}{totals.totalPLPercent.toFixed(2)}%
             </div>
           </div>
         </div>
 
+        {/* Actions */}
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Portfolio</h1>
+          <div className="flex gap-3">
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              {refreshing ? 'Refreshing...' : 'Refresh Prices'}
+            </button>
+            {!addingPosition && (
+              <button
+                onClick={() => setAddingPosition(true)}
+                className="px-6 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors"
+              >
+                Add Position
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 rounded-lg">
+            <p className="text-red-700 dark:text-red-400">{error}</p>
+          </div>
+        )}
+
         {/* Add Position Form */}
         {addingPosition && (
-          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500 mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Add Position to Portfolio</h2>
-            
-            {error && (
-              <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg mb-4">
-                {error}
-              </div>
-            )}
-
+          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 mb-6 border dark:border-gray-500">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Add New Position</h2>
             <form onSubmit={handleAddPosition} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Ticker Symbol *
@@ -358,14 +301,16 @@ const Portfolio: React.FC = () => {
                     type="number"
                     value={newQuantity}
                     onChange={(e) => setNewQuantity(e.target.value)}
-                    placeholder="100"
-                    step="0.00000001"
+                    placeholder="10"
+                    step="0.001"
                     min="0"
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     required
                   />
                 </div>
+              </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Buy Price *
@@ -381,9 +326,7 @@ const Portfolio: React.FC = () => {
                     required
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Buy Date *
@@ -397,19 +340,19 @@ const Portfolio: React.FC = () => {
                     required
                   />
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Notes (optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={newNotes}
-                    onChange={(e) => setNewNotes(e.target.value)}
-                    placeholder="Long-term hold"
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Notes (optional)
+                </label>
+                <input
+                  type="text"
+                  value={newNotes}
+                  onChange={(e) => setNewNotes(e.target.value)}
+                  placeholder="Long-term hold"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
               </div>
 
               <div className="flex gap-3">
@@ -477,8 +420,17 @@ const Portfolio: React.FC = () => {
                 {portfolio.map((position) => (
                   <tr key={position.id} className="hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-bold text-gray-900 dark:text-white">{position.ticker}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">{new Date(position.buy_date).toLocaleDateString()}</div>
+                      <button
+                        onClick={() => handleTickerClick(position.ticker)}
+                        className="text-left hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                      >
+                        <div className="text-sm font-bold text-primary-600 dark:text-primary-400 underline cursor-pointer">
+                          {position.ticker}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {new Date(position.buy_date).toLocaleDateString()}
+                        </div>
+                      </button>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="text-sm text-gray-900 dark:text-white">{position.quantity}</div>
@@ -536,6 +488,13 @@ const Portfolio: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Intraday Modal */}
+      <IntradayModal
+        ticker={selectedTicker}
+        isOpen={showIntradayModal}
+        onClose={() => setShowIntradayModal(false)}
+      />
     </div>
   );
 };

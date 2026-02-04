@@ -4,6 +4,7 @@ import { authAPI, watchlistAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import { WatchlistItem } from '../types';
+import IntradayModal from '../components/IntradayModal';
 
 
 const Watchlist: React.FC = () => {
@@ -16,7 +17,11 @@ const Watchlist: React.FC = () => {
   const [newNotes, setNewNotes] = useState('');
   const [newTargetPrice, setNewTargetPrice] = useState('');
   const [error, setError] = useState('');
-  const [refreshing, setRefreshing] = useState(false);  
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Intraday modal state
+  const [showIntradayModal, setShowIntradayModal] = useState(false);
+  const [selectedTicker, setSelectedTicker] = useState<string>('');
 
   useEffect(() => {
     loadData();
@@ -88,21 +93,30 @@ const Watchlist: React.FC = () => {
     }
   };
 
-  const handleRemoveStock = async (id: string) => {  // ← Changed from number to string
+  const handleRemoveStock = async (id: string) => {
     if (!window.confirm('Remove this stock from your watchlist?')) {
       return;
     }
 
     try {
       await watchlistAPI.remove(id);
-      // Immediately update local state to remove the item
       setWatchlist(prevList => prevList.filter(stock => stock.id !== id));
     } catch (err) {
       console.error('Failed to remove stock:', err);
       setError('Failed to remove stock');
-      // Reload data in case of error
       await loadData();
     }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
+
+  const handleTickerClick = (ticker: string) => {
+    setSelectedTicker(ticker);
+    setShowIntradayModal(true);
   };
 
   const handleLogout = () => {
@@ -137,7 +151,7 @@ const Watchlist: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-800 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
           <p className="mt-4 text-gray-600 dark:text-gray-400">Loading watchlist...</p>
@@ -148,7 +162,7 @@ const Watchlist: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
-      {/* Navigation - Same as before */}
+      {/* Navigation */}
       <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
@@ -156,6 +170,7 @@ const Watchlist: React.FC = () => {
               <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
               <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
             </div>
+
             <div className="hidden md:flex items-center space-x-8">
               <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
               <Link to="/watchlist" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">Watchlist</Link>
@@ -164,9 +179,10 @@ const Watchlist: React.FC = () => {
               <Link to="/stocks?showTopGainers=true" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Stocks</Link>
               <Link to="/technical-analysis" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
               <Link to="/dcf-valuation" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">DCF Valuation</Link>
-            </div>
+            </div>            
+
             <div className="flex items-center space-x-4">
-              <ThemeToggle />
+              <ThemeToggle /> 
               <span className="text-sm text-gray-600 dark:text-gray-300">{user?.email}</span>
               {user && getTierBadge(user.subscription_tier)}
               <button onClick={handleLogout} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium">
@@ -177,41 +193,62 @@ const Watchlist: React.FC = () => {
         </div>
       </nav>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Watchlist</h1>
-              <p className="text-gray-600 dark:text-gray-400 mt-1">
-                {watchlist.length} of {getTierLimit()} stocks
-              </p>
+      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        {/* Watchlist Summary */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Stocks Watched</div>
+            <div className="text-2xl font-bold text-gray-900 dark:text-white">{watchlist.length} / {getTierLimit()}</div>
+          </div>
+          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Gainers Today</div>
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+              {watchlist.filter(s => s.change && s.change > 0).length}
             </div>
-            <button
-              onClick={() => setAddingStock(!addingStock)}
-              className="px-6 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors flex items-center"
-            >
-              <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Stock
-            </button>
+          </div>
+          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Losers Today</div>
+            <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+              {watchlist.filter(s => s.change && s.change < 0).length}
+            </div>
           </div>
         </div>
 
+        {/* Actions */}
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Watchlist</h1>
+          <div className="flex gap-3">
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-medium transition-colors disabled:opacity-50"
+            >
+              {refreshing ? 'Refreshing...' : 'Refresh Prices'}
+            </button>
+            {!addingStock && (
+              <button
+                onClick={() => setAddingStock(true)}
+                className="px-6 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors"
+              >
+                Add Stock
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 rounded-lg">
+            <p className="text-red-700 dark:text-red-400">{error}</p>
+          </div>
+        )}
+
         {/* Add Stock Form */}
         {addingStock && (
-          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500 mb-8">
+          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 mb-6 border dark:border-gray-500">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Add Stock to Watchlist</h2>
-            
-            {error && (
-              <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg mb-4">
-                {error}
-              </div>
-            )}
-
             <form onSubmit={handleAddStock} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Ticker Symbol *
@@ -229,7 +266,7 @@ const Watchlist: React.FC = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Started watching when price was
+                    Started At Price (optional)
                   </label>
                   <input
                     type="number"
@@ -241,19 +278,19 @@ const Watchlist: React.FC = () => {
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Notes (optional)
-                </label>
-                <textarea
-                  value={newNotes}
-                  onChange={(e) => setNewNotes(e.target.value)}
-                  placeholder="Why are you watching this stock?"
-                  rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Notes (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={newNotes}
+                    onChange={(e) => setNewNotes(e.target.value)}
+                    placeholder="Watching for earnings"
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
               </div>
 
               <div className="flex gap-3">
@@ -261,7 +298,7 @@ const Watchlist: React.FC = () => {
                   type="submit"
                   className="px-6 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors"
                 >
-                  Add to Watchlist
+                  Add Stock
                 </button>
                 <button
                   type="button"
@@ -318,7 +355,14 @@ const Watchlist: React.FC = () => {
                 {watchlist.map((stock) => (
                   <tr key={stock.id} className="hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-bold text-gray-900 dark:text-white">{stock.ticker}</div>
+                      <button
+                        onClick={() => handleTickerClick(stock.ticker)}
+                        className="text-left hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                      >
+                        <div className="text-sm font-bold text-primary-600 dark:text-primary-400 underline cursor-pointer">
+                          {stock.ticker}
+                        </div>
+                      </button>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="text-sm font-semibold text-gray-900 dark:text-white">
@@ -373,6 +417,13 @@ const Watchlist: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Intraday Modal */}
+      <IntradayModal
+        ticker={selectedTicker}
+        isOpen={showIntradayModal}
+        onClose={() => setShowIntradayModal(false)}
+      />
     </div>
   );
 };

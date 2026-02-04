@@ -5,7 +5,8 @@ from contextlib import asynccontextmanager
 from app.config import get_settings
 from app.api.v1.endpoints import (
     alerts, auth, dcf_valuation, indicators, portfolio, 
-    stocks, watchlist, technical_analysis, stripe_payments
+    stocks, watchlist, technical_analysis, stripe_payments,
+    intraday
 )
 
 settings = get_settings()
@@ -68,3 +69,4 @@ app.include_router(alerts.router, prefix=f"/api/{settings.API_VERSION}/alerts", 
 app.include_router(technical_analysis.router, prefix="/api/v1/technical-analysis", tags=["Technical Analysis"])
 app.include_router(dcf_valuation.router, prefix="/api/v1/dcf", tags=["DCF Valuation"])
 app.include_router(stripe_payments.router, prefix="/api/v1/stripe", tags=["Stripe"])
+app.include_router(intraday, prefix="", tags=["Intraday"])
