@@ -53,24 +53,17 @@ interface IntradayModalProps {
   onClose: () => void;
 }
 
-const IntradayModal: React.FC<IntradayModalProps> = async ({ ticker, isOpen, onClose }) => {
+const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }) => {
   const [data, setData] = useState<IntradayData | null>(null);
   const [barsData, setBarsData] = useState<BarsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const response = await intradayAPI.getSnapshot(ticker);
-
-
+  
   useEffect(() => {
     if (isOpen && ticker) {
       fetchAllData();
     }
   }, [isOpen, ticker]);
-
-  const [snapshotResponse, barsResponse] = await Promise.all([
-     intradayAPI.getSnapshot(ticker),
-     intradayAPI.getBarsWithMA(ticker)
-   ]);
    
   const fetchAllData = async () => {
     setLoading(true);
