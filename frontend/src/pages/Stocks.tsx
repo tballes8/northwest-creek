@@ -296,7 +296,7 @@ const Stocks: React.FC = () => {
               <ThemeToggle />
               {user && (
                 <div className="flex items-center gap-4">
-                  <span className="text-sm">Welcome, {user.username}</span>
+                  <span className="text-sm">Welcome, {user?.email}</span>
                   <button
                     onClick={handleLogout}
                     className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors duration-200"
