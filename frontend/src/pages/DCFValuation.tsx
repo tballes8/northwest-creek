@@ -355,7 +355,7 @@ const DCFValuation: React.FC = () => {
                   disabled={loadingSuggestions || !ticker.trim()}
                   className="px-6 py-2 bg-gray-600 hover:bg-gray-700 dark:bg-gray-500 dark:hover:bg-gray-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
                 >
-                  {loadingSuggestions ? 'Loading...' : '🤖 Get AI Suggestions'}
+                  {loadingSuggestions ? 'Loading...' : 'Get AI Suggestions'}
                 </button>
               </div>
             </div>
@@ -364,7 +364,7 @@ const DCFValuation: React.FC = () => {
             {showSuggestions && suggestions && (
               <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
                 <h3 className="text-lg font-bold text-blue-900 dark:text-blue-200 mb-2">
-                  🤖 AI-Suggested Parameters for {suggestions.company_name}
+                  AI-Suggested Parameters for {suggestions.company_name}
                 </h3>
                 <div className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
                   <p><strong>Sector:</strong> {suggestions.sector} | <strong>Size:</strong> {suggestions.size_category.replace('_', ' ').toUpperCase()}</p>
