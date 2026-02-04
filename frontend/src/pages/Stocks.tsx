@@ -85,7 +85,17 @@ const Stocks: React.FC = () => {
   const [topGainers, setTopGainers] = useState<TopGainer[]>([]);
   const [gainersLoading, setGainersLoading] = useState(false);
   const [dailySnapshots, setDailySnapshots] = useState<any[]>([]);
+  const [isWarrant, setIsWarrant] = useState(false);
 
+  // Helper function to detect if a ticker is a warrant
+  const detectWarrant = (tickerSymbol: string): boolean => {
+    const upper = tickerSymbol.toUpperCase();
+    return (
+      upper.endsWith('WW') || 
+      upper.endsWith('.W') || 
+      (upper.endsWith('W') && upper.length > 2 && /[A-Z]/.test(upper[upper.length - 2]))
+    );
+  };
 
   useEffect(() => {
     loadUser();
@@ -130,6 +140,10 @@ const Stocks: React.FC = () => {
     setLoading(true);
     setError('');
     setTicker(symbol.toUpperCase());
+    
+    // Detect if this is a warrant
+    const isWarrantStock = detectWarrant(symbol);
+    setIsWarrant(isWarrantStock);
 
     try {
       // Fetch quote, company info, and historical data
@@ -190,70 +204,44 @@ const Stocks: React.FC = () => {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchInput.trim()) {
-      navigate(`/stocks?ticker=${searchInput.toUpperCase()}`);
       loadStockData(searchInput);
       loadNews(searchInput);
+      navigate(`/stocks?ticker=${searchInput.trim().toUpperCase()}`);
     }
   };
 
-  const handleTickerClick = (tickerSymbol: string) => {
-    setSearchInput(tickerSymbol);
-    navigate(`/stocks?ticker=${tickerSymbol}`);
-    loadStockData(tickerSymbol);
-    loadNews(tickerSymbol);
+  const handleTickerClick = (symbol: string) => {
+    setSearchInput(symbol);
+    loadStockData(symbol);
+    loadNews(symbol);
+    navigate(`/stocks?ticker=${symbol}`);
   };
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
-    navigate('/');
+    navigate('/login');
   };
 
-  const getTierBadge = (tier: string) => {
-    const badges = {
-      free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
-      casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
-      active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
-      professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
-    };
-    const badge = badges[tier as keyof typeof badges] || badges.free;
-    return (
-      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.bg} ${badge.text}`}>
-        {badge.label}
-      </span>
-    );
-  };
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
-  };
-
-  const formatLargeNumber = (value: number) => {
+  const formatMarketCap = (value: number) => {
     if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
     if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
     if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
-    if (value >= 1e3) return `$${(value / 1e3).toFixed(2)}K`;
-    return formatCurrency(value);
+    return `$${value.toFixed(2)}`;
   };
 
-  const getChartData = () => {
-    if (!historical.length) return null;
-
-    const dates = historical.map(h => h.date);
-    const prices = historical.map(h => h.close);
-
-    return {
-      labels: dates,
-      datasets: [
-        {
-          label: 'Price',
-          data: prices,
-          borderColor: 'rgb(59, 130, 246)',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-          fill: true,
-          tension: 0.4,
-        },
-      ],
-    };
+  // Chart configuration
+  const chartData = {
+    labels: historical.map(d => new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
+    datasets: [
+      {
+        label: 'Close Price',
+        data: historical.map(d => d.close),
+        borderColor: 'rgb(59, 130, 246)',
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        fill: true,
+        tension: 0.4,
+      },
+    ],
   };
 
   const chartOptions = {
@@ -263,118 +251,201 @@ const Stocks: React.FC = () => {
       legend: {
         display: false,
       },
-      title: {
-        display: false,
+      tooltip: {
+        mode: 'index' as const,
+        intersect: false,
+        callbacks: {
+          label: function(context: any) {
+            return `$${context.parsed.y.toFixed(2)}`;
+          }
+        }
       },
     },
     scales: {
+      x: {
+        grid: {
+          display: false,
+        },
+      },
       y: {
         beginAtZero: false,
+        ticks: {
+          callback: function(value: any) {
+            return '$' + value.toFixed(2);
+          }
+        }
       },
     },
+    interaction: {
+      mode: 'nearest' as const,
+      axis: 'x' as const,
+      intersect: false
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
-      {/* Navigation */}
-      <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
-              <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
+      {/* Header */}
+      <header className="bg-primary-600 dark:bg-primary-700 text-white shadow-lg transition-colors duration-200">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <h1 className="text-2xl font-bold">📈 Stock Dashboard</h1>
             </div>
-            
-            <div className="hidden md:flex items-center space-x-8">
-              <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
-              <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
-              <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
-              <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
-              <Link to="/stocks" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">Stocks</Link>
-              <Link to="/technical-analysis" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
-              <Link to="/dcf-valuation" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">DCF Valuation</Link>
-            </div>
-
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center gap-4">
               <ThemeToggle />
-              <span className="text-sm text-gray-600 dark:text-gray-300">{user?.email}</span>
-              {user && getTierBadge(user.subscription_tier)}
-              <button onClick={handleLogout} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium">
-                Logout
+              {user && (
+                <div className="flex items-center gap-4">
+                  <span className="text-sm">Welcome, {user.username}</span>
+                  <button
+                    onClick={handleLogout}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors duration-200"
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Navigation */}
+          <nav className="mt-4 flex gap-4">
+            <Link
+              to="/stocks"
+              className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors duration-200"
+            >
+              Stocks
+            </Link>
+            <Link
+              to="/portfolio"
+              className="px-4 py-2 hover:bg-white/10 rounded-lg transition-colors duration-200"
+            >
+              Portfolio
+            </Link>
+            <Link
+              to="/stock-screener"
+              className="px-4 py-2 hover:bg-white/10 rounded-lg transition-colors duration-200"
+            >
+              Stock Screener
+            </Link>
+            <Link
+              to="/performance-tracker"
+              className="px-4 py-2 hover:bg-white/10 rounded-lg transition-colors duration-200"
+            >
+              Performance Tracker
+            </Link>
+          </nav>
+
+          {/* Search Bar */}
+          <form onSubmit={handleSearch} className="mt-4">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value.toUpperCase())}
+                placeholder="Enter stock ticker (e.g., AAPL, TSLA, KWMWW)..."
+                className="flex-1 px-4 py-2 rounded-lg bg-white/10 text-white placeholder-white/60 border border-white/20 focus:outline-none focus:ring-2 focus:ring-white/50"
+              />
+              <button
+                type="submit"
+                className="px-6 py-2 bg-white text-primary-600 rounded-lg font-semibold hover:bg-gray-100 transition-colors duration-200"
+              >
+                Search
               </button>
             </div>
-          </div>
+          </form>
         </div>
-      </nav>
+      </header>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">Stock Research</h1>
-
-        {/* Search Bar */}
-        <form onSubmit={handleSearch} className="mb-8">
-          <div className="flex gap-4">
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value.toUpperCase())}
-              placeholder="Enter ticker symbol (e.g., AAPL)"
-              className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent dark:bg-gray-700 dark:text-white"
-            />
-            <button
-              type="submit"
-              className="px-6 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors"
-            >
-              Search
-            </button>
-          </div>
-        </form>
-
+      <div className="container mx-auto px-4 py-8">
         {/* Loading State */}
         {loading && (
           <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600 dark:text-gray-400">Loading stock data...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+            <p className="text-gray-600 dark:text-gray-400">Loading stock data...</p>
           </div>
         )}
 
         {/* Error State */}
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-300 px-4 py-3 rounded-lg">
+          <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-600 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg mb-6">
             {error}
           </div>
         )}
 
+        {/* Warrant Information Box */}
+        {isWarrant && quote && (
+          <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-400 dark:border-blue-600 rounded-lg p-6 mb-6">
+            <div className="flex items-start gap-3">
+              <div className="text-3xl">ℹ️</div>
+              <div>
+                <h3 className="text-lg font-bold text-blue-900 dark:text-blue-200 mb-2">
+                  This is a Warrant Security
+                </h3>
+                <div className="text-blue-800 dark:text-blue-300 space-y-2">
+                  <p className="font-medium">
+                    <strong>What's the difference between Common Stock and Warrants?</strong>
+                  </p>
+                  <div className="space-y-1.5 text-sm">
+                    <p>
+                      <strong>Common Stock:</strong> Represents actual ownership in the company. When you buy common stock, you own a share of the company and may receive dividends and voting rights.
+                    </p>
+                    <p>
+                      <strong>Warrants:</strong> Give you the <em>right</em> (but not the obligation) to buy common stock at a specific price (the "strike price") before a certain date. Warrants are similar to stock options but issued by the company.
+                    </p>
+                    <p>
+                      <strong>Key Points:</strong>
+                    </p>
+                    <ul className="list-disc list-inside ml-4 space-y-1">
+                      <li>Warrants are typically more volatile than the underlying common stock</li>
+                      <li>Warrants have an expiration date - they become worthless if not exercised before then</li>
+                      <li>When exercised, warrants can dilute existing shareholders' ownership</li>
+                      <li>Warrants don't pay dividends or provide voting rights</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Stock Data Display */}
-        {quote && company && !loading && (
+        {quote && company && (
           <div className="space-y-6">
-            {/* Quote Card */}
+            {/* Price Card */}
             <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-              <div className="flex justify-between items-start">
+              <div className="flex items-start justify-between">
                 <div>
-                  <h2 className="text-3xl font-bold text-gray-900 dark:text-white">{company.name}</h2>
-                  <p className="text-gray-600 dark:text-gray-400 text-lg">{ticker}</p>
+                  <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
+                    {company.name}{isWarrant && <span className="text-blue-600 dark:text-blue-400">*</span>}
+                  </h2>
+                  <p className="text-lg text-gray-600 dark:text-gray-400 mt-1">
+                    {ticker} {isWarrant && <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">WARRANT</span>}
+                  </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-3xl font-bold text-gray-900 dark:text-white">{formatCurrency(quote.price)}</p>
-                  <p className={`text-lg font-medium ${quote.change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  <div className="text-4xl font-bold text-gray-900 dark:text-white">
+                    ${quote.price.toFixed(2)}
+                  </div>
+                  <div className={`text-xl font-semibold mt-1 ${quote.change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {quote.change >= 0 ? '+' : ''}{quote.change.toFixed(2)} ({quote.change_percent >= 0 ? '+' : ''}{quote.change_percent.toFixed(2)}%)
-                  </p>
+                  </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
                 <div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">Open</div>
-                  <div className="text-lg font-semibold text-gray-900 dark:text-white">{formatCurrency(quote.open)}</div>
+                  <div className="text-lg font-semibold text-gray-900 dark:text-white">${quote.open.toFixed(2)}</div>
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">High</div>
-                  <div className="text-lg font-semibold text-gray-900 dark:text-white">{formatCurrency(quote.high)}</div>
+                  <div className="text-lg font-semibold text-gray-900 dark:text-white">${quote.high.toFixed(2)}</div>
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">Low</div>
-                  <div className="text-lg font-semibold text-gray-900 dark:text-white">{formatCurrency(quote.low)}</div>
+                  <div className="text-lg font-semibold text-gray-900 dark:text-white">${quote.low.toFixed(2)}</div>
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">Volume</div>
@@ -383,36 +454,31 @@ const Stocks: React.FC = () => {
               </div>
             </div>
 
-            {/* Price Chart */}
+            {/* Chart */}
             <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-              <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white">Price History</h3>
-                <div className="flex gap-2">
-                  {[30, 90, 180, 365].map((days) => (
-                    <button
-                      key={days}
-                      onClick={() => {
-                        setHistoryDays(days);
-                        if (ticker) loadStockData(ticker);
-                      }}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        historyDays === days
-                          ? 'bg-primary-600 text-white'
-                          : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
-                      }`}
-                    >
-                      {days}D
-                    </button>
-                  ))}
-                </div>
+                <select
+                  value={historyDays}
+                  onChange={(e) => {
+                    setHistoryDays(Number(e.target.value));
+                    loadStockData(ticker);
+                  }}
+                  className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-white"
+                >
+                  <option value={30}>30 Days</option>
+                  <option value={90}>90 Days</option>
+                  <option value={180}>180 Days</option>
+                  <option value={365}>1 Year</option>
+                </select>
               </div>
-              <div style={{ height: '400px' }}>
-                {getChartData() && <Line data={getChartData()!} options={chartOptions} />}
+              <div style={{ height: '300px' }}>
+                <Line data={chartData} options={chartOptions} />
               </div>
             </div>
 
             {/* Company Info */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid md:grid-cols-2 gap-6">
               <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Company Details</h3>
                 <div className="space-y-3">
@@ -428,10 +494,16 @@ const Stocks: React.FC = () => {
                       <div className="text-gray-900 dark:text-white font-medium">{company.industry}</div>
                     </div>
                   )}
+                  {company.exchange && (
+                    <div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Exchange</div>
+                      <div className="text-gray-900 dark:text-white font-medium">{company.exchange}</div>
+                    </div>
+                  )}
                   {company.market_cap && (
                     <div>
                       <div className="text-sm text-gray-600 dark:text-gray-400">Market Cap</div>
-                      <div className="text-gray-900 dark:text-white font-medium">{formatLargeNumber(company.market_cap)}</div>
+                      <div className="text-gray-900 dark:text-white font-medium">{formatMarketCap(company.market_cap)}</div>
                     </div>
                   )}
                   {company.employees && (

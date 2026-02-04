@@ -107,15 +107,44 @@ const TechnicalAnalysis: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [analysisData, setAnalysisData] = useState<TechnicalAnalysisData | null>(null);
   const [error, setError] = useState('');
+  const [isWarrant, setIsWarrant] = useState(false);
+  const [relatedCommonStock, setRelatedCommonStock] = useState<string | null>(null);
+
+  // Helper function to detect if a ticker is a warrant
+  const detectWarrant = (tickerSymbol: string): boolean => {
+    const upper = tickerSymbol.toUpperCase();
+    return (
+      upper.endsWith('WW') || 
+      upper.endsWith('.W') || 
+      (upper.endsWith('W') && upper.length > 2 && /[A-Z]/.test(upper[upper.length - 2]))
+    );
+  };
+
+  // Helper function to get related common stock ticker
+  const getRelatedCommonStock = (warrantTicker: string): string | null => {
+    const upper = warrantTicker.toUpperCase();
+    if (upper.endsWith('WW')) {
+      return upper.slice(0, -2);
+    } else if (upper.endsWith('.W')) {
+      return upper.slice(0, -2);
+    } else if (upper.endsWith('W') && upper.length > 2 && /[A-Z]/.test(upper[upper.length - 2])) {
+      return upper.slice(0, -1);
+    }
+    return null;
+  };
 
   React.useEffect(() => {
     loadUser();
     // Auto-analyze if ticker is provided via URL
     if (urlTicker) {
       setTicker(urlTicker);
-      // Optional: Automatically trigger analysis when ticker is provided
-      // Uncomment the line below to enable auto-analysis:
-      // performAnalysis(urlTicker);
+      
+      // Check if warrant
+      const isWarrantStock = detectWarrant(urlTicker);
+      setIsWarrant(isWarrantStock);
+      if (isWarrantStock) {
+        setRelatedCommonStock(getRelatedCommonStock(urlTicker));
+      }
     }
   }, [urlTicker]);
 
@@ -158,6 +187,19 @@ const TechnicalAnalysis: React.FC = () => {
     await performAnalysis(ticker);
   };
 
+  const handleTickerChange = (value: string) => {
+    setTicker(value);
+    
+    // Check if warrant when ticker changes
+    const isWarrantStock = detectWarrant(value);
+    setIsWarrant(isWarrantStock);
+    if (isWarrantStock) {
+      setRelatedCommonStock(getRelatedCommonStock(value));
+    } else {
+      setRelatedCommonStock(null);
+    }
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     navigate('/');
@@ -176,16 +218,6 @@ const TechnicalAnalysis: React.FC = () => {
         {badge.label}
       </span>
     );
-  };
-
-  const getTierLimit = () => {
-    const limits = {
-      free: 5,
-      casual: 20,
-      active: 45,
-      professional: 75
-    };
-    return limits[user?.subscription_tier as keyof typeof limits] || 5;
   };
 
   // Chart configurations
@@ -349,10 +381,8 @@ const TechnicalAnalysis: React.FC = () => {
           backgroundColor: histogram.map((val: number | null) => 
             val && val >= 0 ? 'rgba(34, 197, 94, 0.5)' : 'rgba(239, 68, 68, 0.5)'
           ),
-          borderColor: histogram.map((val: number | null) => 
-            val && val >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)'
-          ),
-          borderWidth: 1,
+          borderColor: 'transparent',
+          borderWidth: 0,
           type: 'bar' as const,
         },
       ],
@@ -362,34 +392,22 @@ const TechnicalAnalysis: React.FC = () => {
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    interaction: {
-      mode: 'index' as const,
-      intersect: false,
-    },
     plugins: {
       legend: {
         position: 'top' as const,
         labels: {
           color: '#9CA3AF',
-          font: {
-            size: 12,
-          },
         },
       },
       tooltip: {
-        backgroundColor: 'rgba(17, 24, 39, 0.9)',
-        titleColor: '#F3F4F6',
-        bodyColor: '#F3F4F6',
-        borderColor: '#374151',
-        borderWidth: 1,
+        mode: 'index' as const,
+        intersect: false,
       },
     },
     scales: {
       x: {
         ticks: {
           color: '#9CA3AF',
-          maxRotation: 45,
-          minRotation: 45,
         },
         grid: {
           color: 'rgba(156, 163, 175, 0.1)',
@@ -407,53 +425,83 @@ const TechnicalAnalysis: React.FC = () => {
   };
 
   const priceChartOptions = {
-    ...chartOptions,
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+        mode: 'index' as const,
+        intersect: false,
+    },
+    plugins: {
+        legend: {
+        position: 'top' as const,
+        labels: {
+            color: '#9CA3AF',
+            usePointStyle: true,
+        },
+        },
+        tooltip: {
+        mode: 'index' as const,
+        intersect: false,
+        },
+    },
     scales: {
-      x: {
+        x: {
         ticks: {
-          color: '#9CA3AF',
-          maxRotation: 45,
-          minRotation: 45,
+            color: '#9CA3AF',
         },
         grid: {
-          color: 'rgba(156, 163, 175, 0.1)',
+            color: 'rgba(156, 163, 175, 0.1)',
         },
-      },
-      y: {
+        },
+        y: {
         type: 'linear' as const,
-        display: true,
         position: 'left' as const,
         ticks: {
-          color: '#9CA3AF',
+            color: '#9CA3AF',
         },
         grid: {
-          color: 'rgba(156, 163, 175, 0.1)',
+            color: 'rgba(156, 163, 175, 0.1)',
         },
-      },
-      y1: {
+        },
+        y1: {
         type: 'linear' as const,
-        display: true,
         position: 'right' as const,
         ticks: {
-          color: '#9CA3AF',
+            color: '#9CA3AF',
         },
         grid: {
-          drawOnChartArea: false,
+            drawOnChartArea: false,
         },
-      },
+        },
     },
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Navigation - Same as before */}
-      <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
-              <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
+      {/* Header */}
+      <header className="bg-primary-600 dark:bg-primary-700 text-white shadow-lg transition-colors duration-200">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold">📊 Technical Analysis</h1>
+            <div className="flex items-center gap-4">
+              <ThemeToggle />
+              {user && (
+                <div className="flex items-center gap-4">
+                  {getTierBadge(user.subscription_tier)}
+                  <span className="text-sm">Welcome, {user.username}</span>
+                  <button
+                    onClick={handleLogout}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors duration-200"
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
             </div>
+          </div>
+
+          {/* Navigation */}
+          <nav className="mt-4 flex gap-4">
             <div className="hidden md:flex items-center space-x-8">
               <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
               <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
@@ -463,108 +511,150 @@ const TechnicalAnalysis: React.FC = () => {
               <Link to="/technical-analysis" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">Technical Analysis</Link>
               <Link to="/dcf-valuation" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">DCF Valuation</Link>
             </div>
-            <div className="flex items-center space-x-4">
-              <ThemeToggle />
-              <span className="text-sm text-gray-600 dark:text-gray-300">{user?.email}</span>
-              {user && getTierBadge(user.subscription_tier)}
-              <button onClick={handleLogout} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium">
-                Logout
-              </button>
-            </div>
-          </div>
+          </nav>
         </div>
-      </nav>
+      </header>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Technical Analysis</h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            🔍 Analyze stock trends with RSI, MACD, Moving Averages, and Bollinger Bands
-          </p>
-          {user && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-              Daily Limit: {getTierLimit()} analyses • Upgrade for more!
-            </p>
-          )}
+      <div className="container mx-auto px-4 py-8">
+        {/* Warrant Warning Box */}
+        {isWarrant && (
+          <div className="bg-orange-50 dark:bg-orange-900/30 border-2 border-orange-500 dark:border-orange-600 rounded-lg p-6 mb-6">
+            <div className="flex items-start gap-3">
+              <div className="text-3xl">⚠️</div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-orange-900 dark:text-orange-200 mb-2">
+                  Caution: Technical Analysis on Warrant Securities
+                </h3>
+                <div className="text-orange-800 dark:text-orange-300 space-y-2">
+                  <p className="font-medium">
+                    You're analyzing a <strong>warrant</strong>, not common stock. Technical indicators may behave differently.
+                  </p>
+                  <div className="space-y-1.5 text-sm">
+                    <p><strong>Important considerations for warrant technical analysis:</strong></p>
+                    <ul className="list-disc list-inside ml-4 space-y-1">
+                      <li><strong>Higher Volatility:</strong> Warrants are typically much more volatile than the underlying stock</li>
+                      <li><strong>Time Decay:</strong> Warrants lose value as they approach expiration (theta decay)</li>
+                      <li><strong>Lower Liquidity:</strong> Often have wider bid-ask spreads and lower trading volume</li>
+                      <li><strong>Leverage Effect:</strong> Price movements are amplified relative to the underlying stock</li>
+                      <li><strong>Expiration Risk:</strong> Becomes worthless if not exercised before expiration date</li>
+                    </ul>
+                    
+                    <div className="mt-3 p-3 bg-orange-100 dark:bg-orange-900/50 rounded border border-orange-300 dark:border-orange-700">
+                      <p className="font-semibold mb-1">Recommended Actions:</p>
+                      <ul className="list-disc list-inside ml-4 space-y-1">
+                        <li>Always check the <strong>expiration date</strong> before trading</li>
+                        <li>Compare warrant price movement to the <strong>underlying common stock</strong></li>
+                        <li>Calculate <strong>intrinsic value</strong> (Stock Price - Strike Price)</li>
+                        <li>Monitor <strong>time value</strong> remaining (Warrant Price - Intrinsic Value)</li>
+                      </ul>
+                      {relatedCommonStock && (
+                        <div className="mt-3">
+                          <p className="font-semibold mb-1">Analyze the underlying stock:</p>
+                          <Link
+                            to={`/technical-analysis?ticker=${relatedCommonStock}`}
+                            className="inline-block px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors"
+                          >
+                            View {relatedCommonStock} Technical Analysis →
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="mt-3 p-3 bg-blue-100 dark:bg-blue-900/30 rounded border border-blue-300 dark:border-blue-700">
+                      <p className="font-semibold text-blue-900 dark:text-blue-200 mb-1">Warrant-Specific Indicators to Watch:</p>
+                      <ul className="list-disc list-inside ml-4 space-y-1 text-blue-800 dark:text-blue-300">
+                        <li><strong>RSI:</strong> May hit extreme levels more frequently due to high volatility</li>
+                        <li><strong>Bollinger Bands:</strong> Expect wider bands and more frequent band touches</li>
+                        <li><strong>Volume:</strong> Critical to watch - low volume = higher risk</li>
+                        <li><strong>Moving Averages:</strong> Consider shorter-term MAs (5-day, 10-day) due to volatility</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Analysis Form */}
+        <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 mb-6 border dark:border-gray-500">
+          <form onSubmit={handleAnalyze} className="flex gap-4">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Stock Ticker {isWarrant && <span className="text-orange-600 dark:text-orange-400 text-xs ml-2">(WARRANT - Use caution)</span>}
+              </label>
+              <input
+                type="text"
+                value={ticker}
+                onChange={(e) => handleTickerChange(e.target.value.toUpperCase())}
+                placeholder="e.g., AAPL, TSLA, MSFT"
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                type="submit"
+                disabled={loading}
+                className="px-6 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-semibold transition-colors disabled:opacity-50"
+              >
+                {loading ? 'Analyzing...' : '📈 Analyze'}
+              </button>
+            </div>
+          </form>
         </div>
 
-        {/* Search Form */}
-        <form onSubmit={handleAnalyze} className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 mb-6 border dark:border-gray-500">
-          <div className="flex gap-4">
-            <input
-              type="text"
-              value={ticker}
-              onChange={(e) => setTicker(e.target.value.toUpperCase())}
-              placeholder="Enter ticker (e.g., AAPL, TSLA, MSFT)"
-              className="flex-1 px-4 py-3 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            />
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-8 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Analyzing...' : 'Analyze'}
-            </button>
-          </div>
-        </form>
-
-        {/* Error Message */}
+        {/* Error Display */}
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg mb-6">
+          <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-600 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg mb-6">
             {error}
           </div>
         )}
 
-        {/* Loading State */}
-        {loading && (
-          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-12 border dark:border-gray-500 text-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-600 mx-auto mb-4"></div>
-            <p className="text-gray-600 dark:text-gray-400">Analyzing {ticker}...</p>
-          </div>
-        )}
-
         {/* Analysis Results */}
-        {analysisData && !loading && (
+        {analysisData && (
           <div className="space-y-6">
             {/* Summary Card */}
             <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-              <div className="flex items-start justify-between">
+              <div className="flex items-start justify-between mb-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                     {analysisData.company_name} ({analysisData.ticker})
                   </h2>
-                  <p className="text-gray-600 dark:text-gray-400 text-sm mb-4">
-                    Analysis Date: {new Date(analysisData.analysis_date).toLocaleDateString()}
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    Analysis as of {new Date(analysisData.analysis_date).toLocaleDateString()}
                   </p>
-                  <div className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
                     ${analysisData.current_price.toFixed(2)}
                   </div>
                 </div>
-                <div className={`px-4 py-2 rounded-lg text-center ${
-                  analysisData.summary.outlook === 'bullish' 
-                    ? 'bg-green-100 dark:bg-green-900/30' 
-                    : analysisData.summary.outlook === 'bearish'
-                    ? 'bg-red-100 dark:bg-red-900/30'
-                    : 'bg-gray-100 dark:bg-gray-600'
-                }`}>
-                  <div className={`text-2xl font-bold ${
-                    analysisData.summary.outlook === 'bullish' 
-                      ? 'text-green-700 dark:text-green-300' 
-                      : analysisData.summary.outlook === 'bearish'
-                      ? 'text-red-700 dark:text-red-300'
-                      : 'text-gray-700 dark:text-gray-300'
-                  }`}>
-                    {analysisData.summary.outlook.toUpperCase()}
-                  </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Strength: {analysisData.summary.strength}/10
+              </div>
+
+              {/* Outlook Summary */}
+              <div className={`p-4 rounded-lg ${
+                analysisData.summary.outlook === 'bullish' 
+                  ? 'bg-green-50 dark:bg-green-900/30 border border-green-500 dark:border-green-600'
+                  : analysisData.summary.outlook === 'bearish'
+                  ? 'bg-red-50 dark:bg-red-900/30 border border-red-500 dark:border-red-600'
+                  : 'bg-gray-50 dark:bg-gray-600 border border-gray-400 dark:border-gray-500'
+              }`}>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">
+                    {analysisData.summary.outlook === 'bullish' ? '🟢' : 
+                     analysisData.summary.outlook === 'bearish' ? '🔴' : '🟡'}
+                  </span>
+                  <div>
+                    <div className="font-bold text-lg capitalize text-gray-900 dark:text-white">
+                      {analysisData.summary.outlook} Outlook
+                    </div>
+                    <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                      {analysisData.summary.message}
+                    </p>
                   </div>
                 </div>
               </div>
-              <p className="text-gray-600 dark:text-gray-400 mt-4">
-                {analysisData.summary.message}
-              </p>
             </div>
 
             {/* Trading Signals */}
@@ -573,8 +663,8 @@ const TechnicalAnalysis: React.FC = () => {
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Trading Signals</h3>
                 <div className="space-y-3">
                   {analysisData.signals.map((signal, index) => (
-                    <div key={index} className="flex items-start space-x-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                      <div className="flex items-center space-x-2">
+                    <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                      <div className="flex-shrink-0 flex items-center gap-3">
                         <span className={`px-2 py-1 rounded text-xs font-bold ${
                           signal.type === 'buy' 
                             ? 'bg-green-500 text-white'
@@ -604,6 +694,11 @@ const TechnicalAnalysis: React.FC = () => {
                     Yellow line = 20-day MA (short-term trend), Purple line = 50-day MA (medium-term trend). 
                     Volume bars on right axis show trading activity.
                 </p>
+                {isWarrant && (
+                  <p className="text-sm text-orange-600 dark:text-orange-400 mb-4 font-medium">
+                    ⚠️ <strong>Warrant Note:</strong> Expect higher volatility and more frequent Bollinger Band touches than common stocks.
+                  </p>
+                )}
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     <strong>Situations to Look For:</strong> Breakout likely: BB squeeze + expanding volume
                 </p>
@@ -622,6 +717,11 @@ const TechnicalAnalysis: React.FC = () => {
                     {analysisData.indicators.rsi.value?.toFixed(2) || 'N/A'}
                     </strong> - {analysisData.indicators.rsi.description}
                 </p>
+                {isWarrant && (
+                  <p className="text-sm text-orange-600 dark:text-orange-400 mb-4 font-medium">
+                    ⚠️ <strong>Warrant Note:</strong> Warrants often hit extreme RSI levels (below 30 or above 70) more frequently than common stocks.
+                  </p>
+                )}
                 <div style={{ height: '300px' }}>
                     {getRSIChartData() && (
                     <Line 
@@ -758,6 +858,14 @@ const TechnicalAnalysis: React.FC = () => {
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">🎯 Bollinger Bands</h3>
                 <p className="text-gray-600 dark:text-gray-400">
                   Show volatility. When price touches lower band = potential bounce opportunity. When price touches upper band = potential reversal down.
+                </p>
+              </div>
+              
+              <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-lg border border-orange-200 dark:border-orange-800">
+                <p className="text-sm text-gray-700 dark:text-gray-300">
+                  <strong>⚠️ Note on Warrants:</strong> Technical analysis on warrants requires special consideration due to their derivative nature, 
+                  higher volatility, time decay, and expiration risk. Always compare warrant movements to the underlying common stock and be aware 
+                  of the time value component that decreases as expiration approaches.
                 </p>
               </div>
             </div>

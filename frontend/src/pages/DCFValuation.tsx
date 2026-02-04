@@ -83,6 +83,31 @@ const DCFValuation: React.FC = () => {
   const [suggestions, setSuggestions] = useState<DCFSuggestions | null>(null);
   const [error, setError] = useState('');
   const [hasLoadedInitialSuggestions, setHasLoadedInitialSuggestions] = useState(false);
+  const [isWarrant, setIsWarrant] = useState(false);
+  const [relatedCommonStock, setRelatedCommonStock] = useState<string | null>(null);
+
+  // Helper function to detect if a ticker is a warrant
+  const detectWarrant = (tickerSymbol: string): boolean => {
+    const upper = tickerSymbol.toUpperCase();
+    return (
+      upper.endsWith('WW') || 
+      upper.endsWith('.W') || 
+      (upper.endsWith('W') && upper.length > 2 && /[A-Z]/.test(upper[upper.length - 2]))
+    );
+  };
+
+  // Helper function to get related common stock ticker
+  const getRelatedCommonStock = (warrantTicker: string): string | null => {
+    const upper = warrantTicker.toUpperCase();
+    if (upper.endsWith('WW')) {
+      return upper.slice(0, -2);
+    } else if (upper.endsWith('.W')) {
+      return upper.slice(0, -2);
+    } else if (upper.endsWith('W') && upper.length > 2 && /[A-Z]/.test(upper[upper.length - 2])) {
+      return upper.slice(0, -1);
+    }
+    return null;
+  };
   
   useEffect(() => {
     loadUser();
@@ -93,6 +118,14 @@ const DCFValuation: React.FC = () => {
     if (urlTicker && !hasLoadedInitialSuggestions) {
       setTicker(urlTicker);
       setHasLoadedInitialSuggestions(true);
+      
+      // Check if warrant
+      const isWarrantStock = detectWarrant(urlTicker);
+      setIsWarrant(isWarrantStock);
+      if (isWarrantStock) {
+        setRelatedCommonStock(getRelatedCommonStock(urlTicker));
+      }
+      
       loadSuggestions(urlTicker);
     }
   }, [urlTicker, hasLoadedInitialSuggestions]);
@@ -167,6 +200,15 @@ const DCFValuation: React.FC = () => {
 	
   const handleTickerChange = (value: string) => {
     setTicker(value);
+    
+    // Check if warrant when ticker changes
+    const isWarrantStock = detectWarrant(value);
+    setIsWarrant(isWarrantStock);
+    if (isWarrantStock) {
+      setRelatedCommonStock(getRelatedCommonStock(value));
+    } else {
+      setRelatedCommonStock(null);
+    }
   };
 
   const handleGetSuggestions = () => {
@@ -174,7 +216,7 @@ const DCFValuation: React.FC = () => {
       loadSuggestions(ticker);
     }
   };
-  
+
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     navigate('/');
@@ -196,24 +238,39 @@ const DCFValuation: React.FC = () => {
   };
 
   const formatCurrency = (value: number) => {
-    if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
-    if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-    if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
-    if (value >= 1e3) return `$${(value / 1e3).toFixed(2)}K`;
+    if (Math.abs(value) >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
+    if (Math.abs(value) >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
+    if (Math.abs(value) >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
+    if (Math.abs(value) >= 1e3) return `$${(value / 1e3).toFixed(2)}K`;
     return `$${value.toFixed(2)}`;
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Navigation */}
-      <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
-              <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
+      {/* Header */}
+      <header className="bg-purple-600 dark:bg-purple-700 text-white shadow-lg transition-colors duration-200">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold">💰 DCF Valuation</h1>
+            <div className="flex items-center gap-4">
+              <ThemeToggle />
+              {user && (
+                <div className="flex items-center gap-4">
+                  {getTierBadge(user.subscription_tier)}
+                  <span className="text-sm">Welcome, {user.username}</span>
+                  <button
+                    onClick={handleLogout}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors duration-200"
+                  >
+                    Logout
+                  </button>
+                </div>
+              )}
             </div>
+          </div>
 
+          {/* Navigation */}
+          <nav className="mt-4 flex gap-4">
             <div className="hidden md:flex items-center space-x-8">
               <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
               <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
@@ -222,69 +279,124 @@ const DCFValuation: React.FC = () => {
               <Link to="/stocks?showTopGainers=true" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Stocks</Link>
               <Link to="/technical-analysis" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
               <Link to="/dcf-valuation" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">DCF Valuation</Link>
-            </div>            
-
-            <div className="flex items-center space-x-4">
-              <ThemeToggle />
-              <span className="text-sm text-gray-600 dark:text-gray-300">{user?.email}</span>
-              {user && getTierBadge(user.subscription_tier)}
-              <button onClick={handleLogout} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium">
-                Logout
-              </button>
             </div>
-          </div>
+		  </nav>
         </div>
-      </nav>
+      </header>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">DCF Valuation</h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            💰 Calculate intrinsic value using Discounted Cash Flow analysis
-          </p>
-        </div>
+      <div className="container mx-auto px-4 py-8">
+        {/* Warrant Warning Box */}
+        {isWarrant && (
+          <div className="bg-yellow-50 dark:bg-yellow-900/30 border-2 border-yellow-500 dark:border-yellow-600 rounded-lg p-6 mb-6">
+            <div className="flex items-start gap-3">
+              <div className="text-3xl">⚠️</div>
+              <div className="flex-1">
+                <h3 className="text-lg font-bold text-yellow-900 dark:text-yellow-200 mb-2">
+                  Warning: DCF Valuation Not Recommended for Warrants
+                </h3>
+                <div className="text-yellow-800 dark:text-yellow-300 space-y-2">
+                  <p className="font-medium">
+                    <strong>Important:</strong> Traditional DCF (Discounted Cash Flow) analysis is designed for common stocks and is <strong>not appropriate</strong> for warrant valuation.
+                  </p>
+                  <div className="space-y-1.5 text-sm">
+                    <p><strong>Why DCF doesn't work for warrants:</strong></p>
+                    <ul className="list-disc list-inside ml-4 space-y-1">
+                      <li>Warrants don't generate cash flows - they're derivative securities</li>
+                      <li>Warrant value depends on the underlying stock's volatility and time to expiration</li>
+                      <li>DCF assumes stable, predictable cash flows - warrants have none</li>
+                      <li>The appropriate model for warrants is Black-Scholes or similar option pricing models</li>
+                    </ul>
+                    
+                    <div className="mt-3 p-3 bg-yellow-100 dark:bg-yellow-900/50 rounded border border-yellow-300 dark:border-yellow-700">
+                      <p className="font-semibold mb-1">Recommended Action:</p>
+                      <p>Analyze the <strong>underlying common stock</strong> instead:</p>
+                      {relatedCommonStock && (
+                        <div className="mt-2">
+                          <Link
+                            to={`/dcf-valuation?ticker=${relatedCommonStock}`}
+                            className="inline-block px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg font-medium transition-colors"
+                          >
+                            Analyze {relatedCommonStock} (Common Stock) →
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="mt-3 p-3 bg-blue-100 dark:bg-blue-900/30 rounded border border-blue-300 dark:border-blue-700">
+                      <p className="font-semibold text-blue-900 dark:text-blue-200 mb-1">For Warrant Valuation:</p>
+                      <ul className="list-disc list-inside ml-4 space-y-1 text-blue-800 dark:text-blue-300">
+                        <li>Use Black-Scholes option pricing model</li>
+                        <li>Consider: Strike price, time to expiration, volatility</li>
+                        <li>Compare warrant price to intrinsic value (Stock Price - Strike Price)</li>
+                        <li>Assess time value remaining before expiration</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Input Form */}
-        <form onSubmit={handleCalculate} className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 mb-6 border dark:border-gray-500">
-          <div className="space-y-4">
-            {/* Ticker Input with Get Suggestions Button */}
+        <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 mb-6 border dark:border-gray-500">
+          <form onSubmit={handleCalculate} className="space-y-6">
+            {/* Ticker Input */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Stock Symbol
+                Stock Ticker {isWarrant && <span className="text-yellow-600 dark:text-yellow-400 text-xs ml-2">(WARRANT - Not recommended for DCF)</span>}
               </label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={ticker}
                   onChange={(e) => handleTickerChange(e.target.value.toUpperCase())}
-                  placeholder="Enter ticker (e.g., AAPL, TSLA, MSFT)"
-                  className="flex-1 px-4 py-3 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  placeholder="e.g., AAPL, MSFT"
+                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500"
                 />
                 <button
                   type="button"
                   onClick={handleGetSuggestions}
                   disabled={loadingSuggestions || !ticker.trim()}
-                  className="px-6 py-3 bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  className="px-6 py-2 bg-gray-600 hover:bg-gray-700 dark:bg-gray-500 dark:hover:bg-gray-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
                 >
-                  {loadingSuggestions ? '🔄' : '💡'} Get Smart Defaults
+                  {loadingSuggestions ? 'Loading...' : '🤖 Get AI Suggestions'}
                 </button>
               </div>
             </div>
 
-            {/* Assumptions Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Show Suggestions */}
+            {showSuggestions && suggestions && (
+              <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                <h3 className="text-lg font-bold text-blue-900 dark:text-blue-200 mb-2">
+                  🤖 AI-Suggested Parameters for {suggestions.company_name}
+                </h3>
+                <div className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
+                  <p><strong>Sector:</strong> {suggestions.sector} | <strong>Size:</strong> {suggestions.size_category.replace('_', ' ').toUpperCase()}</p>
+                  <p className="mt-2 italic">Click "Calculate DCF" below to use these parameters!</p>
+                </div>
+              </div>
+            )}
+
+            {/* Parameter Inputs */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Growth Rate (%)
                 </label>
                 <input
                   type="number"
-                  step="0.1"
                   value={growthRate}
-                  onChange={(e) => setGrowthRate(parseFloat(e.target.value))}
-                  className="w-full px-4 py-2 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  onChange={(e) => setGrowthRate(parseFloat(e.target.value) || 0)}
+                  step="0.1"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-white"
                 />
+                {suggestions && (
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    💡 {suggestions.reasoning.growth_rate}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -293,11 +405,16 @@ const DCFValuation: React.FC = () => {
                 </label>
                 <input
                   type="number"
-                  step="0.1"
                   value={terminalGrowth}
-                  onChange={(e) => setTerminalGrowth(parseFloat(e.target.value))}
-                  className="w-full px-4 py-2 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  onChange={(e) => setTerminalGrowth(parseFloat(e.target.value) || 0)}
+                  step="0.1"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-white"
                 />
+                {suggestions && (
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    💡 {suggestions.reasoning.terminal_growth}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -306,11 +423,16 @@ const DCFValuation: React.FC = () => {
                 </label>
                 <input
                   type="number"
-                  step="0.1"
                   value={discountRate}
-                  onChange={(e) => setDiscountRate(parseFloat(e.target.value))}
-                  className="w-full px-4 py-2 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  onChange={(e) => setDiscountRate(parseFloat(e.target.value) || 0)}
+                  step="0.1"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-white"
                 />
+                {suggestions && (
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    💡 {suggestions.reasoning.discount_rate}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -320,169 +442,92 @@ const DCFValuation: React.FC = () => {
                 <input
                   type="number"
                   value={projectionYears}
-                  onChange={(e) => setProjectionYears(parseInt(e.target.value))}
+                  onChange={(e) => setProjectionYears(parseInt(e.target.value) || 5)}
                   min="3"
-                  max="10"
-                  className="w-full px-4 py-2 bg-white dark:bg-gray-600 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  max="15"
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-white"
                 />
+                {suggestions && (
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    💡 {suggestions.reasoning.projection_years}
+                  </p>
+                )}
               </div>
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full px-6 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-6 py-3 bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 text-white rounded-lg font-semibold transition-colors disabled:opacity-50"
             >
-              {loading ? 'Calculating...' : 'Calculate DCF'}
+              {loading ? 'Calculating...' : '📊 Calculate DCF Valuation'}
             </button>
-          </div>
-        </form>
+          </form>
+        </div>
 
-        {/* Suggestions Card */}
-        {showSuggestions && suggestions && (
-          <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-6 mb-6">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">
-                  💡 AI-Suggested Parameters for {suggestions.company_name}
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {suggestions.sector} • {suggestions.industry} • {suggestions.size_category.replace('_', ' ').toUpperCase()}
-                </p>
-              </div>
-              <button
-                onClick={() => setShowSuggestions(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-              >
-                ✕
-              </button>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div className="bg-white dark:bg-purple-900/30 p-3 rounded-lg">
-                <div className="flex items-center justify-between mb-1">
-                  <strong className="text-gray-900 dark:text-white">Growth Rate:</strong>
-                  <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
-                    {(suggestions.suggestions.growth_rate * 100).toFixed(1)}%
-                  </span>
-                </div>
-                <p className="text-gray-600 dark:text-gray-400 text-xs">{suggestions.reasoning.growth_rate}</p>
-              </div>
-              
-              <div className="bg-white dark:bg-purple-900/30 p-3 rounded-lg">
-                <div className="flex items-center justify-between mb-1">
-                  <strong className="text-gray-900 dark:text-white">Terminal Growth:</strong>
-                  <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
-                    {(suggestions.suggestions.terminal_growth * 100).toFixed(1)}%
-                  </span>
-                </div>
-                <p className="text-gray-600 dark:text-gray-400 text-xs">{suggestions.reasoning.terminal_growth}</p>
-              </div>
-              
-              <div className="bg-white dark:bg-purple-900/30 p-3 rounded-lg">
-                <div className="flex items-center justify-between mb-1">
-                  <strong className="text-gray-900 dark:text-white">Discount Rate:</strong>
-                  <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
-                    {(suggestions.suggestions.discount_rate * 100).toFixed(1)}%
-                  </span>
-                </div>
-                <p className="text-gray-600 dark:text-gray-400 text-xs">{suggestions.reasoning.discount_rate}</p>
-              </div>
-              
-              <div className="bg-white dark:bg-purple-900/30 p-3 rounded-lg">
-                <div className="flex items-center justify-between mb-1">
-                  <strong className="text-gray-900 dark:text-white">Projection Period:</strong>
-                  <span className="text-lg font-bold text-purple-600 dark:text-purple-400">
-                    {suggestions.suggestions.projection_years} years
-                  </span>
-                </div>
-                <p className="text-gray-600 dark:text-gray-400 text-xs">{suggestions.reasoning.projection_years}</p>
-              </div>
-            </div>
-            
-            <div className="mt-4 p-3 bg-purple-100 dark:bg-purple-900/40 rounded-lg">
-              <p className="text-xs text-gray-700 dark:text-gray-300">
-                <strong>💡 Tip:</strong> These parameters have been automatically populated based on {suggestions.company_name}'s sector 
-                and market characteristics. You can adjust them before calculating.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Error Message */}
+        {/* Error Display */}
         {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg mb-6">
+          <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-600 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg mb-6">
             {error}
           </div>
         )}
 
-        {/* Loading State */}
-        {loading && (
-          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-12 border dark:border-gray-500 text-center">
-            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-600 mx-auto mb-4"></div>
-            <p className="text-gray-600 dark:text-gray-400">Calculating DCF for {ticker}...</p>
-          </div>
-        )}
-
-        {/* DCF Results */}
-        {dcfData && !loading && (
+        {/* Results Display */}
+        {dcfData && (
           <div className="space-y-6">
-            {/* Valuation Summary */}
+            {/* Summary Card */}
             <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-              <div className="flex items-start justify-between mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-                    {dcfData.company_name} ({dcfData.ticker})
-                  </h2>
-                  <p className="text-gray-600 dark:text-gray-400">DCF Valuation Analysis</p>
-                </div>
-                <div className={`px-6 py-3 rounded-lg text-center ${
-                  dcfData.recommendation.color === 'green' 
-                    ? 'bg-green-100 dark:bg-green-900/30' 
-                    : dcfData.recommendation.color === 'red'
-                    ? 'bg-red-100 dark:bg-red-900/30'
-                    : 'bg-yellow-100 dark:bg-yellow-900/30'
-                }`}>
-                  <div className={`text-xl font-bold ${
-                    dcfData.recommendation.color === 'green' 
-                      ? 'text-green-700 dark:text-green-300' 
-                      : dcfData.recommendation.color === 'red'
-                      ? 'text-red-700 dark:text-red-300'
-                      : 'text-yellow-700 dark:text-yellow-300'
-                  }`}>
-                    {dcfData.recommendation.rating}
-                  </div>
-                </div>
-              </div>
-
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                {dcfData.company_name} ({dcfData.ticker})
+              </h2>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Current Price</div>
+                <div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Current Price</div>
                   <div className="text-2xl font-bold text-gray-900 dark:text-white">
                     ${dcfData.current_price.toFixed(2)}
                   </div>
                 </div>
-
-                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Intrinsic Value</div>
+                <div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">DCF Intrinsic Value</div>
                   <div className="text-2xl font-bold text-primary-600 dark:text-primary-400">
                     ${dcfData.valuation.intrinsic_value_per_share.toFixed(2)}
                   </div>
                 </div>
-
-                <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-                  <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Margin of Safety</div>
+                <div>
+                  <div className="text-sm text-gray-600 dark:text-gray-400">Margin of Safety</div>
                   <div className={`text-2xl font-bold ${
-                    dcfData.valuation.margin_of_safety > 0 
-                      ? 'text-green-600 dark:text-green-400' 
-                      : 'text-red-600 dark:text-red-400'
+                    dcfData.valuation.margin_of_safety > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                   }`}>
-                    {dcfData.valuation.margin_of_safety.toFixed(2)}%
+                    {dcfData.valuation.margin_of_safety > 0 ? '+' : ''}{dcfData.valuation.margin_of_safety.toFixed(1)}%
                   </div>
                 </div>
               </div>
+            </div>
 
-              <div className="mt-6 p-4 bg-primary-50 dark:bg-primary-900/20 rounded-lg border border-primary-200 dark:border-primary-800">
+            {/* Recommendation */}
+            <div className={`rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border ${
+              dcfData.recommendation.color === 'green' 
+                ? 'bg-green-50 dark:bg-green-900/30 border-green-500 dark:border-green-600'
+                : dcfData.recommendation.color === 'yellow'
+                ? 'bg-yellow-50 dark:bg-yellow-900/30 border-yellow-500 dark:border-yellow-600'
+                : 'bg-red-50 dark:bg-red-900/30 border-red-500 dark:border-red-600'
+            }`}>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="text-3xl">
+                  {dcfData.recommendation.color === 'green' ? '✅' : 
+                   dcfData.recommendation.color === 'yellow' ? '⚠️' : '❌'}
+                </div>
+                <h3 className={`text-xl font-bold ${
+                  dcfData.recommendation.color === 'green' 
+                    ? 'text-green-900 dark:text-green-200'
+                    : dcfData.recommendation.color === 'yellow'
+                    ? 'text-yellow-900 dark:text-yellow-200'
+                    : 'text-red-900 dark:text-red-200'
+                }`}>
+                  {dcfData.recommendation.rating}
+                </h3>
+              </div>
+              <div>
                 <p className="text-gray-700 dark:text-gray-300">{dcfData.recommendation.message}</p>
               </div>
             </div>
@@ -646,6 +691,13 @@ const DCFValuation: React.FC = () => {
                 <p className="text-sm text-gray-700 dark:text-gray-300">
                   <strong>💡 Tip:</strong> DCF is most reliable for mature, stable companies with predictable cash flows. 
                   For growth companies or cyclical businesses, adjust your assumptions carefully and consider multiple scenarios.
+                </p>
+              </div>
+              
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                <p className="text-sm text-gray-700 dark:text-gray-300">
+                  <strong>⚠️ Important:</strong> DCF analysis is <strong>NOT suitable for warrants</strong>. Warrants are derivative securities 
+                  that require option pricing models (Black-Scholes) instead. Always analyze the underlying common stock when evaluating warrants.
                 </p>
               </div>
             </div>
