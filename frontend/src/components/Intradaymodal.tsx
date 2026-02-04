@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { authAPI, watchlistAPI, portfolioAPI, alertsAPI } from '../services/api';
-import { User, WatchlistItem, PortfolioPosition, Alert } from '../types';
-import ThemeToggle from './ThemeToggle';
+import { intradayAPI } from '../services/api';
 
 
 interface IntradayData {
@@ -55,11 +53,13 @@ interface IntradayModalProps {
   onClose: () => void;
 }
 
-const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }) => {
+const IntradayModal: React.FC<IntradayModalProps> = async ({ ticker, isOpen, onClose }) => {
   const [data, setData] = useState<IntradayData | null>(null);
   const [barsData, setBarsData] = useState<BarsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const response = await intradayAPI.getSnapshot(ticker);
+
 
   useEffect(() => {
     if (isOpen && ticker) {
@@ -67,13 +67,18 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
     }
   }, [isOpen, ticker]);
 
+  const [snapshotResponse, barsResponse] = await Promise.all([
+     intradayAPI.getSnapshot(ticker),
+     intradayAPI.getBarsWithMA(ticker)
+   ]);
+   
   const fetchAllData = async () => {
     setLoading(true);
     setError(null);
     
     try {
       const token = localStorage.getItem('access_token');
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const baseUrl = intradayAPI;
       
       // Fetch both snapshot and bars data with moving averages in parallel
       const [snapshotResponse, barsResponse] = await Promise.all([

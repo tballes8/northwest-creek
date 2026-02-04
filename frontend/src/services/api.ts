@@ -126,17 +126,14 @@ export const technicalAPI = {
 };
 export default axiosInstance;
 
-// Intraday API (ADD THIS SECTION)
+// Intraday API
 export const intradayAPI = {
-  // Get snapshot data for a ticker
   getSnapshot: (ticker: string) =>
     axiosInstance.get(`/intraday/${ticker}`),
   
-  // Get 15-minute bars with 50-day and 200-day moving averages
   getBarsWithMA: (ticker: string) =>
     axiosInstance.get(`/intraday/${ticker}/bars-with-ma`),
   
-  // Get batch data for multiple tickers
   getBatch: (tickers: string[]) =>
     axiosInstance.get(`/intraday/batch`, {
       params: { tickers: tickers.join(',') }
