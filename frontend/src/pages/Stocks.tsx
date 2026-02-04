@@ -148,6 +148,21 @@ const Stocks: React.FC = () => {
     }
   };
 
+  const getTierBadge = (tier: string) => {
+    const badges = {
+      free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
+      casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
+      active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
+      professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
+    };
+    const badge = badges[tier as keyof typeof badges] || badges.free;
+    return (
+      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.bg} ${badge.text}`}>
+        {badge.label}
+      </span>
+    );
+  };
+
   const loadStockData = async (symbol: string) => {
     if (!symbol.trim()) return;
 
