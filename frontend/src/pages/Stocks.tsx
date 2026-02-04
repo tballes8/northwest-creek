@@ -86,6 +86,7 @@ const Stocks: React.FC = () => {
   const [gainersLoading, setGainersLoading] = useState(false);
   const [dailySnapshots, setDailySnapshots] = useState<any[]>([]);
   const [isWarrant, setIsWarrant] = useState(false);
+  const [relatedCommonStock, setRelatedCommonStock] = useState<string | null>(null);
 
   // Helper function to detect if a ticker is a warrant
   const detectWarrant = (tickerSymbol: string): boolean => {
@@ -95,6 +96,19 @@ const Stocks: React.FC = () => {
       upper.endsWith('.W') || 
       (upper.endsWith('W') && upper.length > 2 && /[A-Z]/.test(upper[upper.length - 2]))
     );
+  };
+
+  // Helper function to get related common stock ticker
+  const getRelatedCommonStock = (warrantTicker: string): string | null => {
+    const upper = warrantTicker.toUpperCase();
+    if (upper.endsWith('WW')) {
+      return upper.slice(0, -2);
+    } else if (upper.endsWith('.W')) {
+      return upper.slice(0, -2);
+    } else if (upper.endsWith('W') && upper.length > 2 && /[A-Z]/.test(upper[upper.length - 2])) {
+      return upper.slice(0, -1);
+    }
+    return null;
   };
 
   useEffect(() => {
@@ -134,21 +148,6 @@ const Stocks: React.FC = () => {
     }
   };
 
-  const getTierBadge = (tier: string) => {
-    const badges = {
-      free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
-      casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
-      active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
-      professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
-    };
-    const badge = badges[tier as keyof typeof badges] || badges.free;
-    return (
-      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.bg} ${badge.text}`}>
-        {badge.label}
-      </span>
-    );
-  };
-
   const loadStockData = async (symbol: string) => {
     if (!symbol.trim()) return;
 
@@ -159,6 +158,11 @@ const Stocks: React.FC = () => {
     // Detect if this is a warrant
     const isWarrantStock = detectWarrant(symbol);
     setIsWarrant(isWarrantStock);
+    if (isWarrantStock) {
+      setRelatedCommonStock(getRelatedCommonStock(symbol));
+    } else {
+      setRelatedCommonStock(null);
+    }
 
     try {
       // Fetch quote, company info, and historical data
@@ -353,14 +357,6 @@ const Stocks: React.FC = () => {
             </button>
           </div>
         </form>
-        
-        {/* Loading State */}
-        {loading && (
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
-            <p className="text-gray-600 dark:text-gray-400">Loading stock data...</p>
-          </div>
-        )}
 
         {/* Error State */}
         {error && (
@@ -398,6 +394,25 @@ const Stocks: React.FC = () => {
                       <li>When exercised, warrants can dilute existing shareholders' ownership</li>
                       <li>Warrants don't pay dividends or provide voting rights</li>
                     </ul>
+                    
+                    {relatedCommonStock && (
+                      <div className="mt-4 p-4 bg-blue-100 dark:bg-blue-900/50 rounded border border-blue-300 dark:border-blue-700">
+                        <p className="font-semibold text-blue-900 dark:text-blue-200 mb-2">
+                          💡 Want to understand the underlying company better?
+                        </p>
+                        <p className="text-sm text-blue-800 dark:text-blue-300 mb-3">
+                          Since warrants derive their value from the common stock, it's recommended to analyze the common stock first.
+                        </p>
+                        <button
+                          onClick={() => handleTickerClick(relatedCommonStock)}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors inline-flex items-center gap-2"
+                        >
+                          <span>📊</span>
+                          <span>View {relatedCommonStock} (Common Stock)</span>
+                          <span>→</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
