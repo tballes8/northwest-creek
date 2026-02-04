@@ -3,7 +3,7 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { authAPI, portfolioAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
-import IntradayModal from '../components/IntradayModal';
+import IntradayModal from '../components/Intradaymodal';
 
 interface PortfolioPosition {
   id: string;

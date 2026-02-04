@@ -4,7 +4,7 @@ import { authAPI, watchlistAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import { WatchlistItem } from '../types';
-import IntradayModal from '../components/IntradayModal';
+import IntradayModal from '../components/Intradaymodal';
 
 
 const Watchlist: React.FC = () => {
