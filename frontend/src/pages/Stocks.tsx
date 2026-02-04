@@ -285,80 +285,60 @@ const Stocks: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
-      {/* Header */}
-      <header className="bg-primary-600 dark:bg-primary-700 text-white shadow-lg transition-colors duration-200">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <h1 className="text-2xl font-bold">📈 Stock Dashboard</h1>
+      {/* Navigation */}
+      <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center">
+              <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
+              <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
             </div>
-            <div className="flex items-center gap-4">
+            
+            <div className="hidden md:flex items-center space-x-8">
+              <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
+              <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
+              <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
+              <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
+              <Link to="/stocks" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">Stocks</Link>
+              <Link to="/technical-analysis" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
+              <Link to="/dcf-valuation" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">DCF Valuation</Link>
+            </div>
+
+            <div className="flex items-center space-x-4">
               <ThemeToggle />
-              {user && (
-                <div className="flex items-center gap-4">
-                  <span className="text-sm">Welcome, {user?.email}</span>
-                  <button
-                    onClick={handleLogout}
-                    className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors duration-200"
-                  >
-                    Logout
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Navigation */}
-          <nav className="mt-4 flex gap-4">
-            <Link
-              to="/stocks"
-              className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors duration-200"
-            >
-              Stocks
-            </Link>
-            <Link
-              to="/portfolio"
-              className="px-4 py-2 hover:bg-white/10 rounded-lg transition-colors duration-200"
-            >
-              Portfolio
-            </Link>
-            <Link
-              to="/stock-screener"
-              className="px-4 py-2 hover:bg-white/10 rounded-lg transition-colors duration-200"
-            >
-              Stock Screener
-            </Link>
-            <Link
-              to="/performance-tracker"
-              className="px-4 py-2 hover:bg-white/10 rounded-lg transition-colors duration-200"
-            >
-              Performance Tracker
-            </Link>
-          </nav>
-
-          {/* Search Bar */}
-          <form onSubmit={handleSearch} className="mt-4">
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value.toUpperCase())}
-                placeholder="Enter stock ticker (e.g., AAPL, TSLA, KWMWW)..."
-                className="flex-1 px-4 py-2 rounded-lg bg-white/10 text-white placeholder-white/60 border border-white/20 focus:outline-none focus:ring-2 focus:ring-white/50"
-              />
-              <button
-                type="submit"
-                className="px-6 py-2 bg-white text-primary-600 rounded-lg font-semibold hover:bg-gray-100 transition-colors duration-200"
-              >
-                Search
+              <span className="text-sm text-gray-600 dark:text-gray-300">{user?.email}</span>
+              {user && getTierBadge(user.subscription_tier)}
+              <button onClick={handleLogout} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium">
+                Logout
               </button>
             </div>
-          </form>
+          </div>
         </div>
-      </header>
+      </nav>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">Stock Research</h1>
+
+        {/* Search Bar */}
+        <form onSubmit={handleSearch} className="mb-8">
+          <div className="flex gap-4">
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value.toUpperCase())}
+              placeholder="Enter ticker symbol (e.g., AAPL)"
+              className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent dark:bg-gray-700 dark:text-white"
+            />
+            <button
+              type="submit"
+              className="px-6 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors"
+            >
+              Search
+            </button>
+          </div>
+        </form>
+        
         {/* Loading State */}
         {loading && (
           <div className="text-center py-12">

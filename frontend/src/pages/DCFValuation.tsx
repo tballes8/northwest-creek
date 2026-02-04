@@ -247,30 +247,15 @@ const DCFValuation: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
-      {/* Header */}
-      <header className="bg-purple-600 dark:bg-purple-700 text-white shadow-lg transition-colors duration-200">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold">💰 DCF Valuation</h1>
-            <div className="flex items-center gap-4">
-              <ThemeToggle />
-              {user && (
-                <div className="flex items-center gap-4">
-                  {getTierBadge(user.subscription_tier)}
-                  <span className="text-sm">Welcome, {user.username}</span>
-                  <button
-                    onClick={handleLogout}
-                    className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors duration-200"
-                  >
-                    Logout
-                  </button>
-                </div>
-              )}
+      {/* Navigation */}
+      <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center">
+              <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
+              <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
             </div>
-          </div>
 
-          {/* Navigation */}
-          <nav className="mt-4 flex gap-4">
             <div className="hidden md:flex items-center space-x-8">
               <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
               <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
@@ -279,10 +264,19 @@ const DCFValuation: React.FC = () => {
               <Link to="/stocks?showTopGainers=true" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Stocks</Link>
               <Link to="/technical-analysis" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
               <Link to="/dcf-valuation" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">DCF Valuation</Link>
+            </div>            
+
+            <div className="flex items-center space-x-4">
+              <ThemeToggle /> 
+              <span className="text-sm text-gray-600 dark:text-gray-300">{user?.email}</span>
+              {user && getTierBadge(user.subscription_tier)}
+              <button onClick={handleLogout} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium">
+                Logout
+              </button>
             </div>
-		  </nav>
+          </div>
         </div>
-      </header>
+      </nav>
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
