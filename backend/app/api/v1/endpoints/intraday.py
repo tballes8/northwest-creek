@@ -1,56 +1,39 @@
 """
 Intraday market data endpoints using Massive API with Moving Averages
-
+"""
 from fastapi import APIRouter, HTTPException, status
 from typing import List, Dict, Any, Optional
 from massive import RESTClient
 from datetime import datetime, date, timedelta
-import os
-"""
-from fastapi import APIRouter, Depends, Query, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
-from app.db.models import User
-from app.api.dependencies import get_current_user
-from app.db.session import get_db
-from app.services.market_data import market_data_service
-from app.services.company_info import get_sector_from_yfinance, get_company_basics
-from massive import RESTClient
-from massive.rest.models import TickerSnapshot, Agg
+from app.config import get_settings
 
 router = APIRouter()
 
-# Initialize Massive client - use environment variable in production
-# MASSIVE_API_KEY = os.getenv("MASSIVE_API_KEY", "Vu377TX0oKEohsfLJjFXRXJjeA6yj7sA")
-# client = RESTClient(MASSIVE_API_KEY)
-class Intraday:
-    def __init__(self):
-        self.base_url = "https://api.massive.com"
-        self.api_key = settings.MASSIVE_API_KEY
-        self.timeout = 10.0
-        # Initialize Massive REST client for snapshot data
-        self.rest_client = RESTClient(self.api_key)
-
-    def safe_get_attr(obj, attr_path: str, default=None):
-        """Safely get nested attributes from an object"""
-        try:
-            attrs = attr_path.split('.')
-            value = obj
-            for attr in attrs:
-                value = getattr(value, attr)
-            return value
-        except (AttributeError, TypeError):
-            return default
+# Initialize Massive client using settings
+settings = get_settings()
+client = RESTClient(settings.MASSIVE_API_KEY)
 
 
-    def calculate_moving_average(prices: List[float], period: int) -> Optional[float]:
-        """Calculate simple moving average for a given period"""
-        if len(prices) < period:
-            return None
-        return sum(prices[-period:]) / period
+def safe_get_attr(obj, attr_path: str, default=None):
+    """Safely get nested attributes from an object"""
+    try:
+        attrs = attr_path.split('.')
+        value = obj
+        for attr in attrs:
+            value = getattr(value, attr)
+        return value
+    except (AttributeError, TypeError):
+        return default
 
 
-@router.get("/intraday/{ticker}")
+def calculate_moving_average(prices: List[float], period: int) -> Optional[float]:
+    """Calculate simple moving average for a given period"""
+    if len(prices) < period:
+        return None
+    return sum(prices[-period:]) / period
+
+
+@router.get("/{ticker}")
 async def get_intraday_data(ticker: str) -> Dict[str, Any]:
     """
     Get intraday snapshot data for a ticker symbol
@@ -103,7 +86,7 @@ async def get_intraday_data(ticker: str) -> Dict[str, Any]:
         )
 
 
-@router.get("/intraday/{ticker}/bars-with-ma")
+@router.get("/{ticker}/bars-with-ma")
 async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
     """
     Get intraday aggregate bars at 15-minute intervals with 50-day and 200-day moving averages
@@ -206,7 +189,7 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
         )
 
 
-@router.get("/intraday/batch")
+@router.get("/batch")
 async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
     """
     Get intraday data for multiple tickers

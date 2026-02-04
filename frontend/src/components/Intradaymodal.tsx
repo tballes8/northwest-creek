@@ -58,7 +58,8 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
   const [barsData, setBarsData] = useState<BarsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
+
   useEffect(() => {
     if (isOpen && ticker) {
       fetchAllData();
@@ -75,16 +76,10 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
       
       // Fetch both snapshot and bars data with moving averages in parallel
       const [snapshotResponse, barsResponse] = await Promise.all([
-        axios.get(
-          `${baseUrl}/api/intraday/${ticker}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        ),
-        axios.get(
-          `${baseUrl}/api/intraday/${ticker}/bars-with-ma`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        )
+        intradayAPI.getSnapshot(ticker),
+        intradayAPI.getBarsWithMA(ticker)
       ]);
-      
+         
       setData(snapshotResponse.data);
       setBarsData(barsResponse.data);
     } catch (err: any) {
