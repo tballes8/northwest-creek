@@ -158,7 +158,33 @@ async def get_historical_data(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching historical data: {str(e)}")
 
-
+@router.get("/news/{ticker}", response_model=NewsData)
+async def get_stock_news(
+    ticker: str,
+    limit: int = Query(default=3, ge=1, le=50, description="Number of news articles to fetch")
+):
+    """
+    Get latest news articles for a stock
+    
+    **Parameters:**
+    - **ticker**: Stock symbol
+    - **limit**: Number of articles to return (1-50, default 3)
+    
+    **Returns:**
+    - Array of news articles with titles, publishers, dates, URLs, and sentiment insights
+    """
+    try:
+        news = await market_data_service.get_stock_news_rest(ticker, limit)
+        return {
+            "ticker": ticker.upper(),
+            "data": news,
+            "count": len(news)
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching news: {str(e)}")
+    
 @router.get("/{ticker}", response_model=dict)
 async def get_stock_overview(ticker: str):
     """
@@ -187,31 +213,4 @@ async def get_stock_overview(ticker: str):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching stock overview: {str(e)}")
-
-@router.get("/news/{ticker}", response_model=NewsData)
-async def get_stock_news(
-    ticker: str,
-    limit: int = Query(default=3, ge=1, le=50, description="Number of news articles to fetch")
-):
-    """
-    Get latest news articles for a stock
-    
-    **Parameters:**
-    - **ticker**: Stock symbol
-    - **limit**: Number of articles to return (1-50, default 3)
-    
-    **Returns:**
-    - Array of news articles with titles, publishers, dates, URLs, and sentiment insights
-    """
-    try:
-        news = await market_data_service.get_stock_news_rest(ticker, limit)
-        return {
-            "ticker": ticker.upper(),
-            "data": news,
-            "count": len(news)
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching news: {str(e)}")
         
