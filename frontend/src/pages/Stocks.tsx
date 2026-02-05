@@ -66,6 +66,15 @@ interface TopGainer {
   change_percent: number;
 }
 
+// Add interface for daily snapshot
+interface DailySnapshot {
+  ticker: string;
+  open_price: number;
+  close_price: number;
+  change_percent: number;
+  snapshot_date: string;
+}
+
 const Stocks: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -84,7 +93,7 @@ const Stocks: React.FC = () => {
   const [newsLoading, setNewsLoading] = useState(false);
   const [topGainers, setTopGainers] = useState<TopGainer[]>([]);
   const [gainersLoading, setGainersLoading] = useState(false);
-  const [dailySnapshots, setDailySnapshots] = useState<any[]>([]);
+  const [dailySnapshots, setDailySnapshots] = useState<DailySnapshot[]>([]);
   const [isWarrant, setIsWarrant] = useState(false);
   const [relatedCommonStock, setRelatedCommonStock] = useState<string | null>(null);
 
@@ -113,19 +122,18 @@ const Stocks: React.FC = () => {
 
   useEffect(() => {
     loadUser();
+    loadDailySnapshots(); // Load daily snapshots on mount
     if (initialTicker) {
       loadStockData(initialTicker);
       loadNews(initialTicker);
-      loadTopGainers();
-      loadDailySnapshots();
     }
     // Load top gainers when component mounts or when showTopGainers is true
-    if (showTopGainers || initialTicker) {
+    if (showTopGainers || initialTicker || !initialTicker) {
       loadTopGainers();
     }
   }, [initialTicker, showTopGainers]);
 
-  // Add function to load daily snapshots
+  // Function to load daily snapshots
   const loadDailySnapshots = async () => {
     try {
       const response = await stocksAPI.getDailySnapshot(10);
@@ -180,18 +188,19 @@ const Stocks: React.FC = () => {
     }
 
     try {
-      // Fetch quote, company info, and historical data
+      // Fetch quote and company info concurrently
       const [quoteRes, companyRes, historicalRes] = await Promise.all([
-        stocksAPI.getQuote(symbol.toUpperCase()),
-        stocksAPI.getCompany(symbol.toUpperCase()),
-        stocksAPI.getHistorical(symbol.toUpperCase(), historyDays),
+        stocksAPI.getQuote(symbol),
+        stocksAPI.getCompany(symbol),
+        stocksAPI.getHistorical(symbol, historyDays),
       ]);
 
       setQuote(quoteRes.data);
       setCompany(companyRes.data);
       setHistorical(historicalRes.data.data);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to fetch stock data. Please check the ticker symbol and try again.');
+      console.error('Stock API Error:', err);
+      setError(err.response?.data?.detail || 'Failed to load stock data. Please check the ticker symbol and try again.');
       setQuote(null);
       setCompany(null);
       setHistorical([]);
@@ -201,14 +210,12 @@ const Stocks: React.FC = () => {
   };
 
   const loadNews = async (symbol: string) => {
-    if (!symbol.trim()) return;
-
     setNewsLoading(true);
     try {
-      const response = await stocksAPI.getNews(symbol.toUpperCase(), 3); // Get only 3 articles
+      const response = await stocksAPI.getNews(symbol, 3);
       setNews(response.data.data || []);
-    } catch (err: any) {
-      console.error('Failed to fetch news:', err);
+    } catch (err) {
+      console.error('Failed to load news:', err);
       setNews([]);
     } finally {
       setNewsLoading(false);
@@ -218,18 +225,11 @@ const Stocks: React.FC = () => {
   const loadTopGainers = async () => {
     setGainersLoading(true);
     try {
-      const response = await stocksAPI.getTopGainers();
-
-      const data = await response.data;
-      setTopGainers(data.top_gainers || []);
-    } catch (error) {
-      console.error('Failed to load top gainers:', error);
-      // Fallback to default tickers if fetch fails
-      setTopGainers([
-        { ticker: 'AAPL', open: 0, close: 0, change_percent: 0 },
-        { ticker: 'TSLA', open: 0, close: 0, change_percent: 0 },
-        { ticker: 'MSFT', open: 0, close: 0, change_percent: 0 },
-      ]);
+      const response = await stocksAPI.getTopGainers(10);
+      setTopGainers(response.data.gainers || []);
+    } catch (err) {
+      console.error('Failed to load top gainers:', err);
+      setTopGainers([]);
     } finally {
       setGainersLoading(false);
     }
@@ -240,15 +240,33 @@ const Stocks: React.FC = () => {
     if (searchInput.trim()) {
       loadStockData(searchInput);
       loadNews(searchInput);
-      navigate(`/stocks?ticker=${searchInput.trim().toUpperCase()}`);
+      navigate(`/stocks?ticker=${searchInput.toUpperCase()}`);
     }
   };
 
-  const handleTickerClick = (symbol: string) => {
-    setSearchInput(symbol);
-    loadStockData(symbol);
-    loadNews(symbol);
-    navigate(`/stocks?ticker=${symbol}`);
+  const handleTickerClick = (tickerSymbol: string) => {
+    setSearchInput(tickerSymbol);
+    loadStockData(tickerSymbol);
+    loadNews(tickerSymbol);
+    navigate(`/stocks?ticker=${tickerSymbol.toUpperCase()}`);
+  };
+
+  const handleRelatedStockClick = () => {
+    if (relatedCommonStock) {
+      handleTickerClick(relatedCommonStock);
+    }
+  };
+
+  const handleHistoryDaysChange = async (days: number) => {
+    setHistoryDays(days);
+    if (ticker) {
+      try {
+        const response = await stocksAPI.getHistorical(ticker, days);
+        setHistorical(response.data.data);
+      } catch (err) {
+        console.error('Failed to load historical data:', err);
+      }
+    }
   };
 
   const handleLogout = () => {
@@ -256,20 +274,13 @@ const Stocks: React.FC = () => {
     navigate('/login');
   };
 
-  const formatMarketCap = (value: number) => {
-    if (value >= 1e12) return `$${(value / 1e12).toFixed(2)}T`;
-    if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-    if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
-    return `$${value.toFixed(2)}`;
-  };
-
   // Chart configuration
   const chartData = {
-    labels: historical.map(d => new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
+    labels: historical.map((h) => new Date(h.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
     datasets: [
       {
-        label: 'Close Price',
-        data: historical.map(d => d.close),
+        label: `${ticker} Price`,
+        data: historical.map((h) => h.close),
         borderColor: 'rgb(59, 130, 246)',
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
         fill: true,
@@ -289,36 +300,29 @@ const Stocks: React.FC = () => {
         mode: 'index' as const,
         intersect: false,
         callbacks: {
-          label: function(context: any) {
-            return `$${context.parsed.y.toFixed(2)}`;
-          }
-        }
+          label: (context: any) => `$${context.parsed.y.toFixed(2)}`,
+        },
       },
     },
     scales: {
+      y: {
+        ticks: {
+          callback: (value: any) => `$${value}`,
+        },
+        grid: {
+          color: 'rgba(156, 163, 175, 0.1)',
+        },
+      },
       x: {
         grid: {
           display: false,
         },
       },
-      y: {
-        beginAtZero: false,
-        ticks: {
-          callback: function(value: any) {
-            return '$' + value.toFixed(2);
-          }
-        }
-      },
     },
-    interaction: {
-      mode: 'nearest' as const,
-      axis: 'x' as const,
-      intersect: false
-    }
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white transition-colors">
       {/* Navigation */}
       <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -355,149 +359,134 @@ const Stocks: React.FC = () => {
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">Stock Research</h1>
 
         {/* Search Bar */}
-        <form onSubmit={handleSearch} className="mb-8">
-          <div className="flex gap-4">
+        <div className="mb-8">
+          <form onSubmit={handleSearch} className="flex gap-4">
             <input
               type="text"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value.toUpperCase())}
-              placeholder="Enter ticker symbol (e.g., AAPL)"
-              className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent dark:bg-gray-700 dark:text-white"
+              placeholder="Enter ticker symbol (e.g., AAPL, TSLA, MSFT)"
+              className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-transparent dark:bg-gray-600 dark:text-white"
             />
             <button
               type="submit"
-              className="px-6 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors"
+              className="px-8 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors"
             >
               Search
             </button>
-          </div>
-        </form>
+          </form>
+        </div>
 
         {/* Error State */}
         {error && (
-          <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-600 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg mb-6">
-            {error}
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
+            <p className="text-red-800 dark:text-red-200">{error}</p>
           </div>
         )}
 
-        {/* Warrant Information Box */}
-        {isWarrant && quote && (
-          <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-400 dark:border-blue-600 rounded-lg p-6 mb-6">
-            <div className="flex items-start gap-3">
-              <div className="text-3xl">ℹ️</div>
-              <div>
-                <h3 className="text-lg font-bold text-blue-900 dark:text-blue-200 mb-2">
-                  This is a Warrant Security
+        {/* Warrant Alert */}
+        {isWarrant && relatedCommonStock && (
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                  Warrant Detected
                 </h3>
-                <div className="text-blue-800 dark:text-blue-300 space-y-2">
-                  <p className="font-medium">
-                    <strong>What's the difference between Common Stock and Warrants?</strong>
-                  </p>
-                  <div className="space-y-1.5 text-sm">
-                    <p>
-                      <strong>Common Stock:</strong> Represents actual ownership in the company. When you buy common stock, you own a share of the company and may receive dividends and voting rights.
-                    </p>
-                    <p>
-                      <strong>Warrants:</strong> Give you the <em>right</em> (but not the obligation) to buy common stock at a specific price (the "strike price") before a certain date. Warrants are similar to stock options but issued by the company.
-                    </p>
-                    <p>
-                      <strong>Key Points:</strong>
-                    </p>
-                    <ul className="list-disc list-inside ml-4 space-y-1">
-                      <li>Warrants are typically more volatile than the underlying common stock</li>
-                      <li>Warrants have an expiration date - they become worthless if not exercised before then</li>
-                      <li>When exercised, warrants can dilute existing shareholders' ownership</li>
-                      <li>Warrants don't pay dividends or provide voting rights</li>
-                    </ul>
-                    
+                <div className="mt-2 text-sm text-yellow-700 dark:text-yellow-300">
+                  <p>
+                    You're viewing a warrant. Warrants are derivative securities that give the holder the right to purchase shares at a specified price.
                     {relatedCommonStock && (
-                      <div className="mt-4 p-4 bg-blue-100 dark:bg-blue-900/50 rounded border border-blue-300 dark:border-blue-700">
-                        <p className="font-semibold text-blue-900 dark:text-blue-200 mb-2">
-                          💡 Want to understand the underlying company better?
-                        </p>
-                        <p className="text-sm text-blue-800 dark:text-blue-300 mb-3">
-                          Since warrants derive their value from the common stock, it's recommended to analyze the common stock first.
-                        </p>
+                      <>
+                        {' '}Would you like to view the{' '}
                         <button
-                          onClick={() => handleTickerClick(relatedCommonStock)}
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors inline-flex items-center gap-2"
+                          onClick={handleRelatedStockClick}
+                          className="font-medium underline hover:text-yellow-900 dark:hover:text-yellow-100"
                         >
-                          <span>📊</span>
-                          <span>View {relatedCommonStock} (Common Stock)</span>
-                          <span>→</span>
+                          related common stock ({relatedCommonStock})
                         </button>
-                      </div>
+                        ?
+                      </>
                     )}
-                  </div>
+                  </p>
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Stock Data Display */}
-        {quote && company && (
+        {/* Loading State */}
+        {loading && (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 dark:border-primary-400 mx-auto"></div>
+            <p className="mt-4 text-gray-600 dark:text-gray-400">Loading stock data...</p>
+          </div>
+        )}
+
+        {/* Stock Data */}
+        {quote && company && !loading && (
           <div className="space-y-6">
-            {/* Price Card */}
+            {/* Stock Header */}
             <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-              <div className="flex items-start justify-between">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                 <div>
-                  <h2 className="text-3xl font-bold text-gray-900 dark:text-white">
-                    {company.name}{isWarrant && <span className="text-blue-600 dark:text-blue-400">*</span>}
-                  </h2>
-                  <p className="text-lg text-gray-600 dark:text-gray-400 mt-1">
-                    {ticker} {isWarrant && <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">WARRANT</span>}
-                  </p>
+                  <h2 className="text-3xl font-bold text-gray-900 dark:text-white">{company.name}</h2>
+                  <p className="text-gray-600 dark:text-gray-400 mt-1">{ticker} • {company.exchange}</p>
                 </div>
-                <div className="text-right">
-                  <div className="text-4xl font-bold text-gray-900 dark:text-white">
-                    ${quote.price.toFixed(2)}
-                  </div>
-                  <div className={`text-xl font-semibold mt-1 ${quote.change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                <div className="mt-4 md:mt-0 text-right">
+                  <div className="text-4xl font-bold text-gray-900 dark:text-white">${quote.price.toFixed(2)}</div>
+                  <div className={`text-lg font-semibold ${quote.change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {quote.change >= 0 ? '+' : ''}{quote.change.toFixed(2)} ({quote.change_percent >= 0 ? '+' : ''}{quote.change_percent.toFixed(2)}%)
                   </div>
                 </div>
               </div>
+            </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Open</div>
-                  <div className="text-lg font-semibold text-gray-900 dark:text-white">${quote.open.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">High</div>
-                  <div className="text-lg font-semibold text-gray-900 dark:text-white">${quote.high.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Low</div>
-                  <div className="text-lg font-semibold text-gray-900 dark:text-white">${quote.low.toFixed(2)}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Volume</div>
-                  <div className="text-lg font-semibold text-gray-900 dark:text-white">{quote.volume.toLocaleString()}</div>
-                </div>
+            {/* Quote Details */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-4 border dark:border-gray-500">
+                <div className="text-sm text-gray-600 dark:text-gray-400">Open</div>
+                <div className="text-xl font-semibold text-gray-900 dark:text-white">${quote.open.toFixed(2)}</div>
+              </div>
+              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-4 border dark:border-gray-500">
+                <div className="text-sm text-gray-600 dark:text-gray-400">High</div>
+                <div className="text-xl font-semibold text-gray-900 dark:text-white">${quote.high.toFixed(2)}</div>
+              </div>
+              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-4 border dark:border-gray-500">
+                <div className="text-sm text-gray-600 dark:text-gray-400">Low</div>
+                <div className="text-xl font-semibold text-gray-900 dark:text-white">${quote.low.toFixed(2)}</div>
+              </div>
+              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-4 border dark:border-gray-500">
+                <div className="text-sm text-gray-600 dark:text-gray-400">Volume</div>
+                <div className="text-xl font-semibold text-gray-900 dark:text-white">{quote.volume.toLocaleString()}</div>
               </div>
             </div>
 
-            {/* Chart */}
+            {/* Price Chart */}
             <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex justify-between items-center mb-4">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white">Price History</h3>
-                <select
-                  value={historyDays}
-                  onChange={(e) => {
-                    setHistoryDays(Number(e.target.value));
-                    loadStockData(ticker);
-                  }}
-                  className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-white"
-                >
-                  <option value={30}>30 Days</option>
-                  <option value={90}>90 Days</option>
-                  <option value={180}>180 Days</option>
-                  <option value={365}>1 Year</option>
-                </select>
+                <div className="flex gap-2">
+                  {[30, 90, 180, 365].map((days) => (
+                    <button
+                      key={days}
+                      onClick={() => handleHistoryDaysChange(days)}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                        historyDays === days
+                          ? 'bg-primary-600 dark:bg-primary-500 text-white'
+                          : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                      }`}
+                    >
+                      {days}D
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div style={{ height: '300px' }}>
+              <div style={{ height: '400px' }}>
                 <Line data={chartData} options={chartOptions} />
               </div>
             </div>
@@ -519,16 +508,10 @@ const Stocks: React.FC = () => {
                       <div className="text-gray-900 dark:text-white font-medium">{company.industry}</div>
                     </div>
                   )}
-                  {company.exchange && (
-                    <div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">Exchange</div>
-                      <div className="text-gray-900 dark:text-white font-medium">{company.exchange}</div>
-                    </div>
-                  )}
                   {company.market_cap && (
                     <div>
                       <div className="text-sm text-gray-600 dark:text-gray-400">Market Cap</div>
-                      <div className="text-gray-900 dark:text-white font-medium">{formatMarketCap(company.market_cap)}</div>
+                      <div className="text-gray-900 dark:text-white font-medium">${(company.market_cap / 1e9).toFixed(2)}B</div>
                     </div>
                   )}
                   {company.employees && (
@@ -641,7 +624,7 @@ const Stocks: React.FC = () => {
           </div>
         )}
 
-        {/* Empty State with Dynamic Top Gainers */}
+        {/* Empty State with Top Gainers and Daily Snapshots */}
         {!quote && !loading && !error && (
           <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-12 border dark:border-gray-500 text-center">
             <div className="text-6xl mb-4">📊</div>
@@ -649,66 +632,75 @@ const Stocks: React.FC = () => {
             <p className="text-gray-600 dark:text-gray-400 mb-6">
               Enter a ticker symbol above to view detailed stock information, charts, and analysis tools. Or, select from the list below.
             </p>
-              {/* Dynamic Top Gainers Buttons */}
-              {gainersLoading ? (
-                <div className="text-center py-4">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2"></div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Loading top gainers...</p>
-                </div>
-              ) : (
-                <>
-                  {topGainers.length > 0 && (
+            
+            {/* Top Gainers */}
+            {gainersLoading ? (
+              <div className="text-center py-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2"></div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Loading top gainers...</p>
+              </div>
+            ) : (
+              <>
+                {topGainers.length > 0 && (
+                  <>
                     <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
                       {topGainers[0].change_percent > 0 ? "📈 Today's Top Gainers:" : "Quick Start:"}
                     </p>
-                  )}
-                  <div className="flex flex-wrap justify-center gap-3">
-                    {topGainers.map((gainer, index) => (
-                      <button
-                        key={index}
-                        onClick={() => handleTickerClick(gainer.ticker)}
-                        className="group px-4 py-2.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-primary-600 hover:text-white dark:hover:bg-primary-500 transition-all duration-200 transform hover:scale-105"
-                        title={gainer.change_percent > 0 ? `${gainer.change_percent.toFixed(2)}% gain` : gainer.ticker}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold">{gainer.ticker}</span>
-                          {gainer.change_percent > 0 && (
-                            <span className="text-xs font-medium text-green-600 dark:text-green-400 group-hover:text-green-200">
-                              +{gainer.change_percent.toFixed(2)}%
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                  {/* Today's Market Movers */}
-                  {!ticker && dailySnapshots.length > 0 && (
-                    <div className="mt-6">
-                      <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Today's Market Movers</h3>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-                        {dailySnapshots.map((snap) => (
-                          <button
-                            key={snap.ticker}
-                            onClick={() => handleTickerClick(snap.ticker)}
-                            className="p-4 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 rounded-lg transition-colors text-left"
-                          >
-                            <div className="font-semibold text-lg text-gray-900 dark:text-white">{snap.ticker}</div>
-                            <div className={`text-sm ${snap.change_percent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                              {snap.change_percent >= 0 ? '+' : ''}{snap.change_percent.toFixed(2)}%
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                      <button
-                        onClick={loadDailySnapshots}
-                        className="mt-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg text-sm transition-colors"
-                      >
-                        🔄 Load Different Stocks
-                      </button>
+                    <div className="flex flex-wrap justify-center gap-3 mb-8">
+                      {topGainers.map((gainer, index) => (
+                        <button
+                          key={index}
+                          onClick={() => handleTickerClick(gainer.ticker)}
+                          className="group px-4 py-2.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-primary-600 hover:text-white dark:hover:bg-primary-500 transition-all duration-200 transform hover:scale-105"
+                          title={gainer.change_percent > 0 ? `${gainer.change_percent.toFixed(2)}% gain` : gainer.ticker}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">{gainer.ticker}</span>
+                            {gainer.change_percent > 0 && (
+                              <span className="text-xs font-medium text-green-600 dark:text-green-400 group-hover:text-green-200">
+                                +{gainer.change_percent.toFixed(2)}%
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      ))}
                     </div>
-                  )}
-                </>
-              )}
+                  </>
+                )}
+                
+                {/* Daily Market Movers */}
+                {dailySnapshots.length > 0 && (
+                  <div className="mt-8 border-t border-gray-200 dark:border-gray-600 pt-8">
+                    <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Today's Market Movers</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                      Randomly selected stocks from today's market
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                      {dailySnapshots.map((snap) => (
+                        <button
+                          key={snap.ticker}
+                          onClick={() => handleTickerClick(snap.ticker)}
+                          className="p-4 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors text-left group"
+                        >
+                          <div className="font-semibold text-lg text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
+                            {snap.ticker}
+                          </div>
+                          <div className={`text-sm font-medium ${snap.change_percent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {snap.change_percent >= 0 ? '+' : ''}{snap.change_percent.toFixed(2)}%
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={loadDailySnapshots}
+                      className="mt-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg text-sm transition-colors font-medium"
+                    >
+                      🔄 Load Different Stocks
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>
