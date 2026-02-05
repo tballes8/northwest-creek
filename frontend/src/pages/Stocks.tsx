@@ -226,7 +226,7 @@ const Stocks: React.FC = () => {
     setGainersLoading(true);
     try {
       const response = await stocksAPI.getTopGainers(10);
-      setTopGainers(response.data.gainers || []);
+      setTopGainers(response.data || []);
     } catch (err) {
       console.error('Failed to load top gainers:', err);
       setTopGainers([]);
