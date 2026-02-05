@@ -87,7 +87,7 @@ class DailyStockSnapshot(Base):
     open_price = Column(Numeric(precision=18, scale=2), nullable=False)
     close_price = Column(Numeric(precision=18, scale=2), nullable=False)
     change_percent = Column(Numeric(precision=18, scale=2), nullable=False)
-    snapshot_date = Column(DateTime(timezone=True), nullable=True)
+    snapshot_date = Column(Date, nullable=False, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     __table_args__ = (
