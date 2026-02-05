@@ -5,13 +5,15 @@ from fastapi import APIRouter, HTTPException, status
 from typing import List, Dict, Any, Optional
 from massive import RESTClient
 from datetime import datetime, date, timedelta
-from app.config import get_settings
+import os
+import httpx
 
 router = APIRouter()
 
-# Initialize Massive client using settings
-settings = get_settings()
-client = RESTClient(settings.MASSIVE_API_KEY)
+# Initialize Massive client - use environment variable in production
+MASSIVE_API_KEY = os.getenv("MASSIVE_API_KEY", "Vu377TX0oKEohsfLJjFXRXJjeA6yj7sA")
+client = RESTClient(MASSIVE_API_KEY)
+BASE_URL = "https://api.massive.com"
 
 
 def safe_get_attr(obj, attr_path: str, default=None):
@@ -33,7 +35,7 @@ def calculate_moving_average(prices: List[float], period: int) -> Optional[float
     return sum(prices[-period:]) / period
 
 
-@router.get("/{ticker}")
+@router.get("/intraday/{ticker}")
 async def get_intraday_data(ticker: str) -> Dict[str, Any]:
     """
     Get intraday snapshot data for a ticker symbol
@@ -86,7 +88,7 @@ async def get_intraday_data(ticker: str) -> Dict[str, Any]:
         )
 
 
-@router.get("/{ticker}/bars-with-ma")
+@router.get("/intraday/{ticker}/bars-with-ma")
 async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
     """
     Get intraday aggregate bars at 15-minute intervals with 50-day and 200-day moving averages
@@ -96,92 +98,94 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
         today = date.today()
         ticker_upper = ticker.upper()
         
-        # Fetch 15-minute intraday bars for today
-        intraday_bars_iterator = client.list_aggregates(
-            ticker=ticker_upper,
-            multiplier=15,
-            timespan="minute",
-            from_=today.isoformat(),
-            to=today.isoformat(),
-            sort="asc"
-        )
-        
-        intraday_bars = list(intraday_bars_iterator)
-        
-        # Fetch daily bars for moving average calculation
-        # Get last 250 days to ensure we have enough data for 200-day MA
-        end_date = today
-        start_date = today - timedelta(days=250)
-        
-        daily_bars_iterator = client.list_aggregates(
-            ticker=ticker_upper,
-            multiplier=1,
-            timespan="day",
-            from_=start_date.isoformat(),
-            to=end_date.isoformat(),
-            sort="asc"
-        )
-        
-        daily_bars = list(daily_bars_iterator)
-        
-        # Calculate moving averages from daily data
-        daily_closes = [safe_get_attr(bar, 'close') for bar in daily_bars if safe_get_attr(bar, 'close') is not None]
-        
-        ma_50 = calculate_moving_average(daily_closes, 50)
-        ma_200 = calculate_moving_average(daily_closes, 200)
-        
-        # Convert intraday bars to dict format
-        bars_data = []
-        for bar in intraday_bars:
-            bar_dict = {
-                "timestamp": bar.timestamp.isoformat() if hasattr(bar, 'timestamp') else None,
-                "open": safe_get_attr(bar, 'open'),
-                "high": safe_get_attr(bar, 'high'),
-                "low": safe_get_attr(bar, 'low'),
-                "close": safe_get_attr(bar, 'close'),
-                "volume": safe_get_attr(bar, 'volume'),
-                "vwap": safe_get_attr(bar, 'vwap'),
-                # Add moving averages to each bar (they'll be flat lines across the chart)
-                "ma_50": ma_50,
-                "ma_200": ma_200
-            }
-            bars_data.append(bar_dict)
-        
-        # If no intraday data, try to get snapshot data as fallback
-        if not bars_data:
-            snapshots = list(client.list_universal_snapshots(
-                ticker_any_of=[ticker_upper]
-            ))
+        async with httpx.AsyncClient(timeout=30.0) as http_client:
+            # Fetch 15-minute intraday bars for today
+            intraday_url = f"{BASE_URL}/v2/aggs/ticker/{ticker_upper}/range/15/minute/{today.isoformat()}/{today.isoformat()}"
+            intraday_params = {"apiKey": MASSIVE_API_KEY, "adjusted": "true", "sort": "asc"}
             
-            if snapshots:
-                snapshot = snapshots[0]
-                if hasattr(snapshot, 'session'):
-                    current_time = datetime.now()
-                    bars_data = [{
-                        "timestamp": current_time.isoformat(),
-                        "open": safe_get_attr(snapshot, 'session.open'),
-                        "high": safe_get_attr(snapshot, 'session.high'),
-                        "low": safe_get_attr(snapshot, 'session.low'),
-                        "close": safe_get_attr(snapshot, 'session.close'),
-                        "volume": safe_get_attr(snapshot, 'session.volume'),
+            intraday_response = await http_client.get(intraday_url, params=intraday_params)
+            intraday_response.raise_for_status()
+            intraday_data = intraday_response.json()
+            
+            # Fetch daily bars for moving average calculation (last 250 days)
+            end_date = today
+            start_date = today - timedelta(days=250)
+            
+            daily_url = f"{BASE_URL}/v2/aggs/ticker/{ticker_upper}/range/1/day/{start_date.isoformat()}/{end_date.isoformat()}"
+            daily_params = {"apiKey": MASSIVE_API_KEY, "adjusted": "true", "sort": "asc"}
+            
+            daily_response = await http_client.get(daily_url, params=daily_params)
+            daily_response.raise_for_status()
+            daily_data = daily_response.json()
+            
+            # Calculate moving averages from daily data
+            daily_closes = []
+            if "results" in daily_data and daily_data["results"]:
+                daily_closes = [bar["c"] for bar in daily_data["results"] if "c" in bar]
+            
+            ma_50 = calculate_moving_average(daily_closes, 50)
+            ma_200 = calculate_moving_average(daily_closes, 200)
+            
+            # Process intraday bars
+            bars_data = []
+            if "results" in intraday_data and intraday_data["results"]:
+                for bar in intraday_data["results"]:
+                    bar_dict = {
+                        "timestamp": datetime.fromtimestamp(bar["t"] / 1000).isoformat() if "t" in bar else None,
+                        "open": bar.get("o"),
+                        "high": bar.get("h"),
+                        "low": bar.get("l"),
+                        "close": bar.get("c"),
+                        "volume": bar.get("v"),
+                        "vwap": bar.get("vw"),
                         "ma_50": ma_50,
                         "ma_200": ma_200
-                    }]
-        
-        return {
-            "ticker": ticker_upper,
-            "bars": bars_data,
-            "timespan": "minute",
-            "multiplier": 15,
-            "count": len(bars_data),
-            "moving_averages": {
-                "ma_50": ma_50,
-                "ma_200": ma_200
+                    }
+                    bars_data.append(bar_dict)
+            
+            # If no intraday data, try to get snapshot data as fallback
+            if not bars_data:
+                snapshots = list(client.list_universal_snapshots(
+                    ticker_any_of=[ticker_upper]
+                ))
+                
+                if snapshots:
+                    snapshot = snapshots[0]
+                    if hasattr(snapshot, 'session'):
+                        current_time = datetime.now()
+                        bars_data = [{
+                            "timestamp": current_time.isoformat(),
+                            "open": safe_get_attr(snapshot, 'session.open'),
+                            "high": safe_get_attr(snapshot, 'session.high'),
+                            "low": safe_get_attr(snapshot, 'session.low'),
+                            "close": safe_get_attr(snapshot, 'session.close'),
+                            "volume": safe_get_attr(snapshot, 'session.volume'),
+                            "ma_50": ma_50,
+                            "ma_200": ma_200
+                        }]
+            
+            return {
+                "ticker": ticker_upper,
+                "bars": bars_data,
+                "timespan": "minute",
+                "multiplier": 15,
+                "count": len(bars_data),
+                "moving_averages": {
+                    "ma_50": ma_50,
+                    "ma_200": ma_200
+                }
             }
-        }
         
-    except HTTPException:
-        raise
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch data from Massive API: {str(e)}"
+        )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Request to Massive API timed out"
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -189,7 +193,7 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
         )
 
 
-@router.get("/batch")
+@router.get("/intraday/batch")
 async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
     """
     Get intraday data for multiple tickers
