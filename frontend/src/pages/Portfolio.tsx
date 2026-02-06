@@ -40,6 +40,9 @@ const Portfolio: React.FC = () => {
   const [selectedTicker, setSelectedTicker] = useState<string>('');
   const { prices, isConnected, subscribe, unsubscribe } = useLivePrices();
   const [priceFlash, setPriceFlash] = useState<Record<string, 'green' | 'red' | null>>({});
+  const [editingPosition, setEditingPosition] = useState<string | null>(null);
+  const [editQuantity, setEditQuantity] = useState('');
+  const [editNotes, setEditNotes] = useState('');
 
   useEffect(() => {
     loadData();
@@ -181,6 +184,41 @@ const Portfolio: React.FC = () => {
       await loadData();
     }
   };
+
+  const handleStartEdit = (position: PortfolioPosition) => {
+    setEditingPosition(position.id);
+    setEditQuantity(position.quantity.toString());
+    setEditNotes(position.notes || '');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingPosition(null);
+    setEditQuantity('');
+    setEditNotes('');
+  };
+
+  const handleSaveEdit = async (id: string) => {
+    try {
+      const payload: any = {};
+      
+      if (editQuantity && parseFloat(editQuantity) > 0) {
+        payload.quantity = parseFloat(editQuantity);
+      }
+      
+      if (editNotes.trim()) {
+        payload.notes = editNotes.trim();
+      }
+      
+      await portfolioAPI.update(id, payload);
+      await loadData();
+      setEditingPosition(null);
+      setEditQuantity('');
+      setEditNotes('');
+    } catch (err: any) {
+      console.error('Update position error:', err);
+      alert('Failed to update position. Please try again.');
+    }
+  };  
 
   const handleTickerClick = (ticker: string) => {
     setSelectedTicker(ticker);
@@ -477,61 +515,105 @@ const Portfolio: React.FC = () => {
                         <div className="text-sm font-bold text-primary-600 dark:text-primary-400 underline cursor-pointer">
                           {position.ticker}
                         </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          {new Date(position.buy_date).toLocaleDateString()}
-                        </div>
                       </button>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="text-sm text-gray-900 dark:text-white">{position.quantity}</div>
+                      {editingPosition === position.id ? (
+                        <input 
+                          type="number"
+                          value={editQuantity}
+                          onChange={(e) => setEditQuantity(e.target.value)}
+                          step="0.01"
+                          min="0"
+                          className="w-24 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-right"
+                        />
+                      ) : (
+                        <div className="text-sm text-gray-900 dark:text-white">
+                          {position.quantity.toFixed(2)}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="text-sm text-gray-900 dark:text-white">${position.buy_price.toFixed(2)}</div>
+                      <div className="text-sm text-gray-900 dark:text-white">
+                        ${position.buy_price.toFixed(2)}
+                      </div>
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap ${
+                    <td className={`px-6 py-4 whitespace-nowrap text-right ${
                       priceFlash[position.ticker] ? `price-flash-${priceFlash[position.ticker]}` : ''
-                      }`}>
+                    }`}>
                       <div className="text-sm font-medium text-gray-900 dark:text-white">
                         ${position.current_price?.toFixed(2) || 'N/A'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="text-sm font-semibold text-gray-900 dark:text-white">
-                        {position.total_value ? `$${position.total_value.toFixed(2)}` : '-'}
+                      <div className="text-sm text-gray-900 dark:text-white">
+                        ${position.total_value?.toFixed(2) || '-'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {position.profit_loss !== undefined && position.profit_loss !== null ? (
-                        <div>
-                          <div className={`text-sm font-semibold ${
-                            position.profit_loss >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                          }`}>
-                            {position.profit_loss >= 0 ? '+' : ''}${position.profit_loss.toFixed(2)}
+                      <div className={`text-sm font-semibold ${
+                        (position.profit_loss ?? 0) >= 0 
+                          ? 'text-green-600 dark:text-green-400' 
+                          : 'text-red-600 dark:text-red-400'
+                      }`}>
+                        {position.profit_loss !== undefined 
+                          ? `${position.profit_loss >= 0 ? '+' : ''}$${position.profit_loss.toFixed(2)}` 
+                          : '-'
+                        }
+                        {position.profit_loss_percent !== undefined && (
+                          <div className="text-xs">
+                            ({position.profit_loss_percent >= 0 ? '+' : ''}{position.profit_loss_percent.toFixed(2)}%)
                           </div>
-                          {position.profit_loss_percent !== undefined && (
-                            <div className={`text-xs ${
-                              position.profit_loss_percent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                            }`}>
-                              ({position.profit_loss_percent >= 0 ? '+' : ''}{position.profit_loss_percent.toFixed(2)}%)
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-sm text-gray-600 dark:text-gray-400">-</div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
-                        {position.notes || '-'}
+                        )}
                       </div>
                     </td>
+                    <td className="px-6 py-4">
+                      {editingPosition === position.id ? (
+                        <input
+                          type="text"
+                          value={editNotes}
+                          onChange={(e) => setEditNotes(e.target.value)}
+                          placeholder="Notes"
+                          className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                        />
+                      ) : (
+                        <div className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
+                          {position.notes || '-'}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => handleRemovePosition(position.id)}
-                        className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                      >
-                        Remove
-                      </button>
+                      {editingPosition === position.id ? (
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            onClick={() => handleSaveEdit(position.id)}
+                            className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            onClick={() => handleStartEdit(position)}
+                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleRemovePosition(position.id)}
+                            className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -19,6 +19,7 @@ export interface WatchlistItem {
   notes?: string;
   target_price?: number;
   price?: number;
+  previous_close?: number;  // ← ADDED for day change calculation
   change?: number;
   change_percent?: number;
   price_vs_target?: number;
@@ -30,7 +31,8 @@ export interface PortfolioPosition {
   id: string;
   ticker: string;
   quantity: number;
-  average_cost: number;
+  buy_price: number;  // ← FIXED: matches backend (not average_cost)
+  buy_date: string;   // ← ADDED: matches backend
   current_price?: number;
   total_value?: number;
   profit_loss?: number;

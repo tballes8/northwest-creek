@@ -24,6 +24,9 @@ const Watchlist: React.FC = () => {
   const [selectedTicker, setSelectedTicker] = useState<string>('');
   const { prices, isConnected, subscribe, unsubscribe } = useLivePrices();
   const [priceFlash, setPriceFlash] = useState<Record<string, 'green' | 'red' | null>>({});
+  const [editingStock, setEditingStock] = useState<string | null>(null);
+  const [editNotes, setEditNotes] = useState('');
+  const [editTargetPrice, setEditTargetPrice] = useState('');
 
   useEffect(() => {
     loadData();
@@ -58,9 +61,10 @@ const Watchlist: React.FC = () => {
             setPriceFlash(prev => ({ ...prev, [item.ticker]: null }));
           }, 600);
           
-          // Update item with new price
-          const change = livePrice.price - (item.previous_close || livePrice.price);
-          const changePercent = ((change / (item.previous_close || livePrice.price)) * 100);
+          // ✅ FIXED: Use item.price as baseline (not previous_close)
+          const oldPrice = item.price || livePrice.price;
+          const change = livePrice.price - oldPrice;
+          const changePercent = oldPrice ? ((change / oldPrice) * 100) : 0;
           
           return {
             ...item,
@@ -72,7 +76,7 @@ const Watchlist: React.FC = () => {
         return item;
       })
     );
-  }, [prices]);  
+  }, [prices]);
 
   const loadData = async () => {
     try {
@@ -153,6 +157,43 @@ const Watchlist: React.FC = () => {
       alert('Failed to remove stock. Please try again.');
     }
   };
+
+  const handleStartEdit = (stock: WatchlistItem) => {
+    setEditingStock(stock.id);
+    setEditNotes(stock.notes || '');
+    setEditTargetPrice(stock.target_price?.toString() || '');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingStock(null);
+    setEditNotes('');
+    setEditTargetPrice('');
+  };
+
+  const handleSaveEdit = async (id: string) => {
+    try {
+      const payload: any = {};
+      
+      if (editNotes.trim()) {
+        payload.notes = editNotes.trim();
+      }
+      
+      if (editTargetPrice && parseFloat(editTargetPrice) > 0) {
+        payload.target_price = parseFloat(editTargetPrice);
+      } else {
+        payload.target_price = null;
+      }
+      
+      await watchlistAPI.update(id, payload);
+      await loadData();
+      setEditingStock(null);
+      setEditNotes('');
+      setEditTargetPrice('');
+    } catch (err: any) {
+      console.error('Update stock error:', err);
+      alert('Failed to update stock. Please try again.');
+    }
+  };  
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -374,7 +415,7 @@ const Watchlist: React.FC = () => {
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-right ${
                       priceFlash[stock.ticker] ? `price-flash-${priceFlash[stock.ticker]}` : ''
-                      }`}>
+                    }`}>
                       <div className="text-sm font-medium text-gray-900 dark:text-white">
                         ${stock.price?.toFixed(2) || 'N/A'}
                       </div>
@@ -387,9 +428,20 @@ const Watchlist: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="text-sm text-gray-600 dark:text-gray-400">
-                        {stock.target_price ? `$${stock.target_price.toFixed(2)}` : '-'}
-                      </div>
+                      {editingStock === stock.id ? (
+                        <input
+                          type="number"
+                          value={editTargetPrice}
+                          onChange={(e) => setEditTargetPrice(e.target.value)}
+                          placeholder="0.00"
+                          step="0.01"
+                          className="w-24 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                        />
+                      ) : (
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                          {stock.target_price ? `$${stock.target_price.toFixed(2)}` : '-'}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       {stock.price_vs_target !== undefined && stock.price_vs_target !== null && stock.target_price ? (
@@ -408,17 +460,52 @@ const Watchlist: React.FC = () => {
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
-                        {stock.notes || '-'}
-                      </div>
+                      {editingStock === stock.id ? (
+                        <input
+                          type="text"
+                          value={editNotes}
+                          onChange={(e) => setEditNotes(e.target.value)}
+                          placeholder="Notes"
+                          className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                        />
+                      ) : (
+                        <div className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
+                          {stock.notes || '-'}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => handleRemoveStock(stock.id)}
-                        className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                      >
-                        Remove
-                      </button>
+                      {editingStock === stock.id ? (
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            onClick={() => handleSaveEdit(stock.id)}
+                            className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={handleCancelEdit}
+                            className="text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-300"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            onClick={() => handleStartEdit(stock)}
+                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleRemoveStock(stock.id)}
+                            className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
