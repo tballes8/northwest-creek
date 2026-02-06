@@ -42,6 +42,7 @@ const Portfolio: React.FC = () => {
   const [priceFlash, setPriceFlash] = useState<Record<string, 'green' | 'red' | null>>({});
   const [editingPosition, setEditingPosition] = useState<string | null>(null);
   const [editQuantity, setEditQuantity] = useState('');
+  const [editBuyPrice, setEditBuyPrice] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const previousPricesRef = useRef<Map<string, number>>(new Map());
 
@@ -193,12 +194,14 @@ const Portfolio: React.FC = () => {
   const handleStartEdit = (position: PortfolioPosition) => {
     setEditingPosition(position.id);
     setEditQuantity(position.quantity.toString());
+    setEditBuyPrice(position.buy_price.toFixed(2));
     setEditNotes(position.notes || '');
   };
 
   const handleCancelEdit = () => {
     setEditingPosition(null);
     setEditQuantity('');
+    setEditBuyPrice('');
     setEditNotes('');
   };
 
@@ -210,6 +213,10 @@ const Portfolio: React.FC = () => {
         payload.quantity = parseFloat(editQuantity);
       }
       
+      if (editBuyPrice && parseFloat(editBuyPrice) > 0) {
+        payload.buy_price = parseFloat(editBuyPrice);
+      }
+
       if (editNotes.trim()) {
         payload.notes = editNotes.trim();
       }
@@ -218,6 +225,7 @@ const Portfolio: React.FC = () => {
       await loadData();
       setEditingPosition(null);
       setEditQuantity('');
+      setEditBuyPrice('');
       setEditNotes('');
     } catch (err: any) {
       console.error('Update position error:', err);
@@ -501,7 +509,7 @@ const Portfolio: React.FC = () => {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ticker</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Quantity</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Buy Price</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cost Basis</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Current Price</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total Value</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">P&L</th>
@@ -539,16 +547,33 @@ const Portfolio: React.FC = () => {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="text-sm text-gray-900 dark:text-white">
-                        ${position.buy_price.toFixed(2)}
-                      </div>
+                      {editingPosition === position.id ? (
+                        <input 
+                          type="number"
+                          value={editBuyPrice}
+                          onChange={(e) => setEditBuyPrice(e.target.value)}
+                          step="0.01"
+                          min="0"
+                          className="w-24 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-right"
+                        />
+                      ) : (
+                        <div className="text-sm text-gray-900 dark:text-white">
+                          ${position.buy_price.toFixed(2)}
+                        </div>
+                      )}
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-right ${
-                      priceFlash[position.ticker] ? `price-flash-${priceFlash[position.ticker]}` : ''
-                      }`}>
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">
-                        ${position.current_price?.toFixed(2) || 'N/A'}
-                      </div>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      {(() => {
+                        // Use live price if available, otherwise use static price
+                        const displayPrice = prices.get(position.ticker)?.price ?? position.current_price;
+                        const flashClass = priceFlash[position.ticker] ? `flash-${priceFlash[position.ticker]}` : '';
+                        
+                        return (
+                          <div className={`text-sm font-medium text-gray-900 dark:text-white ${flashClass}`}>
+                            ${displayPrice ? displayPrice.toFixed(2) : 'N/A'}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="text-sm text-gray-900 dark:text-white">

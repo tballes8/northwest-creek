@@ -418,12 +418,25 @@ const Watchlist: React.FC = () => {
                         </div>
                       </button>
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-right ${
+                    {/* <td className={`px-6 py-4 whitespace-nowrap text-right ${
                       priceFlash[stock.ticker] ? `price-flash-${priceFlash[stock.ticker]}` : ''
-                    }`}>
+                      }`}>
                       <div className="text-sm font-medium text-gray-900 dark:text-white">
                         ${stock.price?.toFixed(2) || 'N/A'}
                       </div>
+                    </td> */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {(() => {
+                        // Use live price if available, otherwise use static price
+                        const displayPrice = prices.get(stock.ticker)?.price ?? stock.price;
+                        const flashClass = priceFlash[stock.ticker] ? `flash-${priceFlash[stock.ticker]}` : '';
+                        
+                        return (
+                          <div className={`text-sm font-medium text-gray-900 dark:text-white ${flashClass}`}>
+                            ${formatNumber(displayPrice)}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className={`text-sm font-semibold ${
