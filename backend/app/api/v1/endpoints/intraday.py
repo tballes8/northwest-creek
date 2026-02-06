@@ -1,5 +1,7 @@
 """
 Intraday market data endpoints using Massive API with Moving Averages
+UPDATED FOR STOCKS ADVANCED PLAN
+Now includes TRUE 15-minute bars!
 """
 from fastapi import APIRouter, HTTPException, status
 from typing import List, Dict, Any, Optional
@@ -91,7 +93,8 @@ async def get_intraday_data(ticker: str) -> Dict[str, Any]:
 @router.get("/{ticker}/bars-with-ma")
 async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
     """
-    Get intraday aggregate bars at 15-minute intervals with 50-day and 200-day moving averages
+    Get TRUE 15-minute intraday bars with 50-day and 200-day moving averages
+    NOW WORKS WITH STOCKS ADVANCED PLAN!
     Returns bars for the current trading day with moving averages overlayed
     """
     try:
@@ -99,13 +102,22 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
         ticker_upper = ticker.upper()
         
         async with httpx.AsyncClient(timeout=30.0) as http_client:
-            # Fetch 15-minute intraday bars for today
+            # Fetch 15-minute intraday bars for today - THIS NOW WORKS!
             intraday_url = f"{BASE_URL}/v2/aggs/ticker/{ticker_upper}/range/15/minute/{today.isoformat()}/{today.isoformat()}"
             intraday_params = {"apiKey": MASSIVE_API_KEY, "adjusted": "true", "sort": "asc"}
             
-            intraday_response = await http_client.get(intraday_url, params=intraday_params)
-            intraday_response.raise_for_status()
-            intraday_data = intraday_response.json()
+            try:
+                intraday_response = await http_client.get(intraday_url, params=intraday_params)
+                intraday_response.raise_for_status()
+                intraday_data = intraday_response.json()
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 403:
+                    # This shouldn't happen with Advanced plan, but handle gracefully
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="API key doesn't have access to minute-level data. Please verify your Stocks Advanced plan is active."
+                    )
+                raise
             
             # Fetch daily bars for moving average calculation (last 250 days)
             end_date = today
@@ -143,15 +155,15 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
                     }
                     bars_data.append(bar_dict)
             
-            # If no intraday data, try to get snapshot data as fallback
+            # If no intraday data (market closed or no trading yet), try snapshot as fallback
             if not bars_data:
-                snapshots = list(client.list_universal_snapshots(
-                    ticker_any_of=[ticker_upper]
-                ))
-                
-                if snapshots:
-                    snapshot = snapshots[0]
-                    if hasattr(snapshot, 'session'):
+                try:
+                    snapshots = list(client.list_universal_snapshots(
+                        ticker_any_of=[ticker_upper]
+                    ))
+                    
+                    if snapshots and hasattr(snapshots[0], 'session'):
+                        snapshot = snapshots[0]
                         current_time = datetime.now()
                         bars_data = [{
                             "timestamp": current_time.isoformat(),
@@ -163,6 +175,8 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
                             "ma_50": ma_50,
                             "ma_200": ma_200
                         }]
+                except Exception as e:
+                    print(f"Snapshot fallback failed: {e}")
             
             return {
                 "ticker": ticker_upper,
@@ -173,9 +187,12 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
                 "moving_averages": {
                     "ma_50": ma_50,
                     "ma_200": ma_200
-                }
+                },
+                "note": "Powered by Stocks Advanced plan" if bars_data else "Market may be closed - no intraday data available"
             }
         
+    except HTTPException:
+        raise
     except httpx.HTTPStatusError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
