@@ -54,7 +54,7 @@ const Watchlist: React.FC = () => {
         if (livePrice && livePrice.price !== item.price) {
           // Determine flash color
           const isUp = livePrice.price > (item.price || livePrice.price);
-          setPriceFlash(prev => ({ ...prev, [item.ticker]: isUp ? 'green' : 'red' }));
+          const [priceFlash, setPriceFlash] = useState<Record<string, 'up' | 'down' | null>>({});
           
           // Clear flash after animation
           setTimeout(() => {

@@ -356,7 +356,7 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
                 </div>
                 {chartData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={350}>
-                    <LineChart data={chartData}>
+                    <AreaChart data={chartData}>
                       <defs>
                         <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="rgb(59, 130, 246)" stopOpacity={0.8}/>
@@ -378,6 +378,18 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
                       <Tooltip content={<CustomTooltip />} />
                       <Legend wrapperStyle={{ fontSize: '12px' }} />
                       
+                      {/* Intraday Price - PROMINENT (foreground) */}
+                      <Area
+                        type="monotone"
+                        dataKey="price"
+                        stroke={getPriceColor()}
+                        strokeWidth={3}
+                        fill="url(#colorPrice)"
+                        dot={{ r: 5, fill: getPriceColor(), strokeWidth: 2, stroke: '#ffffff' }}
+                        activeDot={{ r: 7, strokeWidth: 2 }}
+                        name="Price"
+                      />
+
                       {/* 20-day MA - Subtle Reference Line (background) */}
                       {barsData?.moving_averages.ma_20 && (
                         <Line
@@ -422,19 +434,7 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
                           isAnimationActive={false}
                         />
                       )}
-                      
-                      {/* Intraday Price - PROMINENT (foreground) */}
-                      <Area
-                        type="monotone"
-                        dataKey="price"
-                        stroke={getPriceColor()}
-                        strokeWidth={3}
-                        fill="url(#colorPrice)"
-                        dot={{ r: 5, fill: getPriceColor(), strokeWidth: 2, stroke: '#ffffff' }}
-                        activeDot={{ r: 7, strokeWidth: 2 }}
-                        name="Price"
-                      />
-                    </LineChart>
+                    </AreaChart>
                   </ResponsiveContainer>
                 ) : (
                   <div className="h-80 flex items-center justify-center text-gray-500 dark:text-gray-400">

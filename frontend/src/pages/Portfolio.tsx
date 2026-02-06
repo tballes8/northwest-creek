@@ -70,7 +70,7 @@ const Portfolio: React.FC = () => {
         if (livePrice && livePrice.price !== pos.current_price) {
           // Determine flash color
           const isUp = livePrice.price > (pos.current_price || livePrice.price);
-          setPriceFlash(prev => ({ ...prev, [pos.ticker]: isUp ? 'green' : 'red' }));
+          const [priceFlash, setPriceFlash] = useState<Record<string, 'up' | 'down' | null>>({});
           
           // Clear flash after animation
           setTimeout(() => {
@@ -540,7 +540,7 @@ const Portfolio: React.FC = () => {
                     </td>
                     <td className={`px-6 py-4 whitespace-nowrap text-right ${
                       priceFlash[position.ticker] ? `price-flash-${priceFlash[position.ticker]}` : ''
-                    }`}>
+                      }`}>
                       <div className="text-sm font-medium text-gray-900 dark:text-white">
                         ${position.current_price?.toFixed(2) || 'N/A'}
                       </div>
