@@ -4,6 +4,9 @@ import { authAPI, portfolioAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import IntradayModal from '../components/Intradaymodal';
+import { useLivePrices } from '../hooks/useLivePrices';
+import LiveBadge from '../components/LiveBadge';
+import '../styles/livePrice.css';
 
 interface PortfolioPosition {
   id: string;
@@ -33,15 +36,61 @@ const Portfolio: React.FC = () => {
   const [error, setError] = useState('');
   const location = useLocation();
   const [refreshing, setRefreshing] = useState(false);
-  
-  // Intraday modal state
   const [showIntradayModal, setShowIntradayModal] = useState(false);
   const [selectedTicker, setSelectedTicker] = useState<string>('');
-
+  const { prices, isConnected, subscribe, unsubscribe } = useLivePrices();
+  const [priceFlash, setPriceFlash] = useState<Record<string, 'green' | 'red' | null>>({});
 
   useEffect(() => {
     loadData();
   }, [location.pathname]);
+  
+  // Subscribe to all portfolio tickers for live prices
+  useEffect(() => {
+    if (portfolio.length > 0 && isConnected) {
+      const tickers = portfolio.map(pos => pos.ticker);
+      subscribe(tickers);
+      
+      return () => {
+        unsubscribe(tickers);
+      };
+    }
+  }, [portfolio, isConnected, subscribe, unsubscribe]);
+
+  // Update portfolio with live prices and trigger flash animations
+  useEffect(() => {
+    if (prices.size === 0) return;
+    
+    setPortfolio(prevPortfolio => 
+      prevPortfolio.map(pos => {
+        const livePrice = prices.get(pos.ticker);
+        if (livePrice && livePrice.price !== pos.current_price) {
+          // Determine flash color
+          const isUp = livePrice.price > (pos.current_price || livePrice.price);
+          setPriceFlash(prev => ({ ...prev, [pos.ticker]: isUp ? 'green' : 'red' }));
+          
+          // Clear flash after animation
+          setTimeout(() => {
+            setPriceFlash(prev => ({ ...prev, [pos.ticker]: null }));
+          }, 600);
+          
+          // Update position with new price
+          const totalValue = livePrice.price * pos.quantity;
+          const profitLoss = totalValue - (pos.buy_price * pos.quantity);
+          const profitLossPercent = ((livePrice.price - pos.buy_price) / pos.buy_price) * 100;
+          
+          return {
+            ...pos,
+            current_price: livePrice.price,
+            total_value: totalValue,
+            profit_loss: profitLoss,
+            profit_loss_percent: profitLossPercent
+          };
+        }
+        return pos;
+      })
+    );
+  }, [prices]);  
 
   const loadData = async () => {
     try {
@@ -247,11 +296,12 @@ const Portfolio: React.FC = () => {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Portfolio</h1>
           <div className="flex gap-3">
+            <LiveBadge isConnected={isConnected} />
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-medium transition-colors disabled:opacity-50"
-            >
+              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2">
+              {/* refresh button content */}
               {refreshing ? 'Refreshing...' : 'Refresh Prices'}
             </button>
             {!addingPosition && (
@@ -438,9 +488,11 @@ const Portfolio: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="text-sm text-gray-900 dark:text-white">${position.buy_price.toFixed(2)}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="text-sm font-semibold text-gray-900 dark:text-white">
-                        {position.current_price ? `$${position.current_price.toFixed(2)}` : '-'}
+                    <td className={`px-6 py-4 whitespace-nowrap ${
+                      priceFlash[position.ticker] ? `price-flash-${priceFlash[position.ticker]}` : ''
+                      }`}>
+                      <div className="text-sm font-medium text-gray-900 dark:text-white">
+                        ${position.current_price?.toFixed(2) || 'N/A'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">

@@ -1,4 +1,4 @@
-import os  # ← ADD THIS IMPORT
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -6,7 +6,7 @@ from app.config import get_settings
 from app.api.v1.endpoints import (
     alerts, auth, dcf_valuation, indicators, portfolio, 
     stocks, watchlist, technical_analysis, stripe_payments,
-    intraday
+    intraday, live_prices
 )
 
 settings = get_settings()
@@ -70,3 +70,4 @@ app.include_router(technical_analysis.router, prefix="/api/v1/technical-analysis
 app.include_router(dcf_valuation.router, prefix="/api/v1/dcf", tags=["DCF Valuation"])
 app.include_router(stripe_payments.router, prefix="/api/v1/stripe", tags=["Stripe"])
 app.include_router(intraday.router, prefix="/api/v1/intraday", tags=["Intraday"])
+app.include_router(live_prices.router, prefix="/api/v1/live-prices", tags=["Live Prices"])

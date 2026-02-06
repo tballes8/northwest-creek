@@ -5,7 +5,9 @@ import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import { WatchlistItem } from '../types';
 import IntradayModal from '../components/Intradaymodal';
-
+import { useLivePrices } from '../hooks/useLivePrices';
+import LiveBadge from '../components/LiveBadge';
+import '../styles/livePrice.css';
 
 const Watchlist: React.FC = () => {
   const navigate = useNavigate();
@@ -18,14 +20,59 @@ const Watchlist: React.FC = () => {
   const [newTargetPrice, setNewTargetPrice] = useState('');
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
-  
-  // Intraday modal state
   const [showIntradayModal, setShowIntradayModal] = useState(false);
   const [selectedTicker, setSelectedTicker] = useState<string>('');
+  const { prices, isConnected, subscribe, unsubscribe } = useLivePrices();
+  const [priceFlash, setPriceFlash] = useState<Record<string, 'green' | 'red' | null>>({});
 
   useEffect(() => {
     loadData();
   }, []);
+
+  // Subscribe to all watchlist tickers for live prices
+  useEffect(() => {
+    if (watchlist.length > 0 && isConnected) {
+      const tickers = watchlist.map(item => item.ticker);
+      subscribe(tickers);
+      
+      return () => {
+        unsubscribe(tickers);
+      };
+    }
+  }, [watchlist, isConnected, subscribe, unsubscribe]);
+
+  // Update watchlist with live prices and trigger flash animations
+  useEffect(() => {
+    if (prices.size === 0) return;
+    
+    setWatchlist(prevWatchlist => 
+      prevWatchlist.map(item => {
+        const livePrice = prices.get(item.ticker);
+        if (livePrice && livePrice.price !== item.current_price) {
+          // Determine flash color
+          const isUp = livePrice.price > (item.current_price || livePrice.price);
+          setPriceFlash(prev => ({ ...prev, [item.ticker]: isUp ? 'green' : 'red' }));
+          
+          // Clear flash after animation
+          setTimeout(() => {
+            setPriceFlash(prev => ({ ...prev, [item.ticker]: null }));
+          }, 600);
+          
+          // Update item with new price
+          const change = livePrice.price - (item.previous_close || livePrice.price);
+          const changePercent = ((change / (item.previous_close || livePrice.price)) * 100);
+          
+          return {
+            ...item,
+            current_price: livePrice.price,
+            change: change,
+            change_percent: changePercent
+          };
+        }
+        return item;
+      })
+    );
+  }, [prices]);  
 
   const loadData = async () => {
     try {
@@ -218,6 +265,7 @@ const Watchlist: React.FC = () => {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Watchlist</h1>
           <div className="flex gap-3">
+            <LiveBadge isConnected={isConnected} />
             <button
               onClick={handleRefresh}
               disabled={refreshing}
@@ -332,8 +380,7 @@ const Watchlist: React.FC = () => {
             </p>
             <button
               onClick={() => setAddingStock(true)}
-              className="px-6 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors"
-            >
+              className="px-6 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors">
               Add Your First Stock
             </button>
           </div>
@@ -364,9 +411,16 @@ const Watchlist: React.FC = () => {
                         </div>
                       </button>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                    {/* <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="text-sm font-semibold text-gray-900 dark:text-white">
                         {stock.price ? `$${stock.price.toFixed(2)}` : '-'}
+                      </div>
+                    </td> */}
+                    <td className={`px-6 py-4 whitespace-nowrap ${
+                      priceFlash[item.ticker] ? `price-flash-${priceFlash[item.ticker]}` : ''
+                      }`}>
+                      <div className="text-sm font-medium text-gray-900 dark:text-white">
+                        ${item.current_price?.toFixed(2) || 'N/A'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
