@@ -397,7 +397,7 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
                           dataKey="ma_20"
                           stroke="rgb(234, 179, 8)"
                           strokeWidth={1.5}
-                          strokeOpacity={0.4}
+                          strokeOpacity={0.8}
                           dot={false}
                           name="20-day MA"
                           connectNulls
@@ -412,7 +412,7 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
                           dataKey="ma_50"
                           stroke="rgb(168, 85, 247)"
                           strokeWidth={1.5}
-                          strokeOpacity={0.4}
+                          strokeOpacity={0.8}
                           dot={false}
                           name="50-day MA"
                           connectNulls
