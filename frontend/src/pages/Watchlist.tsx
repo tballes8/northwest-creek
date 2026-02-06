@@ -433,7 +433,7 @@ const Watchlist: React.FC = () => {
                         
                         return (
                           <div className={`text-sm font-medium text-gray-900 dark:text-white ${flashClass}`}>
-                            ${formatNumber(displayPrice)}
+                            ${displayPrice?.toFixed(2)}
                           </div>
                         );
                       })()}
