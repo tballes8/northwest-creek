@@ -48,9 +48,9 @@ const Watchlist: React.FC = () => {
     setWatchlist(prevWatchlist => 
       prevWatchlist.map(item => {
         const livePrice = prices.get(item.ticker);
-        if (livePrice && livePrice.price !== item.current_price) {
+        if (livePrice && livePrice.price !== item.price) {
           // Determine flash color
-          const isUp = livePrice.price > (item.current_price || livePrice.price);
+          const isUp = livePrice.price > (item.price || livePrice.price);
           setPriceFlash(prev => ({ ...prev, [item.ticker]: isUp ? 'green' : 'red' }));
           
           // Clear flash after animation
@@ -64,7 +64,7 @@ const Watchlist: React.FC = () => {
           
           return {
             ...item,
-            current_price: livePrice.price,
+            price: livePrice.price,
             change: change,
             change_percent: changePercent
           };
@@ -148,10 +148,9 @@ const Watchlist: React.FC = () => {
     try {
       await watchlistAPI.remove(id);
       setWatchlist(prevList => prevList.filter(stock => stock.id !== id));
-    } catch (err) {
-      console.error('Failed to remove stock:', err);
-      setError('Failed to remove stock');
-      await loadData();
+    } catch (err: any) {
+      console.error('Remove stock error:', err);
+      alert('Failed to remove stock. Please try again.');
     }
   };
 
@@ -166,49 +165,16 @@ const Watchlist: React.FC = () => {
     setShowIntradayModal(true);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('access_token');
-    navigate('/');
-  };
-
-  const getTierBadge = (tier: string) => {
-    const badges = {
-      free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
-      casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
-      active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
-      professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
-    };
-    const badge = badges[tier as keyof typeof badges] || badges.free;
-    return (
-      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.bg} ${badge.text}`}>
-        {badge.label}
-      </span>
-    );
-  };
-
-  const getTierLimit = () => {
-    const limits = {
-      free: 5,
-      casual: 20,
-      active: 45,
-      professional: 75
-    };
-    return limits[user?.subscription_tier as keyof typeof limits] || 5;
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading watchlist...</p>
-        </div>
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-800 flex items-center justify-center transition-colors duration-200">
+        <div className="text-gray-900 dark:text-white text-xl">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
       {/* Navigation */}
       <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -217,7 +183,6 @@ const Watchlist: React.FC = () => {
               <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
               <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
             </div>
-
             <div className="hidden md:flex items-center space-x-8">
               <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
               <Link to="/watchlist" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">Watchlist</Link>
@@ -226,13 +191,17 @@ const Watchlist: React.FC = () => {
               <Link to="/stocks?showTopGainers=true" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Stocks</Link>
               <Link to="/technical-analysis" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
               <Link to="/dcf-valuation" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">DCF Valuation</Link>
-            </div>            
-
+            </div>
             <div className="flex items-center space-x-4">
-              <ThemeToggle /> 
+              <ThemeToggle />
               <span className="text-sm text-gray-600 dark:text-gray-300">{user?.email}</span>
-              {user && getTierBadge(user.subscription_tier)}
-              <button onClick={handleLogout} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium">
+              <button
+                onClick={() => {
+                  localStorage.removeItem('access_token');
+                  navigate('/login');
+                }}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg transition-colors"
+              >
                 Logout
               </button>
             </div>
@@ -240,63 +209,55 @@ const Watchlist: React.FC = () => {
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        {/* Watchlist Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Stocks Watched</div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-white">{watchlist.length} / {getTierLimit()}</div>
-          </div>
-          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Gainers Today</div>
-            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-              {watchlist.filter(s => s.change && s.change > 0).length}
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">My Watchlist</h1>
+              <p className="text-gray-600 dark:text-gray-400">
+                Track stocks you're interested in ({watchlist.length} / {(() => {
+                  const limits = { free: 5, casual: 20, active: 45, professional: 75 };
+                  return limits[user?.subscription_tier as keyof typeof limits] || 5;
+                })()})
+              </p>
             </div>
-          </div>
-          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Losers Today</div>
-            <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-              {watchlist.filter(s => s.change && s.change < 0).length}
-            </div>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Watchlist</h1>
-          <div className="flex gap-3">
-            <LiveBadge isConnected={isConnected} />
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-medium transition-colors disabled:opacity-50"
-            >
-              {refreshing ? 'Refreshing...' : 'Refresh Prices'}
-            </button>
-            {!addingStock && (
+            <div className="flex items-center gap-4">
+              <LiveBadge isConnected={isConnected} />
               <button
-                onClick={() => setAddingStock(true)}
-                className="px-6 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors"
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="px-4 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
-                Add Stock
+                <svg className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {refreshing ? 'Refreshing...' : 'Refresh Prices'}
               </button>
-            )}
+              {!addingStock && (
+                <button
+                  onClick={() => setAddingStock(true)}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 dark:bg-green-500 dark:hover:bg-green-600 text-white rounded-lg font-medium transition-colors"
+                >
+                  + Add Stock
+                </button>
+              )}
+            </div>
           </div>
         </div>
-
-        {/* Error Message */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 rounded-lg">
-            <p className="text-red-700 dark:text-red-400">{error}</p>
-          </div>
-        )}
 
         {/* Add Stock Form */}
         {addingStock && (
-          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 mb-6 border dark:border-gray-500">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Add Stock to Watchlist</h2>
-            <form onSubmit={handleAddStock} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 border dark:border-gray-500 p-6 mb-6">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Add New Stock</h2>
+            {error && (
+              <div className="mb-4 p-3 bg-red-100 dark:bg-red-900/50 border border-red-400 dark:border-red-500 text-red-700 dark:text-red-400 rounded">
+                {error}
+              </div>
+            )}
+            <form onSubmit={handleAddStock}>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Ticker Symbol *
@@ -411,16 +372,11 @@ const Watchlist: React.FC = () => {
                         </div>
                       </button>
                     </td>
-                    {/* <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="text-sm font-semibold text-gray-900 dark:text-white">
-                        {stock.price ? `$${stock.price.toFixed(2)}` : '-'}
-                      </div>
-                    </td> */}
-                    <td className={`px-6 py-4 whitespace-nowrap ${
-                      priceFlash[item.ticker] ? `price-flash-${priceFlash[item.ticker]}` : ''
+                    <td className={`px-6 py-4 whitespace-nowrap text-right ${
+                      priceFlash[stock.ticker] ? `price-flash-${priceFlash[stock.ticker]}` : ''
                       }`}>
                       <div className="text-sm font-medium text-gray-900 dark:text-white">
-                        ${item.current_price?.toFixed(2) || 'N/A'}
+                        ${stock.price?.toFixed(2) || 'N/A'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
