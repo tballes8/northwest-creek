@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authAPI, watchlistAPI } from '../services/api';
 import { User } from '../types';
@@ -27,6 +27,7 @@ const Watchlist: React.FC = () => {
   const [editingStock, setEditingStock] = useState<string | null>(null);
   const [editNotes, setEditNotes] = useState('');
   const [editTargetPrice, setEditTargetPrice] = useState('');
+  const previousPricesRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     loadData();
@@ -48,20 +49,23 @@ const Watchlist: React.FC = () => {
   useEffect(() => {
     if (prices.size === 0) return;
     
-    setWatchlist(prevWatchlist => 
-      prevWatchlist.map(item => {
+    setWatchlist(prevWatchlist => {
+      return prevWatchlist.map(item => {
         const livePrice = prices.get(item.ticker);
-        if (livePrice && livePrice.price !== item.price) {
-          // Determine flash color
-          const isUp = livePrice.price > (item.price || livePrice.price);
+        if (!livePrice) return item;
+        
+        const previousPrice = previousPricesRef.current.get(item.ticker) || item.price || livePrice.price;
+        
+        if (livePrice.price !== previousPrice) {
+          const isUp = livePrice.price > previousPrice;
           setPriceFlash(prev => ({ ...prev, [item.ticker]: isUp ? 'green' : 'red' }));
           
-          // Clear flash after animation
           setTimeout(() => {
             setPriceFlash(prev => ({ ...prev, [item.ticker]: null }));
           }, 600);
           
-          // ✅ FIXED: Use item.price as baseline (not previous_close)
+          previousPricesRef.current.set(item.ticker, livePrice.price);
+          
           const oldPrice = item.price || livePrice.price;
           const change = livePrice.price - oldPrice;
           const changePercent = oldPrice ? ((change / oldPrice) * 100) : 0;
@@ -73,9 +77,10 @@ const Watchlist: React.FC = () => {
             change_percent: changePercent
           };
         }
+        
         return item;
-      })
-    );
+      });
+    });
   }, [prices]);
 
   const loadData = async () => {

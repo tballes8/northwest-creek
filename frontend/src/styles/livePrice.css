@@ -17,11 +17,11 @@
   50% {opacity: 0.5; }
 }
 
-.flash-green {
+.price-flash-green {
   animation: flash-green 0.6s ease-in-out;
 }
 
-.flash-red {
+.price-flash-red {
   animation: flash-red 0.6s ease-in-out;
 }
 

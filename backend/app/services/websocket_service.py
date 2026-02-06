@@ -18,7 +18,7 @@ class LivePriceService:
     
     def __init__(self):
         self.polygon_ws_url = "wss://socket.polygon.io/stocks"
-        self.polygon_api_key = os.getenv("MASSIVE_API_KEY")
+        self.polygon_api_key = settings.MASSIVE_API_KEY
         self.polygon_ws: Optional[websockets.WebSocketClientProtocol] = None
         self.subscribed_tickers: Set[str] = set()
         self.clients: Set[websockets.WebSocketServerProtocol] = set()

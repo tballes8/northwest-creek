@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { authAPI, portfolioAPI } from '../services/api';
 import { User } from '../types';
@@ -43,6 +43,7 @@ const Portfolio: React.FC = () => {
   const [editingPosition, setEditingPosition] = useState<string | null>(null);
   const [editQuantity, setEditQuantity] = useState('');
   const [editNotes, setEditNotes] = useState('');
+  const previousPricesRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => {
     loadData();
@@ -64,20 +65,23 @@ const Portfolio: React.FC = () => {
   useEffect(() => {
     if (prices.size === 0) return;
     
-    setPortfolio(prevPortfolio => 
-      prevPortfolio.map(pos => {
+    setPortfolio(prevPortfolio => {
+      return prevPortfolio.map(pos => {
         const livePrice = prices.get(pos.ticker);
-        if (livePrice && livePrice.price !== pos.current_price) {
-          // Determine flash color
-          const isUp = livePrice.price > (pos.current_price || livePrice.price);
+        if (!livePrice) return pos;
+        
+        const previousPrice = previousPricesRef.current.get(pos.ticker) || pos.current_price || livePrice.price;
+        
+        if (livePrice.price !== previousPrice) {
+          const isUp = livePrice.price > previousPrice;
           setPriceFlash(prev => ({ ...prev, [pos.ticker]: isUp ? 'green' : 'red' }));
           
-          // Clear flash after animation
           setTimeout(() => {
             setPriceFlash(prev => ({ ...prev, [pos.ticker]: null }));
           }, 600);
           
-          // Update position with new price
+          previousPricesRef.current.set(pos.ticker, livePrice.price);
+          
           const totalValue = livePrice.price * pos.quantity;
           const profitLoss = totalValue - (pos.buy_price * pos.quantity);
           const profitLossPercent = ((livePrice.price - pos.buy_price) / pos.buy_price) * 100;
@@ -90,10 +94,11 @@ const Portfolio: React.FC = () => {
             profit_loss_percent: profitLossPercent
           };
         }
+        
         return pos;
-      })
-    );
-  }, [prices]);  
+      });
+    });
+  }, [prices]);
 
   const loadData = async () => {
     try {
