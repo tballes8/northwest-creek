@@ -33,7 +33,6 @@ interface BarData {
   vwap?: number | null;
   ma_20?: number | null;
   ma_50?: number | null;
-  ma_200?: number | null;
 }
 
 interface BarsResponse {
@@ -48,7 +47,6 @@ interface BarsResponse {
   moving_averages: {
     ma_20: number | null;
     ma_50: number | null;
-    ma_200: number | null;
   };
   note?: string;
 }
@@ -162,8 +160,7 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
     open: bar.open,
     volume: bar.volume,
     ma_20: bar.ma_20,
-    ma_50: bar.ma_50,
-    ma_200: bar.ma_200
+    ma_50: bar.ma_50
   })) || [];
 
   // Debug: Log MA values to console
@@ -171,10 +168,8 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
     console.log('Moving Averages:', {
       ma_20: barsData.moving_averages.ma_20,
       ma_50: barsData.moving_averages.ma_50,
-      ma_200: barsData.moving_averages.ma_200,
       sample_bar_ma_20: chartData[0]?.ma_20,
-      sample_bar_ma_50: chartData[0]?.ma_50,
-      sample_bar_ma_200: chartData[0]?.ma_200
+      sample_bar_ma_50: chartData[0]?.ma_50
     });
   }
 
@@ -205,11 +200,6 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
             {data.ma_50 && (
               <p className="text-xs" style={{ color: 'rgb(168, 85, 247)' }}>
                 50-day MA: ${formatNumber(data.ma_50)}
-              </p>
-            )}
-            {data.ma_200 && (
-              <p className="text-xs" style={{ color: 'rgb(59, 130, 246)' }}>
-                200-day MA: ${formatNumber(data.ma_200)}
               </p>
             )}
           </div>
@@ -330,9 +320,6 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
                   <div className="text-xs mt-1" style={{ color: barsData?.moving_averages.ma_50 ? 'rgb(168, 85, 247)' : '#9ca3af' }}>
                     50-day: {barsData?.moving_averages.ma_50 ? `$${formatNumber(barsData.moving_averages.ma_50)}` : 'N/A'}
                   </div>
-                  <div className="text-xs mt-1" style={{ color: barsData?.moving_averages.ma_200 ? 'rgb(59, 130, 246)' : '#9ca3af' }}>
-                    200-day: {barsData?.moving_averages.ma_200 ? `$${formatNumber(barsData.moving_averages.ma_200)}` : 'Insufficient data'}
-                  </div>
                 </div>
               </div>
 
@@ -346,12 +333,6 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
                     <span style={{ color: 'rgb(234, 179, 8)' }}>20d: ${formatNumber(barsData?.moving_averages.ma_20)}</span>
                     <span className="mx-1">|</span>
                     <span style={{ color: 'rgb(168, 85, 247)' }}>50d: ${formatNumber(barsData?.moving_averages.ma_50)}</span>
-                    {barsData?.moving_averages.ma_200 && (
-                      <>
-                        <span className="mx-1">|</span>
-                        <span style={{ color: 'rgb(59, 130, 246)' }}>200d: ${formatNumber(barsData?.moving_averages.ma_200)}</span>
-                      </>
-                    )}
                   </div>
                 </div>
                 {chartData.length > 0 ? (
@@ -419,21 +400,6 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
                           isAnimationActive={false}
                         />
                       )}
-                      
-                      {/* 200-day MA - Subtle Reference Line (background) */}
-                      {barsData?.moving_averages.ma_200 && (
-                        <Line
-                          type="monotone"
-                          dataKey="ma_200"
-                          stroke="rgb(59, 130, 246)"
-                          strokeWidth={1.5}
-                          strokeOpacity={0.4}
-                          dot={false}
-                          name="200-day MA"
-                          connectNulls
-                          isAnimationActive={false}
-                        />
-                      )}
                     </AreaChart>
                   </ResponsiveContainer>
                 ) : (
@@ -449,14 +415,6 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
                     )}
                     {barsData.moving_averages.ma_50 && (
                       <span className="text-gray-400"> | <span style={{ color: 'rgb(168, 85, 247)' }}>Purple</span> = 50-day MA</span>
-                    )}
-                    {barsData.moving_averages.ma_200 && (
-                      <span className="text-gray-400"> | <span style={{ color: 'rgb(59, 130, 246)' }}>Blue</span> = 200-day MA</span>
-                    )}
-                    {!barsData.moving_averages.ma_200 && (barsData.moving_averages.ma_50 || barsData.moving_averages.ma_20) && (
-                      <span className="block mt-1 text-gray-400">
-                        (200-day MA unavailable - insufficient trading history)
-                      </span>
                     )}
                     {barsData.note && (
                       <span className="block mt-1">
