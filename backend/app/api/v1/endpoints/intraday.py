@@ -35,7 +35,7 @@ def calculate_moving_average(prices: List[float], period: int) -> Optional[float
     return sum(prices[-period:]) / period
 
 
-@router.get("/intraday/{ticker}")
+@router.get("/{ticker}")
 async def get_intraday_data(ticker: str) -> Dict[str, Any]:
     """
     Get intraday snapshot data for a ticker symbol
@@ -88,7 +88,7 @@ async def get_intraday_data(ticker: str) -> Dict[str, Any]:
         )
 
 
-@router.get("/intraday/{ticker}/bars-with-ma")
+@router.get("/{ticker}/bars-with-ma")
 async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
     """
     Get intraday aggregate bars at 15-minute intervals with 50-day and 200-day moving averages
@@ -193,7 +193,7 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
         )
 
 
-@router.get("/intraday/batch")
+@router.get("/batch")
 async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
     """
     Get intraday data for multiple tickers
