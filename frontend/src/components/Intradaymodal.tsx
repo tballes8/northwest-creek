@@ -83,9 +83,23 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
         intradayAPI.getSnapshot(ticker),
         intradayAPI.getBarsWithMA(ticker)
       ]);
+      
+      const snapshotData = snapshotResponse.data;
+      const barsDataResponse = barsResponse.data;
+      
+      // If current price is null/undefined and we have bars, use the last bar's close
+      if ((!snapshotData.price || snapshotData.price === null) && barsDataResponse.bars && barsDataResponse.bars.length > 0) {
+        const lastBar = barsDataResponse.bars[barsDataResponse.bars.length - 1];
+        snapshotData.price = lastBar.close;
+        
+        // Also update session data if available
+        if (snapshotData.session) {
+          snapshotData.session.close = lastBar.close;
+        }
+      }
          
-      setData(snapshotResponse.data);
-      setBarsData(barsResponse.data);
+      setData(snapshotData);
+      setBarsData(barsDataResponse);
     } catch (err: any) {
       console.error('Failed to fetch intraday data:', err);
       setError(err.response?.data?.detail || 'Failed to load intraday data');
@@ -148,6 +162,16 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
     ma_50: bar.ma_50,
     ma_200: bar.ma_200
   })) || [];
+
+  // Debug: Log MA values to console
+  if (barsData && chartData.length > 0) {
+    console.log('Moving Averages:', {
+      ma_50: barsData.moving_averages.ma_50,
+      ma_200: barsData.moving_averages.ma_200,
+      sample_bar_ma_50: chartData[0]?.ma_50,
+      sample_bar_ma_200: chartData[0]?.ma_200
+    });
+  }
 
   // Custom tooltip for the chart
   const CustomTooltip = ({ active, payload }: any) => {
@@ -286,11 +310,11 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
 
                 <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
                   <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Moving Averages</div>
-                  <div className="text-xs text-orange-600 dark:text-orange-400">
-                    50-day: ${formatNumber(barsData?.moving_averages.ma_50)}
+                  <div className={`text-xs ${barsData?.moving_averages.ma_50 ? 'text-orange-600 dark:text-orange-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                    50-day: {barsData?.moving_averages.ma_50 ? `$${formatNumber(barsData.moving_averages.ma_50)}` : 'N/A'}
                   </div>
-                  <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                    200-day: ${formatNumber(barsData?.moving_averages.ma_200)}
+                  <div className={`text-xs mt-1 ${barsData?.moving_averages.ma_200 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                    200-day: {barsData?.moving_averages.ma_200 ? `$${formatNumber(barsData.moving_averages.ma_200)}` : 'Insufficient data'}
                   </div>
                 </div>
               </div>
@@ -335,30 +359,28 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
                       />
                       
                       {/* 50-day Moving Average */}
-                      {barsData?.moving_averages.ma_50 && (
-                        <Line
-                          type="monotone"
-                          dataKey="ma_50"
-                          stroke="#f97316"
-                          strokeWidth={2}
-                          strokeDasharray="5 5"
-                          dot={false}
-                          name="50-day MA"
-                        />
-                      )}
+                      <Line
+                        type="monotone"
+                        dataKey="ma_50"
+                        stroke="#f97316"
+                        strokeWidth={2}
+                        strokeDasharray="5 5"
+                        dot={false}
+                        name="50-day MA"
+                        connectNulls
+                      />
                       
                       {/* 200-day Moving Average */}
-                      {barsData?.moving_averages.ma_200 && (
-                        <Line
-                          type="monotone"
-                          dataKey="ma_200"
-                          stroke="#3b82f6"
-                          strokeWidth={2}
-                          strokeDasharray="5 5"
-                          dot={false}
-                          name="200-day MA"
-                        />
-                      )}
+                      <Line
+                        type="monotone"
+                        dataKey="ma_200"
+                        stroke="#3b82f6"
+                        strokeWidth={2}
+                        strokeDasharray="5 5"
+                        dot={false}
+                        name="200-day MA"
+                        connectNulls
+                      />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
@@ -368,9 +390,18 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
                 )}
                 {barsData && (
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
-                    {barsData.count} bars (15-minute intervals) | 
-                    <span className="text-orange-600 dark:text-orange-400"> Orange</span> = 50-day MA | 
-                    <span className="text-blue-600 dark:text-blue-400"> Blue</span> = 200-day MA
+                    {barsData.count} bars (15-minute intervals)
+                    {barsData.moving_averages.ma_50 && (
+                      <span> | <span className="text-orange-600 dark:text-orange-400">Orange</span> = 50-day MA</span>
+                    )}
+                    {barsData.moving_averages.ma_200 && (
+                      <span> | <span className="text-blue-600 dark:text-blue-400">Blue</span> = 200-day MA</span>
+                    )}
+                    {!barsData.moving_averages.ma_200 && barsData.moving_averages.ma_50 && (
+                      <span className="block mt-1 text-gray-400">
+                        (200-day MA unavailable - insufficient trading history)
+                      </span>
+                    )}
                     {barsData.note && (
                       <span className="block mt-1">
                         {barsData.note}
