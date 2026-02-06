@@ -41,10 +41,14 @@ interface BarsResponse {
   timespan: string;
   multiplier: number;
   count: number;
+  data_date: string;
+  is_today: boolean;
+  market_status: string;
   moving_averages: {
     ma_50: number | null;
     ma_200: number | null;
   };
+  note?: string;
 }
 
 interface IntradayModalProps {
@@ -114,6 +118,15 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
     }
   };
 
+  const formatDate = (dateString: string): string => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch {
+      return dateString;
+    }
+  };
+
   const getChangeColor = (change: number | null | undefined): string => {
     if (change === null || change === undefined) return 'text-gray-600 dark:text-gray-400';
     return change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
@@ -176,13 +189,20 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center z-10">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl max-w-7xl w-full h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        {/* Header - Fixed */}
+        <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3 flex justify-between items-center">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-              {ticker} - Intraday Chart (15-min)
-            </h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                {ticker} - Intraday Chart
+              </h2>
+              {barsData && !barsData.is_today && (
+                <span className="px-2 py-1 bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 text-xs font-medium rounded">
+                  {formatDate(barsData.data_date)}
+                </span>
+              )}
+            </div>
             {data?.name && (
               <p className="text-sm text-gray-600 dark:text-gray-400">{data.name}</p>
             )}
@@ -197,14 +217,14 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
           </button>
         </div>
 
-        {/* Content */}
-        <div className="px-6 py-4">
+        {/* Content - Scrollable only if needed */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
           {loading ? (
-            <div className="flex justify-center items-center py-12">
+            <div className="flex justify-center items-center h-full">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
             </div>
           ) : error ? (
-            <div className="text-center py-12">
+            <div className="text-center h-full flex flex-col items-center justify-center">
               <div className="text-red-600 dark:text-red-400 mb-2">{error}</div>
               <button
                 onClick={fetchAllData}
@@ -214,60 +234,74 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
               </button>
             </div>
           ) : (
-            <div className="space-y-6">
-              {/* Price Overview */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+            <div className="space-y-4">
+              {/* Show info banner if displaying previous day's data */}
+              {barsData && !barsData.is_today && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="text-sm text-blue-800 dark:text-blue-200">
+                      Market is closed. Showing data from most recent trading day: <strong>{formatDate(barsData.data_date)}</strong>
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Price Overview - Compact */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
                   <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Current Price</div>
-                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                  <div className="text-xl font-bold text-gray-900 dark:text-white">
                     ${formatNumber(data?.price)}
                   </div>
                   {data?.session?.change !== null && (
-                    <div className={`text-sm font-semibold ${getChangeColor(data?.session?.change)}`}>
+                    <div className={`text-xs font-semibold ${getChangeColor(data?.session?.change)}`}>
                       {getChangePrefix(data?.session?.change)}{formatNumber(data?.session?.change)} 
                       ({getChangePrefix(data?.session?.change_percent)}{formatNumber(data?.session?.change_percent)}%)
                     </div>
                   )}
                 </div>
                 
-                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
                   <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Day Range</div>
-                  <div className="text-lg font-semibold text-gray-900 dark:text-white">
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white">
                     ${formatNumber(data?.session?.low)} - ${formatNumber(data?.session?.high)}
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     Open: ${formatNumber(data?.session?.open)}
                   </div>
                 </div>
 
-                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
                   <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Volume</div>
-                  <div className="text-lg font-semibold text-gray-900 dark:text-white">
+                  <div className="text-sm font-semibold text-gray-900 dark:text-white">
                     {formatLargeNumber(data?.session?.volume)}
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                  <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     Status: {data?.market_status || 'N/A'}
                   </div>
                 </div>
 
-                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
                   <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Moving Averages</div>
-                  <div className="text-sm text-orange-600 dark:text-orange-400">
+                  <div className="text-xs text-orange-600 dark:text-orange-400">
                     50-day: ${formatNumber(barsData?.moving_averages.ma_50)}
                   </div>
-                  <div className="text-sm text-blue-600 dark:text-blue-400">
+                  <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
                     200-day: ${formatNumber(barsData?.moving_averages.ma_200)}
                   </div>
                 </div>
               </div>
 
-              {/* Price Chart with Moving Averages */}
-              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                  Intraday Price with 50-day & 200-day Moving Averages
+              {/* Price Chart with Moving Averages - Adjusted height */}
+              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3">
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">
+                  Intraday Price with Moving Averages
                 </h3>
                 {chartData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={450}>
+                  <ResponsiveContainer width="100%" height={350}>
                     <LineChart data={chartData}>
                       <defs>
                         <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
@@ -279,16 +313,16 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
                       <XAxis 
                         dataKey="time" 
                         stroke="#9ca3af"
-                        style={{ fontSize: '12px' }}
+                        style={{ fontSize: '11px' }}
                       />
                       <YAxis 
                         stroke="#9ca3af"
                         domain={['auto', 'auto']}
-                        style={{ fontSize: '12px' }}
+                        style={{ fontSize: '11px' }}
                         tickFormatter={(value) => `$${value.toFixed(2)}`}
                       />
                       <Tooltip content={<CustomTooltip />} />
-                      <Legend />
+                      <Legend wrapperStyle={{ fontSize: '12px' }} />
                       
                       {/* Intraday Price Line */}
                       <Line
@@ -328,15 +362,20 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-96 flex items-center justify-center text-gray-500 dark:text-gray-400">
-                    No intraday data available for today
+                  <div className="h-80 flex items-center justify-center text-gray-500 dark:text-gray-400">
+                    No intraday data available
                   </div>
                 )}
                 {barsData && (
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
-                    Showing {barsData.count} bars (15-minute intervals) | 
+                    {barsData.count} bars (15-minute intervals) | 
                     <span className="text-orange-600 dark:text-orange-400"> Orange</span> = 50-day MA | 
                     <span className="text-blue-600 dark:text-blue-400"> Blue</span> = 200-day MA
+                    {barsData.note && (
+                      <span className="block mt-1">
+                        {barsData.note}
+                      </span>
+                    )}
                   </p>
                 )}
               </div>
@@ -344,8 +383,8 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
           )}
         </div>
 
-        {/* Footer */}
-        <div className="sticky bottom-0 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center">
+        {/* Footer - Fixed */}
+        <div className="flex-shrink-0 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 px-6 py-3 flex justify-between items-center">
           <button
             onClick={fetchAllData}
             disabled={loading}

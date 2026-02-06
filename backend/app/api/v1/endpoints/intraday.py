@@ -95,29 +95,49 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
     """
     Get TRUE 15-minute intraday bars with 50-day and 200-day moving averages
     NOW WORKS WITH STOCKS ADVANCED PLAN!
-    Returns bars for the current trading day with moving averages overlayed
+    Returns bars for the current trading day (or most recent trading day if market is closed)
     """
     try:
         today = date.today()
         ticker_upper = ticker.upper()
         
         async with httpx.AsyncClient(timeout=30.0) as http_client:
-            # Fetch 15-minute intraday bars for today - THIS NOW WORKS!
-            intraday_url = f"{BASE_URL}/v2/aggs/ticker/{ticker_upper}/range/15/minute/{today.isoformat()}/{today.isoformat()}"
-            intraday_params = {"apiKey": MASSIVE_API_KEY, "adjusted": "true", "sort": "asc"}
+            # Try today first, then go back up to 7 days to find most recent trading day
+            bars_found = False
+            intraday_data = None
+            data_date = today
             
-            try:
-                intraday_response = await http_client.get(intraday_url, params=intraday_params)
-                intraday_response.raise_for_status()
-                intraday_data = intraday_response.json()
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 403:
-                    # This shouldn't happen with Advanced plan, but handle gracefully
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="API key doesn't have access to minute-level data. Please verify your Stocks Advanced plan is active."
-                    )
-                raise
+            for days_back in range(8):  # Try today and up to 7 days back
+                check_date = today - timedelta(days=days_back)
+                intraday_url = f"{BASE_URL}/v2/aggs/ticker/{ticker_upper}/range/15/minute/{check_date.isoformat()}/{check_date.isoformat()}"
+                intraday_params = {"apiKey": MASSIVE_API_KEY, "adjusted": "true", "sort": "asc"}
+                
+                try:
+                    intraday_response = await http_client.get(intraday_url, params=intraday_params)
+                    intraday_response.raise_for_status()
+                    intraday_data = intraday_response.json()
+                    
+                    # Check if we got bars
+                    if "results" in intraday_data and intraday_data["results"] and len(intraday_data["results"]) > 0:
+                        bars_found = True
+                        data_date = check_date
+                        break
+                        
+                except httpx.HTTPStatusError as e:
+                    if e.response.status_code == 403:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="API key doesn't have access to minute-level data. Please verify your Stocks Advanced plan is active."
+                        )
+                    # Continue trying previous days
+                    continue
+            
+            if not bars_found or not intraday_data:
+                # If we still don't have data after 7 days, return error
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"No recent trading data found for {ticker_upper}"
+                )
             
             # Fetch daily bars for moving average calculation (last 250 days)
             end_date = today
@@ -155,28 +175,10 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
                     }
                     bars_data.append(bar_dict)
             
-            # If no intraday data (market closed or no trading yet), try snapshot as fallback
-            if not bars_data:
-                try:
-                    snapshots = list(client.list_universal_snapshots(
-                        ticker_any_of=[ticker_upper]
-                    ))
-                    
-                    if snapshots and hasattr(snapshots[0], 'session'):
-                        snapshot = snapshots[0]
-                        current_time = datetime.now()
-                        bars_data = [{
-                            "timestamp": current_time.isoformat(),
-                            "open": safe_get_attr(snapshot, 'session.open'),
-                            "high": safe_get_attr(snapshot, 'session.high'),
-                            "low": safe_get_attr(snapshot, 'session.low'),
-                            "close": safe_get_attr(snapshot, 'session.close'),
-                            "volume": safe_get_attr(snapshot, 'session.volume'),
-                            "ma_50": ma_50,
-                            "ma_200": ma_200
-                        }]
-                except Exception as e:
-                    print(f"Snapshot fallback failed: {e}")
+            # Determine if showing today's or previous day's data
+            is_today = data_date == today
+            market_status = "open" if is_today else "closed"
+            data_note = f"Showing most recent trading day ({data_date.strftime('%B %d, %Y')})" if not is_today else "Real-time data from today"
             
             return {
                 "ticker": ticker_upper,
@@ -184,11 +186,14 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
                 "timespan": "minute",
                 "multiplier": 15,
                 "count": len(bars_data),
+                "data_date": data_date.isoformat(),
+                "is_today": is_today,
+                "market_status": market_status,
                 "moving_averages": {
                     "ma_50": ma_50,
                     "ma_200": ma_200
                 },
-                "note": "Powered by Stocks Advanced plan" if bars_data else "Market may be closed - no intraday data available"
+                "note": data_note
             }
         
     except HTTPException:
