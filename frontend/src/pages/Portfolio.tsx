@@ -70,7 +70,7 @@ const Portfolio: React.FC = () => {
         if (livePrice && livePrice.price !== pos.current_price) {
           // Determine flash color
           const isUp = livePrice.price > (pos.current_price || livePrice.price);
-          setPriceFlash(prev => ({ ...prev, [pos.ticker]: isUp ? 'up' : 'down' }));
+          setPriceFlash(prev => ({ ...prev, [pos.ticker]: isUp ? 'green' : 'red' }));
           
           // Clear flash after animation
           setTimeout(() => {
