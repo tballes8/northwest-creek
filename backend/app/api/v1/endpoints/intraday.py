@@ -157,10 +157,11 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
             
             print(f"DEBUG: Got {len(daily_closes)} daily closes for {ticker_upper}")
             
+            ma_20 = calculate_moving_average(daily_closes, 20)
             ma_50 = calculate_moving_average(daily_closes, 50)
             ma_200 = calculate_moving_average(daily_closes, 200)
             
-            print(f"DEBUG: MA calculations - 50-day: {ma_50}, 200-day: {ma_200}")
+            print(f"DEBUG: MA calculations - 20-day: {ma_20}, 50-day: {ma_50}, 200-day: {ma_200}")
             
             # Process intraday bars
             bars_data = []
@@ -174,6 +175,7 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
                         "close": bar.get("c"),
                         "volume": bar.get("v"),
                         "vwap": bar.get("vw"),
+                        "ma_20": ma_20,
                         "ma_50": ma_50,
                         "ma_200": ma_200
                     }
@@ -194,6 +196,7 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
                 "is_today": is_today,
                 "market_status": market_status,
                 "moving_averages": {
+                    "ma_20": ma_20,
                     "ma_50": ma_50,
                     "ma_200": ma_200
                 },
