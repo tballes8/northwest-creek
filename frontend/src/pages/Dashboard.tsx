@@ -1,8 +1,21 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { authAPI, watchlistAPI, portfolioAPI, alertsAPI } from '../services/api';
 import { User, WatchlistItem, PortfolioPosition, Alert } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
+import { useLivePriceContext } from '../contexts/LivePriceContext';
+import MarketStatusBadge from '../components/MarketStatusBadge';
+import '../styles/livePrice.css';
+
+interface DashboardPosition {
+  ticker: string;
+  quantity: number;
+  buy_price: number;
+  current_price?: number;
+  total_value?: number;
+  profit_loss?: number;
+  profit_loss_percent?: number;
+}
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -10,6 +23,7 @@ const Dashboard: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [positions, setPositions] = useState<DashboardPosition[]>([]);
   const [stats, setStats] = useState({
     watchlistCount: 0,
     portfolioCount: 0,
@@ -19,9 +33,87 @@ const Dashboard: React.FC = () => {
     portfolioPLPercent: 0,
   });
 
+  // Live price context
+  const { prices, isConnected, subscribe, unsubscribe } = useLivePriceContext();
+  const previousPricesRef = useRef<Map<string, number>>(new Map());
+  const [valueFlash, setValueFlash] = useState<'green' | 'red' | null>(null);
+
   useEffect(() => {
     loadDashboardData();
   }, [location.pathname]);
+
+  // Derive a stable ticker string so we only re-subscribe when actual tickers change
+  const tickerList = useMemo(
+    () => positions.map(pos => pos.ticker).sort().join(','),
+    [positions]
+  );
+
+  // Subscribe to portfolio tickers for live prices
+  useEffect(() => {
+    if (tickerList && isConnected) {
+      const tickers = tickerList.split(',');
+      subscribe(tickers);
+      return () => {
+        unsubscribe(tickers);
+      };
+    }
+  }, [tickerList, isConnected, subscribe, unsubscribe]);
+
+  // Update positions and dashboard stats with live prices
+  useEffect(() => {
+    if (prices.size === 0 || positions.length === 0) return;
+
+    let hasChange = false;
+
+    const updatedPositions = positions.map(pos => {
+      const livePrice = prices.get(pos.ticker);
+      if (!livePrice) return pos;
+
+      const previousPrice = previousPricesRef.current.get(pos.ticker) || pos.current_price || livePrice.price;
+
+      if (livePrice.price !== previousPrice) {
+        hasChange = true;
+        previousPricesRef.current.set(pos.ticker, livePrice.price);
+
+        const totalValue = livePrice.price * pos.quantity;
+        const profitLoss = totalValue - (pos.buy_price * pos.quantity);
+        const profitLossPercent = ((livePrice.price - pos.buy_price) / pos.buy_price) * 100;
+
+        return {
+          ...pos,
+          current_price: livePrice.price,
+          total_value: totalValue,
+          profit_loss: profitLoss,
+          profit_loss_percent: profitLossPercent,
+        };
+      }
+      return pos;
+    });
+
+    if (hasChange) {
+      setPositions(updatedPositions);
+
+      // Recalculate dashboard totals
+      const totalValue = updatedPositions.reduce((sum, p) => sum + (p.total_value || 0), 0);
+      const totalCost = updatedPositions.reduce((sum, p) => sum + (p.buy_price * p.quantity), 0);
+      const totalPL = totalValue - totalCost;
+      const totalPLPercent = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
+
+      // Flash animation on the portfolio value card
+      const prevTotalValue = stats.portfolioValue;
+      if (totalValue !== prevTotalValue) {
+        setValueFlash(totalValue > prevTotalValue ? 'green' : 'red');
+        setTimeout(() => setValueFlash(null), 600);
+      }
+
+      setStats(prev => ({
+        ...prev,
+        portfolioValue: totalValue,
+        portfolioPL: totalPL,
+        portfolioPLPercent: totalPLPercent,
+      }));
+    }
+  }, [prices]);
 
   const loadDashboardData = async () => {
     try {
@@ -36,7 +128,16 @@ const Dashboard: React.FC = () => {
       // Get portfolio data
       const portfolioResponse = await portfolioAPI.getAll();
       const portfolioData = portfolioResponse.data;
-      const portfolioCount = portfolioData.positions?.length || 0;
+      const portfolioPositions: DashboardPosition[] = (portfolioData.positions || []).map((p: any) => ({
+        ticker: p.ticker,
+        quantity: p.quantity,
+        buy_price: p.buy_price,
+        current_price: p.current_price,
+        total_value: p.total_value,
+        profit_loss: p.profit_loss,
+        profit_loss_percent: p.profit_loss_percent,
+      }));
+      const portfolioCount = portfolioPositions.length;
       const portfolioValue = portfolioData.total_current_value || 0;
       const portfolioPL = portfolioData.total_profit_loss || 0;
       const portfolioPLPercent = portfolioData.total_profit_loss_percent || 0;
@@ -45,6 +146,7 @@ const Dashboard: React.FC = () => {
       const alertsResponse = await alertsAPI.getAll();
       const alertsCount = alertsResponse.data.alerts?.filter((a: Alert) => a.is_active).length || 0;
 
+      setPositions(portfolioPositions);
       setStats({
         watchlistCount,
         portfolioCount,
@@ -147,12 +249,15 @@ return (
 
     {/* Main Content */}
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Welcome Section with Refresh Button */}
+      {/* Welcome Section with Refresh Button & Market Status */}
       <div className="mb-8 flex justify-between items-start">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Welcome back, {user?.full_name || 'Investor'}! {/*👋 */}
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+              Welcome back, {user?.full_name || 'Investor'}!
+            </h1>
+            <MarketStatusBadge isConnected={isConnected} />
+          </div>
           <p className="text-gray-600 dark:text-gray-400 mt-1">Here's your portfolio overview</p>
         </div>
         <button
@@ -174,7 +279,23 @@ return (
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+        {/* Portfolio Value Card — flashes on live update */}
+        <div
+          className={`bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500 price-transition ${
+            valueFlash === 'green'
+              ? 'ring-2 ring-green-400'
+              : valueFlash === 'red'
+              ? 'ring-2 ring-red-400'
+              : ''
+          }`}
+          style={
+            valueFlash === 'green'
+              ? { animation: 'price-flash-green 0.6s ease-in-out' }
+              : valueFlash === 'red'
+              ? { animation: 'price-flash-red 0.6s ease-in-out' }
+              : undefined
+          }
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Portfolio Value</p>
