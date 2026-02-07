@@ -14,6 +14,7 @@ import Pricing from './pages/Pricing';
 import PaymentSuccess from './pages/PaymentSuccess';
 import RegisterWithPayment from './pages/RegisterWithPayment';
 import Stocks from './pages/Stocks';
+import { LivePriceProvider } from './contexts/LivePriceContext';
 
 
 
@@ -74,6 +75,13 @@ function App() {
             </ProtectedRoute>
           } 
         />
+
+        <LivePriceProvider>
+          <Route path="/portfolio" element={<Portfolio />} />
+          <Route path="/watchlist" element={<Watchlist />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          {/* ...other routes */}
+        </LivePriceProvider>
       </Routes>
     </Router>
   );

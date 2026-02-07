@@ -1,10 +1,10 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { authAPI, portfolioAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import IntradayModal from '../components/Intradaymodal';
-import { useLivePrices } from '../hooks/useLivePrices';
+import { useLivePriceContext } from '../context/LivePriceContext';
 import LiveBadge from '../components/LiveBadge';
 import '../styles/livePrice.css';
 
@@ -38,7 +38,7 @@ const Portfolio: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [showIntradayModal, setShowIntradayModal] = useState(false);
   const [selectedTicker, setSelectedTicker] = useState<string>('');
-  const { prices, isConnected, subscribe, unsubscribe } = useLivePrices();
+  const { prices, isConnected, subscribe, unsubscribe } = useLivePriceContext();
   const [priceFlash, setPriceFlash] = useState<Record<string, 'green' | 'red' | null>>({});
   const [editingPosition, setEditingPosition] = useState<string | null>(null);
   const [editQuantity, setEditQuantity] = useState('');
@@ -50,17 +50,25 @@ const Portfolio: React.FC = () => {
     loadData();
   }, [location.pathname]);
   
-  // Subscribe to all portfolio tickers for live prices
+  // Derive a stable ticker string that only changes when the actual tickers change,
+  // NOT when prices/quantities/etc update within the portfolio array.
+  const tickerList = useMemo(
+    () => portfolio.map(pos => pos.ticker).sort().join(','),
+    [portfolio]
+  );
+
+  // Subscribe to portfolio tickers for live prices.
+  // Depends on tickerList (stable string) instead of portfolio (changes on every price update).
   useEffect(() => {
-    if (portfolio.length > 0 && isConnected) {
-      const tickers = portfolio.map(pos => pos.ticker);
+    if (tickerList && isConnected) {
+      const tickers = tickerList.split(',');
       subscribe(tickers);
       
       return () => {
         unsubscribe(tickers);
       };
     }
-  }, [portfolio, isConnected, subscribe, unsubscribe]);
+  }, [tickerList, isConnected, subscribe, unsubscribe]);
 
   // Update portfolio with live prices and trigger flash animations
   useEffect(() => {

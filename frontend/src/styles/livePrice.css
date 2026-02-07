@@ -17,12 +17,12 @@
   50% {opacity: 0.5; }
 }
 
-.price-flash-green {
-  animation: flash-green 0.6s ease-in-out;
+.flash-green {
+  animation: flashGreen 0.6s ease-in-out;
 }
 
-.price-flash-red {
-  animation: flash-red 0.6s ease-in-out;
+.flash-red {
+  animation: flashRed 0.6s ease-in-out;
 }
 
 .live-badge-pulse {
@@ -33,5 +33,3 @@
 .price-transition {
   transition: all 0.3s ease-in-out;
 }
-
-

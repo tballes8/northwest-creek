@@ -47,13 +47,14 @@ export function useLivePrices(): UseLivePricesReturn {
         setError(null);
         reconnectAttemptsRef.current = 0;
         
-        // Resubscribe to tickers if any
+        // Resubscribe to all tracked tickers on (re)connect
         if (subscribedTickersRef.current.size > 0) {
           const tickers = Array.from(subscribedTickersRef.current);
           ws.send(JSON.stringify({
             action: 'subscribe',
             tickers: tickers
           }));
+          console.log('🔄 Resubscribed to:', tickers);
         }
       };
       
@@ -121,38 +122,38 @@ export function useLivePrices(): UseLivePricesReturn {
   }, []);
 
   const subscribe = useCallback((tickers: string[]) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      console.warn('WebSocket not connected, cannot subscribe');
-      return;
+    const upperTickers = tickers.map(t => t.toUpperCase());
+    
+    // Always track tickers, even if not connected yet.
+    // onopen will resubscribe from subscribedTickersRef.
+    upperTickers.forEach(ticker => subscribedTickersRef.current.add(ticker));
+    
+    // Send subscribe if connected
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        action: 'subscribe',
+        tickers: upperTickers
+      }));
     }
     
-    // Add to subscribed tickers
-    tickers.forEach(ticker => subscribedTickersRef.current.add(ticker.toUpperCase()));
-    
-    // Send subscribe message
-    wsRef.current.send(JSON.stringify({
-      action: 'subscribe',
-      tickers: tickers.map(t => t.toUpperCase())
-    }));
-    
-    console.log('📊 Subscribed to:', tickers);
+    console.log('📊 Subscribed to:', upperTickers);
   }, []);
 
   const unsubscribe = useCallback((tickers: string[]) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      return;
+    const upperTickers = tickers.map(t => t.toUpperCase());
+    
+    // Remove from tracked tickers
+    upperTickers.forEach(ticker => subscribedTickersRef.current.delete(ticker));
+    
+    // Send unsubscribe if connected
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        action: 'unsubscribe',
+        tickers: upperTickers
+      }));
     }
     
-    // Remove from subscribed tickers
-    tickers.forEach(ticker => subscribedTickersRef.current.delete(ticker.toUpperCase()));
-    
-    // Send unsubscribe message
-    wsRef.current.send(JSON.stringify({
-      action: 'unsubscribe',
-      tickers: tickers.map(t => t.toUpperCase())
-    }));
-    
-    console.log('📊 Unsubscribed from:', tickers);
+    console.log('📊 Unsubscribed from:', upperTickers);
   }, []);
 
   // Connect on mount
