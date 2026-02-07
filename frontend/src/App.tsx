@@ -32,56 +32,59 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 function App() {
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/pricing" element={<Pricing />} />
-        <Route path="/verify-email" element={<VerifyEmail />} />
-        <Route path="/payment-success" element={<PaymentSuccess />} />
-        <Route path="/registerwithpayment" element={<RegisterWithPayment />} />
-        <Route path="/stocks" element={<ProtectedRoute><Stocks /></ProtectedRoute>} />
-        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-        <Route path="/watchlist" element={<ProtectedRoute><Watchlist /></ProtectedRoute>} />
+      <LivePriceProvider>
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/payment-success" element={<PaymentSuccess />} />
+          <Route path="/registerwithpayment" element={<RegisterWithPayment />} />
+          <Route path="/stocks" element={<ProtectedRoute><Stocks /></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
 
-        <Route path="/portfolio" 
-          element={
-            <ProtectedRoute>
-              <Portfolio />
-            </ProtectedRoute>
-          } 
-        />
+          <Route path="/watchlist" 
+            element={
+              <ProtectedRoute>
+                <Watchlist />
+              </ProtectedRoute>
+            } 
+          />
 
-        <Route path="/alerts" 
-          element={
-            <ProtectedRoute>
-              <Alerts />
-            </ProtectedRoute>
-          } 
-        />
+          <Route path="/portfolio" 
+            element={
+              <ProtectedRoute>
+                <Portfolio />
+              </ProtectedRoute>
+            } 
+          />
 
-        <Route path="/technical-analysis" 
-          element={
-            <ProtectedRoute>
-              <TechnicalAnalysis />
-            </ProtectedRoute>
-          } 
-        />
+          <Route path="/alerts" 
+            element={
+              <ProtectedRoute>
+                <Alerts />
+              </ProtectedRoute>
+            } 
+          />
 
-        <Route path="/dcf-valuation" 
-          element={
-            <ProtectedRoute>
-              <DCFValuation />
-            </ProtectedRoute>
-          } 
-        />
+          <Route path="/technical-analysis" 
+            element={
+              <ProtectedRoute>
+                <TechnicalAnalysis />
+              </ProtectedRoute>
+            } 
+          />
 
-        <LivePriceProvider>
-          <Route path="/portfolio" element={<Portfolio />} />
-          <Route path="/watchlist" element={<Watchlist />} />
-          {/* ...other routes */}
-        </LivePriceProvider>
-      </Routes>
+          <Route path="/dcf-valuation" 
+            element={
+              <ProtectedRoute>
+                <DCFValuation />
+              </ProtectedRoute>
+            } 
+          />
+        </Routes>
+      </LivePriceProvider>
     </Router>
   );
 }
