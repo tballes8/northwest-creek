@@ -1,11 +1,11 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authAPI, watchlistAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import { WatchlistItem } from '../types';
 import IntradayModal from '../components/Intradaymodal';
-import { useLivePrices } from '../hooks/useLivePrices';
+import { useLivePriceContext } from '../context/LivePriceContext';
 import LiveBadge from '../components/LiveBadge';
 import '../styles/livePrice.css';
 
@@ -22,7 +22,7 @@ const Watchlist: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [showIntradayModal, setShowIntradayModal] = useState(false);
   const [selectedTicker, setSelectedTicker] = useState<string>('');
-  const { prices, isConnected, subscribe, unsubscribe } = useLivePrices();
+  const { prices, isConnected, subscribe, unsubscribe } = useLivePriceContext();
   const [priceFlash, setPriceFlash] = useState<Record<string, 'green' | 'red' | null>>({});
   const [editingStock, setEditingStock] = useState<string | null>(null);
   const [editNotes, setEditNotes] = useState('');
@@ -33,17 +33,25 @@ const Watchlist: React.FC = () => {
     loadData();
   }, []);
 
-  // Subscribe to all watchlist tickers for live prices
+  // Derive a stable ticker string that only changes when the actual tickers change,
+  // NOT when prices/notes/etc update within the watchlist array.
+  const tickerList = useMemo(
+    () => watchlist.map(item => item.ticker).sort().join(','),
+    [watchlist]
+  );
+
+  // Subscribe to watchlist tickers for live prices.
+  // Depends on tickerList (stable string) instead of watchlist (changes on every price update).
   useEffect(() => {
-    if (watchlist.length > 0 && isConnected) {
-      const tickers = watchlist.map(item => item.ticker);
+    if (tickerList && isConnected) {
+      const tickers = tickerList.split(',');
       subscribe(tickers);
       
       return () => {
         unsubscribe(tickers);
       };
     }
-  }, [watchlist, isConnected, subscribe, unsubscribe]);
+  }, [tickerList, isConnected, subscribe, unsubscribe]);
 
   // Update watchlist with live prices and trigger flash animations
   useEffect(() => {
@@ -418,13 +426,6 @@ const Watchlist: React.FC = () => {
                         </div>
                       </button>
                     </td>
-                    {/* <td className={`px-6 py-4 whitespace-nowrap text-right ${
-                      priceFlash[stock.ticker] ? `price-flash-${priceFlash[stock.ticker]}` : ''
-                      }`}>
-                      <div className="text-sm font-medium text-gray-900 dark:text-white">
-                        ${stock.price?.toFixed(2) || 'N/A'}
-                      </div>
-                    </td> */}
                     <td className="px-6 py-4 whitespace-nowrap">
                       {(() => {
                         // Use live price if available, otherwise use static price
