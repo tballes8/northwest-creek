@@ -79,7 +79,6 @@ function App() {
         <LivePriceProvider>
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/watchlist" element={<Watchlist />} />
-          <Route path="/dashboard" element={<Dashboard />} />
           {/* ...other routes */}
         </LivePriceProvider>
       </Routes>

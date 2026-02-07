@@ -70,4 +70,4 @@ app.include_router(technical_analysis.router, prefix="/api/v1/technical-analysis
 app.include_router(dcf_valuation.router, prefix="/api/v1/dcf", tags=["DCF Valuation"])
 app.include_router(stripe_payments.router, prefix="/api/v1/stripe", tags=["Stripe"])
 app.include_router(intraday.router, prefix="/api/v1/intraday", tags=["Intraday"])
-app.include_router(live_prices.router, prefix="/api/v1/live-prices", tags=["Live Prices"])
+app.include_router(live_prices.router, prefix="/api/v1/live_prices", tags=["Live Prices"])
