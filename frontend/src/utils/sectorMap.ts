@@ -37,7 +37,8 @@ const TICKER_SECTOR_MAP: Record<string, string> = {
   OKTA: 'Technology', HUBS: 'Technology', DOCU: 'Technology', ZM: 'Technology',
   ARM: 'Technology', SMCI: 'Technology', TSM: 'Technology', ASML: 'Technology',
   SAP: 'Technology', Sony: 'Technology', BABA: 'Technology', JD: 'Technology',
-  PDD: 'Technology', BIDU: 'Technology', NTES: 'Technology',
+  PDD: 'Technology', BIDU: 'Technology', NTES: 'Technology', AUR: 'Technology',
+  VEEA:  'Technology', DOCN: 'Technology',
 
   // ── Healthcare ──────────────────────────────────
   UNH: 'Healthcare', JNJ: 'Healthcare', LLY: 'Healthcare', ABBV: 'Healthcare',
@@ -49,7 +50,7 @@ const TICKER_SECTOR_MAP: Record<string, string> = {
   MRNA: 'Healthcare', BIIB: 'Healthcare', ILMN: 'Healthcare', DXCM: 'Healthcare',
   IDXX: 'Healthcare', A: 'Healthcare', IQV: 'Healthcare', EW: 'Healthcare',
   HUM: 'Healthcare', CNC: 'Healthcare', BAX: 'Healthcare', BDX: 'Healthcare',
-  GEHC: 'Healthcare', ALGN: 'Healthcare',
+  GEHC: 'Healthcare', ALGN: 'Healthcare', GTBP: 'Healthcare',
 
   // ── Financial Services ──────────────────────────
   BRK: 'Financial Services', JPM: 'Financial Services', V: 'Financial Services',
@@ -63,7 +64,9 @@ const TICKER_SECTOR_MAP: Record<string, string> = {
   PRU: 'Financial Services', AFL: 'Financial Services', ALL: 'Financial Services',
   PYPL: 'Financial Services', FIS: 'Financial Services', FISV: 'Financial Services',
   COF: 'Financial Services', DFS: 'Financial Services', SYF: 'Financial Services',
-  'BRK.B': 'Financial Services', 'BRK.A': 'Financial Services',
+  'BRK.B': 'Financial Services', 'BRK.A': 'Financial Services', 
+  OXLC: 'Financial Services', HIVE: 'Financial Services', IREN: 'Financial Services',
+  CIFR: 'Financial Services',
 
   // ── Consumer Cyclical ───────────────────────────
   AMZN: 'Consumer Cyclical', TSLA: 'Consumer Cyclical', HD: 'Consumer Cyclical',
@@ -88,6 +91,7 @@ const TICKER_SECTOR_MAP: Record<string, string> = {
   WBD: 'Communication Services', PARA: 'Communication Services',
   LYV: 'Communication Services', RBLX: 'Communication Services',
   SPOT: 'Communication Services', RDDT: 'Communication Services',
+  NXDR: 'Communication Services',
 
   // ── Industrials ─────────────────────────────────
   CAT: 'Industrials', UNP: 'Industrials', RTX: 'Industrials',
@@ -100,7 +104,8 @@ const TICKER_SECTOR_MAP: Record<string, string> = {
   IR: 'Industrials', ROK: 'Industrials', PCAR: 'Industrials',
   FAST: 'Industrials', SWK: 'Industrials', LHX: 'Industrials',
   DAL: 'Industrials', UAL: 'Industrials', AAL: 'Industrials',
-  LUV: 'Industrials', AXON: 'Industrials',
+  LUV: 'Industrials', AXON: 'Industrials', KODK: 'Industrials',
+  ACHR: 'Industrials',
 
   // ── Consumer Defensive ──────────────────────────
   WMT: 'Consumer Defensive', PG: 'Consumer Defensive', KO: 'Consumer Defensive',
