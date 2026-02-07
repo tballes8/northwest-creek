@@ -4,7 +4,7 @@ import { authAPI, portfolioAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import IntradayModal from '../components/Intradaymodal';
-import { useLivePriceContext } from '../context/LivePriceContext';
+import { useLivePriceContext } from '../contexts/LivePriceContext';
 import LiveBadge from '../components/LiveBadge';
 import '../styles/livePrice.css';
 
