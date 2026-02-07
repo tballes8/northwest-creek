@@ -5,6 +5,8 @@ import { User, WatchlistItem, PortfolioPosition, Alert } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import { useLivePriceContext } from '../contexts/LivePriceContext';
 import MarketStatusBadge from '../components/MarketStatusBadge';
+import SectorPieChart from '../components/SectorPieChart';
+import { computeSectorBreakdown } from '../utils/sectorMap';
 import '../styles/livePrice.css';
 
 interface DashboardPosition {
@@ -24,6 +26,7 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [positions, setPositions] = useState<DashboardPosition[]>([]);
+  const [watchlistTickers, setWatchlistTickers] = useState<string[]>([]);
   const [stats, setStats] = useState({
     watchlistCount: 0,
     portfolioCount: 0,
@@ -37,6 +40,21 @@ const Dashboard: React.FC = () => {
   const { prices, isConnected, subscribe, unsubscribe } = useLivePriceContext();
   const previousPricesRef = useRef<Map<string, number>>(new Map());
   const [valueFlash, setValueFlash] = useState<'green' | 'red' | null>(null);
+
+  // Sector breakdowns for pie charts
+  const portfolioSectors = useMemo(
+    () => computeSectorBreakdown(
+      positions.map(p => ({ ticker: p.ticker, value: p.total_value || (p.current_price || p.buy_price) * p.quantity }))
+    ),
+    [positions]
+  );
+
+  const watchlistSectors = useMemo(
+    () => computeSectorBreakdown(
+      watchlistTickers.map(ticker => ({ ticker }))
+    ),
+    [watchlistTickers]
+  );
 
   useEffect(() => {
     loadDashboardData();
@@ -123,7 +141,9 @@ const Dashboard: React.FC = () => {
 
       // Get watchlist count
       const watchlistResponse = await watchlistAPI.getAll();
-      const watchlistCount = watchlistResponse.data.items?.length || 0;
+      const watchlistItems = watchlistResponse.data.items || [];
+      const watchlistCount = watchlistItems.length;
+      setWatchlistTickers(watchlistItems.map((item: any) => item.ticker));
 
       // Get portfolio data
       const portfolioResponse = await portfolioAPI.getAll();
@@ -438,9 +458,19 @@ return (
             </Link>
           </div>
           {stats.portfolioCount > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <p className="text-sm text-gray-600 dark:text-gray-400">{stats.portfolioCount} position(s) tracked</p>
-              <div className="border-t dark:border-gray-700 pt-3">
+              {portfolioSectors.length > 0 && (
+                <div className="pt-2">
+                  <SectorPieChart
+                    data={portfolioSectors}
+                    title="Sector Allocation"
+                    mode="value"
+                    size={140}
+                  />
+                </div>
+              )}
+              <div className="border-t dark:border-gray-600 pt-3">
                 <Link 
                   to="/portfolio"
                   className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 text-sm font-medium"
@@ -476,9 +506,19 @@ return (
             </Link>
           </div>
           {stats.watchlistCount > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <p className="text-sm text-gray-600 dark:text-gray-400">{stats.watchlistCount} stock(s) watched</p>
-              <div className="border-t dark:border-gray-700 pt-3">
+              {watchlistSectors.length > 0 && (
+                <div className="pt-2">
+                  <SectorPieChart
+                    data={watchlistSectors}
+                    title="Sector Breakdown"
+                    mode="count"
+                    size={140}
+                  />
+                </div>
+              )}
+              <div className="border-t dark:border-gray-600 pt-3">
                 <Link 
                   to="/watchlist"
                   className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 text-sm font-medium"
