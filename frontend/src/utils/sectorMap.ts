@@ -188,10 +188,10 @@ const TICKER_SECTOR_MAP: Record<string, string> = {
   HEI: 'Industrials', TXT: 'Industrials', LDOS: 'Industrials',
   J: 'Industrials', BAH: 'Industrials', TTEK: 'Industrials',
   WAB: 'Industrials', ROP: 'Industrials', CMI: 'Industrials',
-  OTIS: 'Industrials', SWK: 'Industrials', MAS: 'Industrials',
-  PAYC: 'Industrials', PAYX: 'Industrials', ADP: 'Industrials',
-  VRSK: 'Industrials', BR: 'Industrials', JBHT: 'Industrials',
-  XPO: 'Industrials', CHRW: 'Industrials', EXPD: 'Industrials',
+  OTIS: 'Industrials', MAS: 'Industrials', PAYC: 'Industrials', 
+  PAYX: 'Industrials', ADP: 'Industrials', VRSK: 'Industrials', 
+  BR: 'Industrials', JBHT: 'Industrials', XPO: 'Industrials', 
+  CHRW: 'Industrials', EXPD: 'Industrials',
 
   // ── Consumer Defensive (40+) ──────────────────────────────────────────
   WMT: 'Consumer Defensive', PG: 'Consumer Defensive', KO: 'Consumer Defensive',
