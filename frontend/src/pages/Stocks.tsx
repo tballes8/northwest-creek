@@ -4,7 +4,8 @@ import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import { authAPI, stocksAPI } from '../services/api'; 
+import { authAPI, stocksAPI } from '../services/api';
+import { getTickersForSector, SECTOR_COLORS } from '../utils/sectorMap';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 // Register Chart.js components
@@ -80,6 +81,7 @@ const Stocks: React.FC = () => {
   const [searchParams] = useSearchParams();
   const initialTicker = searchParams.get('ticker') || '';
   const showTopGainers = searchParams.get('showTopGainers') === 'true';
+  const sectorParam = searchParams.get('sector') || '';
   const [user, setUser] = useState<User | null>(null);
   const [ticker, setTicker] = useState(initialTicker);
   const [searchInput, setSearchInput] = useState(initialTicker);
@@ -94,6 +96,8 @@ const Stocks: React.FC = () => {
   const [topGainers, setTopGainers] = useState<TopGainer[]>([]);
   const [gainersLoading, setGainersLoading] = useState(false);
   const [dailySnapshots, setDailySnapshots] = useState<DailySnapshot[]>([]);
+  const [sectorSnapshots, setSectorSnapshots] = useState<DailySnapshot[]>([]);
+  const [sectorLoading, setSectorLoading] = useState(false);
   const [isWarrant, setIsWarrant] = useState(false);
   const [relatedCommonStock, setRelatedCommonStock] = useState<string | null>(null);
 
@@ -131,7 +135,33 @@ const Stocks: React.FC = () => {
     if (showTopGainers || initialTicker || !initialTicker) {
       loadTopGainers();
     }
-  }, [initialTicker, showTopGainers]);
+    // Load sector-specific stocks when sector param is present
+    if (sectorParam) {
+      loadSectorSnapshots(sectorParam);
+    }
+  }, [initialTicker, showTopGainers, sectorParam]);
+
+  // Function to load stocks for a specific sector
+  const loadSectorSnapshots = async (sector: string) => {
+    setSectorLoading(true);
+    try {
+      const sectorTickers = getTickersForSector(sector);
+      if (sectorTickers.length === 0) {
+        setSectorSnapshots([]);
+        return;
+      }
+      // Randomly pick up to 100 tickers to send to backend (avoids giant query strings)
+      const shuffled = [...sectorTickers].sort(() => Math.random() - 0.5);
+      const subset = shuffled.slice(0, 100);
+      const response = await stocksAPI.getDailySnapshot(10, subset);
+      setSectorSnapshots(response.data.snapshots || []);
+    } catch (error) {
+      console.error('Failed to load sector snapshots:', error);
+      setSectorSnapshots([]);
+    } finally {
+      setSectorLoading(false);
+    }
+  };
 
   // Function to load daily snapshots
   const loadDailySnapshots = async () => {
@@ -226,7 +256,7 @@ const Stocks: React.FC = () => {
     setGainersLoading(true);
     try {
       const response = await stocksAPI.getTopGainers(10);
-      setTopGainers(response.data || []);
+      setTopGainers(response.data.top_gainers || []);
     } catch (err) {
       console.error('Failed to load top gainers:', err);
       setTopGainers([]);
@@ -624,14 +654,88 @@ const Stocks: React.FC = () => {
           </div>
         )}
 
-        {/* Empty State with Top Gainers and Daily Snapshots */}
+        {/* Empty State with Top Gainers, Daily Snapshots, and Sector Explorer */}
         {!quote && !loading && !error && (
           <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-12 border dark:border-gray-500 text-center">
-            <div className="text-6xl mb-4">📊</div>
-            <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Search for a Stock</h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Enter a ticker symbol above to view detailed stock information, charts, and analysis tools. Or, select from the list below.
-            </p>
+            
+            {/* Sector Explorer Banner — shown when navigating from Dashboard pie chart */}
+            {sectorParam && (
+              <div className="mb-8 pb-8 border-b border-gray-200 dark:border-gray-600">
+                <div className="flex items-center justify-center gap-3 mb-3">
+                  <span
+                    className="inline-block w-4 h-4 rounded-full"
+                    style={{ backgroundColor: SECTOR_COLORS[sectorParam] || SECTOR_COLORS['Other'] }}
+                  />
+                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {sectorParam} Sector
+                  </h3>
+                </div>
+                <p className="text-gray-600 dark:text-gray-400 mb-1">
+                  Explore companies in the {sectorParam} sector to diversify your portfolio
+                </p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mb-6">
+                  Showing random stocks from today's market snapshot
+                </p>
+                
+                {sectorLoading ? (
+                  <div className="text-center py-6">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2"></div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Loading {sectorParam} stocks...</p>
+                  </div>
+                ) : sectorSnapshots.length > 0 ? (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                      {sectorSnapshots.map((snap) => (
+                        <button
+                          key={snap.ticker}
+                          onClick={() => handleTickerClick(snap.ticker)}
+                          className="p-4 rounded-lg transition-all text-left group hover:scale-[1.03]"
+                          style={{
+                            backgroundColor: `${SECTOR_COLORS[sectorParam] || SECTOR_COLORS['Other']}15`,
+                            borderWidth: '1px',
+                            borderColor: `${SECTOR_COLORS[sectorParam] || SECTOR_COLORS['Other']}30`,
+                          }}
+                        >
+                          <div
+                            className="font-semibold text-lg transition-colors"
+                            style={{ color: SECTOR_COLORS[sectorParam] || SECTOR_COLORS['Other'] }}
+                          >
+                            {snap.ticker}
+                          </div>
+                          <div className={`text-sm font-medium ${snap.change_percent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {snap.change_percent >= 0 ? '+' : ''}{snap.change_percent.toFixed(2)}%
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => loadSectorSnapshots(sectorParam)}
+                      className="mt-4 px-4 py-2 text-white rounded-lg text-sm transition-colors font-medium hover:opacity-90"
+                      style={{ backgroundColor: SECTOR_COLORS[sectorParam] || SECTOR_COLORS['Other'] }}
+                    >
+                      🔄 Load Different {sectorParam} Stocks
+                    </button>
+                  </>
+                ) : (
+                  <div className="text-center py-6">
+                    <p className="text-gray-500 dark:text-gray-400">
+                      No {sectorParam} stocks found in today's snapshot. Try running the daily snapshot fetch first.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Default empty state content */}
+            {!sectorParam && (
+              <>
+                <div className="text-6xl mb-4">📊</div>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Search for a Stock</h3>
+                <p className="text-gray-600 dark:text-gray-400 mb-6">
+                  Enter a ticker symbol above to view detailed stock information, charts, and analysis tools. Or, select from the list below.
+                </p>
+              </>
+            )}
             
             {/* Top Gainers */}
             {gainersLoading ? (

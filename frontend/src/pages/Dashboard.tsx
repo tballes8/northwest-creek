@@ -198,6 +198,10 @@ const Dashboard: React.FC = () => {
     navigate('/');
   };
 
+  const handleSectorClick = (sector: string) => {
+    navigate(`/stocks?sector=${encodeURIComponent(sector)}`);
+  };
+
   const getTierBadge = (tier: string) => {
     const badges = {
       free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
@@ -467,6 +471,7 @@ return (
                     title="Sector Allocation"
                     mode="value"
                     size={140}
+                    onSectorClick={handleSectorClick}
                   />
                 </div>
               )}
@@ -515,6 +520,7 @@ return (
                     title="Sector Breakdown"
                     mode="count"
                     size={140}
+                    onSectorClick={handleSectorClick}
                   />
                 </div>
               )}
