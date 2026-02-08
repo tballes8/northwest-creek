@@ -311,7 +311,19 @@ const Stocks: React.FC = () => {
     setAddingToWatchlist(true);
     setWatchlistMsg(null);
     try {
-      await watchlistAPI.add({ ticker: ticker.toUpperCase().trim() });
+      const payload: any = { ticker: ticker.toUpperCase().trim() };
+      // Auto-fill Started At price with current price
+      if (quote?.price) {
+        payload.target_price = quote.price;
+      }
+      // Auto-fill Notes with company name + sector
+      const parts = [];
+      if (company?.name) parts.push(company.name);
+      if (company?.sector) parts.push(company.sector);
+      if (parts.length > 0) {
+        payload.notes = parts.join(' – ');
+      }
+      await watchlistAPI.add(payload);
       setWatchlistMsg({ type: 'success', text: `${ticker.toUpperCase()} added to watchlist!` });
       setTimeout(() => setWatchlistMsg(null), 3000);
     } catch (err: any) {
@@ -356,7 +368,7 @@ const Stocks: React.FC = () => {
     scales: {
       y: {
         ticks: {
-          callback: (value: any) => `$${value}`,
+          callback: (value: any) => `$${Number(value).toFixed(2)}`,
         },
         grid: {
           color: 'rgba(156, 163, 175, 0.1)',

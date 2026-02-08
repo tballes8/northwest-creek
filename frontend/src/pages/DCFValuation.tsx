@@ -230,7 +230,17 @@ const DCFValuation: React.FC = () => {
     setAddingToWatchlist(true);
     setWatchlistMsg(null);
     try {
-      await watchlistAPI.add({ ticker: t });
+      const payload: any = { ticker: t };
+      if (dcfData?.current_price) {
+        payload.target_price = dcfData.current_price;
+      }
+      const parts = [];
+      if (dcfData?.company_name) parts.push(dcfData.company_name);
+      if (suggestions?.sector) parts.push(suggestions.sector);
+      if (parts.length > 0) {
+        payload.notes = parts.join(' – ');
+      }
+      await watchlistAPI.add(payload);
       setWatchlistMsg({ type: 'success', text: `${t} added to watchlist!` });
       setTimeout(() => setWatchlistMsg(null), 3000);
     } catch (err: any) {

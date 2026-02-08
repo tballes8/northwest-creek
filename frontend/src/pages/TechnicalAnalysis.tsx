@@ -258,7 +258,14 @@ const TechnicalAnalysis: React.FC = () => {
     setAddingToWatchlist(true);
     setWatchlistMsg(null);
     try {
-      await watchlistAPI.add({ ticker: t });
+      const payload: any = { ticker: t };
+      if (analysisData?.current_price) {
+        payload.target_price = analysisData.current_price;
+      }
+      if (analysisData?.company_name) {
+        payload.notes = analysisData.company_name;
+      }
+      await watchlistAPI.add(payload);
       setWatchlistMsg({ type: 'success', text: `${t} added to watchlist!` });
       setTimeout(() => setWatchlistMsg(null), 3000);
     } catch (err: any) {
@@ -946,7 +953,7 @@ const TechnicalAnalysis: React.FC = () => {
                 <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">VWAP (Volume Weighted Average Price)</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    {analysisData.indicators.vwap?.description || 'Institutional benchmark — price above VWAP is bullish'}
+                    VWAP calculates the average price weighted by volume throughout the day. Institutional traders use it as a benchmark — price above VWAP suggests buyers are in control and the stock has bullish momentum, while price below VWAP indicates selling pressure. It helps identify fair value and is one of the most widely used indicators by professional traders.
                   </p>
                   <div style={{ height: '300px' }}>
                     <Line data={{
@@ -981,7 +988,7 @@ const TechnicalAnalysis: React.FC = () => {
                 {/* OBV Chart */}
                 <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">On-Balance Volume (OBV)</h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Rising OBV confirms uptrend. Divergence from price signals reversal.</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">OBV tracks cumulative buying and selling pressure by adding volume on up days and subtracting on down days. A rising OBV confirms an uptrend is supported by strong volume. When OBV diverges from price — such as price rising while OBV falls — it often signals an impending trend reversal.</p>
                   <div style={{ height: '250px' }}>
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
@@ -1002,7 +1009,7 @@ const TechnicalAnalysis: React.FC = () => {
                 <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Stochastic Oscillator</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    {analysisData.indicators.stochastic?.description || '%K/%D oscillator. >80 overbought, <20 oversold.'}
+                    The Stochastic Oscillator compares a stock's closing price to its price range over a set period. Readings above 80 indicate overbought conditions where a pullback may occur, while readings below 20 suggest oversold conditions where a bounce is likely. Crossovers between the %K and %D lines generate buy and sell signals.
                   </p>
                   <div style={{ height: '250px' }}>
                     <Line data={{
@@ -1020,7 +1027,7 @@ const TechnicalAnalysis: React.FC = () => {
                 <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ADX (Average Directional Index)</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    {analysisData.indicators.adx?.description || 'Measures trend strength (not direction). >25 = trending, <20 = ranging.'}
+                    ADX measures trend strength regardless of direction — values above 25 indicate a strong trend worth trading, while values below 20 suggest a weak or sideways market. The +DI and -DI lines show direction: when +DI is above -DI the trend is bullish, and vice versa. Together they help determine whether to use trend-following or range-bound strategies.
                   </p>
                   <div style={{ height: '250px' }}>
                     <Line data={{
@@ -1037,8 +1044,8 @@ const TechnicalAnalysis: React.FC = () => {
                 {/* CCI + ROC */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                    <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">CCI</h4>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">{analysisData.indicators.cci?.description || 'Commodity Channel Index'}</p>
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">CCI (Commodity Channel Index)</h4>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">CCI measures how far the current price deviates from its statistical average. Readings above +100 indicate overbought conditions and potential for a pullback, while readings below -100 signal oversold conditions and a possible bounce. It is useful for identifying cyclical trends and price extremes across any asset class.</p>
                     <div style={{ height: '200px' }}>
                       <Line data={{
                         labels: analysisData.chart_data.map(d => d.date),
@@ -1052,7 +1059,7 @@ const TechnicalAnalysis: React.FC = () => {
                   </div>
                   <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                     <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ROC (Rate of Change)</h4>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">{analysisData.indicators.roc?.description || 'Price momentum %'}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">ROC measures the percentage change in price over a specific period, making it useful for identifying overbought or oversold conditions as well as trend reversals. A rising ROC above zero confirms bullish momentum, while a falling ROC below zero signals bearish pressure. Extreme readings often precede price corrections.</p>
                     <div style={{ height: '200px' }}>
                       <Line data={{
                         labels: analysisData.chart_data.map(d => d.date),
@@ -1095,7 +1102,7 @@ const TechnicalAnalysis: React.FC = () => {
                 {/* ATR Chart */}
                 <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ATR (Average True Range)</h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{analysisData.indicators.atr?.description || 'Volatility measurement'}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">ATR measures market volatility by calculating the average range between high and low prices over a given period. Higher ATR means greater volatility and wider price swings, which is important for setting stop-loss levels and position sizing. Traders use ATR to avoid placing stops too tight in volatile markets or too wide in calm ones.</p>
                   <div style={{ height: '250px' }}>
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
@@ -1108,7 +1115,7 @@ const TechnicalAnalysis: React.FC = () => {
                 {/* Keltner Channels (overlay on price) */}
                 <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Keltner Channels</h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{analysisData.indicators.keltner?.description || 'EMA ± ATR bands'}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Keltner Channels plot an EMA with upper and lower bands based on ATR. Price breaking above the upper channel suggests strong bullish momentum and a potential breakout, while a break below the lower channel signals bearish pressure. Price staying within the channels indicates normal trading. They are commonly used with Bollinger Bands to identify squeeze setups.</p>
                   <div style={{ height: '350px' }}>
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
@@ -1145,7 +1152,7 @@ const TechnicalAnalysis: React.FC = () => {
                 {/* Parabolic SAR (dots on price chart) */}
                 <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Parabolic SAR</h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{analysisData.indicators.parabolic_sar?.description || 'Stop & reverse points'}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Parabolic SAR (Stop and Reverse) places dots above or below the price to indicate trend direction. Dots below the price confirm an uptrend, while dots above signal a downtrend. When the dots flip sides it generates a reversal signal, making it particularly useful for setting trailing stop-losses and identifying entry and exit points during trending markets.</p>
                   <div style={{ height: '350px' }}>
                     <Chart type="line" data={{
                       labels: analysisData.chart_data.map(d => d.date),
@@ -1161,7 +1168,7 @@ const TechnicalAnalysis: React.FC = () => {
                 {/* Ichimoku Cloud */}
                 <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Ichimoku Cloud</h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{analysisData.indicators.ichimoku?.description || 'Support/resistance + trend'}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">The Ichimoku Cloud is a comprehensive indicator that shows support/resistance levels, trend direction, and momentum all at once. Price above the cloud is bullish, below is bearish, and within the cloud is neutral. The Tenkan-Sen and Kijun-Sen lines act like short-term and medium-term moving averages — their crossovers generate trade signals similar to moving average crossovers.</p>
                   <div style={{ height: '400px' }}>
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
@@ -1178,7 +1185,7 @@ const TechnicalAnalysis: React.FC = () => {
                 {/* Donchian Channels */}
                 <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Donchian Channels</h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{analysisData.indicators.donchian?.description || 'Breakout trading system'}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Donchian Channels plot the highest high and lowest low over a set period, creating a breakout trading system. A price break above the upper channel signals a potential new uptrend, while a break below the lower channel signals a new downtrend. Made famous by the "Turtle Traders," this indicator is a foundational tool for trend-following and breakout strategies.</p>
                   <div style={{ height: '350px' }}>
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
