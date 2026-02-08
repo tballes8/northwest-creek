@@ -4,7 +4,7 @@ import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import { authAPI, stocksAPI } from '../services/api';
+import { authAPI, stocksAPI, watchlistAPI } from '../services/api';
 import { getTickersForSector, SECTOR_COLORS } from '../utils/sectorMap';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -100,6 +100,8 @@ const Stocks: React.FC = () => {
   const [sectorLoading, setSectorLoading] = useState(false);
   const [isWarrant, setIsWarrant] = useState(false);
   const [relatedCommonStock, setRelatedCommonStock] = useState<string | null>(null);
+  const [watchlistMsg, setWatchlistMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [addingToWatchlist, setAddingToWatchlist] = useState(false);
 
   // Helper function to detect if a ticker is a warrant
   const detectWarrant = (tickerSymbol: string): boolean => {
@@ -304,6 +306,23 @@ const Stocks: React.FC = () => {
     navigate('/login');
   };
 
+  const handleAddToWatchlist = async () => {
+    if (!ticker.trim()) return;
+    setAddingToWatchlist(true);
+    setWatchlistMsg(null);
+    try {
+      await watchlistAPI.add({ ticker: ticker.toUpperCase().trim() });
+      setWatchlistMsg({ type: 'success', text: `${ticker.toUpperCase()} added to watchlist!` });
+      setTimeout(() => setWatchlistMsg(null), 3000);
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || 'Failed to add to watchlist';
+      setWatchlistMsg({ type: 'error', text: typeof msg === 'string' ? msg : 'Failed to add to watchlist' });
+      setTimeout(() => setWatchlistMsg(null), 4000);
+    } finally {
+      setAddingToWatchlist(false);
+    }
+  };
+
   // Chart configuration
   const chartData = {
     labels: historical.map((h) => new Date(h.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
@@ -368,8 +387,8 @@ const Stocks: React.FC = () => {
               <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
               <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
               <Link to="/stocks" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">Stocks</Link>
-              <Link to="/technical-analysis" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
-              <Link to="/dcf-valuation" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">DCF Valuation</Link>
+              <Link to={`/technical-analysis${ticker ? `?ticker=${ticker}` : ''}`} className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
+              <Link to={`/dcf-valuation${ticker ? `?ticker=${ticker}` : ''}`} className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">DCF Valuation</Link>
             </div>
 
             <div className="flex items-center space-x-4">
@@ -473,6 +492,21 @@ const Stocks: React.FC = () => {
                     {quote.change >= 0 ? '+' : ''}{quote.change.toFixed(2)} ({quote.change_percent >= 0 ? '+' : ''}{quote.change_percent.toFixed(2)}%)
                   </div>
                 </div>
+              </div>
+              {/* Add to Watchlist */}
+              <div className="mt-4 flex items-center gap-3">
+                <button
+                  onClick={handleAddToWatchlist}
+                  disabled={addingToWatchlist}
+                  className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 dark:bg-yellow-600 dark:hover:bg-yellow-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {addingToWatchlist ? '⏳ Adding...' : '⭐ Add to Watchlist'}
+                </button>
+                {watchlistMsg && (
+                  <span className={`text-sm font-medium ${watchlistMsg.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {watchlistMsg.text}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -638,6 +672,13 @@ const Stocks: React.FC = () => {
 
             {/* Action Buttons */}
             <div className="flex gap-4">
+              <button
+                onClick={handleAddToWatchlist}
+                disabled={addingToWatchlist}
+                className="flex-1 px-6 py-3 bg-yellow-500 hover:bg-yellow-600 dark:bg-yellow-600 dark:hover:bg-yellow-700 text-white text-center rounded-lg font-medium transition-colors disabled:opacity-50"
+              >
+                {addingToWatchlist ? '⏳ Adding...' : '⭐ Add to Watchlist'}
+              </button>
               <Link
                 to={`/technical-analysis?ticker=${ticker}`}
                 className="flex-1 px-6 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white text-center rounded-lg font-medium transition-colors"

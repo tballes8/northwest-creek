@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { authAPI, technicalAPI } from '../services/api';
+import { authAPI, technicalAPI, watchlistAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import {
@@ -154,6 +154,8 @@ const TechnicalAnalysis: React.FC = () => {
   const [showMomentum, setShowMomentum] = useState(false);
   const [showVolatility, setShowVolatility] = useState(false);
   const [showTrend, setShowTrend] = useState(false);
+  const [watchlistMsg, setWatchlistMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [addingToWatchlist, setAddingToWatchlist] = useState(false);
 
   // Helper function to detect if a ticker is a warrant
   const detectWarrant = (tickerSymbol: string): boolean => {
@@ -248,6 +250,24 @@ const TechnicalAnalysis: React.FC = () => {
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     navigate('/');
+  };
+
+  const handleAddToWatchlist = async () => {
+    const t = ticker.trim().toUpperCase() || analysisData?.ticker;
+    if (!t) return;
+    setAddingToWatchlist(true);
+    setWatchlistMsg(null);
+    try {
+      await watchlistAPI.add({ ticker: t });
+      setWatchlistMsg({ type: 'success', text: `${t} added to watchlist!` });
+      setTimeout(() => setWatchlistMsg(null), 3000);
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || 'Failed to add to watchlist';
+      setWatchlistMsg({ type: 'error', text: typeof msg === 'string' ? msg : 'Failed to add to watchlist' });
+      setTimeout(() => setWatchlistMsg(null), 4000);
+    } finally {
+      setAddingToWatchlist(false);
+    }
   };
 
   const getTierBadge = (tier: string) => {
@@ -536,9 +556,9 @@ const TechnicalAnalysis: React.FC = () => {
               <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
               <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
               <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
-              <Link to="/stocks?showTopGainers=true" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Stocks</Link>
+              <Link to={`/stocks${ticker ? `?ticker=${ticker}` : '?showTopGainers=true'}`} className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Stocks</Link>
               <Link to="/technical-analysis" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">Technical Analysis</Link>
-              <Link to="/dcf-valuation" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">DCF Valuation</Link>
+              <Link to={`/dcf-valuation${ticker ? `?ticker=${ticker}` : ''}`} className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">DCF Valuation</Link>
             </div>
             <div className="flex items-center space-x-4">
               <ThemeToggle />
@@ -667,6 +687,34 @@ const TechnicalAnalysis: React.FC = () => {
                     ${analysisData.current_price.toFixed(2)}
                   </div>
                 </div>
+              </div>
+
+              {/* Quick Actions: Watchlist + Cross-page links */}
+              <div className="flex flex-wrap items-center gap-3 mb-4">
+                <button
+                  onClick={handleAddToWatchlist}
+                  disabled={addingToWatchlist}
+                  className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 dark:bg-yellow-600 dark:hover:bg-yellow-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {addingToWatchlist ? '⏳ Adding...' : '⭐ Add to Watchlist'}
+                </button>
+                <Link
+                  to={`/stocks?ticker=${analysisData.ticker}`}
+                  className="px-4 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium text-sm transition-colors"
+                >
+                  📊 Stock Details
+                </Link>
+                <Link
+                  to={`/dcf-valuation?ticker=${analysisData.ticker}`}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 text-white rounded-lg font-medium text-sm transition-colors"
+                >
+                  💰 DCF Valuation
+                </Link>
+                {watchlistMsg && (
+                  <span className={`text-sm font-medium ${watchlistMsg.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {watchlistMsg.text}
+                  </span>
+                )}
               </div>
 
               {/* Outlook Summary */}
