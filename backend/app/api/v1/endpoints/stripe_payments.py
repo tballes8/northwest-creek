@@ -4,6 +4,7 @@ Stripe Payment Integration - Handle subscriptions
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from pydantic import BaseModel
 import stripe
 from typing import Optional
 
@@ -18,9 +19,13 @@ router = APIRouter()
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
 
+class CheckoutRequest(BaseModel):
+    price_id: str
+
+
 @router.post("/create-checkout-session")
 async def create_checkout_session(
-    price_id: str,
+    request: CheckoutRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -31,6 +36,8 @@ async def create_checkout_session(
     - price_id: The Stripe Price ID for the subscription plan
     """
     try:
+        price_id = request.price_id
+        
         # Determine which plan based on price_id
         if price_id == settings.STRIPE_CASUAL_PRICE_ID:
             plan_name = "Casual Retail Investor"

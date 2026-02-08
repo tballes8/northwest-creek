@@ -21,7 +21,7 @@ security = HTTPBearer()
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
+async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db), selected_tier: str = "free"):
     """Register a new user and send verification email"""
     # Check if email exists
     result = await db.execute(select(User).where(User.email == user_data.email))
@@ -50,11 +50,12 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await db.refresh(user)
     
-    # Send verification email
+    # Send verification email (pass selected tier so it's embedded in the verification URL)
     email_sent = email_service.send_verification_email(
         to_email=user.email,
         verification_token=verification_token,
-        user_name=user.full_name or user.email
+        user_name=user.full_name or user.email,
+        selected_tier=selected_tier
     )
     
     if not email_sent:
@@ -95,9 +96,14 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
     
     await db.commit()
     
+    # Create access token so the frontend can auto-login the user
+    access_token = create_access_token(data={"sub": str(user.id)})
+    
     return {
         "message": "Email verified successfully! You can now log in.",
-        "email": user.email
+        "email": user.email,
+        "access_token": access_token,
+        "token_type": "bearer"
     }
 
 
@@ -154,7 +160,7 @@ async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
     if not user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Please verify your email before logging in. Check your inbox for the verification link."
+            detail="Please verify your email before logging in. Check your inbox (and spam/junk folder) for the verification link."
         )
     
     # Create token

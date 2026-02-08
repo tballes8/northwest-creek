@@ -26,8 +26,8 @@ axiosInstance.interceptors.request.use(
 
 // Auth API
 export const authAPI = {
-  register: (data: { email: string; password: string; full_name: string }) =>
-    axiosInstance.post('/auth/register', data),
+  register: (data: { email: string; password: string; full_name: string }, selectedTier?: string) =>
+    axiosInstance.post(`/auth/register${selectedTier ? `?selected_tier=${selectedTier}` : ''}`, data),
   
   login: (data: { email: string; password: string }) =>
     axiosInstance.post('/auth/login', data),

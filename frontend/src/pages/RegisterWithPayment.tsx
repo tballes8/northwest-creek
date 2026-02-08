@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI } from '../services/api';
-import axios from 'axios';
 
 type Step = 'plan' | 'account' | 'success';
 type Tier = 'free' | 'casual' | 'active' | 'professional';
@@ -14,9 +13,6 @@ const RegisterWithPayment: React.FC = () => {
   // If a tier was passed via URL, skip straight to account creation
   const [step, setStep] = useState<Step>(urlTier ? 'account' : 'plan');
   const [selectedTier, setSelectedTier] = useState<Tier>(urlTier || 'casual');
-  const [stripeConfig, setStripeConfig] = useState<any>(null);
-
-  const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
   
   const [formData, setFormData] = useState({
     email: '',
@@ -27,19 +23,6 @@ const RegisterWithPayment: React.FC = () => {
   
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    loadStripeConfig();
-  }, []);
-
-  const loadStripeConfig = async () => {
-    try {
-      const response = await axios.get(`${API_URL}/api/v1/stripe/config`);
-      setStripeConfig(response.data);
-    } catch (error) {
-      console.error('Failed to load Stripe config:', error);
-    }
-  };
 
   const handlePlanSelect = (tier: Tier) => {
     setSelectedTier(tier);
@@ -64,45 +47,15 @@ const RegisterWithPayment: React.FC = () => {
     setLoading(true);
 
     try {
-      // Create account
+      // Create account — pass selected tier so backend embeds it in verification email URL
       await authAPI.register({
         email: formData.email,
         password: formData.password,
         full_name: formData.full_name,
-      });
+      }, selectedTier);
 
-      if (selectedTier === 'free') {
-        // Free tier — show success
-        setStep('success');
-      } else {
-        // Paid tier — login and redirect to Stripe
-        const loginResponse = await authAPI.login({
-          email: formData.email,
-          password: formData.password,
-        });
-        
-        localStorage.setItem('access_token', loginResponse.data.access_token);
-        
-        // Redirect to Stripe checkout
-        const priceId = selectedTier === 'casual' 
-          ? stripeConfig?.casual_price_id
-          : selectedTier === 'active'
-          ? stripeConfig?.active_price_id
-          : stripeConfig?.professional_price_id;
-
-        const checkoutResponse = await axios.post(
-          `${API_URL}/api/v1/stripe/create-checkout-session`,
-          { price_id: priceId },
-          { 
-            headers: { 
-              Authorization: `Bearer ${loginResponse.data.access_token}` 
-            } 
-          }
-        );
-
-        // Redirect to Stripe
-        window.location.href = checkoutResponse.data.checkout_url;
-      }
+      // Show success — user must verify email first, then they'll be redirected to Stripe for paid tiers
+      setStep('success');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Registration failed. Please try again.');
       setLoading(false);
@@ -437,10 +390,20 @@ const RegisterWithPayment: React.FC = () => {
               <p className="text-gray-600 dark:text-gray-400 mb-4">
                 We've sent a verification link to <strong className="text-gray-900 dark:text-white">{formData.email}</strong>
               </p>
-              
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-                Click the link in the email to verify your account and start using Northwest Creek.
-              </p>
+
+              {selectedTier !== 'free' && (
+                <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-700 rounded-lg p-4 mb-4">
+                  <p className="text-sm text-primary-800 dark:text-primary-200">
+                    <strong>Next step:</strong> After verifying your email, you'll be automatically redirected to complete your <strong>{selectedTier}</strong> subscription payment.
+                  </p>
+                </div>
+              )}
+
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4 mb-6">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  <strong>📧 Can't find the email?</strong> Check your <strong>spam or junk folder</strong> — verification emails sometimes end up there.
+                </p>
+              </div>
               
               <Link
                 to="/login"

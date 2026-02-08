@@ -4,6 +4,7 @@ Email Service - Send verification and notification emails using SendGrid
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Email, To, Content
 from app.config import settings
+from app.core.tier_limits import TIER_LIMITS
 
 
 class EmailService:
@@ -48,9 +49,43 @@ class EmailService:
             print(f"❌ Failed to send email to {to_email}: {str(e)}")
             return False
     
-    def send_verification_email(self, to_email: str, verification_token: str, user_name: str) -> bool:
+    def send_verification_email(self, to_email: str, verification_token: str, user_name: str, selected_tier: str = "free") -> bool:
         """Send account verification email"""
-        verification_url = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}"
+        # Embed selected tier in the verification URL so the frontend can redirect to Stripe after verification
+        tier_param = f"&tier={selected_tier}" if selected_tier and selected_tier != "free" else ""
+        verification_url = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}{tier_param}"
+        
+        # Build dynamic features list from TIER_LIMITS
+        limits = TIER_LIMITS.get(selected_tier, TIER_LIMITS["free"])
+        tier_display = {
+            "free": "Free",
+            "casual": "Casual Investor",
+            "active": "Active Investor",
+            "professional": "Professional"
+        }.get(selected_tier, "Free")
+        
+        # Review period label
+        review_period = {
+            "free": "total",
+            "casual": "per week",
+            "active": "per day",
+            "professional": "per day"
+        }.get(selected_tier, "total")
+        
+        features_html = f'<li>✅ Track up to {limits["watchlist_stocks"]} stocks in your watchlist</li>\n'
+        features_html += f'                            <li>✅ Monitor {limits["portfolio_entries"]} portfolio positions</li>\n'
+        features_html += f'                            <li>✅ {limits["stock_reviews"]} stock reviews {review_period}</li>\n'
+        
+        if limits["alerts"] > 0:
+            features_html += f'                            <li>✅ {limits["alerts"]} price alerts</li>\n'
+        
+        if limits["dcf_valuations"] > 0:
+            features_html += f'                            <li>✅ {limits["dcf_valuations"]} DCF valuations {review_period}</li>\n'
+        
+        if limits["technical_analysis"]:
+            features_html += '                            <li>✅ Advanced technical analysis (15+ indicators)</li>\n'
+        
+        features_html += '                            <li>✅ Real-time market data and quotes</li>'
         
         html_content = f"""
         <!DOCTYPE html>
@@ -180,16 +215,13 @@ class EmailService:
                     
                     <div class="warning">
                         <p><strong>⏰ This link will expire in 24 hours.</strong></p>
+                        <p style="margin-top: 8px;">Can't find this email? <strong>Check your spam or junk folder</strong> — sometimes verification emails end up there.</p>
                     </div>
                     
                     <div class="features">
-                        <p><strong>Once verified, you'll have access to:</strong></p>
+                        <p><strong>Your {tier_display} plan includes:</strong></p>
                         <ul>
-                            <li>✅ Track up to 5 stocks in your watchlist</li>
-                            <li>✅ Monitor 3 portfolio positions</li>
-                            <li>✅ Set 5 price alerts</li>
-                            <li>✅ Real-time market data and quotes</li>
-                            <li>✅ Advanced technical indicators</li>
+                            {features_html}
                         </ul>
                     </div>
                     

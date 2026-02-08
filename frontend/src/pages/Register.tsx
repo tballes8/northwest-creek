@@ -65,6 +65,11 @@ const Register: React.FC = () => {
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
                 Click the link in the email to verify your account and start using Northwest Creek.
               </p>
+              <div className="mt-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3">
+                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                  <strong>📧 Can't find it?</strong> Check your <strong>spam or junk folder</strong> — verification emails sometimes end up there.
+                </p>
+              </div>
               <div className="mt-6">
                 <Link
                   to="/login"
