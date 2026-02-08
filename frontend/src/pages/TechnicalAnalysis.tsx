@@ -66,6 +66,20 @@ interface TechnicalAnalysisData {
       position: string;
       description: string;
     };
+    // ── Advanced Indicators ────────────────────────────
+    vwap?: { value: number; signal: string; description: string } | null;
+    obv?: { value: number; signal: string; description: string } | null;
+    ad_line?: { value: number; signal: string; description: string } | null;
+    stochastic?: { k: number; d: number; signal: string; description: string } | null;
+    adx?: { adx: number; plus_di: number; minus_di: number; strength: string; direction: string; description: string } | null;
+    cci?: { value: number; signal: string; description: string } | null;
+    roc?: { value: number; signal: string; description: string } | null;
+    atr?: { value: number; percent: number; volatility: string; description: string } | null;
+    keltner?: { upper: number; middle: number; lower: number; position: string; description: string } | null;
+    std_dev?: { value: number; percent: number; description: string } | null;
+    parabolic_sar?: { value: number; trend: string; description: string } | null;
+    ichimoku?: { tenkan: number; kijun: number; senkou_a: number; senkou_b: number; signal: string; description: string } | null;
+    donchian?: { upper: number; lower: number; middle: number; description: string } | null;
   };
   signals: Array<{
     type: string;
@@ -89,6 +103,31 @@ interface TechnicalAnalysisData {
     macd_line: number | null;
     macd_signal: number | null;
     macd_histogram: number | null;
+    // Advanced
+    vwap?: number | null;
+    obv?: number | null;
+    ad_line?: number | null;
+    stoch_k?: number | null;
+    stoch_d?: number | null;
+    adx?: number | null;
+    plus_di?: number | null;
+    minus_di?: number | null;
+    cci?: number | null;
+    roc?: number | null;
+    atr?: number | null;
+    keltner_upper?: number | null;
+    keltner_middle?: number | null;
+    keltner_lower?: number | null;
+    std_dev?: number | null;
+    sar?: number | null;
+    sar_trend?: number | null;
+    ichimoku_tenkan?: number | null;
+    ichimoku_kijun?: number | null;
+    ichimoku_senkou_a?: number | null;
+    ichimoku_senkou_b?: number | null;
+    donchian_upper?: number | null;
+    donchian_lower?: number | null;
+    donchian_middle?: number | null;
   }>;
   summary: {
     outlook: string;
@@ -109,6 +148,12 @@ const TechnicalAnalysis: React.FC = () => {
   const [error, setError] = useState('');
   const [isWarrant, setIsWarrant] = useState(false);
   const [relatedCommonStock, setRelatedCommonStock] = useState<string | null>(null);
+  
+  // Advanced indicator panel toggles
+  const [showVolume, setShowVolume] = useState(false);
+  const [showMomentum, setShowMomentum] = useState(false);
+  const [showVolatility, setShowVolatility] = useState(false);
+  const [showTrend, setShowTrend] = useState(false);
 
   // Helper function to detect if a ticker is a warrant
   const detectWarrant = (tickerSymbol: string): boolean => {
@@ -816,6 +861,309 @@ const TechnicalAnalysis: React.FC = () => {
                 </p>
               </div>
             </div>
+
+            {/* ═══════════════════════════════════════════════════════════ */}
+            {/* ADVANCED INDICATORS — Toggleable Panels                    */}
+            {/* ═══════════════════════════════════════════════════════════ */}
+            <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">📊 Advanced Indicators</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Click a category to expand charts and details</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { key: 'volume', label: '📊 Volume', state: showVolume, toggle: setShowVolume, color: 'blue' },
+                  { key: 'momentum', label: '⚡ Momentum', state: showMomentum, toggle: setShowMomentum, color: 'purple' },
+                  { key: 'volatility', label: '🌊 Volatility', state: showVolatility, toggle: setShowVolatility, color: 'orange' },
+                  { key: 'trend', label: '📈 Trend', state: showTrend, toggle: setShowTrend, color: 'green' },
+                ].map(cat => (
+                  <button
+                    key={cat.key}
+                    onClick={() => cat.toggle(!cat.state)}
+                    className={`p-3 rounded-lg font-semibold text-sm transition-all border-2 ${
+                      cat.state 
+                        ? 'bg-primary-600 text-white border-primary-600 dark:bg-primary-500 dark:border-primary-500'
+                        : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-500 hover:border-primary-400 dark:hover:border-primary-400'
+                    }`}
+                  >
+                    {cat.label} {cat.state ? '▼' : '▶'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* ── VOLUME INDICATORS ──────────────────────────────────── */}
+            {showVolume && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">📊 Volume Indicators</h3>
+                {/* VWAP Chart */}
+                <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">VWAP (Volume Weighted Average Price)</h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    {analysisData.indicators.vwap?.description || 'Institutional benchmark — price above VWAP is bullish'}
+                  </p>
+                  <div style={{ height: '300px' }}>
+                    <Line data={{
+                      labels: analysisData.chart_data.map(d => d.date),
+                      datasets: [
+                        { label: 'Price', data: analysisData.chart_data.map(d => d.close), borderColor: 'rgb(59, 130, 246)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: false },
+                        { label: 'VWAP', data: analysisData.chart_data.map(d => d.vwap), borderColor: 'rgb(245, 158, 11)', borderWidth: 2, pointRadius: 0, tension: 0.1, borderDash: [5,5], fill: false },
+                      ]
+                    }} options={chartOptions} />
+                  </div>
+                </div>
+                {/* OBV + A/D Line summary cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[
+                    { label: 'VWAP', data: analysisData.indicators.vwap },
+                    { label: 'OBV', data: analysisData.indicators.obv },
+                    { label: 'A/D Line', data: analysisData.indicators.ad_line },
+                  ].map(item => (
+                    <div key={item.label} className="bg-white dark:bg-gray-700 rounded-lg shadow dark:shadow-gray-200/20 p-4 border dark:border-gray-500">
+                      <h4 className="font-bold text-gray-900 dark:text-white mb-2">{item.label}</h4>
+                      {item.data ? (
+                        <>
+                          <p className={`text-sm font-semibold ${item.data.signal === 'bullish' ? 'text-green-500' : item.data.signal === 'bearish' ? 'text-red-500' : 'text-gray-500'}`}>
+                            {item.data.signal?.toUpperCase()}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{item.data.description}</p>
+                        </>
+                      ) : <p className="text-xs text-gray-400">N/A</p>}
+                    </div>
+                  ))}
+                </div>
+                {/* OBV Chart */}
+                <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">On-Balance Volume (OBV)</h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Rising OBV confirms uptrend. Divergence from price signals reversal.</p>
+                  <div style={{ height: '250px' }}>
+                    <Line data={{
+                      labels: analysisData.chart_data.map(d => d.date),
+                      datasets: [
+                        { label: 'OBV', data: analysisData.chart_data.map(d => d.obv), borderColor: 'rgb(16, 185, 129)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true, backgroundColor: 'rgba(16, 185, 129, 0.1)' },
+                      ]
+                    }} options={chartOptions} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── MOMENTUM INDICATORS ────────────────────────────────── */}
+            {showMomentum && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">⚡ Momentum Indicators</h3>
+                {/* Stochastic Oscillator */}
+                <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Stochastic Oscillator</h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    {analysisData.indicators.stochastic?.description || '%K/%D oscillator. >80 overbought, <20 oversold.'}
+                  </p>
+                  <div style={{ height: '250px' }}>
+                    <Line data={{
+                      labels: analysisData.chart_data.map(d => d.date),
+                      datasets: [
+                        { label: '%K', data: analysisData.chart_data.map(d => d.stoch_k), borderColor: 'rgb(59, 130, 246)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: false },
+                        { label: '%D', data: analysisData.chart_data.map(d => d.stoch_d), borderColor: 'rgb(239, 68, 68)', borderWidth: 2, pointRadius: 0, tension: 0.1, borderDash: [5,5], fill: false },
+                        { label: 'Overbought', data: Array(analysisData.chart_data.length).fill(80), borderColor: 'rgba(239,68,68,0.4)', borderWidth: 1, borderDash: [3,3], pointRadius: 0, fill: false },
+                        { label: 'Oversold', data: Array(analysisData.chart_data.length).fill(20), borderColor: 'rgba(34,197,94,0.4)', borderWidth: 1, borderDash: [3,3], pointRadius: 0, fill: false },
+                      ]
+                    }} options={{...chartOptions, scales: {...chartOptions.scales, y: {...chartOptions.scales.y, min: 0, max: 100}}}} />
+                  </div>
+                </div>
+                {/* ADX */}
+                <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ADX (Average Directional Index)</h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    {analysisData.indicators.adx?.description || 'Measures trend strength (not direction). >25 = trending, <20 = ranging.'}
+                  </p>
+                  <div style={{ height: '250px' }}>
+                    <Line data={{
+                      labels: analysisData.chart_data.map(d => d.date),
+                      datasets: [
+                        { label: 'ADX', data: analysisData.chart_data.map(d => d.adx), borderColor: 'rgb(139, 92, 246)', borderWidth: 2.5, pointRadius: 0, tension: 0.1, fill: false },
+                        { label: '+DI', data: analysisData.chart_data.map(d => d.plus_di), borderColor: 'rgb(34, 197, 94)', borderWidth: 1.5, pointRadius: 0, tension: 0.1, fill: false },
+                        { label: '-DI', data: analysisData.chart_data.map(d => d.minus_di), borderColor: 'rgb(239, 68, 68)', borderWidth: 1.5, pointRadius: 0, tension: 0.1, fill: false },
+                        { label: 'Trending (25)', data: Array(analysisData.chart_data.length).fill(25), borderColor: 'rgba(156,163,175,0.4)', borderWidth: 1, borderDash: [3,3], pointRadius: 0, fill: false },
+                      ]
+                    }} options={chartOptions} />
+                  </div>
+                </div>
+                {/* CCI + ROC */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">CCI</h4>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">{analysisData.indicators.cci?.description || 'Commodity Channel Index'}</p>
+                    <div style={{ height: '200px' }}>
+                      <Line data={{
+                        labels: analysisData.chart_data.map(d => d.date),
+                        datasets: [
+                          { label: 'CCI', data: analysisData.chart_data.map(d => d.cci), borderColor: 'rgb(245, 158, 11)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true, backgroundColor: 'rgba(245,158,11,0.1)' },
+                          { label: '+100', data: Array(analysisData.chart_data.length).fill(100), borderColor: 'rgba(239,68,68,0.3)', borderWidth: 1, borderDash: [3,3], pointRadius: 0, fill: false },
+                          { label: '-100', data: Array(analysisData.chart_data.length).fill(-100), borderColor: 'rgba(34,197,94,0.3)', borderWidth: 1, borderDash: [3,3], pointRadius: 0, fill: false },
+                        ]
+                      }} options={chartOptions} />
+                    </div>
+                  </div>
+                  <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ROC (Rate of Change)</h4>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">{analysisData.indicators.roc?.description || 'Price momentum %'}</p>
+                    <div style={{ height: '200px' }}>
+                      <Line data={{
+                        labels: analysisData.chart_data.map(d => d.date),
+                        datasets: [
+                          { label: 'ROC %', data: analysisData.chart_data.map(d => d.roc), borderColor: 'rgb(99, 102, 241)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true, backgroundColor: 'rgba(99,102,241,0.1)' },
+                          { label: 'Zero', data: Array(analysisData.chart_data.length).fill(0), borderColor: 'rgba(156,163,175,0.4)', borderWidth: 1, borderDash: [3,3], pointRadius: 0, fill: false },
+                        ]
+                      }} options={chartOptions} />
+                    </div>
+                  </div>
+                </div>
+                {/* Momentum summary cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Stochastic', data: analysisData.indicators.stochastic, val: analysisData.indicators.stochastic ? `%K: ${analysisData.indicators.stochastic.k}` : 'N/A' },
+                    { label: 'ADX', data: analysisData.indicators.adx, val: analysisData.indicators.adx ? `${analysisData.indicators.adx.adx}` : 'N/A' },
+                    { label: 'CCI', data: analysisData.indicators.cci, val: analysisData.indicators.cci?.value?.toFixed(0) || 'N/A' },
+                    { label: 'ROC', data: analysisData.indicators.roc, val: analysisData.indicators.roc?.value ? `${analysisData.indicators.roc.value > 0 ? '+' : ''}${analysisData.indicators.roc.value.toFixed(1)}%` : 'N/A' },
+                  ].map(item => (
+                    <div key={item.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-center">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{item.label}</p>
+                      <p className="text-lg font-bold text-gray-900 dark:text-white">{item.val}</p>
+                      <p className={`text-xs font-semibold ${
+                        item.data?.signal === 'bullish' || item.data?.signal === 'oversold' || item.data?.direction === 'bullish' ? 'text-green-500' 
+                        : item.data?.signal === 'bearish' || item.data?.signal === 'overbought' || item.data?.direction === 'bearish' ? 'text-red-500' 
+                        : 'text-gray-400'
+                      }`}>
+                        {(item.data as any)?.signal || (item.data as any)?.strength || ''}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── VOLATILITY INDICATORS ──────────────────────────────── */}
+            {showVolatility && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">🌊 Volatility Indicators</h3>
+                {/* ATR Chart */}
+                <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ATR (Average True Range)</h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{analysisData.indicators.atr?.description || 'Volatility measurement'}</p>
+                  <div style={{ height: '250px' }}>
+                    <Line data={{
+                      labels: analysisData.chart_data.map(d => d.date),
+                      datasets: [
+                        { label: 'ATR', data: analysisData.chart_data.map(d => d.atr), borderColor: 'rgb(249, 115, 22)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true, backgroundColor: 'rgba(249,115,22,0.1)' },
+                      ]
+                    }} options={chartOptions} />
+                  </div>
+                </div>
+                {/* Keltner Channels (overlay on price) */}
+                <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Keltner Channels</h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{analysisData.indicators.keltner?.description || 'EMA ± ATR bands'}</p>
+                  <div style={{ height: '350px' }}>
+                    <Line data={{
+                      labels: analysisData.chart_data.map(d => d.date),
+                      datasets: [
+                        { label: 'Price', data: analysisData.chart_data.map(d => d.close), borderColor: 'rgb(59, 130, 246)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: false },
+                        { label: 'KC Upper', data: analysisData.chart_data.map(d => d.keltner_upper), borderColor: 'rgb(239, 68, 68)', borderWidth: 1.5, pointRadius: 0, tension: 0.1, borderDash: [4,4], fill: false },
+                        { label: 'KC Middle', data: analysisData.chart_data.map(d => d.keltner_middle), borderColor: 'rgb(156, 163, 175)', borderWidth: 1, pointRadius: 0, tension: 0.1, borderDash: [2,2], fill: false },
+                        { label: 'KC Lower', data: analysisData.chart_data.map(d => d.keltner_lower), borderColor: 'rgb(34, 197, 94)', borderWidth: 1.5, pointRadius: 0, tension: 0.1, borderDash: [4,4], fill: false },
+                      ]
+                    }} options={chartOptions} />
+                  </div>
+                </div>
+                {/* Volatility summary */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[
+                    { label: 'ATR', desc: analysisData.indicators.atr?.description, badge: analysisData.indicators.atr?.volatility },
+                    { label: 'Keltner', desc: analysisData.indicators.keltner?.description, badge: analysisData.indicators.keltner?.position?.replace('_', ' ') },
+                    { label: 'Std Dev', desc: analysisData.indicators.std_dev?.description, badge: analysisData.indicators.std_dev?.percent ? `${analysisData.indicators.std_dev.percent}%` : 'N/A' },
+                  ].map(item => (
+                    <div key={item.label} className="bg-white dark:bg-gray-700 rounded-lg shadow dark:shadow-gray-200/20 p-4 border dark:border-gray-500">
+                      <h4 className="font-bold text-gray-900 dark:text-white mb-1">{item.label}</h4>
+                      <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 mb-2">{item.badge || 'N/A'}</span>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{item.desc || 'N/A'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── TREND INDICATORS ───────────────────────────────────── */}
+            {showTrend && (
+              <div className="space-y-4">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">📈 Trend Indicators</h3>
+                {/* Parabolic SAR (dots on price chart) */}
+                <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Parabolic SAR</h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{analysisData.indicators.parabolic_sar?.description || 'Stop & reverse points'}</p>
+                  <div style={{ height: '350px' }}>
+                    <Chart type="line" data={{
+                      labels: analysisData.chart_data.map(d => d.date),
+                      datasets: [
+                        { label: 'Price', data: analysisData.chart_data.map(d => d.close), borderColor: 'rgb(59, 130, 246)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: false, type: 'line' as const },
+                        { label: 'SAR', data: analysisData.chart_data.map(d => d.sar), borderColor: 'transparent', borderWidth: 0, pointRadius: 2.5,
+                          pointBackgroundColor: analysisData.chart_data.map(d => d.sar_trend === 1 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)'),
+                          fill: false, type: 'line' as const, showLine: false },
+                      ]
+                    }} options={chartOptions} />
+                  </div>
+                </div>
+                {/* Ichimoku Cloud */}
+                <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Ichimoku Cloud</h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{analysisData.indicators.ichimoku?.description || 'Support/resistance + trend'}</p>
+                  <div style={{ height: '400px' }}>
+                    <Line data={{
+                      labels: analysisData.chart_data.map(d => d.date),
+                      datasets: [
+                        { label: 'Price', data: analysisData.chart_data.map(d => d.close), borderColor: 'rgb(59, 130, 246)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: false },
+                        { label: 'Tenkan-sen', data: analysisData.chart_data.map(d => d.ichimoku_tenkan), borderColor: 'rgb(239, 68, 68)', borderWidth: 1.5, pointRadius: 0, tension: 0.1, fill: false },
+                        { label: 'Kijun-sen', data: analysisData.chart_data.map(d => d.ichimoku_kijun), borderColor: 'rgb(59, 130, 246)', borderWidth: 1.5, pointRadius: 0, tension: 0.1, borderDash: [5,5], fill: false },
+                        { label: 'Senkou A', data: analysisData.chart_data.map(d => d.ichimoku_senkou_a), borderColor: 'rgba(34, 197, 94, 0.6)', borderWidth: 1, pointRadius: 0, tension: 0.1, fill: '+1', backgroundColor: 'rgba(34, 197, 94, 0.08)' },
+                        { label: 'Senkou B', data: analysisData.chart_data.map(d => d.ichimoku_senkou_b), borderColor: 'rgba(239, 68, 68, 0.6)', borderWidth: 1, pointRadius: 0, tension: 0.1, fill: false },
+                      ]
+                    }} options={chartOptions} />
+                  </div>
+                </div>
+                {/* Donchian Channels */}
+                <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Donchian Channels</h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{analysisData.indicators.donchian?.description || 'Breakout trading system'}</p>
+                  <div style={{ height: '350px' }}>
+                    <Line data={{
+                      labels: analysisData.chart_data.map(d => d.date),
+                      datasets: [
+                        { label: 'Price', data: analysisData.chart_data.map(d => d.close), borderColor: 'rgb(59, 130, 246)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: false },
+                        { label: 'DC Upper', data: analysisData.chart_data.map(d => d.donchian_upper), borderColor: 'rgb(34, 197, 94)', borderWidth: 1.5, pointRadius: 0, tension: 0, fill: false },
+                        { label: 'DC Middle', data: analysisData.chart_data.map(d => d.donchian_middle), borderColor: 'rgb(156, 163, 175)', borderWidth: 1, pointRadius: 0, tension: 0, borderDash: [3,3], fill: false },
+                        { label: 'DC Lower', data: analysisData.chart_data.map(d => d.donchian_lower), borderColor: 'rgb(239, 68, 68)', borderWidth: 1.5, pointRadius: 0, tension: 0, fill: false },
+                      ]
+                    }} options={chartOptions} />
+                  </div>
+                </div>
+                {/* Trend summary cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[
+                    { label: 'Parabolic SAR', data: analysisData.indicators.parabolic_sar, badge: analysisData.indicators.parabolic_sar?.trend, color: analysisData.indicators.parabolic_sar?.trend === 'uptrend' ? 'green' : 'red' },
+                    { label: 'Ichimoku Cloud', data: analysisData.indicators.ichimoku, badge: analysisData.indicators.ichimoku?.signal, color: analysisData.indicators.ichimoku?.signal === 'bullish' ? 'green' : analysisData.indicators.ichimoku?.signal === 'bearish' ? 'red' : 'gray' },
+                    { label: 'Donchian', data: analysisData.indicators.donchian, badge: analysisData.indicators.donchian ? `$${analysisData.indicators.donchian.upper} / $${analysisData.indicators.donchian.lower}` : 'N/A', color: 'gray' },
+                  ].map(item => (
+                    <div key={item.label} className="bg-white dark:bg-gray-700 rounded-lg shadow dark:shadow-gray-200/20 p-4 border dark:border-gray-500">
+                      <h4 className="font-bold text-gray-900 dark:text-white mb-1">{item.label}</h4>
+                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold mb-2 ${
+                        item.color === 'green' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                        : item.color === 'red' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                        : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+                      }`}>{item.badge || 'N/A'}</span>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{item.data?.description || 'N/A'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
           </div>
         )}
 
@@ -851,6 +1199,19 @@ const TechnicalAnalysis: React.FC = () => {
                 <p className="text-gray-600 dark:text-gray-400">
                   Show volatility. When price touches lower band = potential bounce opportunity. When price touches upper band = potential reversal down.
                 </p>
+              </div>
+
+              <div className="bg-primary-50 dark:bg-primary-900/20 p-4 rounded-lg border border-primary-200 dark:border-primary-800">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">📊 Advanced Indicators (15 additional)</h3>
+                <p className="text-gray-600 dark:text-gray-400 text-sm mb-2">
+                  After running an analysis, toggle these category panels for deeper insights:
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-gray-400">
+                  <div><strong>Volume:</strong> VWAP, OBV, A/D Line</div>
+                  <div><strong>Momentum:</strong> Stochastic, ADX, CCI, ROC</div>
+                  <div><strong>Volatility:</strong> ATR, Keltner Channels, Std Dev</div>
+                  <div><strong>Trend:</strong> Parabolic SAR, Ichimoku Cloud, Donchian</div>
+                </div>
               </div>
               
               <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-lg border border-orange-200 dark:border-orange-800">
