@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import axios from 'axios';
 
-type Step = 'account' | 'plan' | 'success';
+type Step = 'plan' | 'account' | 'success';
 type Tier = 'free' | 'casual' | 'active' | 'professional';
 
 const RegisterWithPayment: React.FC = () => {
   const navigate = useNavigate();
-  const [step, setStep] = useState<Step>('account');
-  const [selectedTier, setSelectedTier] = useState<Tier>('free');
+  const [searchParams] = useSearchParams();
+  const urlTier = searchParams.get('tier') as Tier | null;
+
+  // If a tier was passed via URL, skip straight to account creation
+  const [step, setStep] = useState<Step>(urlTier ? 'account' : 'plan');
+  const [selectedTier, setSelectedTier] = useState<Tier>(urlTier || 'casual');
   const [stripeConfig, setStripeConfig] = useState<any>(null);
 
   const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -30,11 +34,17 @@ const RegisterWithPayment: React.FC = () => {
 
   const loadStripeConfig = async () => {
     try {
-      const response = await axios.get('${API_URL}/api/v1/stripe/config');
+      const response = await axios.get(`${API_URL}/api/v1/stripe/config`);
       setStripeConfig(response.data);
     } catch (error) {
       console.error('Failed to load Stripe config:', error);
     }
+  };
+
+  const handlePlanSelect = (tier: Tier) => {
+    setSelectedTier(tier);
+    setError('');
+    setStep('account');
   };
 
   const handleAccountSubmit = async (e: React.FormEvent) => {
@@ -51,25 +61,8 @@ const RegisterWithPayment: React.FC = () => {
       return;
     }
 
-    setStep('plan');
-  };
-
-  const handlePlanSelection = async (tier: Tier) => {
-    setSelectedTier(tier);
-    
-    if (tier === 'free') {
-      // Register with free tier
-      await registerUser('free');
-    } else {
-      // Show payment confirmation
-      setLoading(true);
-      await registerUser(tier);
-    }
-  };
-
-  const registerUser = async (tier: Tier) => {
     setLoading(true);
-    
+
     try {
       // Create account
       await authAPI.register({
@@ -78,11 +71,11 @@ const RegisterWithPayment: React.FC = () => {
         full_name: formData.full_name,
       });
 
-      if (tier === 'free') {
-        // Free tier - show success
+      if (selectedTier === 'free') {
+        // Free tier — show success
         setStep('success');
       } else {
-        // Paid tier - login and redirect to Stripe
+        // Paid tier — login and redirect to Stripe
         const loginResponse = await authAPI.login({
           email: formData.email,
           password: formData.password,
@@ -91,14 +84,14 @@ const RegisterWithPayment: React.FC = () => {
         localStorage.setItem('access_token', loginResponse.data.access_token);
         
         // Redirect to Stripe checkout
-        const priceId = tier === 'casual' 
+        const priceId = selectedTier === 'casual' 
           ? stripeConfig?.casual_price_id
-          : tier === 'active'
+          : selectedTier === 'active'
           ? stripeConfig?.active_price_id
           : stripeConfig?.professional_price_id;
 
         const checkoutResponse = await axios.post(
-          'http://localhost:8000/api/v1/stripe/create-checkout-session',
+          `${API_URL}/api/v1/stripe/create-checkout-session`,
           { price_id: priceId },
           { 
             headers: { 
@@ -116,6 +109,13 @@ const RegisterWithPayment: React.FC = () => {
     }
   };
 
+  const tierLabels: Record<Tier, string> = {
+    free: 'Free',
+    casual: 'Casual Investor — $20/mo',
+    active: 'Active Investor — $40/mo',
+    professional: 'Professional — $100/mo',
+  };
+
   const pricingTiers = [
     {
       name: 'Free',
@@ -125,8 +125,9 @@ const RegisterWithPayment: React.FC = () => {
       features: [
         '5 watchlist stocks',
         '5 portfolio entries',
-        '5 stock reviews',
+        '5 stock reviews (total)',
         'Real-time market data',
+        'Basic stock search',
       ],
       highlight: false,
     },
@@ -141,6 +142,7 @@ const RegisterWithPayment: React.FC = () => {
         '5 stock reviews/week',
         '5 DCF valuations/week',
         'Technical Analysis',
+        'Priority support',
       ],
       highlight: true,
     },
@@ -152,9 +154,11 @@ const RegisterWithPayment: React.FC = () => {
       features: [
         '45 watchlist stocks',
         '45 portfolio entries',
+        '20 price alerts',
         '5 stock reviews/day',
         '5 DCF valuations/day',
         'Advanced Technical Analysis',
+        'Priority support',
       ],
       highlight: false,
     },
@@ -166,9 +170,11 @@ const RegisterWithPayment: React.FC = () => {
       features: [
         '75 watchlist stocks',
         '75 portfolio entries',
-        '50 alerts',
-        '20 DCF valuations daily',
-        '20 Technical Analysis daily',
+        '50 price alerts',
+        '20 stock reviews/day',
+        '20 DCF valuations/day',
+        'Full Technical Analysis suite',
+        'Priority support',
       ],
       highlight: false,
     },
@@ -177,134 +183,58 @@ const RegisterWithPayment: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto">
+        {/* Logo */}
+        <div className="text-center mb-6">
+          <Link to="/" className="inline-block">
+            <img src="/images/logo.png" alt="Northwest Creek" className="h-16 w-16 mx-auto" />
+          </Link>
+        </div>
+
         {/* Progress Steps */}
         <div className="mb-8">
           <div className="flex items-center justify-center">
-            <div className={`flex items-center ${step === 'account' ? 'text-primary-600' : 'text-gray-400'}`}>
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${
-                step === 'account' ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300'
+            <div className={`flex items-center ${step === 'plan' ? 'text-primary-600 dark:text-primary-400' : step === 'account' || step === 'success' ? 'text-green-600 dark:text-green-400' : 'text-gray-400'}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-bold ${
+                step === 'plan' 
+                  ? 'border-primary-600 bg-primary-600 text-white' 
+                  : step === 'account' || step === 'success'
+                  ? 'border-green-600 bg-green-600 text-white'
+                  : 'border-gray-300 text-gray-400'
               }`}>
-                1
-              </div>
-              <span className="ml-2 font-medium">Create Account</span>
-            </div>
-            
-            <div className="w-16 h-1 mx-4 bg-gray-300"></div>
-            
-            <div className={`flex items-center ${step === 'plan' ? 'text-primary-600' : 'text-gray-400'}`}>
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${
-                step === 'plan' ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300'
-              }`}>
-                2
+                {step === 'account' || step === 'success' ? '✓' : '1'}
               </div>
               <span className="ml-2 font-medium">Choose Plan</span>
             </div>
             
-            <div className="w-16 h-1 mx-4 bg-gray-300"></div>
+            <div className={`w-16 h-1 mx-4 ${step !== 'plan' ? 'bg-primary-600 dark:bg-primary-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
             
-            <div className={`flex items-center ${step === 'success' ? 'text-primary-600' : 'text-gray-400'}`}>
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 ${
-                step === 'success' ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300'
+            <div className={`flex items-center ${step === 'account' ? 'text-primary-600 dark:text-primary-400' : step === 'success' ? 'text-green-600 dark:text-green-400' : 'text-gray-400'}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-bold ${
+                step === 'account' 
+                  ? 'border-primary-600 bg-primary-600 text-white' 
+                  : step === 'success'
+                  ? 'border-green-600 bg-green-600 text-white'
+                  : 'border-gray-300 text-gray-400'
+              }`}>
+                {step === 'success' ? '✓' : '2'}
+              </div>
+              <span className="ml-2 font-medium">Create Account</span>
+            </div>
+            
+            <div className={`w-16 h-1 mx-4 ${step === 'success' ? 'bg-primary-600 dark:bg-primary-500' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
+            
+            <div className={`flex items-center ${step === 'success' ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400'}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 text-sm font-bold ${
+                step === 'success' ? 'border-primary-600 bg-primary-600 text-white' : 'border-gray-300 text-gray-400'
               }`}>
                 3
               </div>
-              <span className="ml-2 font-medium">Complete</span>
+              <span className="ml-2 font-medium">Get Started</span>
             </div>
           </div>
         </div>
 
-        {/* Step 1: Account Creation */}
-        {step === 'account' && (
-          <div className="max-w-md mx-auto">
-            <div className="text-center mb-6">
-              <Link to="/">
-                <img src="/images/logo.png" alt="Northwest Creek" className="h-16 w-16 mx-auto" />
-              </Link>
-              <h2 className="mt-4 text-3xl font-extrabold text-gray-900 dark:text-white">
-                Create your account
-              </h2>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                Already have an account?{' '}
-                <Link to="/login" className="font-medium text-primary-600 dark:text-primary-400 hover:underline">
-                  Sign in
-                </Link>
-              </p>
-            </div>
-
-            <div className="bg-white dark:bg-gray-700 py-8 px-6 shadow-xl rounded-lg border dark:border-gray-500">
-              <form onSubmit={handleAccountSubmit} className="space-y-6">
-                {error && (
-                  <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg">
-                    {error}
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Full name
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.full_name}
-                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Email address
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  />
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                    Must be at least 8 characters
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Confirm password
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={formData.confirmPassword}
-                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                    className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-lg transition-colors"
-                >
-                  Continue to Plan Selection
-                </button>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: Plan Selection */}
+        {/* Step 1: Plan Selection */}
         {step === 'plan' && (
           <div>
             <div className="text-center mb-8">
@@ -312,22 +242,18 @@ const RegisterWithPayment: React.FC = () => {
                 Choose Your Plan
               </h2>
               <p className="mt-2 text-gray-600 dark:text-gray-400">
-                Start with our free tier or upgrade for advanced features
+                Pick the plan that fits your investing style — you can always upgrade later
               </p>
             </div>
-
-            {error && (
-              <div className="max-w-2xl mx-auto mb-6 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg">
-                {error}
-              </div>
-            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {pricingTiers.map((tier) => (
                 <div
                   key={tier.tier}
-                  className={`bg-white dark:bg-gray-700 rounded-xl shadow-lg border p-6 ${
-                    tier.highlight ? 'ring-2 ring-primary-500' : 'dark:border-gray-500'
+                  className={`bg-white dark:bg-gray-700 rounded-xl shadow-lg border p-6 transition-all ${
+                    tier.highlight 
+                      ? 'ring-2 ring-primary-500 transform scale-105' 
+                      : 'dark:border-gray-500 hover:shadow-xl'
                   }`}
                 >
                   {tier.highlight && (
@@ -365,31 +291,131 @@ const RegisterWithPayment: React.FC = () => {
                   </ul>
 
                   <button
-                    onClick={() => handlePlanSelection(tier.tier)}
-                    disabled={loading}
+                    onClick={() => handlePlanSelect(tier.tier)}
                     className={`w-full py-3 px-4 rounded-lg font-semibold transition-colors ${
                       tier.highlight
                         ? 'bg-primary-600 hover:bg-primary-700 text-white'
                         : 'bg-gray-900 hover:bg-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 text-white'
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    }`}
                   >
-                    {loading && selectedTier === tier.tier
-                      ? 'Processing...'
-                      : tier.tier === 'free'
-                      ? 'Start Free'
-                      : `Choose ${tier.name}`}
+                    {tier.tier === 'free' ? 'Start Free' : `Choose ${tier.name}`}
                   </button>
                 </div>
               ))}
             </div>
 
-            <div className="mt-6 text-center">
-              <button
-                onClick={() => setStep('account')}
-                className="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-              >
-                ← Back to Account Details
-              </button>
+            <div className="mt-8 text-center">
+              <p className="text-gray-500 dark:text-gray-400 text-sm">
+                Already have an account?{' '}
+                <Link to="/login" className="font-medium text-primary-600 dark:text-primary-400 hover:underline">
+                  Sign in
+                </Link>
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Create Account */}
+        {step === 'account' && (
+          <div className="max-w-md mx-auto">
+            <div className="text-center mb-6">
+              <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white">
+                Create Your Account
+              </h2>
+              <div className="mt-3 inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold bg-primary-100 dark:bg-primary-900/30 text-primary-800 dark:text-primary-200">
+                Selected Plan: {tierLabels[selectedTier]}
+              </div>
+              <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+                Already have an account?{' '}
+                <Link to="/login" className="font-medium text-primary-600 dark:text-primary-400 hover:underline">
+                  Sign in
+                </Link>
+              </p>
+            </div>
+
+            <div className="bg-white dark:bg-gray-700 py-8 px-6 shadow-xl rounded-lg border dark:border-gray-500">
+              <form onSubmit={handleAccountSubmit} className="space-y-6">
+                {error && (
+                  <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg">
+                    {error}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Full name
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.full_name}
+                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Email address
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                    Must be at least 8 characters
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Confirm password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={formData.confirmPassword}
+                    onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading 
+                    ? 'Creating account...' 
+                    : selectedTier === 'free' 
+                    ? 'Create Free Account' 
+                    : 'Create Account & Continue to Payment'}
+                </button>
+              </form>
+
+              <div className="mt-4 text-center">
+                <button
+                  onClick={() => { setStep('plan'); setError(''); }}
+                  className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                >
+                  ← Change plan
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -409,7 +435,7 @@ const RegisterWithPayment: React.FC = () => {
               </h3>
               
               <p className="text-gray-600 dark:text-gray-400 mb-4">
-                We've sent a verification link to <strong>{formData.email}</strong>
+                We've sent a verification link to <strong className="text-gray-900 dark:text-white">{formData.email}</strong>
               </p>
               
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
@@ -418,7 +444,7 @@ const RegisterWithPayment: React.FC = () => {
               
               <Link
                 to="/login"
-                className="inline-block px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white font-semibold rounded-lg transition-colors"
+                className="inline-block px-6 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold rounded-lg transition-colors"
               >
                 Go to Login
               </Link>
