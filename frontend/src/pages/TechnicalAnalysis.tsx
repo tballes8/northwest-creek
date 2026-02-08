@@ -1028,8 +1028,8 @@ const TechnicalAnalysis: React.FC = () => {
                       <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{item.label}</p>
                       <p className="text-lg font-bold text-gray-900 dark:text-white">{item.val}</p>
                       <p className={`text-xs font-semibold ${
-                        item.data?.signal === 'bullish' || item.data?.signal === 'oversold' || item.data?.direction === 'bullish' ? 'text-green-500' 
-                        : item.data?.signal === 'bearish' || item.data?.signal === 'overbought' || item.data?.direction === 'bearish' ? 'text-red-500' 
+                        (item.data as any)?.signal === 'bullish' || (item.data as any)?.signal === 'oversold' || (item.data as any)?.direction === 'bullish' ? 'text-green-500' 
+                        : (item.data as any)?.signal === 'bearish' || (item.data as any)?.signal === 'overbought' || (item.data as any)?.direction === 'bearish' ? 'text-red-500' 
                         : 'text-gray-400'
                       }`}>
                         {(item.data as any)?.signal || (item.data as any)?.strength || ''}
