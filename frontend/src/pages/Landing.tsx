@@ -28,10 +28,10 @@ const Landing: React.FC = () => {
                 to="/register"
                 className="bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm"
               >
-                Get Started Free
+                Get Started
               </Link>
 
-              <ThemeToggle />  {/* ADD THIS */}
+              <ThemeToggle />
             
             </div>
           </div>
@@ -54,7 +54,7 @@ const Landing: React.FC = () => {
               to="/register"
               className="px-8 py-4 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white text-lg font-semibold rounded-lg shadow-lg transition-colors"
             >
-              Start Free Trial
+              Chose a Plan
             </Link>
             <Link
               to="/login"
