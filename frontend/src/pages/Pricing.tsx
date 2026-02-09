@@ -5,6 +5,8 @@ import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 const Pricing: React.FC = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
@@ -29,7 +31,7 @@ const Pricing: React.FC = () => {
 
   const loadStripeConfig = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/api/v1/stripe/config');
+      const response = await axios.get(`${API_URL}/api/v1/stripe/config`);
       setStripeConfig(response.data);
     } catch (error) {
       console.error('Failed to load Stripe config:', error);
@@ -37,26 +39,15 @@ const Pricing: React.FC = () => {
   };
 
   const handleUpgrade = async (tier: string, priceId: string) => {
-    try {
-        const token = localStorage.getItem('access_token');
-        if (!token) {
-        navigate('/login');
-        return;
-        }
-
-        const response = await axios.post(
-        'http://localhost:8000/api/v1/stripe/create-checkout-session',
-        { price_id: priceId },
-        { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        // Redirect to Stripe Checkout
-        window.location.href = response.data.checkout_url;
-        } catch (error) {
-            console.error('Failed to create checkout session:', error);
-            alert('Failed to start checkout. Please try again.');
-        }
-    };
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      // Not logged in — send to registration with tier
+      navigate(`/registerwithpayment?tier=${tier}`);
+      return;
+    }
+    // Logged in — go directly to in-app payment page
+    navigate(`/payment?tier=${tier}`);
+  };
 
     const handleLogout = () => {
     localStorage.removeItem('access_token');
@@ -489,10 +480,10 @@ const Pricing: React.FC = () => {
             Our team is here to help you find the perfect plan for your needs.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            
+            <a
               href="mailto:support@northwestcreek.com"
               className="px-8 py-3 bg-white text-primary-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
-            <a>
+            >
               Email Us
             </a>
             <Link

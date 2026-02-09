@@ -1,5 +1,8 @@
 """
 Stripe Payment Integration - Handle subscriptions
+Supports both:
+  - Stripe Checkout (redirect) via /create-checkout-session
+  - Stripe Elements (in-app) via /create-subscription
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,8 +22,121 @@ router = APIRouter()
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
 
+# ---- Request Models ----
+
 class CheckoutRequest(BaseModel):
     price_id: str
+
+class SubscriptionRequest(BaseModel):
+    tier: str  # 'casual', 'active', 'professional'
+
+
+# ---- Helper: Map tier to price ID ----
+
+def get_price_id_for_tier(tier: str) -> str:
+    """Get Stripe Price ID for a given tier"""
+    tier_map = {
+        'casual': settings.STRIPE_CASUAL_PRICE_ID,
+        'active': settings.STRIPE_ACTIVE_PRICE_ID,
+        'professional': settings.STRIPE_PROFESSIONAL_PRICE_ID,
+    }
+    price_id = tier_map.get(tier)
+    if not price_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid tier: {tier}. Must be casual, active, or professional."
+        )
+    return price_id
+
+
+def get_plan_name_for_price(price_id: str) -> str:
+    """Get plan name from price ID"""
+    if price_id == settings.STRIPE_CASUAL_PRICE_ID:
+        return "Casual Retail Investor"
+    elif price_id == settings.STRIPE_ACTIVE_PRICE_ID:
+        return "Active Retail Investor"
+    elif price_id == settings.STRIPE_PROFESSIONAL_PRICE_ID:
+        return "Professional Investor"
+    return "Unknown"
+
+
+def get_tier_for_price(price_id: str) -> str:
+    """Get tier slug from price ID"""
+    if price_id == settings.STRIPE_CASUAL_PRICE_ID:
+        return 'casual'
+    elif price_id == settings.STRIPE_ACTIVE_PRICE_ID:
+        return 'active'
+    elif price_id == settings.STRIPE_PROFESSIONAL_PRICE_ID:
+        return 'professional'
+    return 'free'
+
+
+# ---- Endpoints ----
+
+@router.post("/create-subscription")
+async def create_subscription(
+    request: SubscriptionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Create a Stripe Customer + Subscription for in-app payment via Stripe Elements.
+    Returns the client_secret for the frontend to confirm payment.
+    """
+    try:
+        price_id = get_price_id_for_tier(request.tier)
+        
+        # Step 1: Find or create Stripe Customer
+        # Search by email to avoid duplicates
+        customers = stripe.Customer.list(email=current_user.email, limit=1)
+        
+        if customers.data:
+            customer = customers.data[0]
+        else:
+            customer = stripe.Customer.create(
+                email=current_user.email,
+                name=current_user.full_name or current_user.email,
+                metadata={
+                    'user_id': str(current_user.id),
+                }
+            )
+        
+        # Step 2: Create Subscription with incomplete payment
+        # This creates an Invoice + PaymentIntent automatically
+        subscription = stripe.Subscription.create(
+            customer=customer.id,
+            items=[{'price': price_id}],
+            payment_behavior='default_incomplete',
+            payment_settings={
+                'save_default_payment_method': 'on_subscription',
+            },
+            expand=['latest_invoice.payment_intent'],
+            metadata={
+                'user_id': str(current_user.id),
+                'plan_name': get_plan_name_for_price(price_id),
+            },
+        )
+        
+        # Extract client_secret from the PaymentIntent
+        client_secret = subscription.latest_invoice.payment_intent.client_secret
+        
+        return {
+            "subscription_id": subscription.id,
+            "client_secret": client_secret,
+        }
+        
+    except stripe.error.StripeError as e:
+        print(f"Stripe error in create-subscription: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Payment setup failed: {str(e)}"
+        )
+    except Exception as e:
+        print(f"Error creating subscription: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not set up subscription. Please try again."
+        )
 
 
 @router.post("/create-checkout-session")
@@ -30,28 +146,19 @@ async def create_checkout_session(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Create a Stripe Checkout session for subscription
-    
-    Parameters:
-    - price_id: The Stripe Price ID for the subscription plan
+    Create a Stripe Checkout session (redirect-based).
+    Kept for backward compatibility with Pricing page upgrades.
     """
     try:
         price_id = request.price_id
+        plan_name = get_plan_name_for_price(price_id)
         
-        # Determine which plan based on price_id
-        if price_id == settings.STRIPE_CASUAL_PRICE_ID:
-            plan_name = "Casual Retail Investor"
-        elif price_id == settings.STRIPE_ACTIVE_PRICE_ID:
-            plan_name = "Active Retail Investor"
-        elif price_id == settings.STRIPE_PROFESSIONAL_PRICE_ID:
-            plan_name = "Professional Investor"
-        else:
+        if plan_name == "Unknown":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid price ID"
             )
         
-        # Create Stripe Checkout Session
         checkout_session = stripe.checkout.Session.create(
             customer_email=current_user.email,
             payment_method_types=['card'],
@@ -93,15 +200,14 @@ async def create_checkout_session(
         )
 
 
+# ---- Webhook ----
+
 @router.post("/webhook")
 async def stripe_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Handle Stripe webhook events
-    This endpoint is called by Stripe when subscription events occur
-    """
+    """Handle Stripe webhook events"""
     payload = await request.body()
     sig_header = request.headers.get('stripe-signature')
     
@@ -109,95 +215,100 @@ async def stripe_webhook(
         event = stripe.Webhook.construct_event(
             payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
         )
-    except ValueError as e:
-        # Invalid payload
+    except ValueError:
         raise HTTPException(status_code=400, detail="Invalid payload")
-    except stripe.error.SignatureVerificationError as e:
-        # Invalid signature
+    except stripe.error.SignatureVerificationError:
         raise HTTPException(status_code=400, detail="Invalid signature")
     
-    # Handle the event
-    if event['type'] == 'checkout.session.completed':
-        session = event['data']['object']
-        await handle_checkout_session_completed(session, db)
+    event_type = event['type']
+    print(f"📨 Stripe webhook: {event_type}")
     
-    elif event['type'] == 'customer.subscription.updated':
+    if event_type == 'checkout.session.completed':
+        session = event['data']['object']
+        await handle_checkout_completed(session, db)
+    
+    elif event_type == 'invoice.paid':
+        # This fires for both Checkout and Elements-based subscriptions
+        invoice = event['data']['object']
+        await handle_invoice_paid(invoice, db)
+    
+    elif event_type == 'customer.subscription.updated':
         subscription = event['data']['object']
         await handle_subscription_updated(subscription, db)
     
-    elif event['type'] == 'customer.subscription.deleted':
+    elif event_type == 'customer.subscription.deleted':
         subscription = event['data']['object']
         await handle_subscription_deleted(subscription, db)
     
-    elif event['type'] == 'invoice.payment_failed':
+    elif event_type == 'invoice.payment_failed':
         invoice = event['data']['object']
         await handle_payment_failed(invoice, db)
     
     return {"status": "success"}
 
 
-async def handle_checkout_session_completed(session, db: AsyncSession):
-    """Handle successful checkout - upgrade user's subscription"""
+# ---- Webhook Handlers ----
+
+async def handle_checkout_completed(session, db: AsyncSession):
+    """Handle successful Stripe Checkout — upgrade user's subscription"""
     user_id = session['metadata'].get('user_id')
-    
     if not user_id:
-        print("No user_id in session metadata")
+        print("No user_id in checkout session metadata")
         return
     
-    # Get subscription from session
     subscription_id = session.get('subscription')
-    
     if subscription_id:
-        # Retrieve subscription to get price_id
         subscription = stripe.Subscription.retrieve(subscription_id)
         price_id = subscription['items']['data'][0]['price']['id']
+        new_tier = get_tier_for_price(price_id)
         
-        # Determine tier based on price_id
-        if price_id == settings.STRIPE_CASUAL_PRICE_ID:
-            new_tier = 'casual'
-        elif price_id == settings.STRIPE_ACTIVE_PRICE_ID:
-            new_tier = 'active'
-        elif price_id == settings.STRIPE_PROFESSIONAL_PRICE_ID:
-            new_tier = 'professional'
-        else:
-            new_tier = 'free'
-        
-        # Update user tier
-        result = await db.execute(
-            select(User).where(User.id == user_id)
-        )
+        result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
         
         if user:
             user.subscription_tier = new_tier
             await db.commit()
-            print(f"✅ User {user.email} upgraded to {new_tier}")
+            print(f"✅ User {user.email} upgraded to {new_tier} (via Checkout)")
+
+
+async def handle_invoice_paid(invoice, db: AsyncSession):
+    """Handle successful invoice payment — works for both Checkout and Elements flows"""
+    subscription_id = invoice.get('subscription')
+    if not subscription_id:
+        return
+    
+    try:
+        subscription = stripe.Subscription.retrieve(subscription_id)
+        user_id = subscription['metadata'].get('user_id')
+        
+        if not user_id:
+            print(f"No user_id in subscription {subscription_id} metadata")
+            return
+        
+        price_id = subscription['items']['data'][0]['price']['id']
+        new_tier = get_tier_for_price(price_id)
+        
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        
+        if user:
+            user.subscription_tier = new_tier
+            await db.commit()
+            print(f"✅ User {user.email} upgraded to {new_tier} (via invoice.paid)")
+    except Exception as e:
+        print(f"Error handling invoice.paid: {e}")
 
 
 async def handle_subscription_updated(subscription, db: AsyncSession):
     """Handle subscription updates (e.g., plan changes)"""
     user_id = subscription['metadata'].get('user_id')
-    
     if not user_id:
         return
     
-    # Get price_id from subscription
     price_id = subscription['items']['data'][0]['price']['id']
+    new_tier = get_tier_for_price(price_id)
     
-    # Determine tier
-    if price_id == settings.STRIPE_CASUAL_PRICE_ID:
-        new_tier = 'casual'
-    elif price_id == settings.STRIPE_ACTIVE_PRICE_ID:
-        new_tier = 'active'
-    elif price_id == settings.STRIPE_PROFESSIONAL_PRICE_ID:
-        new_tier = 'professional'
-    else:
-        new_tier = 'free'
-    
-    # Update user tier
-    result = await db.execute(
-        select(User).where(User.id == user_id)
-    )
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     
     if user:
@@ -207,16 +318,12 @@ async def handle_subscription_updated(subscription, db: AsyncSession):
 
         
 async def handle_subscription_deleted(subscription, db: AsyncSession):
-    """Handle subscription cancellation - downgrade to free"""
+    """Handle subscription cancellation — downgrade to free"""
     user_id = subscription['metadata'].get('user_id')
-    
     if not user_id:
         return
     
-    # Downgrade user to free tier
-    result = await db.execute(
-        select(User).where(User.id == user_id)
-    )
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     
     if user:
@@ -226,11 +333,12 @@ async def handle_subscription_deleted(subscription, db: AsyncSession):
 
 
 async def handle_payment_failed(invoice, db: AsyncSession):
-    """Handle failed payment - could send email notification"""
+    """Handle failed payment"""
     customer_email = invoice.get('customer_email')
     print(f"❌ Payment failed for {customer_email}")
-    # TODO: Send email notification to user
 
+
+# ---- Status & Config ----
 
 @router.get("/subscription-status")
 async def get_subscription_status(

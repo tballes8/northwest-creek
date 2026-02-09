@@ -15,6 +15,7 @@ import PaymentSuccess from './pages/PaymentSuccess';
 import RegisterWithPayment from './pages/RegisterWithPayment';
 import Stocks from './pages/Stocks';
 import { LivePriceProvider } from './contexts/LivePriceContext';
+import Payment from './pages/Payment';
 
 
 
@@ -43,6 +44,7 @@ function App() {
           <Route path="/registerwithpayment" element={<RegisterWithPayment />} />
           <Route path="/stocks" element={<ProtectedRoute><Stocks /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/payment" element={<Payment />} />
 
           <Route path="/watchlist" 
             element={
