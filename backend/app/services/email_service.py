@@ -3,31 +3,52 @@ Email Service - Send verification and notification emails using SendGrid
 """
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Email, To, Content
-from app.config import settings
+from app.config import get_settings
 from app.core.tier_limits import TIER_LIMITS
+
+# Use get_settings() lazily to avoid circular imports at module load
+_settings = None
+
+def _get_settings():
+    global _settings
+    if _settings is None:
+        _settings = get_settings()
+    return _settings
 
 
 class EmailService:
     def __init__(self):
+        # Lazy init — settings may not be ready at import time
+        self._sg = None
+        self._initialized = False
+    
+    def _ensure_initialized(self):
+        """Lazy initialization of SendGrid client"""
+        if self._initialized:
+            return
+        self._initialized = True
+        
+        settings = _get_settings()
         self.api_key = settings.SENDGRID_API_KEY
         self.from_email = settings.FROM_EMAIL
         self.from_name = settings.FROM_NAME
         
-        # Only initialize SendGrid client if API key is provided
         if self.api_key:
-            self.sg = SendGridAPIClient(self.api_key)
+            self._sg = SendGridAPIClient(self.api_key)
+            print(f"✅ SendGrid initialized (from: {self.from_email})")
         else:
-            self.sg = None
-            print("⚠️ Warning: SENDGRID_API_KEY not configured")
+            self._sg = None
+            print("⚠️ Warning: SENDGRID_API_KEY not configured — emails will NOT send")
     
     def send_email(self, to_email: str, subject: str, html_content: str) -> bool:
         """Send an email using SendGrid"""
-        if not self.sg:
-            print("❌ Cannot send email: SendGrid not configured")
+        self._ensure_initialized()
+        
+        if not self._sg:
+            print(f"❌ Cannot send email to {to_email}: SendGrid not configured")
             return False
             
         try:
-            # Create message
             message = Mail(
                 from_email=Email(self.from_email, self.from_name),
                 to_emails=To(to_email),
@@ -35,8 +56,7 @@ class EmailService:
                 html_content=Content("text/html", html_content)
             )
             
-            # Send email
-            response = self.sg.send(message)
+            response = self._sg.send(message)
             
             if response.status_code in [200, 202]:
                 print(f"✅ Email sent to {to_email} (Status: {response.status_code})")
@@ -50,10 +70,15 @@ class EmailService:
             return False
     
     def send_verification_email(self, to_email: str, verification_token: str, user_name: str, selected_tier: str = "free") -> bool:
-        """Send account verification email"""
-        # Embed selected tier in the verification URL so the frontend can redirect to Stripe after verification
+        """Send account verification email with tier-specific features"""
+        settings = _get_settings()
+        
+        # Embed selected tier in the verification URL so frontend can redirect to Stripe after verification
         tier_param = f"&tier={selected_tier}" if selected_tier and selected_tier != "free" else ""
         verification_url = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}{tier_param}"
+        
+        print(f"📧 Sending verification email to {to_email} (tier={selected_tier})")
+        print(f"   Verification URL: {verification_url}")
         
         # Build dynamic features list from TIER_LIMITS
         limits = TIER_LIMITS.get(selected_tier, TIER_LIMITS["free"])
@@ -64,7 +89,6 @@ class EmailService:
             "professional": "Professional"
         }.get(selected_tier, "Free")
         
-        # Review period label
         review_period = {
             "free": "total",
             "casual": "per week",

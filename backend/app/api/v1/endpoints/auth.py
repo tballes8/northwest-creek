@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -21,7 +21,11 @@ security = HTTPBearer()
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db), selected_tier: str = "free"):
+async def register(
+    user_data: UserCreate,
+    db: AsyncSession = Depends(get_db),
+    selected_tier: str = Query(default="free", description="Selected subscription tier")
+):
     """Register a new user and send verification email"""
     # Check if email exists
     result = await db.execute(select(User).where(User.email == user_data.email))
@@ -35,12 +39,12 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db), se
     verification_token = secrets.token_urlsafe(32)
     token_expires = datetime.now(timezone.utc) + timedelta(hours=24)
     
-    # Create user (not verified yet)
+    # Create user (not verified yet — starts as free, upgraded after Stripe payment)
     user = User(
         email=user_data.email,
         password_hash=get_password_hash(user_data.password),
         full_name=user_data.full_name,
-        is_verified=False,  # Start unverified
+        is_verified=False,
         is_active=True,
         verification_token=verification_token,
         verification_token_expires=token_expires
@@ -62,7 +66,7 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db), se
         print(f"⚠️ Warning: Verification email failed to send to {user.email}")
     
     return {
-        "message": "Registration successful! Please check your email to verify your account.",
+        "message": "Registration successful! Please check your email (and spam/junk folder) to verify your account.",
         "email": user.email
     }
 
@@ -140,7 +144,7 @@ async def resend_verification(email: str, db: AsyncSession = Depends(get_db)):
         user_name=user.full_name or user.email
     )
     
-    return {"message": "Verification email sent! Please check your inbox."}
+    return {"message": "Verification email sent! Please check your inbox (and spam/junk folder)."}
 
 
 @router.post("/login", response_model=Token)
