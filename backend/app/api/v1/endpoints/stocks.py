@@ -197,6 +197,66 @@ async def get_stock_news(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching news: {str(e)}")
     
+@router.get("/ipos")
+async def get_ipos():
+    """
+    Get upcoming, pending, and rumored IPOs from Massive API.
+    """
+    import httpx
+    from app.config import settings
+    
+    api_key = settings.MASSIVE_API_KEY
+    base_url = "https://api.polygon.io/vX/reference/ipos"
+    
+    results = {
+        "upcoming": [],
+        "pending": [],
+        "rumored": [],
+    }
+    
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            for status_key, ipo_status in [("upcoming", "new"), ("pending", "pending"), ("rumored", "rumor")]:
+                try:
+                    resp = await client.get(
+                        base_url,
+                        params={
+                            "ipo_status": ipo_status,
+                            "order": "desc",
+                            "sort": "listing_date",
+                            "limit": 15,
+                            "apiKey": api_key,
+                        },
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        items = []
+                        for ipo in data.get("results", []):
+                            items.append({
+                                "ticker": ipo.get("ticker", "N/A"),
+                                "issuer_name": ipo.get("issuer_name", "Unknown"),
+                                "listing_date": ipo.get("listing_date"),
+                                "final_issue_price": ipo.get("final_issue_price"),
+                                "lowest_offer_price": ipo.get("lowest_offer_price"),
+                                "highest_offer_price": ipo.get("highest_offer_price"),
+                                "total_offer_size": ipo.get("total_offer_size"),
+                                "shares_outstanding": ipo.get("shares_outstanding"),
+                                "primary_exchange": ipo.get("primary_exchange"),
+                                "security_type": ipo.get("security_type"),
+                                "ipo_status": ipo.get("ipo_status"),
+                            })
+                        results[status_key] = items
+                    else:
+                        print(f"IPO fetch for {ipo_status} returned {resp.status_code}")
+                except Exception as inner_err:
+                    print(f"IPO fetch error for {ipo_status}: {inner_err}")
+        
+        return results
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching IPO data: {str(e)}")
+
+
 @router.get("/{ticker}", response_model=dict)
 async def get_stock_overview(ticker: str):
     """
@@ -225,4 +285,3 @@ async def get_stock_overview(ticker: str):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching stock overview: {str(e)}")
-        
