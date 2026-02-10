@@ -321,7 +321,7 @@ const DCFValuation: React.FC = () => {
         </nav>
         <UpgradeRequired
           feature="DCF Valuation"
-          currentTier={user.subscription_tier}
+          currentTier={user?.subscription_tier || "free"}
           limitReached={true}
           currentUsage={usageCount}
           maxUsage={tierLimit}
