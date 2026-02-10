@@ -272,5 +272,142 @@ class EmailService:
         )
 
 
+    # ---- Payment Success / Subscription Confirmation Email ----
+    
+    def send_payment_success_email(self, to_email: str, user_name: str, plan_name: str, tier: str) -> bool:
+        """Send subscription confirmation email after successful payment"""
+        settings = _get_settings()
+        dashboard_url = f"{settings.FRONTEND_URL}/dashboard"
+        
+        print(f"📧 Sending payment success email to {to_email} (plan={plan_name})")
+        
+        # Build features list for the purchased tier
+        limits = TIER_LIMITS.get(tier, TIER_LIMITS.get("casual", {}))
+        review_period = {
+            "casual": "per week", "active": "per day", "professional": "per day"
+        }.get(tier, "per week")
+        
+        price = {"casual": "$20", "active": "$40", "professional": "$100"}.get(tier, "")
+        
+        features_html = f'<li>✅ Track up to {limits.get("watchlist_stocks", 20)} stocks in your watchlist</li>\n'
+        features_html += f'                            <li>✅ Monitor {limits.get("portfolio_entries", 20)} portfolio positions</li>\n'
+        features_html += f'                            <li>✅ {limits.get("stock_reviews", 5)} stock reviews {review_period}</li>\n'
+        if limits.get("alerts", 0) > 0:
+            features_html += f'                            <li>✅ {limits["alerts"]} price alerts</li>\n'
+        if limits.get("dcf_valuations", 0) > 0:
+            features_html += f'                            <li>✅ {limits["dcf_valuations"]} DCF valuations {review_period}</li>\n'
+        if limits.get("technical_analysis", False):
+            features_html += '                            <li>✅ Advanced technical analysis (15+ indicators)</li>\n'
+        features_html += '                            <li>✅ Real-time market data and quotes</li>'
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ 
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                    line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f3f4f6;
+                }}
+                .container {{ 
+                    max-width: 600px; margin: 40px auto; background-color: #ffffff;
+                    border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                }}
+                .header {{ 
+                    background: linear-gradient(135deg, #0d9488 0%, #14b8a6 100%); 
+                    color: white; padding: 40px 30px; text-align: center; 
+                }}
+                .header h1 {{ margin: 0; font-size: 28px; font-weight: 700; }}
+                .content {{ padding: 40px 30px; }}
+                .content p {{ margin: 0 0 16px 0; color: #374151; }}
+                .button {{ 
+                    display: inline-block; background: #0d9488; color: white; 
+                    padding: 14px 32px; text-decoration: none; border-radius: 6px; 
+                    font-weight: 600; margin: 24px 0;
+                }}
+                .features {{
+                    background: #f9fafb; padding: 24px; border-radius: 6px; margin: 24px 0;
+                }}
+                .features ul {{ margin: 0; padding-left: 20px; }}
+                .features li {{ margin: 8px 0; color: #374151; }}
+                .footer {{ 
+                    text-align: center; padding: 30px; background: #f9fafb;
+                    color: #6b7280; font-size: 14px; border-top: 1px solid #e5e7eb;
+                }}
+                .footer p {{ margin: 4px 0; }}
+                .success-box {{
+                    background: #ecfdf5; border-left: 4px solid #10b981;
+                    padding: 16px; border-radius: 4px; margin: 20px 0;
+                }}
+                .success-box p {{ margin: 0; color: #065f46; font-size: 14px; }}
+                .plan-badge {{
+                    display: inline-block; background: #0d9488; color: white;
+                    padding: 6px 16px; border-radius: 20px; font-weight: 600; font-size: 14px;
+                }}
+                .details-box {{
+                    background: #f9fafb; border-radius: 6px; padding: 20px; margin: 24px 0;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🎉 Payment Successful!</h1>
+                </div>
+                <div class="content">
+                    <p><strong>Hi {user_name},</strong></p>
+                    
+                    <div class="success-box">
+                        <p><strong>Your subscription is now active!</strong></p>
+                        <p style="margin-top: 8px;">You've been upgraded to the <span class="plan-badge">{plan_name}</span> plan.</p>
+                    </div>
+                    
+                    <p>Thank you for subscribing to Northwest Creek! Your {plan_name} subscription ({price}/month) is now active and all premium features have been unlocked.</p>
+                    
+                    <div class="features">
+                        <p><strong>Your {plan_name} plan includes:</strong></p>
+                        <ul>
+                            {features_html}
+                        </ul>
+                    </div>
+                    
+                    <div style="text-align: center;">
+                        <a href="{dashboard_url}" class="button">Go to Dashboard →</a>
+                    </div>
+                    
+                    <div class="details-box">
+                        <p style="margin: 0 0 8px 0; font-weight: 600; color: #1f2937;">Subscription Details</p>
+                        <p style="margin: 4px 0; font-size: 14px;"><strong>Plan:</strong> {plan_name}</p>
+                        <p style="margin: 4px 0; font-size: 14px;"><strong>Amount:</strong> {price}/month</p>
+                        <p style="margin: 4px 0; font-size: 14px;"><strong>Billing:</strong> Monthly, auto-renewal</p>
+                        <p style="margin: 8px 0 0 0; font-size: 13px; color: #6b7280;">
+                            You can manage your subscription anytime from your account settings. Cancel anytime — no questions asked.
+                        </p>
+                    </div>
+                    
+                    <p style="margin-top: 24px; font-size: 14px; color: #6b7280;">
+                        Questions about your subscription? Contact us at 
+                        <a href="mailto:support@northwestcreek.com" style="color: #0d9488;">support@northwestcreek.com</a>
+                    </p>
+                    
+                    <p style="margin-top: 32px;"><strong>Happy investing!</strong><br>The Northwest Creek Team</p>
+                </div>
+                <div class="footer">
+                    <p><strong>Northwest Creek</strong></p>
+                    <p>Intelligent Stock Analysis & Portfolio Management</p>
+                    <p style="margin-top: 12px;">This is an automated email, please do not reply.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return self.send_email(
+            to_email=to_email,
+            subject=f"✅ Welcome to {plan_name} — Your Subscription is Active!",
+            html_content=html_content
+        )
+
+
 # Singleton instance
 email_service = EmailService()

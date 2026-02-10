@@ -7,6 +7,9 @@ import IntradayModal from '../components/Intradaymodal';
 import { useLivePriceContext } from '../contexts/LivePriceContext';
 import LiveBadge from '../components/LiveBadge';
 import '../styles/livePrice.css';
+import axios from 'axios';
+
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 interface PortfolioPosition {
   id: string;
@@ -115,7 +118,55 @@ const Portfolio: React.FC = () => {
       setUser(userResponse.data);
 
       const portfolioResponse = await portfolioAPI.getAll();
-      setPortfolio(portfolioResponse.data.positions || []);
+      const positions = portfolioResponse.data.positions || [];
+      
+      // Fetch fresh prices from Massive API for all portfolio tickers
+      if (positions.length > 0) {
+        try {
+          const tickers = positions.map((p: PortfolioPosition) => p.ticker).join(',');
+          const token = localStorage.getItem('access_token');
+          const priceResponse = await axios.get(
+            `${API_URL}/api/v1/intraday/batch?tickers=${tickers}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          
+          // Build a price map from the fresh data
+          const freshPrices: Record<string, number> = {};
+          if (Array.isArray(priceResponse.data)) {
+            priceResponse.data.forEach((item: any) => {
+              if (item.ticker && item.price) {
+                freshPrices[item.ticker] = item.price;
+              }
+            });
+          }
+          
+          // Update positions with fresh prices
+          const updatedPositions = positions.map((pos: PortfolioPosition) => {
+            const freshPrice = freshPrices[pos.ticker];
+            if (freshPrice) {
+              const totalValue = freshPrice * pos.quantity;
+              const profitLoss = totalValue - (pos.buy_price * pos.quantity);
+              const profitLossPercent = ((freshPrice - pos.buy_price) / pos.buy_price) * 100;
+              return {
+                ...pos,
+                current_price: freshPrice,
+                total_value: totalValue,
+                profit_loss: profitLoss,
+                profit_loss_percent: profitLossPercent,
+              };
+            }
+            return pos;
+          });
+          
+          setPortfolio(updatedPositions);
+          console.log(`✅ Refreshed prices for ${Object.keys(freshPrices).length} tickers`);
+        } catch (priceErr) {
+          console.warn('⚠️ Could not fetch fresh prices, using cached:', priceErr);
+          setPortfolio(positions);
+        }
+      } else {
+        setPortfolio(positions);
+      }
     } catch (error) {
       console.error('Failed to load data:', error);
       if ((error as any).response?.status === 401) {

@@ -17,7 +17,7 @@ class LivePriceService:
     """Service to manage live price streaming from Polygon.io"""
     
     def __init__(self):
-        self.polygon_ws_url = "wss://socket.polygon.io/stocks"
+        self.polygon_ws_url = "wss://socket.massive.com/stocks"
         self.polygon_api_key = settings.MASSIVE_API_KEY
         self.polygon_ws: Optional[websockets.WebSocketClientProtocol] = None
         self.subscribed_tickers: Set[str] = set()

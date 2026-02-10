@@ -37,6 +37,50 @@ def calculate_moving_average(prices: List[float], period: int) -> Optional[float
     return sum(prices[-period:]) / period
 
 
+@router.get("/batch")
+async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
+    """
+    Get intraday data for multiple tickers
+    Pass tickers as comma-separated string: ?tickers=AAPL,GOOGL,MSFT
+    MUST be declared before /{ticker} to avoid FastAPI treating 'batch' as a ticker
+    """
+    try:
+        ticker_list = [t.strip().upper() for t in tickers.split(',') if t.strip()]
+        
+        if not ticker_list:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No valid tickers provided"
+            )
+        
+        snapshots = list(client.list_universal_snapshots(
+            ticker_any_of=ticker_list
+        ))
+        
+        results = []
+        for snapshot in snapshots:
+            data = {
+                "ticker": safe_get_attr(snapshot, 'ticker'),
+                "name": safe_get_attr(snapshot, 'name'),
+                "type": safe_get_attr(snapshot, 'type'),
+                "price": safe_get_attr(snapshot, 'price'),
+                "change": safe_get_attr(snapshot, 'session.change') if hasattr(snapshot, 'session') else None,
+                "change_percent": safe_get_attr(snapshot, 'session.change_percent') if hasattr(snapshot, 'session') else None,
+                "market_status": safe_get_attr(snapshot, 'market_status'),
+            }
+            results.append(data)
+        
+        return results
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch batch intraday data: {str(e)}"
+        )
+
+
 @router.get("/{ticker}")
 async def get_intraday_data(ticker: str) -> Dict[str, Any]:
     """
@@ -219,47 +263,4 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch intraday bars with moving averages: {str(e)}"
-        )
-
-
-@router.get("/batch")
-async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
-    """
-    Get intraday data for multiple tickers
-    Pass tickers as comma-separated string: ?tickers=AAPL,GOOGL,MSFT
-    """
-    try:
-        ticker_list = [t.strip().upper() for t in tickers.split(',') if t.strip()]
-        
-        if not ticker_list:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No valid tickers provided"
-            )
-        
-        snapshots = list(client.list_universal_snapshots(
-            ticker_any_of=ticker_list
-        ))
-        
-        results = []
-        for snapshot in snapshots:
-            data = {
-                "ticker": safe_get_attr(snapshot, 'ticker'),
-                "name": safe_get_attr(snapshot, 'name'),
-                "type": safe_get_attr(snapshot, 'type'),
-                "price": safe_get_attr(snapshot, 'price'),
-                "change": safe_get_attr(snapshot, 'session.change') if hasattr(snapshot, 'session') else None,
-                "change_percent": safe_get_attr(snapshot, 'session.change_percent') if hasattr(snapshot, 'session') else None,
-                "market_status": safe_get_attr(snapshot, 'market_status'),
-            }
-            results.append(data)
-        
-        return results
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch batch intraday data: {str(e)}"
         )

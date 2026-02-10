@@ -15,6 +15,7 @@ from app.db.models import User
 from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.config import settings
+from app.services.email_service import email_service
 
 router = APIRouter()
 
@@ -266,9 +267,23 @@ async def handle_checkout_completed(session, db: AsyncSession):
         user = result.scalar_one_or_none()
         
         if user:
+            old_tier = user.subscription_tier
             user.subscription_tier = new_tier
             await db.commit()
             print(f"✅ User {user.email} upgraded to {new_tier} (via Checkout)")
+            
+            # Send payment success email (only on actual tier change)
+            if old_tier != new_tier:
+                try:
+                    plan_name = get_plan_name_for_price(price_id)
+                    email_service.send_payment_success_email(
+                        to_email=user.email,
+                        user_name=user.full_name or user.email,
+                        plan_name=plan_name,
+                        tier=new_tier
+                    )
+                except Exception as email_err:
+                    print(f"⚠️ Payment success email failed for {user.email}: {email_err}")
 
 
 async def handle_invoice_paid(invoice, db: AsyncSession):
@@ -292,9 +307,23 @@ async def handle_invoice_paid(invoice, db: AsyncSession):
         user = result.scalar_one_or_none()
         
         if user:
+            old_tier = user.subscription_tier
             user.subscription_tier = new_tier
             await db.commit()
             print(f"✅ User {user.email} upgraded to {new_tier} (via invoice.paid)")
+            
+            # Send payment success email (only on actual tier change)
+            if old_tier != new_tier:
+                try:
+                    plan_name = get_plan_name_for_price(price_id)
+                    email_service.send_payment_success_email(
+                        to_email=user.email,
+                        user_name=user.full_name or user.email,
+                        plan_name=plan_name,
+                        tier=new_tier
+                    )
+                except Exception as email_err:
+                    print(f"⚠️ Payment success email failed for {user.email}: {email_err}")
     except Exception as e:
         print(f"Error handling invoice.paid: {e}")
 
