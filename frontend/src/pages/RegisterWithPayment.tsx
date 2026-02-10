@@ -52,7 +52,7 @@ const RegisterWithPayment: React.FC = () => {
         email: formData.email,
         password: formData.password,
         full_name: formData.full_name,
-      }, selectedTier);
+      });
 
       // Show success — user must verify email first, then they'll be redirected to Stripe for paid tiers
       setStep('success');
