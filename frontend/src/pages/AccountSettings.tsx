@@ -112,10 +112,10 @@ const AccountSettings: React.FC = () => {
 
   const getTierBadge = (tier: string) => {
     const badges: Record<string, { bg: string; text: string; label: string }> = {
-      free: { bg: 'bg-gray-500', text: 'text-white', label: 'Free' },
-      casual: { bg: 'bg-teal-500', text: 'text-white', label: 'Casual' },
-      active: { bg: 'bg-blue-500', text: 'text-white', label: 'Active' },
-      professional: { bg: 'bg-purple-500', text: 'text-white', label: 'Professional' },
+      free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
+      casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
+      active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
+      professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
     };
     const badge = badges[tier] || badges.free;
     return (
@@ -127,57 +127,54 @@ const AccountSettings: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-500"></div>
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading account...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-800">
       {/* Navigation */}
-      <nav className="bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-8">
-              <Link to="/dashboard" className="flex items-center space-x-2">
-                <img src="/nwc_logo.png" alt="Northwest Creek" className="h-8 w-8" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                <span className="text-xl font-bold text-teal-600 dark:text-teal-400">Northwest Creek</span>
-              </Link>
-              <div className="hidden md:flex space-x-4">
-                <Link to="/dashboard" className="text-gray-600 dark:text-gray-300 hover:text-teal-600 dark:hover:text-teal-400 font-medium">Dashboard</Link>
-                <Link to="/watchlist" className="text-gray-600 dark:text-gray-300 hover:text-teal-600 dark:hover:text-teal-400 font-medium">Watchlist</Link>
-                <Link to="/portfolio" className="text-gray-600 dark:text-gray-300 hover:text-teal-600 dark:hover:text-teal-400 font-medium">Portfolio</Link>
-                <Link to="/alerts" className="text-gray-600 dark:text-gray-300 hover:text-teal-600 dark:hover:text-teal-400 font-medium">Alerts</Link>
-                <Link to="/stocks" className="text-gray-600 dark:text-gray-300 hover:text-teal-600 dark:hover:text-teal-400 font-medium">Stocks</Link>
-                <Link to="/technical-analysis" className="text-gray-600 dark:text-gray-300 hover:text-teal-600 dark:hover:text-teal-400 font-medium">Technical Analysis</Link>
-                <Link to="/dcf-valuation" className="text-gray-600 dark:text-gray-300 hover:text-teal-600 dark:hover:text-teal-400 font-medium">DCF Valuation</Link>
-              </div>
+            <div className="flex items-center">
+              <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
+              <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
+            </div>
+            <div className="hidden md:flex items-center space-x-8">
+              <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
+              <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
+              <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
+              <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
+              <Link to="/stocks" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Stocks</Link>
+              <Link to="/technical-analysis" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
+              <Link to="/dcf-valuation" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">DCF Valuation</Link>
             </div>
             <div className="flex items-center space-x-4">
-              <ThemeToggle />
-              {user && (
-                <>
-                  <span className="text-sm text-gray-600 dark:text-gray-300">{user.email}</span>
-                  {getTierBadge(user.subscription_tier)}
-                </>
-              )}
+              <Link to="/account" className="text-sm text-gray-300 hover:text-teal-400 transition-colors">{user?.email}</Link>
+              {user && getTierBadge(user.subscription_tier)}
               <button
                 onClick={handleLogout}
-                className="text-gray-600 dark:text-gray-300 hover:text-red-500 font-medium"
+                className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium"
               >
                 Logout
               </button>
+              <ThemeToggle />
             </div>
           </div>
         </div>
       </nav>
 
-      <div className="max-w-4xl mx-auto px-4 py-10">
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-8">Account Settings</h1>
 
         {/* Account Info */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border dark:border-gray-700 p-6 mb-6">
+        <div className="bg-white dark:bg-gray-700 rounded-xl shadow-lg border dark:border-gray-500 p-6 mb-6">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Account Information</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -204,7 +201,7 @@ const AccountSettings: React.FC = () => {
         </div>
 
         {/* Subscription */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border dark:border-gray-700 p-6 mb-6">
+        <div className="bg-white dark:bg-gray-700 rounded-xl shadow-lg border dark:border-gray-500 p-6 mb-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Subscription</h2>
             {getTierBadge(user?.subscription_tier || 'free')}
@@ -341,7 +338,7 @@ const AccountSettings: React.FC = () => {
         )}
 
         {/* Quick Links */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border dark:border-gray-700 p-6">
+        <div className="bg-white dark:bg-gray-700 rounded-xl shadow-lg border dark:border-gray-500 p-6">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Links</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Link to="/dashboard" className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-750 hover:bg-gray-100 dark:hover:bg-gray-600 border dark:border-gray-600 transition-colors">
