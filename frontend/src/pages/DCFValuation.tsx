@@ -179,8 +179,11 @@ const DCFValuation: React.FC = () => {
   const [usageCount, setUsageCount] = useState(0);
 
   const handleCalculate = async (e: React.FormEvent) => {
-    setUsageCount(prev => prev + 1);
     e.preventDefault();
+
+    if (user && usageCount >= tierLimit) {
+      return;
+    }
   
     if (!ticker.trim()) {
       setError('Please enter a ticker symbol');
@@ -201,6 +204,7 @@ const DCFValuation: React.FC = () => {
     
       setDcfData(response.data);
       setShowSuggestions(false);
+      setUsageCount(prev => prev + 1);
     } catch (err: any) {
       console.error('DCF calculation error:', err);
       setError(err.response?.data?.detail || 'Failed to calculate DCF. Please check the ticker symbol and try again.');
@@ -326,8 +330,40 @@ const DCFValuation: React.FC = () => {
       </div>
     );
   }
+
+  return (
+    <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
+      {/* Navigation */}
+      <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center">
+              <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
+              <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
+            </div>
+            <div className="hidden md:flex items-center space-x-8">
+              <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
+              <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
+              <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
+              <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
+              <Link to={`/stocks${ticker ? `?ticker=${ticker}` : '?showTopGainers=true'}`} className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Stocks</Link>
+              <Link to={`/technical-analysis${ticker ? `?ticker=${ticker}` : ''}`} className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
+              <Link to="/dcf-valuation" className="text-primary-400 font-medium border-b-2 border-primary-400 pb-1">DCF Valuation</Link>
+            </div>
+            <div className="flex items-center space-x-4">
+              <ThemeToggle />
+              <Link to="/account" className="text-sm text-gray-300 hover:text-teal-400 transition-colors">{user?.email}</Link>
+              {user && getTierBadge(user.subscription_tier)}
+              <button onClick={handleLogout} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium">
+                Logout
+              </button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-8">
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Warrant Warning Box */}
         {isWarrant && (
           <div className="bg-yellow-50 dark:bg-yellow-900/30 border-2 border-yellow-500 dark:border-yellow-600 rounded-lg p-6 mb-6">
