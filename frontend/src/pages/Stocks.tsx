@@ -103,6 +103,8 @@ const Stocks: React.FC = () => {
   const [newsLoading, setNewsLoading] = useState(false);
   const [topGainers, setTopGainers] = useState<TopGainer[]>([]);
   const [gainersLoading, setGainersLoading] = useState(false);
+  const [topLosers, setTopLosers] = useState<TopGainer[]>([]);
+  const [losersLoading, setLosersLoading] = useState(false);
   const [dailySnapshots, setDailySnapshots] = useState<DailySnapshot[]>([]);
   const [sectorSnapshots, setSectorSnapshots] = useState<DailySnapshot[]>([]);
   const [sectorLoading, setSectorLoading] = useState(false);
@@ -149,6 +151,7 @@ const Stocks: React.FC = () => {
     // Load top gainers when component mounts or when showTopGainers is true
     if (showTopGainers || initialTicker || !initialTicker) {
       loadTopGainers();
+      loadTopLosers();
     }
     // Load sector-specific stocks when sector param is present
     if (sectorParam) {
@@ -335,6 +338,23 @@ const Stocks: React.FC = () => {
       setTopGainers([]);
     } finally {
       setGainersLoading(false);
+    }
+  };
+
+  const loadTopLosers = async () => {
+    setLosersLoading(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await axios.get(
+        `${API_URL}/api/v1/stocks/top-losers?limit=10`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setTopLosers(response.data.top_losers || []);
+    } catch (err) {
+      console.error('Failed to load top losers:', err);
+      setTopLosers([]);
+    } finally {
+      setLosersLoading(false);
     }
   };
 
@@ -956,6 +976,37 @@ const Stocks: React.FC = () => {
                   </>
                 )}
                 
+                {/* Top Losers */}
+                {losersLoading ? (
+                  <div className="text-center py-4 mt-6">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-500 mx-auto mb-2"></div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Loading top losers...</p>
+                  </div>
+                ) : topLosers.length > 0 && (
+                  <div className="mt-6">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                      📉 Today's Top Losers:
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-3">
+                      {topLosers.map((loser, index) => (
+                        <button
+                          key={index}
+                          onClick={() => handleTickerClick(loser.ticker)}
+                          className="group px-4 py-2.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-red-600 hover:text-white dark:hover:bg-red-500 transition-all duration-200 transform hover:scale-105"
+                          title={`${loser.change_percent.toFixed(2)}% loss`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">{loser.ticker}</span>
+                            <span className="text-xs font-medium text-red-600 dark:text-red-400 group-hover:text-red-200">
+                              {loser.change_percent.toFixed(2)}%
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Daily Market Movers */}
                 {dailySnapshots.length > 0 && (
                   <div className="mt-8 border-t border-gray-200 dark:border-gray-600 pt-8">
