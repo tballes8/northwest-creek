@@ -59,16 +59,44 @@ async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
         
         results = []
         for snapshot in snapshots:
+            # Try multiple price sources — universal snapshots may store price in different places
+            price = (
+                safe_get_attr(snapshot, 'price')
+                or safe_get_attr(snapshot, 'session.close')
+                or safe_get_attr(snapshot, 'session.previous_close')
+                or safe_get_attr(snapshot, 'last_trade.price')
+                or safe_get_attr(snapshot, 'last_quote.midpoint')
+            )
+            
+            ticker_val = safe_get_attr(snapshot, 'ticker')
+            
+            # Debug: log first snapshot's attributes to find where price lives
+            if snapshots.index(snapshot) == 0:
+                print(f"🔍 DEBUG snapshot for {ticker_val}:")
+                print(f"   .price = {safe_get_attr(snapshot, 'price')}")
+                print(f"   .session.close = {safe_get_attr(snapshot, 'session.close')}")
+                print(f"   .session.previous_close = {safe_get_attr(snapshot, 'session.previous_close')}")
+                print(f"   .last_trade = {safe_get_attr(snapshot, 'last_trade')}")
+                print(f"   .last_trade.price = {safe_get_attr(snapshot, 'last_trade.price')}")
+                print(f"   .value = {safe_get_attr(snapshot, 'value')}")
+                print(f"   dir(snapshot) = {[a for a in dir(snapshot) if not a.startswith('_')]}")
+                if hasattr(snapshot, 'session') and snapshot.session:
+                    print(f"   dir(session) = {[a for a in dir(snapshot.session) if not a.startswith('_')]}")
+            
             data = {
-                "ticker": safe_get_attr(snapshot, 'ticker'),
+                "ticker": ticker_val,
                 "name": safe_get_attr(snapshot, 'name'),
                 "type": safe_get_attr(snapshot, 'type'),
-                "price": safe_get_attr(snapshot, 'price'),
+                "price": price,
                 "change": safe_get_attr(snapshot, 'session.change') if hasattr(snapshot, 'session') else None,
                 "change_percent": safe_get_attr(snapshot, 'session.change_percent') if hasattr(snapshot, 'session') else None,
                 "market_status": safe_get_attr(snapshot, 'market_status'),
             }
             results.append(data)
+        
+        # Debug summary
+        prices_found = sum(1 for r in results if r.get('price'))
+        print(f"📊 Batch: {len(ticker_list)} requested, {len(results)} snapshots returned, {prices_found} have prices")
         
         return results
         
