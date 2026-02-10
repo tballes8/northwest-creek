@@ -112,6 +112,51 @@ const Portfolio: React.FC = () => {
     });
   }, [prices]);
 
+  // Auto-refresh prices every 30 seconds via REST (catches updates WebSocket misses on low-volume stocks)
+  useEffect(() => {
+    if (!tickerList) return;
+
+    const refreshPrices = async () => {
+      try {
+        const token = localStorage.getItem('access_token');
+        const priceResponse = await axios.get(
+          `${API_URL}/api/v1/intraday/batch?tickers=${tickerList}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        const freshPrices: Record<string, number> = {};
+        if (Array.isArray(priceResponse.data)) {
+          priceResponse.data.forEach((item: any) => {
+            if (item.ticker && item.price) {
+              freshPrices[item.ticker] = item.price;
+            }
+          });
+        }
+
+        setPortfolio(prev => prev.map(pos => {
+          const freshPrice = freshPrices[pos.ticker];
+          if (freshPrice && freshPrice !== pos.current_price) {
+            // Flash animation
+            const isUp = freshPrice > (pos.current_price || 0);
+            setPriceFlash(pf => ({ ...pf, [pos.ticker]: isUp ? 'green' : 'red' }));
+            setTimeout(() => setPriceFlash(pf => ({ ...pf, [pos.ticker]: null })), 600);
+
+            const totalValue = freshPrice * pos.quantity;
+            const profitLoss = totalValue - (pos.buy_price * pos.quantity);
+            const profitLossPercent = ((freshPrice - pos.buy_price) / pos.buy_price) * 100;
+            return { ...pos, current_price: freshPrice, total_value: totalValue, profit_loss: profitLoss, profit_loss_percent: profitLossPercent };
+          }
+          return pos;
+        }));
+      } catch (err) {
+        // Silent fail — WebSocket and initial load are primary, this is supplemental
+      }
+    };
+
+    const interval = setInterval(refreshPrices, 30000);
+    return () => clearInterval(interval);
+  }, [tickerList]);
+
   const loadData = async () => {
     try {
       const userResponse = await authAPI.getCurrentUser();
@@ -344,7 +389,7 @@ const Portfolio: React.FC = () => {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
       {/* Navigation */}
       <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
@@ -373,7 +418,7 @@ const Portfolio: React.FC = () => {
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-screen-2xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         {/* Portfolio Summary */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
