@@ -297,12 +297,12 @@ const DCFValuation: React.FC = () => {
             </div>            
 
             <div className="flex items-center space-x-4">
-              <ThemeToggle /> 
-              <span className="text-sm text-gray-600 dark:text-gray-300">{user?.email}</span>
+              <Link to="/account" className="text-sm text-gray-600 dark:text-gray-300 hover:text-teal-400 transition-colors">{user?.email}</Link>
               {user && getTierBadge(user.subscription_tier)}
               <button onClick={handleLogout} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium">
                 Logout
               </button>
+              <ThemeToggle /> 
             </div>
           </div>
         </div>

@@ -272,7 +272,6 @@ async def handle_checkout_completed(session, db: AsyncSession):
             await db.commit()
             print(f"✅ User {user.email} upgraded to {new_tier} (via Checkout)")
             
-            # Send payment success email (only on actual tier change)
             if old_tier != new_tier:
                 try:
                     plan_name = get_plan_name_for_price(price_id)
@@ -283,7 +282,7 @@ async def handle_checkout_completed(session, db: AsyncSession):
                         tier=new_tier
                     )
                 except Exception as email_err:
-                    print(f"⚠️ Payment success email failed for {user.email}: {email_err}")
+                    print(f"⚠️ Payment success email failed: {email_err}")
 
 
 async def handle_invoice_paid(invoice, db: AsyncSession):
@@ -312,7 +311,6 @@ async def handle_invoice_paid(invoice, db: AsyncSession):
             await db.commit()
             print(f"✅ User {user.email} upgraded to {new_tier} (via invoice.paid)")
             
-            # Send payment success email (only on actual tier change)
             if old_tier != new_tier:
                 try:
                     plan_name = get_plan_name_for_price(price_id)
@@ -323,7 +321,7 @@ async def handle_invoice_paid(invoice, db: AsyncSession):
                         tier=new_tier
                     )
                 except Exception as email_err:
-                    print(f"⚠️ Payment success email failed for {user.email}: {email_err}")
+                    print(f"⚠️ Payment success email failed: {email_err}")
     except Exception as e:
         print(f"Error handling invoice.paid: {e}")
 
@@ -365,6 +363,149 @@ async def handle_payment_failed(invoice, db: AsyncSession):
     """Handle failed payment"""
     customer_email = invoice.get('customer_email')
     print(f"❌ Payment failed for {customer_email}")
+
+
+# ---- Cancel Subscription ----
+
+@router.post("/cancel-subscription")
+async def cancel_subscription(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Cancel the user's Stripe subscription.
+    Cancels at period end so user keeps access until billing cycle finishes.
+    """
+    try:
+        if current_user.subscription_tier == 'free':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No active subscription to cancel."
+            )
+        
+        # Find customer by email
+        customers = stripe.Customer.list(email=current_user.email, limit=1)
+        if not customers.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No Stripe customer found for this account."
+            )
+        
+        customer = customers.data[0]
+        
+        # Find active subscriptions
+        subscriptions = stripe.Subscription.list(
+            customer=customer.id,
+            status='active',
+            limit=10
+        )
+        
+        if not subscriptions.data:
+            # Check for trialing subscriptions too
+            subscriptions = stripe.Subscription.list(
+                customer=customer.id,
+                status='trialing',
+                limit=10
+            )
+        
+        if not subscriptions.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active subscription found."
+            )
+        
+        cancelled_ids = []
+        for sub in subscriptions.data:
+            # Cancel at period end — user keeps access until billing cycle ends
+            stripe.Subscription.modify(
+                sub.id,
+                cancel_at_period_end=True
+            )
+            cancelled_ids.append(sub.id)
+            print(f"🚫 Subscription {sub.id} set to cancel at period end for {current_user.email}")
+        
+        return {
+            "status": "cancellation_scheduled",
+            "message": "Your subscription will be cancelled at the end of the current billing period. You'll keep access to all features until then.",
+            "subscription_ids": cancelled_ids,
+        }
+        
+    except HTTPException:
+        raise
+    except stripe.error.StripeError as e:
+        print(f"Stripe error cancelling subscription: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to cancel subscription: {str(e)}"
+        )
+    except Exception as e:
+        print(f"Error cancelling subscription: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not cancel subscription. Please try again."
+        )
+
+
+@router.post("/cancel-subscription-immediate")
+async def cancel_subscription_immediate(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Immediately cancel subscription and downgrade to free.
+    Used when user wants instant cancellation (no access until period end).
+    """
+    try:
+        if current_user.subscription_tier == 'free':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No active subscription to cancel."
+            )
+        
+        customers = stripe.Customer.list(email=current_user.email, limit=1)
+        if not customers.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No Stripe customer found."
+            )
+        
+        customer = customers.data[0]
+        subscriptions = stripe.Subscription.list(
+            customer=customer.id,
+            status='active',
+            limit=10
+        )
+        
+        for sub in subscriptions.data:
+            stripe.Subscription.cancel(sub.id)
+            print(f"🚫 Subscription {sub.id} cancelled immediately for {current_user.email}")
+        
+        # Downgrade user immediately
+        old_tier = current_user.subscription_tier
+        current_user.subscription_tier = 'free'
+        await db.commit()
+        
+        print(f"⚠️ User {current_user.email} downgraded from {old_tier} to free (immediate cancel)")
+        
+        return {
+            "status": "cancelled",
+            "message": "Your subscription has been cancelled and your account has been downgraded to the Free tier.",
+            "new_tier": "free",
+        }
+        
+    except HTTPException:
+        raise
+    except stripe.error.StripeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to cancel: {str(e)}"
+        )
+    except Exception as e:
+        print(f"Error in immediate cancel: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not cancel subscription."
+        )
 
 
 # ---- Status & Config ----

@@ -109,6 +109,11 @@ const Watchlist: React.FC = () => {
     }
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('access_token');
+    navigate('/');
+  };  
+
   const handleAddStock = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -247,17 +252,11 @@ const Watchlist: React.FC = () => {
               <Link to="/dcf-valuation" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">DCF Valuation</Link>
             </div>
             <div className="flex items-center space-x-4">
-              <ThemeToggle />
-              <span className="text-sm text-gray-600 dark:text-gray-300">{user?.email}</span>
-              <button
-                onClick={() => {
-                  localStorage.removeItem('access_token');
-                  navigate('/login');
-                }}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg transition-colors"
-              >
+              <Link to="/account" className="text-sm text-gray-600 dark:text-gray-300 hover:text-teal-400 transition-colors">{user?.email}</Link>
+              <button onClick={handleLogout} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium">
                 Logout
               </button>
+              <ThemeToggle />
             </div>
           </div>
         </div>

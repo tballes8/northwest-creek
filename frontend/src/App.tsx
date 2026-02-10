@@ -16,7 +16,8 @@ import RegisterWithPayment from './pages/RegisterWithPayment';
 import Stocks from './pages/Stocks';
 import { LivePriceProvider } from './contexts/LivePriceContext';
 import Payment from './pages/Payment';
-
+import AccountSettings from './pages/AccountSettings';
+import UpgradeRequired from '../components/UpgradeRequired';
 
 
 // Protected Route Component
@@ -45,7 +46,20 @@ function App() {
           <Route path="/stocks" element={<ProtectedRoute><Stocks /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/payment" element={<Payment />} />
+          <Route path="/account" element={<AccountSettings />} />
 
+          if (usageCount >= tierLimit) {
+            return (
+              <UpgradeRequired
+                feature="Technical Analysis"
+                currentTier={user.subscription_tier}
+                limitReached={true}
+                currentUsage={usageCount}
+                maxUsage={tierLimit}
+              />
+            );
+          }
+          
           <Route path="/watchlist" 
             element={
               <ProtectedRoute>

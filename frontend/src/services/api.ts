@@ -26,8 +26,8 @@ axiosInstance.interceptors.request.use(
 
 // Auth API
 export const authAPI = {
-  register: (data: { email: string; password: string; full_name: string }, selectedTier?: string) =>
-    axiosInstance.post(`/auth/register${selectedTier ? `?selected_tier=${selectedTier}` : ''}`, data),
+  register: (data: { email: string; password: string; full_name: string }) =>
+    axiosInstance.post('/auth/register', data),
   
   login: (data: { email: string; password: string }) =>
     axiosInstance.post('/auth/login', data),
@@ -129,6 +129,25 @@ export const technicalAPI = {
   analyze: (ticker: string) =>
     axiosInstance.get(`/technical-analysis/analyze/${ticker}`),
 };
+
+// Stripe / Subscription API
+export const stripeAPI = {
+  getConfig: () =>
+    axiosInstance.get('/stripe/config'),
+  
+  getSubscriptionStatus: () =>
+    axiosInstance.get('/stripe/subscription-status'),
+  
+  createSubscription: (tier: string) =>
+    axiosInstance.post('/stripe/create-subscription', { tier }),
+  
+  cancelSubscription: () =>
+    axiosInstance.post('/stripe/cancel-subscription'),
+  
+  cancelSubscriptionImmediate: () =>
+    axiosInstance.post('/stripe/cancel-subscription-immediate'),
+};
+
 export default axiosInstance;
 
 // Intraday API
