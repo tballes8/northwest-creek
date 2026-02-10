@@ -9,6 +9,9 @@ import { useLivePriceContext } from '../contexts/LivePriceContext';
 import MarketStatusBadge from '../components/MarketStatusBadge';
 import UpgradeRequired from '../components/UpgradeRequired';
 import '../styles/livePrice.css';
+import axios from 'axios';
+
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 const Watchlist: React.FC = () => {
   const navigate = useNavigate();
@@ -91,6 +94,49 @@ const Watchlist: React.FC = () => {
       });
     });
   }, [prices]);
+
+  // Auto-refresh prices every 30 seconds via REST (catches updates WebSocket misses on low-volume stocks)
+  useEffect(() => {
+    if (!tickerList) return;
+
+    const refreshPrices = async () => {
+      try {
+        const token = localStorage.getItem('access_token');
+        const priceResponse = await axios.get(
+          `${API_URL}/api/v1/intraday/batch?tickers=${tickerList}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        const freshPrices: Record<string, number> = {};
+        if (Array.isArray(priceResponse.data)) {
+          priceResponse.data.forEach((item: any) => {
+            if (item.ticker && item.price) {
+              freshPrices[item.ticker] = item.price;
+            }
+          });
+        }
+
+        setWatchlist(prev => prev.map(item => {
+          const freshPrice = freshPrices[item.ticker];
+          if (freshPrice && freshPrice !== item.price) {
+            const isUp = freshPrice > (item.price || 0);
+            setPriceFlash(pf => ({ ...pf, [item.ticker]: isUp ? 'green' : 'red' }));
+            setTimeout(() => setPriceFlash(pf => ({ ...pf, [item.ticker]: null })), 600);
+
+            const change = item.change ?? 0;
+            const changePercent = item.change_percent ?? 0;
+            return { ...item, price: freshPrice, change, change_percent: changePercent };
+          }
+          return item;
+        }));
+      } catch (err) {
+        // Silent fail — WebSocket and initial load are primary, this is supplemental
+      }
+    };
+
+    const interval = setInterval(refreshPrices, 30000);
+    return () => clearInterval(interval);
+  }, [tickerList]);
 
   const loadData = async () => {
     try {
@@ -244,7 +290,10 @@ const Watchlist: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 dark:bg-gray-800 flex items-center justify-center transition-colors duration-200">
-        <div className="text-gray-900 dark:text-white text-xl">Loading...</div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600 dark:text-gray-400">Loading watchlist...</p>
+        </div>
       </div>
     );
   }
@@ -440,6 +489,7 @@ const Watchlist: React.FC = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ticker</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Current Price</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Day Change</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Watching Since</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Started At</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">vs Start</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Notes</th>
@@ -477,6 +527,15 @@ const Watchlist: React.FC = () => {
                         stock.change && stock.change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                       }`}>
                         {stock.change ? `${stock.change >= 0 ? '+' : ''}$${stock.change.toFixed(2)} (${stock.change_percent?.toFixed(2)}%)` : '-'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <div className="text-sm text-gray-600 dark:text-gray-400">
+                        {(() => {
+                          const dateStr = (stock as any).added_at || (stock as any).created_at;
+                          if (!dateStr) return '-';
+                          return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                        })()}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
