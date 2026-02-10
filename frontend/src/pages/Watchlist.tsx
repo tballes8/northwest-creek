@@ -95,7 +95,7 @@ const Watchlist: React.FC = () => {
     });
   }, [prices]);
 
-  // Auto-refresh prices every 30 seconds via REST (catches updates WebSocket misses on low-volume stocks)
+  // Auto-refresh prices every 30s via REST (catches updates WebSocket misses on low-volume stocks)
   useEffect(() => {
     if (!tickerList) return;
 
@@ -122,15 +122,12 @@ const Watchlist: React.FC = () => {
             const isUp = freshPrice > (item.price || 0);
             setPriceFlash(pf => ({ ...pf, [item.ticker]: isUp ? 'green' : 'red' }));
             setTimeout(() => setPriceFlash(pf => ({ ...pf, [item.ticker]: null })), 600);
-
-            const change = item.change ?? 0;
-            const changePercent = item.change_percent ?? 0;
-            return { ...item, price: freshPrice, change, change_percent: changePercent };
+            return { ...item, price: freshPrice };
           }
           return item;
         }));
       } catch (err) {
-        // Silent fail — WebSocket and initial load are primary, this is supplemental
+        // Silent fail
       }
     };
 
@@ -144,7 +141,45 @@ const Watchlist: React.FC = () => {
       setUser(userResponse.data);
 
       const watchlistResponse = await watchlistAPI.getAll();
-      setWatchlist(watchlistResponse.data.items || []);
+      const items = watchlistResponse.data.items || [];
+
+      // Fetch fresh prices from batch endpoint
+      if (items.length > 0) {
+        try {
+          const tickers = items.map((item: WatchlistItem) => item.ticker).join(',');
+          const token = localStorage.getItem('access_token');
+          const priceResponse = await axios.get(
+            `${API_URL}/api/v1/intraday/batch?tickers=${tickers}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+
+          const freshPrices: Record<string, number> = {};
+          if (Array.isArray(priceResponse.data)) {
+            priceResponse.data.forEach((item: any) => {
+              if (item.ticker && item.price) {
+                freshPrices[item.ticker] = item.price;
+              }
+            });
+          }
+
+          // Overlay fresh prices onto watchlist items
+          const updatedItems = items.map((item: WatchlistItem) => {
+            const freshPrice = freshPrices[item.ticker];
+            if (freshPrice) {
+              return { ...item, price: freshPrice };
+            }
+            return item;
+          });
+
+          setWatchlist(updatedItems);
+          console.log(`✅ Refreshed watchlist prices for ${Object.keys(freshPrices).length} tickers`);
+        } catch (priceErr) {
+          console.warn('⚠️ Could not fetch fresh prices, using cached:', priceErr);
+          setWatchlist(items);
+        }
+      } else {
+        setWatchlist(items);
+      }
     } catch (error) {
       console.error('Failed to load data:', error);
       if ((error as any).response?.status === 401) {
