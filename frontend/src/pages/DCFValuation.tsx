@@ -69,9 +69,8 @@ const DCFValuation: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const urlTicker = searchParams.get('ticker') || '';
-  
-  const [showSuggestions, setShowSuggestions] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [ticker, setTicker] = useState(urlTicker);
   const [growthRate, setGrowthRate] = useState(5);
   const [terminalGrowth, setTerminalGrowth] = useState(2.5);

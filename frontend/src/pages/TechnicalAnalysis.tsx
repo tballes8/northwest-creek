@@ -141,7 +141,6 @@ const TechnicalAnalysis: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const urlTicker = searchParams.get('ticker') || '';
-  
   const [user, setUser] = useState<User | null>(null);
   const [ticker, setTicker] = useState(urlTicker);
   const [loading, setLoading] = useState(false);
