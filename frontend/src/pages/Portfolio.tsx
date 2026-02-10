@@ -5,7 +5,7 @@ import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import IntradayModal from '../components/Intradaymodal';
 import { useLivePriceContext } from '../contexts/LivePriceContext';
-import LiveBadge from '../components/LiveBadge';
+import MarketStatusBadge from '../components/MarketStatusBadge';
 import '../styles/livePrice.css';
 import axios from 'axios';
 
@@ -406,7 +406,7 @@ const Portfolio: React.FC = () => {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Portfolio</h1>
           <div className="flex gap-3">
-            <LiveBadge isConnected={isConnected} />
+            <MarketStatusBadge isConnected={isConnected} />
             <button
               onClick={handleRefresh}
               disabled={refreshing}

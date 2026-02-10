@@ -6,7 +6,7 @@ import ThemeToggle from '../components/ThemeToggle';
 import { WatchlistItem } from '../types';
 import IntradayModal from '../components/Intradaymodal';
 import { useLivePriceContext } from '../contexts/LivePriceContext';
-import LiveBadge from '../components/LiveBadge';
+import MarketStatusBadge from '../components/MarketStatusBadge';
 import '../styles/livePrice.css';
 
 const Watchlist: React.FC = () => {
@@ -278,7 +278,7 @@ const Watchlist: React.FC = () => {
               </p>
             </div>
             <div className="flex items-center gap-4">
-              <LiveBadge isConnected={isConnected} />
+              <MarketStatusBadge isConnected={isConnected} />
               <button
                 onClick={handleRefresh}
                 disabled={refreshing}
