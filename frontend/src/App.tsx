@@ -17,8 +17,6 @@ import Stocks from './pages/Stocks';
 import { LivePriceProvider } from './contexts/LivePriceContext';
 import Payment from './pages/Payment';
 import AccountSettings from './pages/AccountSettings';
-import UpgradeRequired from '../components/UpgradeRequired';
-
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -46,51 +44,11 @@ function App() {
           <Route path="/stocks" element={<ProtectedRoute><Stocks /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/payment" element={<Payment />} />
-          <Route path="/account" element={<AccountSettings />} />
-
-          if (usageCount >= tierLimit) {
-            return (
-              <UpgradeRequired
-                feature="Technical Analysis"
-                currentTier={user.subscription_tier}
-                limitReached={true}
-                currentUsage={usageCount}
-                maxUsage={tierLimit}
-              />
-            );
-          }
-          
-          <Route path="/watchlist" 
-            element={
-              <ProtectedRoute>
-                <Watchlist />
-              </ProtectedRoute>
-            } 
-          />
-
-          <Route path="/portfolio" 
-            element={
-              <ProtectedRoute>
-                <Portfolio />
-              </ProtectedRoute>
-            } 
-          />
-
-          <Route path="/alerts" 
-            element={
-              <ProtectedRoute>
-                <Alerts />
-              </ProtectedRoute>
-            } 
-          />
-
-          <Route path="/technical-analysis" 
-            element={
-              <ProtectedRoute>
-                <TechnicalAnalysis />
-              </ProtectedRoute>
-            } 
-          />
+          <Route path="/account" element={<AccountSettings />} />          
+          <Route path="/watchlist" element={<ProtectedRoute><Watchlist /></ProtectedRoute>} />
+          <Route path="/portfolio" element={<ProtectedRoute><Portfolio /></ProtectedRoute>} />
+          <Route path="/alerts" element={<ProtectedRoute><Alerts /></ProtectedRoute>} />
+          <Route path="/technical-analysis" element={<ProtectedRoute><TechnicalAnalysis /></ProtectedRoute>} />
 
           <Route path="/dcf-valuation" 
             element={

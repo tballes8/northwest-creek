@@ -7,6 +7,7 @@ import { WatchlistItem } from '../types';
 import IntradayModal from '../components/Intradaymodal';
 import { useLivePriceContext } from '../contexts/LivePriceContext';
 import MarketStatusBadge from '../components/MarketStatusBadge';
+import UpgradeRequired from '../components/UpgradeRequired';
 import '../styles/livePrice.css';
 
 const Watchlist: React.FC = () => {
@@ -112,6 +113,21 @@ const Watchlist: React.FC = () => {
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     navigate('/');
+  };
+
+  const getTierBadge = (tier: string) => {
+    const badges: Record<string, { bg: string; text: string; label: string }> = {
+      free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
+      casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
+      active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
+      professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
+    };
+    const badge = badges[tier] || badges.free;
+    return (
+      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.bg} ${badge.text}`}>
+        {badge.label}
+      </span>
+    );
   };  
 
   const handleAddStock = async (e: React.FormEvent) => {
@@ -123,12 +139,13 @@ const Watchlist: React.FC = () => {
       return;
     }
 
-    const limits = {
+  const limits = {
       free: 5,
       casual: 20,
       active: 45,
       professional: 75
     };
+  
     const limit = limits[user?.subscription_tier as keyof typeof limits] || 5;
 
     if (watchlist.length >= limit) {
@@ -232,11 +249,15 @@ const Watchlist: React.FC = () => {
     );
   }
 
+  const watchlistLimits: Record<string, number> = { free: 5, casual: 20, active: 45, professional: 75 };
+  const watchlistLimit = watchlistLimits[user?.subscription_tier || 'free'] || 5;
+  const isAtLimit = watchlist.length >= watchlistLimit;
+
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
       {/* Navigation */}
       <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
@@ -252,18 +273,31 @@ const Watchlist: React.FC = () => {
               <Link to="/dcf-valuation" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">DCF Valuation</Link>
             </div>
             <div className="flex items-center space-x-4">
-              <Link to="/account" className="text-sm text-gray-600 dark:text-gray-300 hover:text-teal-400 transition-colors">{user?.email}</Link>
+              <ThemeToggle />
+              <Link to="/account" className="text-sm text-gray-300 hover:text-teal-400 transition-colors">{user?.email}</Link>
+              {user && getTierBadge(user.subscription_tier)}
               <button onClick={handleLogout} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium">
                 Logout
               </button>
-              <ThemeToggle />
             </div>
           </div>
         </div>
       </nav>
 
+      {/* Show upgrade banner when at limit */}
+      {isAtLimit && user && (
+        <UpgradeRequired
+          feature="Watchlist"
+          currentTier={user.subscription_tier}
+          limitReached={true}
+          currentUsage={watchlist.length}
+          maxUsage={watchlistLimit}
+          onBack={() => {}}
+        />
+      )}
+
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
           <div className="flex justify-between items-center">

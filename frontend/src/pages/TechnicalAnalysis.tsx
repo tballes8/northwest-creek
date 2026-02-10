@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI, technicalAPI, watchlistAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
+import UpgradeRequired from '../components/UpgradeRequired';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -156,6 +157,7 @@ const TechnicalAnalysis: React.FC = () => {
   const [showTrend, setShowTrend] = useState(false);
   const [watchlistMsg, setWatchlistMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [addingToWatchlist, setAddingToWatchlist] = useState(false);
+  const [usageCount, setUsageCount] = useState(0);
 
   // Helper function to detect if a ticker is a warrant
   const detectWarrant = (tickerSymbol: string): boolean => {
@@ -221,6 +223,7 @@ const TechnicalAnalysis: React.FC = () => {
     try {
       const response = await technicalAPI.analyze(symbol.toUpperCase());
       setAnalysisData(response.data);
+      setUsageCount(prev => prev + 1);
     } catch (err: any) {
       console.error('Analysis error:', err);
       setError(err.response?.data?.detail || 'Failed to analyze stock. Please check the ticker symbol.');
@@ -229,9 +232,34 @@ const TechnicalAnalysis: React.FC = () => {
     }
   };
 
+  const getTierBadge = (tier: string) => {
+    const badges = {
+      free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
+      casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
+      active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
+      professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
+    };
+    const badge = badges[tier as keyof typeof badges] || badges.free;
+    return (
+      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.bg} ${badge.text}`}>
+        {badge.label}
+      </span>
+    );
+  };
+
+  const TIER_LIMITS: Record<string, number> = {
+      free: 5, casual: 5, active: 5, professional: 20
+    };
+
+  const tierLimit = TIER_LIMITS[user?.subscription_tier || 'free'] || 5;  
+
   const handleAnalyze = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await performAnalysis(ticker);
+      e.preventDefault();
+      if (user && usageCount >= tierLimit) {
+        // Don't call API — the render below will show UpgradeRequired
+        return;
+      }
+      await performAnalysis(ticker);
   };
 
   const handleTickerChange = (value: string) => {
@@ -275,21 +303,6 @@ const TechnicalAnalysis: React.FC = () => {
     } finally {
       setAddingToWatchlist(false);
     }
-  };
-
-  const getTierBadge = (tier: string) => {
-    const badges = {
-      free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
-      casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
-      active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
-      professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
-    };
-    const badge = badges[tier as keyof typeof badges] || badges.free;
-    return (
-      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.bg} ${badge.text}`}>
-        {badge.label}
-      </span>
-    );
   };
 
   // Chart configurations
@@ -548,11 +561,51 @@ const TechnicalAnalysis: React.FC = () => {
     },
   };
 
+  // Show upgrade page if user has hit their limit
+  if (user && usageCount >= tierLimit) {
+    return (
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
+        <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
+          <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between h-16">
+              <div className="flex items-center">
+                <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
+                <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
+              </div>
+              <div className="hidden md:flex items-center space-x-8">
+                <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
+                <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
+                <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
+                <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
+                <Link to="/stocks" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Stocks</Link>
+                <Link to="/technical-analysis" className="text-primary-400 font-medium border-b-2 border-primary-400 pb-1">Technical Analysis</Link>
+                <Link to="/dcf-valuation" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">DCF Valuation</Link>
+              </div>
+              <div className="flex items-center space-x-4">
+                <ThemeToggle />
+                <Link to="/account" className="text-sm text-gray-300 hover:text-teal-400 transition-colors">{user?.email}</Link>
+                {user && getTierBadge(user.subscription_tier)}
+                <button onClick={() => { localStorage.removeItem('access_token'); navigate('/login'); }} className="text-gray-300 hover:text-white text-sm font-medium">Logout</button>
+              </div>
+            </div>
+          </div>
+        </nav>
+        <UpgradeRequired
+          feature="Technical Analysis"
+          currentTier={user.subscription_tier}
+          limitReached={true}
+          currentUsage={usageCount}
+          maxUsage={tierLimit}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
       {/* Navigation - Same as before */}
       <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />

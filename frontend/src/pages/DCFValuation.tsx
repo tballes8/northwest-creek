@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI, dcfAPI, watchlistAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
-
+import UpgradeRequired from '../components/UpgradeRequired';
 
 interface DCFSuggestions {
   ticker: string;
@@ -144,7 +144,7 @@ const DCFValuation: React.FC = () => {
       }
     }
   };
-
+  
   const loadSuggestions = async (symbol: string) => {
     if (!symbol.trim()) return;
 
@@ -170,7 +170,16 @@ const DCFValuation: React.FC = () => {
     }
   };
 
+  const TIER_LIMITS: Record<string, number> = {
+    free: 5, casual: 5, active: 5, professional: 20
+  };
+
+  const tierLimit = TIER_LIMITS[user?.subscription_tier || 'free'] || 5;
+
+  const [usageCount, setUsageCount] = useState(0);
+
   const handleCalculate = async (e: React.FormEvent) => {
+    setUsageCount(prev => prev + 1);
     e.preventDefault();
   
     if (!ticker.trim()) {
@@ -274,40 +283,49 @@ const DCFValuation: React.FC = () => {
     if (Math.abs(value) >= 1e3) return `$${(value / 1e3).toFixed(2)}K`;
     return `$${value.toFixed(2)}`;
   };
+  if (usageCount >= tierLimit) {
+    return (
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
+        {/* Navigation */}
+        <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between h-16">
+              <div className="flex items-center">
+                <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
+                <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
+              </div>
 
-  return (
-    <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
-      {/* Navigation */}
-      <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
-              <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
-            </div>
+              <div className="hidden md:flex items-center space-x-8">
+                <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
+                <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
+                <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
+                <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
+                <Link to={`/stocks${ticker ? `?ticker=${ticker}` : '?showTopGainers=true'}`} className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Stocks</Link>
+                <Link to={`/technical-analysis${ticker ? `?ticker=${ticker}` : ''}`} className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
+                <Link to="/dcf-valuation" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">DCF Valuation</Link>
+              </div>            
 
-            <div className="hidden md:flex items-center space-x-8">
-              <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
-              <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
-              <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
-              <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
-              <Link to={`/stocks${ticker ? `?ticker=${ticker}` : '?showTopGainers=true'}`} className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Stocks</Link>
-              <Link to={`/technical-analysis${ticker ? `?ticker=${ticker}` : ''}`} className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
-              <Link to="/dcf-valuation" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">DCF Valuation</Link>
-            </div>            
-
-            <div className="flex items-center space-x-4">
-              <Link to="/account" className="text-sm text-gray-600 dark:text-gray-300 hover:text-teal-400 transition-colors">{user?.email}</Link>
-              {user && getTierBadge(user.subscription_tier)}
-              <button onClick={handleLogout} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium">
-                Logout
-              </button>
-              <ThemeToggle /> 
+              <div className="flex items-center space-x-4">
+                <Link to="/account" className="text-sm text-gray-600 dark:text-gray-300 hover:text-teal-400 transition-colors">{user?.email}</Link>
+                {user && getTierBadge(user.subscription_tier)}
+                <button onClick={handleLogout} className="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm font-medium">
+                  Logout
+                </button>
+                <ThemeToggle /> 
+              </div>
             </div>
           </div>
-        </div>
-      </nav>
-
+        </nav>
+        <UpgradeRequired
+          feature="DCF Valuation"
+          currentTier={user.subscription_tier}
+          limitReached={true}
+          currentUsage={usageCount}
+          maxUsage={tierLimit}
+        />
+      </div>
+    );
+  }
       {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
         {/* Warrant Warning Box */}
