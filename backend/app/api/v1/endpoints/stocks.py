@@ -86,20 +86,48 @@ async def get_daily_snapshot(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching daily snapshot: {str(e)}")
 
+def _is_warrant(ticker: str) -> bool:
+    """Detect if a ticker is a warrant (e.g., ABCDW, ABCWW, ABCD.WS, ABCD+)"""
+    t = ticker.upper().strip()
+    if t.endswith('WS') or t.endswith('.WS'):
+        return True
+    if t.endswith('WW'):
+        return True
+    if t.endswith('+'):
+        return True
+    # Ends in W preceded by a letter (e.g., SOUNW, BRKHW) — common warrant pattern
+    # But exclude legitimate tickers like BMW, VEW (short tickers ending in W)
+    if len(t) > 3 and t.endswith('W') and t[-2].isalpha():
+        return True
+    return False
+
+
 @router.get("/top-gainers")
 async def get_top_gainers(limit: int = 10):
-    """Get top stock gainers"""
+    """Get top stock gainers, excluding warrants"""
     try:
-        result = await market_data_service.get_top_gainers(limit)
+        # Fetch extra to compensate for filtered-out warrants
+        result = await market_data_service.get_top_gainers(limit + 20)
+        
+        if "top_gainers" in result and isinstance(result["top_gainers"], list):
+            filtered = [g for g in result["top_gainers"] if not _is_warrant(g.get("ticker", ""))]
+            result["top_gainers"] = filtered[:limit]
+        
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/top-losers")
 async def get_top_losers(limit: int = 10):
-    """Get top stock losers"""
+    """Get top stock losers, excluding warrants"""
     try:
-        return await market_data_service.get_top_losers(limit)
+        result = await market_data_service.get_top_losers(limit + 20)
+        
+        if "top_losers" in result and isinstance(result["top_losers"], list):
+            filtered = [g for g in result["top_losers"] if not _is_warrant(g.get("ticker", ""))]
+            result["top_losers"] = filtered[:limit]
+        
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
