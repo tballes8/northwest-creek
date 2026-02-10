@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
@@ -6,6 +6,7 @@ import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement
 import { Line } from 'react-chartjs-2';
 import { authAPI, stocksAPI, watchlistAPI } from '../services/api';
 import { getTickersForSector, SECTOR_COLORS } from '../utils/sectorMap';
+import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 // Register Chart.js components
@@ -76,6 +77,13 @@ interface DailySnapshot {
   snapshot_date: string;
 }
 
+interface SearchSuggestion {
+  ticker: string;
+  name: string;
+  type?: string;
+  primary_exchange?: string;
+}
+
 const Stocks: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -102,6 +110,11 @@ const Stocks: React.FC = () => {
   const [relatedCommonStock, setRelatedCommonStock] = useState<string | null>(null);
   const [watchlistMsg, setWatchlistMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [addingToWatchlist, setAddingToWatchlist] = useState(false);
+  const [suggestions, setSuggestions] = useState<SearchSuggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // Helper function to detect if a ticker is a warrant
   const detectWarrant = (tickerSymbol: string): boolean => {
@@ -142,6 +155,64 @@ const Stocks: React.FC = () => {
       loadSectorSnapshots(sectorParam);
     }
   }, [initialTicker, showTopGainers, sectorParam]);
+
+  // Close suggestions dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Debounced ticker/company search
+  const searchTickers = useCallback(async (query: string) => {
+    if (query.length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    
+    setSuggestionsLoading(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await axios.get(
+        `${API_URL}/api/v1/stocks/search?q=${encodeURIComponent(query)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const results = response.data.results || [];
+      setSuggestions(results);
+      setShowSuggestions(results.length > 0);
+    } catch (err) {
+      console.error('Search error:', err);
+      setSuggestions([]);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }, []);
+
+  const handleSearchInputChange = (value: string) => {
+    setSearchInput(value);
+    
+    // Clear previous debounce
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    
+    // Debounce API call by 300ms
+    debounceRef.current = setTimeout(() => {
+      searchTickers(value);
+    }, 300);
+  };
+
+  const handleSuggestionClick = (suggestion: SearchSuggestion) => {
+    setSearchInput(suggestion.ticker);
+    setShowSuggestions(false);
+    setSuggestions([]);
+    handleTickerClick(suggestion.ticker);
+  };
 
   // Function to load stocks for a specific sector
   const loadSectorSnapshots = async (sector: string) => {
@@ -269,10 +340,31 @@ const Stocks: React.FC = () => {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    setShowSuggestions(false);
+    setSuggestions([]);
     if (searchInput.trim()) {
-      loadStockData(searchInput);
-      loadNews(searchInput);
-      navigate(`/stocks?ticker=${searchInput.toUpperCase()}`);
+      // If input looks like a ticker (all caps, short), search directly
+      // Otherwise if we have suggestions, use the first match's ticker
+      const input = searchInput.trim();
+      const looksLikeTicker = /^[A-Z]{1,5}(\.[A-Z])?$/.test(input.toUpperCase()) && input.length <= 6;
+      
+      if (looksLikeTicker) {
+        loadStockData(input);
+        loadNews(input);
+        navigate(`/stocks?ticker=${input.toUpperCase()}`);
+      } else if (suggestions.length > 0) {
+        // Use first suggestion's ticker
+        const firstTicker = suggestions[0].ticker;
+        setSearchInput(firstTicker);
+        loadStockData(firstTicker);
+        loadNews(firstTicker);
+        navigate(`/stocks?ticker=${firstTicker}`);
+      } else {
+        // Try it as a ticker anyway
+        loadStockData(input);
+        loadNews(input);
+        navigate(`/stocks?ticker=${input.toUpperCase()}`);
+      }
     }
   };
 
@@ -386,7 +478,7 @@ const Stocks: React.FC = () => {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white transition-colors">
       {/* Navigation */}
       <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
@@ -416,19 +508,58 @@ const Stocks: React.FC = () => {
       </nav>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">Stock Research</h1>
 
         {/* Search Bar */}
-        <div className="mb-8">
+        <div className="mb-8" ref={searchContainerRef}>
           <form onSubmit={handleSearch} className="flex gap-4">
-            <input
-              type="text"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value.toUpperCase())}
-              placeholder="Enter ticker symbol (e.g., AAPL, TSLA, MSFT)"
-              className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-transparent dark:bg-gray-600 dark:text-white"
-            />
+            <div className="flex-1 relative">
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => handleSearchInputChange(e.target.value)}
+                onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
+                placeholder="Search by ticker symbol or company name (e.g., AAPL or Apple)"
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-transparent dark:bg-gray-600 dark:text-white"
+                autoComplete="off"
+              />
+              
+              {/* Suggestions Dropdown */}
+              {showSuggestions && (
+                <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-500 rounded-lg shadow-xl max-h-80 overflow-y-auto">
+                  {suggestionsLoading ? (
+                    <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
+                      Searching...
+                    </div>
+                  ) : (
+                    suggestions.map((s, i) => (
+                      <button
+                        key={`${s.ticker}-${i}`}
+                        type="button"
+                        onClick={() => handleSuggestionClick(s)}
+                        className="w-full px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors flex items-center justify-between border-b border-gray-100 dark:border-gray-600 last:border-b-0"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-primary-600 dark:text-primary-400 min-w-[60px]">
+                            {s.ticker}
+                          </span>
+                          <span className="text-sm text-gray-700 dark:text-gray-300 truncate">
+                            {s.name}
+                          </span>
+                        </div>
+                        {s.type && (
+                          <span className="text-xs text-gray-400 dark:text-gray-500 ml-2 shrink-0">
+                            {s.type === 'CS' ? 'Stock' : s.type === 'ETF' ? 'ETF' : s.type === 'ADRC' ? 'ADR' : s.type}
+                          </span>
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
             <button
               type="submit"
               className="px-8 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors"
@@ -785,7 +916,7 @@ const Stocks: React.FC = () => {
                 <div className="text-6xl mb-4">📊</div>
                 <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Search for a Stock</h3>
                 <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  Enter a ticker symbol above to view detailed stock information, charts, and analysis tools. Or, select from the list below.
+                  Enter a ticker symbol or company name above to view detailed stock information, charts, and analysis tools. Or, select from the list below.
                 </p>
               </>
             )}

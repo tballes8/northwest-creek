@@ -257,6 +257,54 @@ async def get_ipos():
         raise HTTPException(status_code=500, detail=f"Error fetching IPO data: {str(e)}")
 
 
+@router.get("/search")
+async def search_tickers(q: str = Query(..., min_length=1, description="Search query - ticker symbol or company name")):
+    """
+    Search for stocks by ticker symbol or company name using Massive API.
+    Returns matching tickers with company names.
+    """
+    import httpx
+    from app.config import settings
+    
+    api_key = settings.MASSIVE_API_KEY
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                "https://api.polygon.io/v3/reference/tickers",
+                params={
+                    "search": q.strip(),
+                    "active": "true",
+                    "market": "stocks",
+                    "limit": 10,
+                    "sort": "ticker",
+                    "order": "asc",
+                    "apiKey": api_key,
+                },
+            )
+            
+            if resp.status_code != 200:
+                return {"results": []}
+            
+            data = resp.json()
+            results = []
+            for item in data.get("results", []):
+                results.append({
+                    "ticker": item.get("ticker"),
+                    "name": item.get("name"),
+                    "market": item.get("market"),
+                    "type": item.get("type"),
+                    "primary_exchange": item.get("primary_exchange"),
+                    "active": item.get("active"),
+                })
+            
+            return {"results": results}
+            
+    except Exception as e:
+        print(f"Ticker search error: {e}")
+        return {"results": []}
+
+
 @router.get("/{ticker}", response_model=dict)
 async def get_stock_overview(ticker: str):
     """
