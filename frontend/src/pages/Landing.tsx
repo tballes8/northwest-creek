@@ -31,7 +31,7 @@ const Landing: React.FC = () => {
                 alt="Northwest Creek LLC" 
                 className="h-12 w-12 mr-3"
               />
-              <span className="text-4xl font-bold text-primary-600 dark:text-primary-400">Northwest Creek</span>
+              <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Caveat', cursive", fontSize: '1.65rem' }}>Northwest Creek</span>
             </div>
             <div className="flex items-center space-x-4">
               <Link
