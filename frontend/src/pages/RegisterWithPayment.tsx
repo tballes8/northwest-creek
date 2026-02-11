@@ -140,6 +140,7 @@ const RegisterWithPayment: React.FC = () => {
         <div className="text-center mb-6">
           <Link to="/" className="inline-block">
             <img src="/images/logo.png" alt="Northwest Creek" className="h-16 w-16 mx-auto" />
+            <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1rem', fontStyle: 'italic' }}>Northwest Creek</span>
           </Link>
         </div>
 

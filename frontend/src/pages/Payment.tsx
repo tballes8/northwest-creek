@@ -312,6 +312,7 @@ const Payment: React.FC = () => {
         <div className="text-center mb-8">
           <Link to="/" className="inline-block mb-4">
             <img src="/images/logo.png" alt="Northwest Creek" className="h-12 w-12 mx-auto" />
+            <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1rem', fontStyle: 'italic' }}>Northwest Creek</span>
           </Link>
           <h1 className="text-3xl font-bold text-white">Complete Your Subscription</h1>
           <p className="mt-2 text-gray-400">Secure payment powered by Stripe</p>

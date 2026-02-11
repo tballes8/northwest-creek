@@ -176,7 +176,7 @@ const Pricing: React.FC = () => {
             <div className="flex items-center">
               <Link to="/" className="flex items-center">
                 <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
-                <span className="text-xl font-bold text-primary-400">Northwest Creek</span>
+                <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>Northwest Creek</span>
               </Link>
             </div>
             
