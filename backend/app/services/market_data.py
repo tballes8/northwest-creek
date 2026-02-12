@@ -191,7 +191,8 @@ class MarketDataService:
                     "market_cap": result.get("market_cap"),
                     "phone": result.get("phone_number", ""),
                     "employees": result.get("total_employees"),
-                    "country": result.get("locale", "US")
+                    "country": result.get("locale", "US"),
+                    "type": result.get("type", ""),  # CS = Common Stock, ETF = ETF, ADRC = ADR, etc.
                 }                
         except httpx.TimeoutException:
             raise ValueError(f"Timeout fetching company info for {ticker}")

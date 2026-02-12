@@ -37,6 +37,7 @@ interface CompanyInfo {
   phone?: string;
   employees?: number;
   country?: string;
+  type?: string;  // CS = Common Stock, ETF = ETF, ADRC = ADR
 }
 
 interface HistoricalPrice {
@@ -705,7 +706,14 @@ const Stocks: React.FC = () => {
               <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                 <div>
                   <h2 className="text-3xl font-bold text-gray-900 dark:text-white">{company.name}</h2>
-                  <p className="text-gray-600 dark:text-gray-400 mt-1">{ticker} • {company.exchange}</p>
+                  <p className="text-gray-600 dark:text-gray-400 mt-1 flex items-center gap-2">
+                    {ticker} • {company.exchange}
+                    {company.type === 'ETF' && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                        ETF
+                      </span>
+                    )}
+                  </p>
                 </div>
                 <div className="mt-4 md:mt-0 text-right">
                   <div className="text-4xl font-bold text-gray-900 dark:text-white">${quote.price.toFixed(2)}</div>
@@ -779,8 +787,26 @@ const Stocks: React.FC = () => {
             {/* Company Info + Dividends */}
             <div className="grid md:grid-cols-3 gap-6">
               <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Company Details</h3>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+                  {company.type === 'ETF' ? 'Fund Details' : 'Company Details'}
+                </h3>
                 <div className="space-y-3">
+                  {company.type && (
+                    <div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Type</div>
+                      <div className="text-gray-900 dark:text-white font-medium">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          company.type === 'ETF'
+                            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
+                            : company.type === 'ADRC'
+                            ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300'
+                            : 'bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-300'
+                        }`}>
+                          {company.type === 'CS' ? 'Common Stock' : company.type === 'ETF' ? 'Exchange-Traded Fund' : company.type === 'ADRC' ? 'ADR' : company.type}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                   {company.sector && (
                     <div>
                       <div className="text-sm text-gray-600 dark:text-gray-400">Sector</div>
@@ -795,11 +821,13 @@ const Stocks: React.FC = () => {
                   )}
                   {company.market_cap && (
                     <div>
-                      <div className="text-sm text-gray-600 dark:text-gray-400">Market Cap</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">
+                        {company.type === 'ETF' ? 'Net Assets' : 'Market Cap'}
+                      </div>
                       <div className="text-gray-900 dark:text-white font-medium">${(company.market_cap / 1e9).toFixed(2)}B</div>
                     </div>
                   )}
-                  {company.employees && (
+                  {company.employees && company.type !== 'ETF' && (
                     <div>
                       <div className="text-sm text-gray-600 dark:text-gray-400">Employees</div>
                       <div className="text-gray-900 dark:text-white font-medium">{company.employees.toLocaleString()}</div>
@@ -923,9 +951,11 @@ const Stocks: React.FC = () => {
               </div>
 
               <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">About</h3>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+                  {company.type === 'ETF' ? 'Investment Objective' : 'About'}
+                </h3>
                 <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-                  {company.description || 'No description available.'}
+                  {company.description || (company.type === 'ETF' ? 'No investment objective available.' : 'No description available.')}
                 </p>
               </div>
             </div>

@@ -33,6 +33,7 @@ class CompanyInfo(BaseModel):
     phone: Optional[str] = None
     employees: Optional[int] = None
     country: Optional[str] = None
+    type: Optional[str] = None
 
 
 class HistoricalPrice(BaseModel):
