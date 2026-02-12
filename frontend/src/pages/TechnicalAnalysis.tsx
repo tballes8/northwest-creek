@@ -566,6 +566,7 @@ const TechnicalAnalysis: React.FC = () => {
   if (user && usageCount >= tierLimit) {
     return (
       <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
+        {/* Navigation */}
         <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
           <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between h-16">
@@ -573,15 +574,17 @@ const TechnicalAnalysis: React.FC = () => {
                 <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
                 <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>Northwest Creek</span>
               </div>
+              
               <div className="hidden md:flex items-center space-x-8">
                 <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
                 <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
                 <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
                 <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
                 <Link to="/stocks" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Stocks</Link>
-                <Link to="/technical-analysis" className="text-primary-400 font-medium border-b-2 border-primary-400 pb-1">Technical Analysis</Link>
+                <Link to="/technical-analysis" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">Technical Analysis</Link>
                 <Link to="/dcf-valuation" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">DCF Valuation</Link>
               </div>
+
               <div className="flex items-center space-x-4">
                 <div className="relative" ref={userMenuRef}>
                   <button
