@@ -6,8 +6,11 @@ import { User } from '../types';
 import { authAPI } from '../services/api';
 // WYSIWYG Editor — install: npm install react-quill-new
 // If using the older package: npm install react-quill  (change import accordingly)
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
+import ReactQuillOriginal from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
+
+// Fix: react-quill-new class component types are incompatible with React 18 JSX types
+const ReactQuill = ReactQuillOriginal as unknown as React.FC<any>;
 
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -90,6 +93,16 @@ const AdminContent: React.FC = () => {
     return { Authorization: `Bearer ${token}` };
   }, []);
 
+  const loadTutorials = useCallback(async () => {
+    const res = await axios.get(`${API_URL}/api/v1/content/admin/tutorials`, { headers: getHeaders() });
+    setTutorials(res.data);
+  }, [getHeaders]);
+
+  const loadBlogs = useCallback(async () => {
+    const res = await axios.get(`${API_URL}/api/v1/content/admin/blogs`, { headers: getHeaders() });
+    setBlogs(res.data);
+  }, [getHeaders]);
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -108,14 +121,9 @@ const AdminContent: React.FC = () => {
       }
     };
     loadData();
-  }, [navigate]);
+  }, [navigate, loadTutorials, loadBlogs]);
 
   // ── Tutorial CRUD ───────────────────────────────────────
-
-  const loadTutorials = async () => {
-    const res = await axios.get(`${API_URL}/api/v1/content/admin/tutorials`, { headers: getHeaders() });
-    setTutorials(res.data);
-  };
 
   const openTutorialForm = (tutorial?: Tutorial) => {
     if (tutorial) {
@@ -168,11 +176,6 @@ const AdminContent: React.FC = () => {
   };
 
   // ── Blog CRUD ───────────────────────────────────────────
-
-  const loadBlogs = async () => {
-    const res = await axios.get(`${API_URL}/api/v1/content/admin/blogs`, { headers: getHeaders() });
-    setBlogs(res.data);
-  };
 
   const openBlogForm = async (post?: BlogPostItem) => {
     if (post) {

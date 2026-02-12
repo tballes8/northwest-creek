@@ -1,7 +1,6 @@
 {
   "dependencies": {
     "@tailwindcss/typography": "^0.5.19",
-    "react-quill": "^2.0.0",
     "react-quill-new": "^3.8.3"
   }
 }
