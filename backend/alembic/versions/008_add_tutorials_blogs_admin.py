@@ -15,10 +15,7 @@ depends_on = None
 
 
 def upgrade():
-    # 1. Add is_admin flag to users table
-    op.add_column('users', sa.Column('is_admin', sa.Boolean(), server_default=sa.text('false'), nullable=False))
-
-    # 2. Create tutorials table
+    # 1. Create tutorials table
     op.create_table(
         'tutorials',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
@@ -37,7 +34,7 @@ def upgrade():
     op.create_index('idx_tutorials_published', 'tutorials', ['is_published', 'display_order'])
     op.create_index('idx_tutorials_category', 'tutorials', ['category'])
 
-    # 3. Create blog_posts table
+    # 2. Create blog_posts table
     op.create_table(
         'blog_posts',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
