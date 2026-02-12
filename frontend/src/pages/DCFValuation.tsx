@@ -407,7 +407,7 @@ const DCFValuation: React.FC = () => {
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
-              <span className="text-xl font-bold text-primary-400 dark:text-primary-400">Northwest Creek</span>
+              <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>Northwest Creek</span>
             </div>
             <div className="hidden md:flex items-center space-x-8">
               <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
