@@ -60,3 +60,4 @@ def downgrade():
     op.drop_table('blog_posts')
     op.drop_table('tutorials')
     op.drop_column('users', 'is_admin')
+    
