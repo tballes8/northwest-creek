@@ -162,6 +162,7 @@ class MarketDataService:
     async def get_company_info(self, ticker: str) -> Dict[str, Any]:
         """
         Get company information using Polygon.io
+        For fund-type tickers (ETF, ETS, ETN, etc.), enriches with yfinance fund data.
         """
         try:
             async with httpx.AsyncClient() as client:
@@ -180,7 +181,7 @@ class MarketDataService:
                 sic_description = result.get("sic_description", "").lower()
                 sector = self._map_sic_to_sector(sic_description)
 
-                return {
+                company = {
                     "ticker": result.get("ticker", ticker),
                     "name": result.get("name", ""),
                     "description": result.get("description", ""),
@@ -192,8 +193,41 @@ class MarketDataService:
                     "phone": result.get("phone_number", ""),
                     "employees": result.get("total_employees"),
                     "country": result.get("locale", "US"),
-                    "type": result.get("type", ""),  # CS = Common Stock, ETF = ETF, ADRC = ADR, etc.
-                }                
+                    "type": result.get("type", ""),
+                    # Fund-specific fields default to None
+                    "fund_description": None,
+                    "fund_category": None,
+                    "fund_family": None,
+                    "fund_expense_ratio": None,
+                    "fund_inception_date": None,
+                    "fund_total_assets": None,
+                }
+
+                # If this is a fund-type ticker, enrich with yfinance fund data
+                fund_types = {"ETF", "ETS", "ETN", "ETV", "ETD"}
+                if company["type"] in fund_types:
+                    try:
+                        import asyncio
+                        from app.services.company_info import get_company_basics
+
+                        yf_data = await asyncio.to_thread(get_company_basics, ticker)
+
+                        # Merge fund-specific fields from yfinance
+                        company["fund_description"] = yf_data.get("fund_description")
+                        company["fund_category"] = yf_data.get("fund_category")
+                        company["fund_family"] = yf_data.get("fund_family")
+                        company["fund_expense_ratio"] = yf_data.get("fund_expense_ratio")
+                        company["fund_inception_date"] = yf_data.get("fund_inception_date")
+                        company["fund_total_assets"] = yf_data.get("fund_total_assets")
+
+                        # If Polygon description is empty, use yfinance description
+                        if not company["description"]:
+                            company["description"] = yf_data.get("fund_description") or yf_data.get("description") or ""
+                    except Exception as e:
+                        print(f"Warning: Could not enrich ETF data from yfinance for {ticker}: {e}")
+
+                return company
+
         except httpx.TimeoutException:
             raise ValueError(f"Timeout fetching company info for {ticker}")
         except httpx.HTTPError as e:
