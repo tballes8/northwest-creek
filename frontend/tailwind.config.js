@@ -84,5 +84,5 @@ darkMode: 'class', // ← Make sure this line is here!
       },
     },
   },
-  plugins: [require('@tailwindcss/typography')],
+  plugins: [require('@tailwindcss/typography'),],
 }

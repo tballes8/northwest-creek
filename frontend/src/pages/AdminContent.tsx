@@ -6,8 +6,9 @@ import { User } from '../types';
 import { authAPI } from '../services/api';
 // WYSIWYG Editor — install: npm install react-quill-new
 // If using the older package: npm install react-quill  (change import accordingly)
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
+
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
