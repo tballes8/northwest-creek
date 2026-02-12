@@ -34,6 +34,12 @@ class CompanyInfo(BaseModel):
     employees: Optional[int] = None
     country: Optional[str] = None
     type: Optional[str] = None
+    fund_description: Optional[str] = None
+    fund_category: Optional[str] = None
+    fund_family: Optional[str] = None
+    fund_expense_ratio: Optional[float] = None
+    fund_inception_date: Optional[str] = None
+    fund_total_assets: Optional[int] = None
 
 
 class HistoricalPrice(BaseModel):

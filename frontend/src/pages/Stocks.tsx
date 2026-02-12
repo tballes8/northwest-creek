@@ -38,6 +38,13 @@ interface CompanyInfo {
   employees?: number;
   country?: string;
   type?: string;  // CS = Common Stock, ETF = ETF, ADRC = ADR
+  // Fund-specific fields (populated by yfinance for ETFs)
+  fund_description?: string | null;
+  fund_category?: string | null;
+  fund_family?: string | null;
+  fund_expense_ratio?: number | null;
+  fund_inception_date?: string | null;
+  fund_total_assets?: number | null;
 }
 
 interface HistoricalPrice {
@@ -811,24 +818,65 @@ const Stocks: React.FC = () => {
                       </div>
                     </div>
                   )}
-                  {company.sector && (
+
+                  {/* === ETF-specific fields from yfinance === */}
+                  {isFundType(company.type) && company.fund_category && (
+                    <div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Category</div>
+                      <div className="text-gray-900 dark:text-white font-medium">{company.fund_category}</div>
+                    </div>
+                  )}
+                  {isFundType(company.type) && company.fund_family && (
+                    <div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Fund Family</div>
+                      <div className="text-gray-900 dark:text-white font-medium">{company.fund_family}</div>
+                    </div>
+                  )}
+                  {isFundType(company.type) && company.fund_expense_ratio != null && (
+                    <div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Expense Ratio</div>
+                      <div className="text-gray-900 dark:text-white font-medium">{(company.fund_expense_ratio * 100).toFixed(2)}%</div>
+                    </div>
+                  )}
+                  {isFundType(company.type) && company.fund_inception_date && (
+                    <div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">Inception Date</div>
+                      <div className="text-gray-900 dark:text-white font-medium">
+                        {new Date(company.fund_inception_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* === Stock-specific fields === */}
+                  {!isFundType(company.type) && company.sector && (
                     <div>
                       <div className="text-sm text-gray-600 dark:text-gray-400">Sector</div>
                       <div className="text-gray-900 dark:text-white font-medium">{company.sector}</div>
                     </div>
                   )}
-                  {company.industry && (
+                  {!isFundType(company.type) && company.industry && (
                     <div>
                       <div className="text-sm text-gray-600 dark:text-gray-400">Industry</div>
                       <div className="text-gray-900 dark:text-white font-medium">{company.industry}</div>
                     </div>
                   )}
-                  {company.market_cap && (
+
+                  {/* === Shared fields === */}
+                  {(company.market_cap || (isFundType(company.type) && company.fund_total_assets)) && (
                     <div>
                       <div className="text-sm text-gray-600 dark:text-gray-400">
                         {isFundType(company.type) ? 'Net Assets' : 'Market Cap'}
                       </div>
-                      <div className="text-gray-900 dark:text-white font-medium">${(company.market_cap / 1e9).toFixed(2)}B</div>
+                      <div className="text-gray-900 dark:text-white font-medium">
+                        {(() => {
+                          const val = isFundType(company.type) ? (company.fund_total_assets || company.market_cap) : company.market_cap;
+                          if (!val) return '—';
+                          if (val >= 1e12) return `$${(val / 1e12).toFixed(2)}T`;
+                          if (val >= 1e9) return `$${(val / 1e9).toFixed(2)}B`;
+                          if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
+                          return `$${val.toLocaleString()}`;
+                        })()}
+                      </div>
                     </div>
                   )}
                   {company.employees && !isFundType(company.type) && (
@@ -959,7 +1007,9 @@ const Stocks: React.FC = () => {
                   {isFundType(company.type) ? 'Investment Objective' : 'About'}
                 </h3>
                 <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-                  {company.description || (isFundType(company.type) ? 'No investment objective available.' : 'No description available.')}
+                  {isFundType(company.type)
+                    ? (company.fund_description || company.description || 'No investment objective available.')
+                    : (company.description || 'No description available.')}
                 </p>
               </div>
             </div>
