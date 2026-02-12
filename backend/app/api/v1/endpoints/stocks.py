@@ -285,6 +285,77 @@ async def get_ipos():
         raise HTTPException(status_code=500, detail=f"Error fetching IPO data: {str(e)}")
 
 
+@router.get("/dividends/{ticker}")
+async def get_dividends(ticker: str):
+    """
+    Get dividend information for a stock or ETF.
+
+    Returns the most recent dividends plus a computed annual yield
+    when a current price is available.
+    """
+    try:
+        import asyncio
+
+        # Fetch dividends and current quote concurrently
+        div_task = market_data_service.get_dividends(ticker, limit=10)
+        quote_task = market_data_service.get_quote(ticker)
+
+        div_result, quote_result = await asyncio.gather(
+            div_task,
+            quote_task,
+            return_exceptions=True,
+        )
+
+        # Ensure dividends succeeded
+        if isinstance(div_result, Exception):
+            div_result = {"ticker": ticker.upper(), "dividends": [], "has_dividends": False}
+
+        # Compute annual yield if we have both price and dividend data
+        annual_dividend = None
+        annual_yield = None
+        frequency_label = None
+
+        divs = div_result.get("dividends", [])
+        if divs:
+            latest = divs[0]
+            cash = latest.get("cash_amount")
+            freq = latest.get("frequency")
+
+            # Map frequency integer to readable label
+            freq_map = {
+                0: "One-time",
+                1: "Annual",
+                2: "Semi-Annual",
+                3: "Trimester",
+                4: "Quarterly",
+                12: "Monthly",
+                24: "Bi-Monthly",
+                52: "Weekly",
+            }
+            frequency_label = freq_map.get(freq, "Unknown")
+
+            if cash and freq and freq > 0:
+                annual_dividend = round(cash * freq, 4)
+
+                # Yield = annual dividend / current price * 100
+                if not isinstance(quote_result, Exception) and quote_result:
+                    price = quote_result.get("price")
+                    if price and price > 0:
+                        annual_yield = round((annual_dividend / price) * 100, 2)
+
+        return {
+            "ticker": ticker.upper(),
+            "has_dividends": div_result.get("has_dividends", False),
+            "dividends": divs,
+            "annual_dividend": annual_dividend,
+            "annual_yield": annual_yield,
+            "frequency_label": frequency_label,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching dividends: {str(e)}")
+
+
 @router.get("/search")
 async def search_tickers(q: str = Query(..., min_length=1, description="Search query - ticker symbol or company name")):
     """

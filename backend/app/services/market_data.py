@@ -410,6 +410,72 @@ class MarketDataService:
             print(f"Error fetching news: {str(e)}")
             raise Exception(f"Failed to fetch news: {str(e)}")
     
+    async def get_dividends(self, ticker: str, limit: int = 10) -> Dict[str, Any]:
+        """
+        Fetch dividend history for a stock/ETF from Massive API.
+
+        Args:
+            ticker: Stock or ETF symbol
+            limit: Max number of dividend records to return (default 10)
+
+        Returns:
+            dict with 'ticker', 'dividends' list, and 'has_dividends' bool
+        """
+        try:
+            ticker = ticker.upper().strip()
+            if not ticker:
+                raise ValueError("Ticker symbol is required")
+
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(
+                    f"{self.base_url}/v3/reference/dividends",
+                    params={
+                        "ticker": ticker,
+                        "order": "desc",
+                        "sort": "ex_dividend_date",
+                        "limit": limit,
+                        "apiKey": self.api_key,
+                    },
+                    timeout=self.timeout,
+                )
+
+                if resp.status_code != 200:
+                    return {
+                        "ticker": ticker,
+                        "dividends": [],
+                        "has_dividends": False,
+                    }
+
+                data = resp.json()
+                results = data.get("results", [])
+
+                dividends = []
+                for d in results:
+                    dividends.append({
+                        "cash_amount": d.get("cash_amount"),
+                        "currency": d.get("currency", "USD"),
+                        "declaration_date": d.get("declaration_date"),
+                        "ex_dividend_date": d.get("ex_dividend_date"),
+                        "pay_date": d.get("pay_date"),
+                        "record_date": d.get("record_date"),
+                        "frequency": d.get("frequency"),
+                        "distribution_type": d.get("dividend_type") or d.get("distribution_type", "unknown"),
+                    })
+
+                return {
+                    "ticker": ticker,
+                    "dividends": dividends,
+                    "has_dividends": len(dividends) > 0,
+                }
+
+        except Exception as e:
+            print(f"Error fetching dividends for {ticker}: {e}")
+            return {
+                "ticker": ticker,
+                "dividends": [],
+                "has_dividends": False,
+            }
+
     async def get_top_gainers(self, limit: int = 10) -> Dict[str, Any]:
         """
         Get top stock gainers from Massive API

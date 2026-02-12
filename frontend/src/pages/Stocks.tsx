@@ -68,6 +68,26 @@ interface TopGainer {
   change_percent: number;
 }
 
+interface DividendRecord {
+  cash_amount: number | null;
+  currency: string;
+  declaration_date: string | null;
+  ex_dividend_date: string | null;
+  pay_date: string | null;
+  record_date: string | null;
+  frequency: number | null;
+  distribution_type: string;
+}
+
+interface DividendInfo {
+  ticker: string;
+  has_dividends: boolean;
+  dividends: DividendRecord[];
+  annual_dividend: number | null;
+  annual_yield: number | null;
+  frequency_label: string | null;
+}
+
 // Add interface for daily snapshot
 interface DailySnapshot {
   ticker: string;
@@ -117,6 +137,8 @@ const Stocks: React.FC = () => {
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const [dividendInfo, setDividendInfo] = useState<DividendInfo | null>(null);
+  const [dividendLoading, setDividendLoading] = useState(false);
 
   // Helper function to detect if a ticker is a warrant
   const detectWarrant = (tickerSymbol: string): boolean => {
@@ -304,12 +326,14 @@ const Stocks: React.FC = () => {
       setQuote(quoteRes.data);
       setCompany(companyRes.data);
       setHistorical(historicalRes.data.data);
+      loadDividends(symbol);
     } catch (err: any) {
       console.error('Stock API Error:', err);
       setError(err.response?.data?.detail || 'Failed to load stock data. Please check the ticker symbol and try again.');
       setQuote(null);
       setCompany(null);
       setHistorical([]);
+      setDividendInfo(null);
     } finally {
       setLoading(false);
     }
@@ -325,6 +349,23 @@ const Stocks: React.FC = () => {
       setNews([]);
     } finally {
       setNewsLoading(false);
+    }
+  };
+
+  const loadDividends = async (symbol: string) => {
+    setDividendLoading(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await axios.get(
+        `${API_URL}/api/v1/stocks/dividends/${encodeURIComponent(symbol.toUpperCase())}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setDividendInfo(response.data);
+    } catch (err) {
+      console.error('Failed to load dividends:', err);
+      setDividendInfo(null);
+    } finally {
+      setDividendLoading(false);
     }
   };
 
@@ -444,6 +485,23 @@ const Stocks: React.FC = () => {
       setTimeout(() => setWatchlistMsg(null), 4000);
     } finally {
       setAddingToWatchlist(false);
+    }
+  };
+
+  // Dividend helpers
+  const formatFrequency = (freq: number | null, label: string | null): string => {
+    if (label && label !== 'Unknown') return label;
+    if (freq === null) return '—';
+    const map: Record<number, string> = { 0: 'One-time', 1: 'Annual', 2: 'Semi-Annual', 4: 'Quarterly', 12: 'Monthly' };
+    return map[freq] ?? `${freq}x/yr`;
+  };
+
+  const formatDividendDate = (dateStr: string | null): string => {
+    if (!dateStr) return '—';
+    try {
+      return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch {
+      return dateStr;
     }
   };
 
@@ -718,8 +776,8 @@ const Stocks: React.FC = () => {
               </div>
             </div>
 
-            {/* Company Info */}
-            <div className="grid md:grid-cols-2 gap-6">
+            {/* Company Info + Dividends */}
+            <div className="grid md:grid-cols-3 gap-6">
               <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Company Details</h3>
                 <div className="space-y-3">
@@ -762,6 +820,106 @@ const Stocks: React.FC = () => {
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Dividend Information Card */}
+              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Dividend Information</h3>
+
+                {dividendLoading ? (
+                  <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm py-4">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
+                    Loading dividend data...
+                  </div>
+                ) : dividendInfo && dividendInfo.has_dividends && dividendInfo.dividends.length > 0 ? (
+                  <div className="space-y-3">
+                    {/* Annual Yield — hero stat */}
+                    {dividendInfo.annual_yield !== null && (
+                      <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 text-center">
+                        <div className="text-2xl font-bold text-green-700 dark:text-green-300">
+                          {dividendInfo.annual_yield.toFixed(2)}%
+                        </div>
+                        <div className="text-xs text-green-600 dark:text-green-400 font-medium">Annual Dividend Yield</div>
+                      </div>
+                    )}
+
+                    {/* Key metrics grid */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">Per Share</div>
+                        <div className="text-gray-900 dark:text-white font-medium">
+                          ${dividendInfo.dividends[0].cash_amount?.toFixed(4) ?? '—'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">Annual</div>
+                        <div className="text-gray-900 dark:text-white font-medium">
+                          {dividendInfo.annual_dividend !== null
+                            ? `$${dividendInfo.annual_dividend.toFixed(2)}`
+                            : '—'}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">Frequency</div>
+                        <div className="text-gray-900 dark:text-white font-medium">
+                          {formatFrequency(dividendInfo.dividends[0].frequency, dividendInfo.frequency_label)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">Type</div>
+                        <div className="text-gray-900 dark:text-white font-medium capitalize">
+                          {dividendInfo.dividends[0].distribution_type || '—'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Dates */}
+                    <div className="border-t border-gray-200 dark:border-gray-600 pt-3 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Ex-Dividend</span>
+                        <span className="text-gray-900 dark:text-white font-medium">
+                          {formatDividendDate(dividendInfo.dividends[0].ex_dividend_date)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Pay Date</span>
+                        <span className="text-gray-900 dark:text-white font-medium">
+                          {formatDividendDate(dividendInfo.dividends[0].pay_date)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Declaration</span>
+                        <span className="text-gray-900 dark:text-white font-medium">
+                          {formatDividendDate(dividendInfo.dividends[0].declaration_date)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Recent history (last 4 dividends) */}
+                    {dividendInfo.dividends.length > 1 && (
+                      <div className="border-t border-gray-200 dark:border-gray-600 pt-3">
+                        <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Recent History</div>
+                        <div className="space-y-1.5">
+                          {dividendInfo.dividends.slice(0, 4).map((div, idx) => (
+                            <div key={idx} className="flex justify-between text-sm">
+                              <span className="text-gray-500 dark:text-gray-400">
+                                {formatDividendDate(div.ex_dividend_date)}
+                              </span>
+                              <span className="text-gray-900 dark:text-white font-medium">
+                                ${div.cash_amount?.toFixed(4) ?? '—'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-6 text-gray-500 dark:text-gray-400">
+                    <div className="text-3xl mb-2">—</div>
+                    <p className="text-sm">No dividends distributed</p>
+                  </div>
+                )}
               </div>
 
               <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
