@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Numeric, Date, Index
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Numeric, Date, Index, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -19,6 +19,7 @@ class User(Base):
     verification_token = Column(String(255), nullable=True)
     verification_token_expires = Column(DateTime(timezone=True), nullable=True)
     is_verified = Column(Boolean, default=False)
+    is_admin = Column(Boolean, default=False)
     
     # Subscription tiers: free, casual, active, professional
     subscription_tier = Column(String(50), default="free")
@@ -51,7 +52,7 @@ class Portfolio(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     ticker = Column(String(10), nullable=False)
-    quantity = Column(Numeric(precision=18, scale=8), nullable=False)
+    quantity = Column(Integer, default=0, nullable=False)
     buy_price = Column(Numeric(precision=18, scale=2), nullable=False)
     buy_date = Column(Date, nullable=False)
     notes = Column(Text, nullable=True)
@@ -93,3 +94,36 @@ class DailyStockSnapshot(Base):
     __table_args__ = (
         Index('idx_snapshot_date_change', 'snapshot_date', 'change_percent'),
     )
+
+
+class Tutorial(Base):
+    __tablename__ = "tutorials"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    youtube_url = Column(String(500), nullable=True)
+    video_url = Column(String(500), nullable=True)
+    thumbnail_url = Column(String(500), nullable=True)
+    category = Column(String(100), default="General")
+    display_order = Column(Integer, default=0)
+    is_published = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class BlogPost(Base):
+    __tablename__ = "blog_posts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(255), nullable=False)
+    slug = Column(String(300), unique=True, nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    excerpt = Column(Text, nullable=True)
+    cover_image_url = Column(String(500), nullable=True)
+    category = Column(String(100), default="General")
+    tags = Column(String(500), nullable=True)
+    is_published = Column(Boolean, default=False)
+    author_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

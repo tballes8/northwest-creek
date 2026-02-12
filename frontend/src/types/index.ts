@@ -11,6 +11,7 @@ export interface User {
   subscription_tier: 'free' | 'casual' | 'active' | 'professional';
   created_at: string;
   updated_at: string | null;
+    is_admin?: boolean;
 }
 
 export interface WatchlistItem {
