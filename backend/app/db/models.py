@@ -124,6 +124,6 @@ class BlogPost(Base):
     category = Column(String(100), default="General")
     tags = Column(String(500), nullable=True)
     is_published = Column(Boolean, default=False)
-    author_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    author_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

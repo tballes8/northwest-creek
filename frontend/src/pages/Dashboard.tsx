@@ -310,7 +310,6 @@ return (
             </div>
 
             <div className="flex items-center space-x-4">
-              <ThemeToggle />
               <div className="relative" ref={userMenuRef}>
                 <button
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
@@ -382,6 +381,7 @@ return (
                 )}
               </div>
             </div>
+            <ThemeToggle />
           </div>
         </div>
       </nav>
