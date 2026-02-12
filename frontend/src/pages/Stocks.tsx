@@ -490,6 +490,10 @@ const Stocks: React.FC = () => {
   };
 
   // Dividend helpers
+  // Fund-type codes from Polygon/Massive: ETF, ETS (Exchange Traded Share), ETN (Exchange Traded Note)
+  const FUND_TYPES = new Set(['ETF', 'ETS', 'ETN', 'ETV', 'ETD']);
+  const isFundType = (type?: string): boolean => !!type && FUND_TYPES.has(type);
+
   const formatFrequency = (freq: number | null, label: string | null): string => {
     if (label && label !== 'Unknown') return label;
     if (freq === null) return '—';
@@ -630,7 +634,7 @@ const Stocks: React.FC = () => {
                         </div>
                         {s.type && (
                           <span className="text-xs text-gray-400 dark:text-gray-500 ml-2 shrink-0">
-                            {s.type === 'CS' ? 'Stock' : s.type === 'ETF' ? 'ETF' : s.type === 'ADRC' ? 'ADR' : s.type}
+                            {s.type === 'CS' ? 'Stock' : FUND_TYPES.has(s.type || '') ? 'ETF' : s.type === 'ADRC' ? 'ADR' : s.type}
                           </span>
                         )}
                       </button>
@@ -708,7 +712,7 @@ const Stocks: React.FC = () => {
                   <h2 className="text-3xl font-bold text-gray-900 dark:text-white">{company.name}</h2>
                   <p className="text-gray-600 dark:text-gray-400 mt-1 flex items-center gap-2">
                     {ticker} • {company.exchange}
-                    {company.type === 'ETF' && (
+                    {isFundType(company.type) && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
                         ETF
                       </span>
@@ -788,7 +792,7 @@ const Stocks: React.FC = () => {
             <div className="grid md:grid-cols-3 gap-6">
               <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                  {company.type === 'ETF' ? 'Fund Details' : 'Company Details'}
+                  {isFundType(company.type) ? 'Fund Details' : 'Company Details'}
                 </h3>
                 <div className="space-y-3">
                   {company.type && (
@@ -796,13 +800,13 @@ const Stocks: React.FC = () => {
                       <div className="text-sm text-gray-600 dark:text-gray-400">Type</div>
                       <div className="text-gray-900 dark:text-white font-medium">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          company.type === 'ETF'
+                          isFundType(company.type)
                             ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300'
                             : company.type === 'ADRC'
                             ? 'bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-300'
                             : 'bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-300'
                         }`}>
-                          {company.type === 'CS' ? 'Common Stock' : company.type === 'ETF' ? 'Exchange-Traded Fund' : company.type === 'ADRC' ? 'ADR' : company.type}
+                          {company.type === 'CS' ? 'Common Stock' : isFundType(company.type) ? 'Exchange-Traded Fund' : company.type === 'ADRC' ? 'ADR' : company.type}
                         </span>
                       </div>
                     </div>
@@ -822,12 +826,12 @@ const Stocks: React.FC = () => {
                   {company.market_cap && (
                     <div>
                       <div className="text-sm text-gray-600 dark:text-gray-400">
-                        {company.type === 'ETF' ? 'Net Assets' : 'Market Cap'}
+                        {isFundType(company.type) ? 'Net Assets' : 'Market Cap'}
                       </div>
                       <div className="text-gray-900 dark:text-white font-medium">${(company.market_cap / 1e9).toFixed(2)}B</div>
                     </div>
                   )}
-                  {company.employees && company.type !== 'ETF' && (
+                  {company.employees && !isFundType(company.type) && (
                     <div>
                       <div className="text-sm text-gray-600 dark:text-gray-400">Employees</div>
                       <div className="text-gray-900 dark:text-white font-medium">{company.employees.toLocaleString()}</div>
@@ -952,10 +956,10 @@ const Stocks: React.FC = () => {
 
               <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                  {company.type === 'ETF' ? 'Investment Objective' : 'About'}
+                  {isFundType(company.type) ? 'Investment Objective' : 'About'}
                 </h3>
                 <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-                  {company.description || (company.type === 'ETF' ? 'No investment objective available.' : 'No description available.')}
+                  {company.description || (isFundType(company.type) ? 'No investment objective available.' : 'No description available.')}
                 </p>
               </div>
             </div>
