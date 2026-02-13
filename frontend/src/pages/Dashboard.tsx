@@ -579,7 +579,7 @@ return (
                 </div>
               )}
               <div className="border-t dark:border-gray-600 pt-3">
-                <Link 
+                <Link
                   to="/portfolio"
                   className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 text-sm font-medium"
                 >
