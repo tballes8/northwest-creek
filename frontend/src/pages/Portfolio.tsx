@@ -379,6 +379,19 @@ const Portfolio: React.FC = () => {
 
   const totals = calculateTotals();
 
+  // Read sector filter from URL query param (e.g. /portfolio?sector=Technology)
+  const sectorFilter = new URLSearchParams(location.search).get('sector') || '';
+
+  // Sort portfolio so the selected sector's positions appear first
+  const sortedPortfolio = useMemo(() => {
+    if (!sectorFilter) return portfolio;
+    return [...portfolio].sort((a, b) => {
+      const aMatch = getSector(a.ticker) === sectorFilter ? 0 : 1;
+      const bMatch = getSector(b.ticker) === sectorFilter ? 0 : 1;
+      return aMatch - bMatch;
+    });
+  }, [portfolio, sectorFilter]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
@@ -693,7 +706,7 @@ const Portfolio: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-700 divide-y divide-gray-200 dark:divide-gray-600">
-                {portfolio.map((position) => (
+                {sortedPortfolio.map((position) => (
                   <tr key={position.id} className="hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button
