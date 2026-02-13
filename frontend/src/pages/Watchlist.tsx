@@ -10,6 +10,7 @@ import MarketStatusBadge from '../components/MarketStatusBadge';
 import UpgradeRequired from '../components/UpgradeRequired';
 import '../styles/livePrice.css';
 import axios from 'axios';
+import { getSector, SECTOR_COLORS } from '../utils/sectorMap';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -589,6 +590,7 @@ const Watchlist: React.FC = () => {
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ticker</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sector</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Current Price</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Day Change</th>
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Watching Since</th>
@@ -610,6 +612,13 @@ const Watchlist: React.FC = () => {
                           {stock.ticker}
                         </div>
                       </button>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <span
+                        className="inline-block w-3 h-3 rounded-full"
+                        style={{ backgroundColor: SECTOR_COLORS[getSector(stock.ticker)] || SECTOR_COLORS['Other'] }}
+                        title={getSector(stock.ticker)}
+                      />
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {(() => {
