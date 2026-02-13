@@ -32,8 +32,10 @@ class UserUpdate(BaseModel):
 
 class UserInDB(UserBase):
     """User as stored in database"""
-    id: UUID  # ← Changed from int to UUID
+    id: UUID
     is_active: bool
+    is_verified: bool = False
+    is_admin: bool = False
     subscription_tier: str
     created_at: datetime
     
