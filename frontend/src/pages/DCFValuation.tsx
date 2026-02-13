@@ -383,8 +383,8 @@ const DCFValuation: React.FC = () => {
                     </div>
                   )}
                 </div>
+                <ThemeToggle />
               </div>
-              <ThemeToggle />
             </div>
           </div>
         </nav>

@@ -656,8 +656,8 @@ const TechnicalAnalysis: React.FC = () => {
                     </div>
                   )}
                 </div>
+                <ThemeToggle />
               </div>
-              <ThemeToggle />
             </div>
           </div>
         </nav>
