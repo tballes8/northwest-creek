@@ -8,6 +8,7 @@ import { useLivePriceContext } from '../contexts/LivePriceContext';
 import MarketStatusBadge from '../components/MarketStatusBadge';
 import '../styles/livePrice.css';
 import axios from 'axios';
+import { getSector, SECTOR_COLORS } from '../utils/sectorMap';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -681,6 +682,7 @@ const Portfolio: React.FC = () => {
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ticker</th>
+                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sector</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Quantity</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cost Basis</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Current Price</th>
@@ -703,9 +705,16 @@ const Portfolio: React.FC = () => {
                         </div>
                       </button>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <span
+                        className="inline-block w-3 h-3 rounded-full"
+                        style={{ backgroundColor: SECTOR_COLORS[getSector(position.ticker)] || SECTOR_COLORS['Other'] }}
+                        title={getSector(position.ticker)}
+                      />
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       {editingPosition === position.id ? (
-                        <input 
+                        <input
                           type="number"
                           value={editQuantity}
                           onChange={(e) => setEditQuantity(e.target.value)}
@@ -715,7 +724,7 @@ const Portfolio: React.FC = () => {
                         />
                       ) : (
                         <div className="text-sm text-gray-900 dark:text-white">
-                          {position.quantity.toFixed(2)}
+                          {Math.round(position.quantity)}
                         </div>
                       )}
                     </td>
