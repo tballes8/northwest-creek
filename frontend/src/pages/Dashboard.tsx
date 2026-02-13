@@ -557,18 +557,18 @@ return (
       {/* Recent Activity / Empty State */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
         {/* Portfolio Summary */}
-        <Link to="/portfolio" className="block bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500 hover:shadow-xl hover:border-primary-400 dark:hover:border-primary-500 transition-all duration-200">
+        <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Portfolio Overview</h2>
-            <span className="text-sm text-primary-600 dark:text-primary-400 font-medium">
+            <Link to="/portfolio" className="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium">
               View all →
-            </span>
+            </Link>
           </div>
           {stats.portfolioCount > 0 ? (
             <div className="space-y-4">
               <p className="text-sm text-gray-600 dark:text-gray-400">{stats.portfolioCount} position(s) tracked</p>
               {portfolioSectors.length > 0 && (
-                <div className="pt-2" onClick={(e) => e.stopPropagation()}>
+                <div className="pt-2">
                   <SectorPieChart
                     data={portfolioSectors}
                     title="Sector Allocation"
@@ -579,9 +579,12 @@ return (
                 </div>
               )}
               <div className="border-t dark:border-gray-600 pt-3">
-                <span className="text-primary-600 dark:text-primary-400 text-sm font-medium">
+                <Link
+                  to="/portfolio"
+                  className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 text-sm font-medium"
+                >
                   Manage your positions →
-                </span>
+                </Link>
               </div>
             </div>
           ) : (
@@ -592,12 +595,15 @@ return (
                 </svg>
               </div>
               <p className="text-gray-600 dark:text-gray-400 mb-4">No portfolio positions yet</p>
-              <span className="inline-block bg-primary-600 dark:bg-primary-500 text-white px-4 py-2 rounded-lg font-medium">
+              <Link
+                to="/portfolio"
+                className="inline-block bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              >
                 Add Your First Position
-              </span>
+              </Link>
             </div>
           )}
-        </Link>
+        </div>
 
         {/* Watchlist Summary */}
         <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
