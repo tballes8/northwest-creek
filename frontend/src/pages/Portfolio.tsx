@@ -7,6 +7,7 @@ import IntradayModal from '../components/Intradaymodal';
 import { useLivePriceContext } from '../contexts/LivePriceContext';
 import MarketStatusBadge from '../components/MarketStatusBadge';
 import '../styles/livePrice.css';
+import { getSector, SECTOR_COLORS } from '../utils/sectorMap';
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -681,6 +682,7 @@ const Portfolio: React.FC = () => {
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ticker</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sector</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Quantity</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cost Basis</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Current Price</th>
@@ -703,9 +705,24 @@ const Portfolio: React.FC = () => {
                         </div>
                       </button>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {(() => {
+                        const sector = getSector(position.ticker);
+                        const color = SECTOR_COLORS[sector] || SECTOR_COLORS['Other'];
+                        return (
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="inline-block w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: color }}
+                            />
+                            <span className="text-sm text-gray-700 dark:text-gray-300">{sector}</span>
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       {editingPosition === position.id ? (
-                        <input 
+                        <input
                           type="number"
                           value={editQuantity}
                           onChange={(e) => setEditQuantity(e.target.value)}
@@ -721,7 +738,7 @@ const Portfolio: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       {editingPosition === position.id ? (
-                        <input 
+                        <input
                           type="number"
                           value={editBuyPrice}
                           onChange={(e) => setEditBuyPrice(e.target.value)}
