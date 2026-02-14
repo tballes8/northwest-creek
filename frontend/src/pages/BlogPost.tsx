@@ -32,18 +32,25 @@ const BlogPost: React.FC = () => {
   useEffect(() => {
     const loadPost = async () => {
       try {
-        const userRes = await authAPI.getCurrentUser();
-        setUser(userRes.data);
+        // Try to load user (optional — visitor may not be logged in)
+        try {
+          const userRes = await authAPI.getCurrentUser();
+          setUser(userRes.data);
+        } catch {
+          // Not logged in — that's fine for public blog pages
+        }
 
         const token = localStorage.getItem('access_token');
+        const headers: Record<string, string> = {};
+        if (token) headers.Authorization = `Bearer ${token}`;
+
         const res = await axios.get(
           `${API_URL}/api/v1/content/blogs/${slug}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+          { headers }
         );
         setPost(res.data);
       } catch (err: any) {
-        if (err.response?.status === 401) navigate('/login');
-        else if (err.response?.status === 404) setError('Post not found');
+        if (err.response?.status === 404) setError('Post not found');
         else setError('Failed to load blog post');
       } finally {
         setLoading(false);
@@ -149,7 +156,7 @@ const BlogPost: React.FC = () => {
                 prose-pre:bg-gray-900 prose-pre:text-gray-100
                 prose-code:text-primary-600 dark:prose-code:text-primary-400
                 prose-blockquote:border-primary-500"
-              style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
+              style={{ textAlign: 'justify', overflowWrap: 'normal', wordBreak: 'normal' }}
               dangerouslySetInnerHTML={{ __html: post.content }}
             />
           </article>

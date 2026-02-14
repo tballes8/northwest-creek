@@ -174,10 +174,9 @@ async def delete_tutorial(
 @router.get("/blogs", response_model=List[BlogPostListItem])
 async def list_blog_posts(
     category: Optional[str] = Query(None),
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List published blog posts (without full content)."""
+    """List published blog posts (public — no auth required)."""
     query = select(BlogPost).where(BlogPost.is_published == True)
     if category:
         query = query.where(BlogPost.category == category)
@@ -189,10 +188,9 @@ async def list_blog_posts(
 
 @router.get("/blogs/categories", response_model=List[str])
 async def list_blog_categories(
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get distinct blog categories."""
+    """Get distinct blog categories (public)."""
     result = await db.execute(
         select(BlogPost.category)
         .where(BlogPost.is_published == True)
@@ -205,10 +203,9 @@ async def list_blog_categories(
 @router.get("/blogs/{slug}", response_model=BlogPostResponse)
 async def get_blog_post(
     slug: str,
-    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get a single blog post by slug (with full content)."""
+    """Get a single blog post by slug (public — no auth required)."""
     result = await db.execute(
         select(BlogPost).where(BlogPost.slug == slug, BlogPost.is_published == True)
     )
