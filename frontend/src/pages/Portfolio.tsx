@@ -590,7 +590,7 @@ const Portfolio: React.FC = () => {
                     value={newQuantity}
                     onChange={(e) => setNewQuantity(e.target.value)}
                     placeholder="10"
-                    step="0.001"
+                    step="1"
                     min="0"
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     required
