@@ -24,6 +24,10 @@ interface BlogPostFull {
 const BlogPost: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+
+  // Sync check — determines which nav renders on first paint (no flash)
+  const hasToken = !!localStorage.getItem('access_token');
+
   const [user, setUser] = useState<User | null>(null);
   const [post, setPost] = useState<BlogPostFull | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,12 +50,14 @@ const BlogPost: React.FC = () => {
 
   useEffect(() => {
     const loadPost = async () => {
-      // Try to load user (optional — determines which nav to show)
-      try {
-        const userRes = await authAPI.getCurrentUser();
-        setUser(userRes.data);
-      } catch {
-        // Not logged in — will show public nav
+      // Try to load user details for dropdown (optional)
+      if (hasToken) {
+        try {
+          const userRes = await authAPI.getCurrentUser();
+          setUser(userRes.data);
+        } catch {
+          // Token expired or invalid — will show public nav
+        }
       }
 
       // Always fetch the blog post (public endpoint)
@@ -66,7 +72,7 @@ const BlogPost: React.FC = () => {
       }
     };
     if (slug) loadPost();
-  }, [slug]);
+  }, [slug, hasToken]);
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
@@ -88,14 +94,17 @@ const BlogPost: React.FC = () => {
     );
   };
 
+  // Use hasToken for immediate nav decision, user for dropdown details
+  const isSignedIn = hasToken && user;
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
       {/* Navigation */}
       <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
-            {/* Logo — links to landing when public, static when signed in (matches Dashboard) */}
-            {user ? (
+            {/* Logo — links to landing when public, static when signed in */}
+            {hasToken ? (
               <div className="flex items-center">
                 <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
                 <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>Northwest Creek</span>
@@ -108,7 +117,7 @@ const BlogPost: React.FC = () => {
             )}
 
             {/* Signed in: full page links */}
-            {user && (
+            {hasToken && (
               <div className="hidden md:flex items-center space-x-8">
                 <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
                 <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
@@ -121,8 +130,8 @@ const BlogPost: React.FC = () => {
             )}
 
             <div className="flex items-center space-x-4">
-              {/* Signed in: user dropdown */}
-              {user ? (
+              {/* Signed in: user dropdown (renders once user data loads) */}
+              {isSignedIn ? (
                 <div className="relative" ref={userMenuRef}>
                   <button
                     onClick={() => setUserMenuOpen(!userMenuOpen)}
@@ -193,10 +202,10 @@ const BlogPost: React.FC = () => {
                     </div>
                   )}
                 </div>
-              ) : (
+              ) : !hasToken ? (
                 /* Not signed in: just an "All Posts" link */
                 <Link to="/blogs" className="text-gray-400 hover:text-white text-sm font-medium">All Posts</Link>
-              )}
+              ) : null}
               <ThemeToggle />
             </div>
           </div>
@@ -268,17 +277,18 @@ const BlogPost: React.FC = () => {
               </div>
             )}
 
-            {/* Content — Tailwind prose handles all typography */}
+            {/* Content — prose handles typography, overflow-wrap prevents horizontal scroll */}
             <div
-              className="prose prose-lg dark:prose-invert max-w-none
+              className="prose prose-lg dark:prose-invert
                 prose-headings:text-gray-900 dark:prose-headings:text-white
                 prose-p:text-gray-700 dark:prose-p:text-gray-300
                 prose-a:text-primary-600 dark:prose-a:text-primary-400
                 prose-strong:text-gray-900 dark:prose-strong:text-white
-                prose-img:rounded-lg prose-img:shadow-md
-                prose-pre:bg-gray-900 prose-pre:text-gray-100
+                prose-img:rounded-lg prose-img:shadow-md prose-img:max-w-full
+                prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-pre:overflow-x-auto
                 prose-code:text-primary-600 dark:prose-code:text-primary-400
                 prose-blockquote:border-primary-500"
+              style={{ overflowWrap: 'break-word' }}
               dangerouslySetInnerHTML={{ __html: post.content }}
             />
           </article>
