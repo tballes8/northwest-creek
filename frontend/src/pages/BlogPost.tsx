@@ -46,26 +46,27 @@ const BlogPost: React.FC = () => {
 
   useEffect(() => {
     const loadPost = async () => {
+      // Try to load user (optional — nav displays user info if logged in)
       try {
         const userRes = await authAPI.getCurrentUser();
         setUser(userRes.data);
+      } catch {
+        // Not logged in — that's fine, blog posts are public
+      }
 
-        const token = localStorage.getItem('access_token');
-        const res = await axios.get(
-          `${API_URL}/api/v1/content/blogs/${slug}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+      // Always fetch the blog post (public endpoint)
+      try {
+        const res = await axios.get(`${API_URL}/api/v1/content/blogs/${slug}`);
         setPost(res.data);
       } catch (err: any) {
-        if (err.response?.status === 401) navigate('/login');
-        else if (err.response?.status === 404) setError('Post not found');
+        if (err.response?.status === 404) setError('Post not found');
         else setError('Failed to load blog post');
       } finally {
         setLoading(false);
       }
     };
     if (slug) loadPost();
-  }, [slug, navigate]);
+  }, [slug]);
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
