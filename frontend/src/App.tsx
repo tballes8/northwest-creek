@@ -21,6 +21,7 @@ import Tutorials from './pages/Tutorials';
 import Blogs from './pages/Blogs';
 import BlogPost from './pages/BlogPost';
 import AdminContent from './pages/AdminContent';
+import BlogList from './pages/BlogList';
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -58,6 +59,7 @@ function App() {
           <Route path="/blogs" element={<Blogs />} />
           <Route path="/blogs/:slug" element={<BlogPost />} />
           <Route path="/admin" element={<AdminContent />} />
+          <Route path="/blogs" element={<BlogList />} />
         </Routes>
       </LivePriceProvider>
     </Router>
