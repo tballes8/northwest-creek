@@ -18,10 +18,10 @@ import { LivePriceProvider } from './contexts/LivePriceContext';
 import Payment from './pages/Payment';
 import AccountSettings from './pages/AccountSettings';
 import Tutorials from './pages/Tutorials';
-import Blogs from './pages/Blogs';
+import BlogList from './pages/BlogList';
 import BlogPost from './pages/BlogPost';
 import AdminContent from './pages/AdminContent';
-import BlogList from './pages/BlogList';
+
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -56,10 +56,9 @@ function App() {
           <Route path="/technical-analysis" element={<ProtectedRoute><TechnicalAnalysis /></ProtectedRoute>} />
           <Route path="/dcf-valuation" element={<ProtectedRoute><DCFValuation /></ProtectedRoute>} />
           <Route path="/tutorials" element={<Tutorials />} />
-          <Route path="/blogs" element={<Blogs />} />
+          <Route path="/blogs" element={<BlogList />} />
           <Route path="/blogs/:slug" element={<BlogPost />} />
           <Route path="/admin" element={<AdminContent />} />
-          <Route path="/blogs" element={<BlogList />} />
         </Routes>
       </LivePriceProvider>
     </Router>
