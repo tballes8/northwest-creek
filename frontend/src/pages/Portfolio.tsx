@@ -252,8 +252,8 @@ const Portfolio: React.FC = () => {
       return;
     }
 
-    if (parseFloat(newQuantity) <= 0) {
-      setError('Quantity must be greater than 0');
+    if (parseInt(newQuantity, 10) <= 0 || isNaN(parseInt(newQuantity, 10))) {
+      setError('Quantity must be a whole number greater than 0');
       return;
     }
 
@@ -265,7 +265,7 @@ const Portfolio: React.FC = () => {
     try {
       await portfolioAPI.add({
         ticker: newTicker.toUpperCase().trim(),
-        quantity: parseFloat(newQuantity),
+        quantity: parseInt(newQuantity, 10),
         buy_price: parseFloat(newBuyPrice),
         buy_date: newBuyDate,
         notes: newNotes.trim() || undefined
@@ -318,8 +318,8 @@ const Portfolio: React.FC = () => {
     try {
       const payload: any = {};
       
-      if (editQuantity && parseFloat(editQuantity) > 0) {
-        payload.quantity = parseFloat(editQuantity);
+      if (editQuantity && parseInt(editQuantity, 10) > 0) {
+        payload.quantity = parseInt(editQuantity, 10);
       }
       
       if (editBuyPrice && parseFloat(editBuyPrice) > 0) {
@@ -739,13 +739,13 @@ const Portfolio: React.FC = () => {
                           type="number"
                           value={editQuantity}
                           onChange={(e) => setEditQuantity(e.target.value)}
-                          step="0.01"
+                          step="1"
                           min="0"
                           className="w-24 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-right"
                         />
                       ) : (
                         <div className="text-sm text-gray-900 dark:text-white">
-                          {position.quantity.toFixed(2)}
+                          {Number.isInteger(position.quantity) ? position.quantity : position.quantity.toFixed(2)}
                         </div>
                       )}
                     </td>
