@@ -2,8 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import ThemeToggle from '../components/ThemeToggle';
-import { User } from '../types';
-import { authAPI } from '../services/api';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -22,7 +20,6 @@ interface BlogPostItem {
 }
 
 const BlogList: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
   const [posts, setPosts] = useState<BlogPostItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -30,14 +27,6 @@ const BlogList: React.FC = () => {
 
   useEffect(() => {
     const loadData = async () => {
-      // Try to load user (optional — visitor may not be logged in)
-      try {
-        const userRes = await authAPI.getCurrentUser();
-        setUser(userRes.data);
-      } catch {
-        // Not logged in — that's fine for public blog pages
-      }
-
       try {
         const [postsRes, catsRes] = await Promise.all([
           axios.get(`${API_URL}/api/v1/content/blogs`),
@@ -64,7 +53,7 @@ const BlogList: React.FC = () => {
       <nav className="bg-gray-900 shadow-sm border-b border-gray-700">
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
-            <div className="flex items-center">
+            <Link to="/" className="flex items-center">
               <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
               <span
                 className="text-xl font-bold text-primary-400"
@@ -72,26 +61,9 @@ const BlogList: React.FC = () => {
               >
                 Northwest Creek
               </span>
-            </div>
-            <div className="hidden md:flex items-center space-x-8">
-              {user && <Link to="/dashboard" className="text-gray-400 hover:text-white">Dashboard</Link>}
-              <Link to="/blogs" className="text-primary-400 font-medium border-b-2 border-primary-400 pb-1">Blog</Link>
-            </div>
-            <div className="flex items-center space-x-4">
+            </Link>
+            <div className="flex items-center">
               <ThemeToggle />
-              {user ? (
-                <Link to="/dashboard" className="text-sm text-gray-300 hover:text-teal-400">{user.email}</Link>
-              ) : (
-                <div className="flex items-center space-x-3">
-                  <Link to="/login" className="text-sm text-gray-300 hover:text-teal-400">Sign In</Link>
-                  <Link
-                    to="/register"
-                    className="text-sm px-3 py-1.5 rounded-md bg-primary-600 text-white hover:bg-primary-500 transition-colors"
-                  >
-                    Get Started
-                  </Link>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -102,7 +74,7 @@ const BlogList: React.FC = () => {
         <div className="mb-10">
           <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-3">Blog</h1>
           <p className="text-lg text-gray-600 dark:text-gray-400">
-            Insights on investing, portfolio strategy, and building wealth with a balanced approach.
+            Professional Stock Analysis for Retail Investors
           </p>
         </div>
 
@@ -223,16 +195,6 @@ const BlogList: React.FC = () => {
               <span className="text-sm text-gray-500 dark:text-gray-400">
                 © {new Date().getFullYear()} Northwest Creek LLC
               </span>
-            </div>
-            <div className="flex items-center gap-6">
-              {!user && (
-                <Link to="/register" className="text-sm text-primary-600 dark:text-primary-400 hover:underline">
-                  Create Free Account
-                </Link>
-              )}
-              <Link to="/dashboard" className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300">
-                Dashboard
-              </Link>
             </div>
           </div>
         </div>
