@@ -5,6 +5,7 @@ Save as: backend/app/schemas/content.py
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
+from uuid import UUID
 
 
 # ── Tutorials ──────────────────────────────────────────────
@@ -36,7 +37,7 @@ class TutorialUpdate(BaseModel):
 
 
 class TutorialResponse(TutorialBase):
-    id: int
+    id: UUID
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -72,9 +73,9 @@ class BlogPostUpdate(BaseModel):
 
 
 class BlogPostResponse(BlogPostBase):
-    id: int
+    id: UUID
     slug: str
-    author_id: Optional[int] = None
+    author_id: Optional[UUID] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -84,7 +85,7 @@ class BlogPostResponse(BlogPostBase):
 
 class BlogPostListItem(BaseModel):
     """Lighter model for blog listing (no full content)"""
-    id: int
+    id: UUID
     title: str
     slug: str
     excerpt: Optional[str] = None
@@ -92,7 +93,7 @@ class BlogPostListItem(BaseModel):
     category: str = "General"
     tags: Optional[str] = None
     is_published: bool = False
-    author_id: Optional[int] = None
+    author_id: Optional[UUID] = None
     created_at: Optional[datetime] = None
 
     class Config:
