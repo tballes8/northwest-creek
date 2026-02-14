@@ -8,7 +8,7 @@ import { authAPI } from '../services/api';
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 interface BlogPostFull {
-  id: number;
+  id: string;
   title: string;
   slug: string;
   content: string;
@@ -16,7 +16,7 @@ interface BlogPostFull {
   cover_image_url: string | null;
   category: string;
   tags: string | null;
-  author_id: number | null;
+  author_id: string | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -74,7 +74,7 @@ const BlogPost: React.FC = () => {
         </div>
       </nav>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 overflow-hidden">
         {/* Back link */}
         <Link to="/blogs" className="inline-flex items-center gap-1.5 text-sm text-primary-500 hover:text-primary-400 mb-6 group">
           <svg className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -149,6 +149,7 @@ const BlogPost: React.FC = () => {
                 prose-pre:bg-gray-900 prose-pre:text-gray-100
                 prose-code:text-primary-600 dark:prose-code:text-primary-400
                 prose-blockquote:border-primary-500"
+              style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
               dangerouslySetInnerHTML={{ __html: post.content }}
             />
           </article>

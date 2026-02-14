@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, delete, func
 from typing import List, Optional
+from uuid import UUID
 
 from app.db.session import get_db
 from app.db.models import Tutorial, BlogPost, User
@@ -84,7 +85,7 @@ async def list_tutorial_categories(
 
 @router.get("/tutorials/{tutorial_id}", response_model=TutorialResponse)
 async def get_tutorial(
-    tutorial_id: int,
+    tutorial_id: UUID,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -130,7 +131,7 @@ async def create_tutorial(
 
 @router.put("/admin/tutorials/{tutorial_id}", response_model=TutorialResponse)
 async def update_tutorial(
-    tutorial_id: int,
+    tutorial_id: UUID,
     data: TutorialUpdate,
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
@@ -152,7 +153,7 @@ async def update_tutorial(
 
 @router.delete("/admin/tutorials/{tutorial_id}", status_code=204)
 async def delete_tutorial(
-    tutorial_id: int,
+    tutorial_id: UUID,
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
@@ -272,7 +273,7 @@ async def create_blog_post(
 
 @router.put("/admin/blogs/{blog_id}", response_model=BlogPostResponse)
 async def update_blog_post(
-    blog_id: int,
+    blog_id: UUID,
     data: BlogPostUpdate,
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
@@ -299,7 +300,7 @@ async def update_blog_post(
 
 @router.delete("/admin/blogs/{blog_id}", status_code=204)
 async def delete_blog_post(
-    blog_id: int,
+    blog_id: UUID,
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
