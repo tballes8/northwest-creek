@@ -75,6 +75,7 @@ class EmailService:
     
     def send_verification_email(self, to_email: str, verification_token: str, user_name: str, selected_tier: str = "free") -> bool:
         """Send account verification email with tier-specific features"""
+        self._ensure_initialized()
         settings = _get_settings()
         
         # Embed selected tier in the verification URL so frontend can redirect to Stripe after verification
@@ -281,6 +282,7 @@ class EmailService:
     
     def send_payment_success_email(self, to_email: str, user_name: str, plan_name: str, tier: str) -> bool:
         """Send subscription confirmation email after successful payment"""
+        self._ensure_initialized()
         settings = _get_settings()
         dashboard_url = f"{settings.FRONTEND_URL}/dashboard"
         
@@ -420,6 +422,7 @@ class EmailService:
         The link points to /reset-password?token=<token> on the frontend.
         Token expires in 1 hour (enforced server-side).
         """
+        self._ensure_initialized()
         settings = _get_settings()
         reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
 
