@@ -9,9 +9,6 @@ from app.schemas import (
     stock,
     watchlist,
     daily_snapshot,
-    ForgotPasswordRequest,
-    ResetPasswordRequest,
-    ChangePasswordRequest
 )
 
 # Export commonly used schemas for convenience
@@ -21,6 +18,9 @@ from app.schemas.auth import (
     UserResponse,
     Token,
     TokenData,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    ChangePasswordRequest
 )
 
 from app.schemas.daily_snapshot import (
@@ -40,9 +40,12 @@ __all__ = [
     "UserCreate",
     "UserLogin",
     "UserResponse",
+    "ForgotPasswordRequest",
+    "ResetPasswordRequest",
+    "ChangePasswordRequest",
     "Token",
     "TokenData",
     # Daily snapshot schemas
     "DailySnapshotItem",
-    "DailySnapshotResponse",    
+    "DailySnapshotResponse",
 ]
