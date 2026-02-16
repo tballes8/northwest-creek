@@ -30,13 +30,14 @@ class EmailService:
         
         settings = _get_settings()
         self.api_key = settings.SENDGRID_API_KEY
-        self.from_email = settings.FROM_EMAIL              # support@northwestcreekllc.com (transactional)
+        self.from_email = settings.FROM_EMAIL              # tyrone.ballesteros@outlook.com (default)
+        self.support_email = settings.SUPPORT_EMAIL        # support@northwestcreekllc.com (transactional)
         self.sales_email = settings.SALES_EMAIL            # sales@northwestcreekllc.com (payment/marketing)
         self.from_name = settings.FROM_NAME
         
         if self.api_key:
             self._sg = SendGridAPIClient(self.api_key)
-            print(f"✅ SendGrid initialized (support: {self.from_email}, sales: {self.sales_email})")
+            print(f"✅ SendGrid initialized (default: {self.from_email}, support: {self.support_email}, sales: {self.sales_email})")
         else:
             self._sg = None
             print("⚠️ Warning: SENDGRID_API_KEY not configured — emails will NOT send")
@@ -271,7 +272,8 @@ class EmailService:
         return self.send_email(
             to_email=to_email,
             subject="🎉 Verify Your Northwest Creek Account",
-            html_content=html_content
+            html_content=html_content,
+            from_email_override=self.support_email
         )
 
 
@@ -507,7 +509,8 @@ class EmailService:
         return self.send_email(
             to_email=to_email,
             subject="🔒 Reset Your Northwest Creek Password",
-            html_content=html_content
+            html_content=html_content,
+            from_email_override=self.support_email
         )
 
 
