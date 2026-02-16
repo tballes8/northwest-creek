@@ -30,27 +30,30 @@ class EmailService:
         
         settings = _get_settings()
         self.api_key = settings.SENDGRID_API_KEY
-        self.from_email = settings.FROM_EMAIL
+        self.from_email = settings.FROM_EMAIL              # support@northwestcreekllc.com (transactional)
+        self.sales_email = settings.SALES_EMAIL            # sales@northwestcreekllc.com (payment/marketing)
         self.from_name = settings.FROM_NAME
         
         if self.api_key:
             self._sg = SendGridAPIClient(self.api_key)
-            print(f"✅ SendGrid initialized (from: {self.from_email})")
+            print(f"✅ SendGrid initialized (support: {self.from_email}, sales: {self.sales_email})")
         else:
             self._sg = None
             print("⚠️ Warning: SENDGRID_API_KEY not configured — emails will NOT send")
     
-    def send_email(self, to_email: str, subject: str, html_content: str) -> bool:
-        """Send an email using SendGrid"""
+    def send_email(self, to_email: str, subject: str, html_content: str, from_email_override: str = None) -> bool:
+        """Send an email using SendGrid. Optionally override the from address."""
         self._ensure_initialized()
         
         if not self._sg:
             print(f"❌ Cannot send email to {to_email}: SendGrid not configured")
             return False
+        
+        sender = from_email_override or self.from_email
             
         try:
             message = Mail(
-                from_email=Email(self.from_email, self.from_name),
+                from_email=Email(sender, self.from_name),
                 to_emails=To(to_email),
                 subject=subject,
                 html_content=Content("text/html", html_content)
@@ -405,7 +408,8 @@ class EmailService:
         return self.send_email(
             to_email=to_email,
             subject=f"✅ Welcome to {plan_name} — Your Subscription is Active!",
-            html_content=html_content
+            html_content=html_content,
+            from_email_override=self.sales_email
         )
     
     def send_password_reset_email(self, to_email: str, reset_token: str, user_name: str) -> bool:
@@ -505,6 +509,7 @@ class EmailService:
             subject="🔒 Reset Your Northwest Creek Password",
             html_content=html_content
         )
+
 
 
 # Singleton instance

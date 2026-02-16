@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     # SendGrid Email Settings
     SENDGRID_API_KEY: str = Field(default="", env="SENDGRID_API_KEY")
     FROM_EMAIL: str = Field(default="", env="FROM_EMAIL")
+    SALES_EMAIL: str = Field(default="", env="SALES_EMAIL")
     FROM_NAME: str = Field(default="Northwest Creek", env="FROM_NAME")
     FRONTEND_URL: str = Field(default="http://localhost:3000", env="FRONTEND_URL")
 
@@ -64,6 +65,7 @@ def get_settings() -> Settings:
         print(f"✅ Config loaded:")
         print(f"   FRONTEND_URL = {settings.FRONTEND_URL}")
         print(f"   FROM_EMAIL = {settings.FROM_EMAIL}")
+        print(f"   SALES_EMAIL = {settings.SALES_EMAIL}")
         print(f"   SENDGRID_API_KEY = {'✅ SET (' + settings.SENDGRID_API_KEY[:8] + '...)' if settings.SENDGRID_API_KEY else '❌ NOT SET'}")
         print(f"   STRIPE_SECRET_KEY = {'✅ SET' if settings.STRIPE_SECRET_KEY else '❌ NOT SET'}")
         print(f"   STRIPE_PUBLISHABLE_KEY = {'✅ SET' if settings.STRIPE_PUBLISHABLE_KEY else '❌ NOT SET'}")

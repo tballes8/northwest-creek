@@ -229,30 +229,33 @@ async def forgot_password(
 ):
     """
     Request a password reset link.
-    Always returns the same message regardless of whether the email exists
-    to prevent email enumeration.
+    Returns an error if the email is not registered.
     """
     result = await db.execute(select(User).where(User.email == request.email))
     user = result.scalar_one_or_none()
 
-    if user:
-        # Generate reset token — 1-hour expiry
-        reset_token = secrets.token_urlsafe(32)
-        user.password_reset_token = reset_token
-        user.password_reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
-        await db.commit()
-
-        email_sent = email_service.send_password_reset_email(
-            to_email=user.email,
-            reset_token=reset_token,
-            user_name=user.full_name or user.email
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found with that email address."
         )
-        if not email_sent:
-            print(f"Warning: Password reset email failed to send to {user.email}")
 
-    # Identical response whether user exists or not
+    # Generate reset token — 1-hour expiry
+    reset_token = secrets.token_urlsafe(32)
+    user.password_reset_token = reset_token
+    user.password_reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
+    await db.commit()
+
+    email_sent = email_service.send_password_reset_email(
+        to_email=user.email,
+        reset_token=reset_token,
+        user_name=user.full_name or user.email
+    )
+    if not email_sent:
+        print(f"Warning: Password reset email failed to send to {user.email}")
+
     return {
-        "message": "If that email is registered, you will receive a password reset link shortly. Please check your inbox and spam/junk folder."
+        "message": "A password reset link has been sent to your email. Please check your inbox and spam/junk folder."
     }
 
 
