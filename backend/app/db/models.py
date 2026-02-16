@@ -18,6 +18,8 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     verification_token = Column(String(255), nullable=True)
     verification_token_expires = Column(DateTime(timezone=True), nullable=True)
+    password_reset_token = Column(String(255), nullable=True)
+    password_reset_token_expires = Column(DateTime(timezone=True), nullable=True)
     is_verified = Column(Boolean, default=False)
     is_admin = Column(Boolean, default=False)
     

@@ -7,6 +7,7 @@ import secrets
 
 from app.db.models import User
 from app.schemas import UserCreate, UserLogin, Token, UserResponse
+from app.schemas.auth import ForgotPasswordRequest, ResetPasswordRequest, ChangePasswordRequest
 from app.core.security import (
     get_password_hash,
     verify_password,
@@ -63,7 +64,7 @@ async def register(
     )
     
     if not email_sent:
-        print(f"⚠️ Warning: Verification email failed to send to {user.email}")
+        print(f"Warning: Verification email failed to send to {user.email}")
     
     return {
         "message": "Registration successful! Please check your email (and spam/junk folder) to verify your account.",
@@ -215,3 +216,134 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials"
         )
+
+
+# ---------------------------------------------------------------------------
+# Password Reset (unauthenticated — forgot password flow)
+# ---------------------------------------------------------------------------
+
+@router.post("/forgot-password")
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Request a password reset link.
+    Always returns the same message regardless of whether the email exists
+    to prevent email enumeration.
+    """
+    result = await db.execute(select(User).where(User.email == request.email))
+    user = result.scalar_one_or_none()
+
+    if user:
+        # Generate reset token — 1-hour expiry
+        reset_token = secrets.token_urlsafe(32)
+        user.password_reset_token = reset_token
+        user.password_reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
+        await db.commit()
+
+        email_sent = email_service.send_password_reset_email(
+            to_email=user.email,
+            reset_token=reset_token,
+            user_name=user.full_name or user.email
+        )
+        if not email_sent:
+            print(f"Warning: Password reset email failed to send to {user.email}")
+
+    # Identical response whether user exists or not
+    return {
+        "message": "If that email is registered, you will receive a password reset link shortly. Please check your inbox and spam/junk folder."
+    }
+
+
+@router.post("/reset-password")
+async def reset_password(
+    request: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Reset password using the token from the emailed link.
+    """
+    result = await db.execute(
+        select(User).where(User.password_reset_token == request.token)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token."
+        )
+
+    if user.password_reset_token_expires < datetime.now(timezone.utc):
+        # Clear expired token
+        user.password_reset_token = None
+        user.password_reset_token_expires = None
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset token has expired. Please request a new one."
+        )
+
+    # Update password and clear token
+    user.password_hash = get_password_hash(request.new_password)
+    user.password_reset_token = None
+    user.password_reset_token_expires = None
+    await db.commit()
+
+    return {"message": "Password has been reset successfully. You can now sign in with your new password."}
+
+
+# ---------------------------------------------------------------------------
+# Change Password (authenticated — from Account Settings)
+# ---------------------------------------------------------------------------
+
+@router.post("/change-password")
+async def change_password(
+    request: ChangePasswordRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Change password for the currently authenticated user.
+    Requires the current password for verification.
+    """
+    # Resolve current user from JWT
+    try:
+        payload = decode_token(credentials.credentials)
+        user_id = payload.get("sub")
+        if not user_id:
+            raise ValueError("Missing sub claim")
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials"
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+
+    # Verify current password
+    if not verify_password(request.current_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect."
+        )
+
+    # Prevent setting the same password
+    if verify_password(request.new_password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be different from your current password."
+        )
+
+    user.password_hash = get_password_hash(request.new_password)
+    await db.commit()
+
+    return {"message": "Password changed successfully."}

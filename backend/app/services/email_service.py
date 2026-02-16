@@ -407,6 +407,78 @@ class EmailService:
             subject=f"✅ Welcome to {plan_name} — Your Subscription is Active!",
             html_content=html_content
         )
+    
+    def send_password_reset_email(self, to_email: str, reset_token: str, user_name: str) -> bool:
+        """
+        Send a password reset email with a tokenized link.
+        The link points to /reset-password?token=<token> on the frontend.
+        Token expires in 1 hour (enforced server-side).
+        """
+        settings = _get_settings()
+        reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
+
+        subject = "Reset Your Northwest Creek Password"
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="text-align: center; margin-bottom: 30px;">
+                <h1 style="color: #0d9488; margin: 0;">Northwest Creek</h1>
+            </div>
+
+            <h2 style="color: #1f2937;">Password Reset Request</h2>
+
+            <p style="color: #4b5563; font-size: 16px;">
+                Hi {user_name},
+            </p>
+
+            <p style="color: #4b5563; font-size: 16px;">
+                We received a request to reset your password. Click the button below to choose a new password:
+            </p>
+
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{reset_url}"
+                style="background-color: #0d9488; color: white; padding: 14px 32px;
+                        text-decoration: none; border-radius: 8px; font-size: 16px;
+                        font-weight: bold; display: inline-block;">
+                    Reset Password
+                </a>
+            </div>
+
+            <p style="color: #6b7280; font-size: 14px;">
+                This link will expire in <strong>1 hour</strong>. If you didn't request a password reset,
+                you can safely ignore this email — your password will not be changed.
+            </p>
+
+            <p style="color: #6b7280; font-size: 14px;">
+                If the button doesn't work, copy and paste this URL into your browser:<br/>
+                <a href="{reset_url}" style="color: #0d9488; word-break: break-all;">{reset_url}</a>
+            </p>
+
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;" />
+
+            <p style="color: #9ca3af; font-size: 12px; text-align: center;">
+                Northwest Creek, LLC &mdash; Stock Analysis Platform
+            </p>
+        </div>
+        """
+
+        try:
+            from sendgrid import SendGridAPIClient
+            from sendgrid.helpers.mail import Mail
+
+            message = Mail(
+                from_email=self.from_email,
+                to_emails=to_email,
+                subject=subject,
+                html_content=html_content
+            )
+            sg = SendGridAPIClient(self.sendgrid_api_key)
+            response = sg.send(message)
+            print(f"Password reset email sent to {to_email}, status: {response.status_code}")
+            return response.status_code in [200, 201, 202]
+        except Exception as e:
+            print(f"Failed to send password reset email to {to_email}: {e}")
+            return False
+
 
 
 # Singleton instance

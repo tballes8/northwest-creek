@@ -15,7 +15,7 @@ axiosInstance.interceptors.request.use(
     const token = localStorage.getItem('access_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
-      console.log('Sending token:', token.substring(0, 20) + '...');  // ← Add logging
+      console.log('Sending token:', token.substring(0, 20) + '...');
     }
     return config;
   },
@@ -37,6 +37,15 @@ export const authAPI = {
 
   verifyEmail: (token: string) => 
     axiosInstance.get(`/auth/verify-email?token=${token}`),
+
+  forgotPassword: (data: { email: string }) =>
+    axiosInstance.post('/auth/forgot-password', data),
+
+  resetPassword: (data: { token: string; new_password: string }) =>
+    axiosInstance.post('/auth/reset-password', data),
+
+  changePassword: (data: { current_password: string; new_password: string }) =>
+    axiosInstance.post('/auth/change-password', data),
 };
 
 // Watchlist API
@@ -47,10 +56,10 @@ export const watchlistAPI = {
   add: (data: { ticker: string; notes?: string; target_price?: number }) =>
     axiosInstance.post('/watchlist', data),
   
-  remove: (id: string) =>  // ← Changed from number to string
+  remove: (id: string) =>
     axiosInstance.delete(`/watchlist/${id}`),
   
-  update: (id: string, data: { notes?: string; target_price?: number }) =>  // ← Changed from number to string
+  update: (id: string, data: { notes?: string; target_price?: number }) =>
     axiosInstance.put(`/watchlist/${id}`, data),
 };
 
@@ -72,16 +81,16 @@ export const portfolioAPI = {
 // Alerts API
 export const alertsAPI = {
   getAll: () =>
-    axiosInstance.get('/alerts/'),  // ← Added trailing slash
+    axiosInstance.get('/alerts/'),
   
   create: (data: { ticker: string; condition: 'above' | 'below'; target_price: number; notes?: string }) =>
-    axiosInstance.post('/alerts/', data),  // ← Added trailing slash
+    axiosInstance.post('/alerts/', data),
   
   delete: (id: string) =>
-    axiosInstance.delete(`/alerts/${id}/`),  // ← Fixed syntax + added trailing slash
+    axiosInstance.delete(`/alerts/${id}/`),
   
   update: (id: string, data: { is_active?: boolean; notes?: string }) =>
-    axiosInstance.put(`/alerts/${id}/`, data),  // ← Fixed syntax + added trailing slash
+    axiosInstance.put(`/alerts/${id}/`, data),
 };
 
 // Stocks API

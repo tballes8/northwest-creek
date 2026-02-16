@@ -11,6 +11,13 @@ const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Forgot password state
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetMessage, setResetMessage] = useState('');
+  const [resetError, setResetError] = useState('');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -29,6 +36,34 @@ const Login: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetMessage('');
+    setResetError('');
+    setResetLoading(true);
+
+    try {
+      const response = await authAPI.forgotPassword({ email: resetEmail });
+      setResetMessage(response.data.message);
+      // Don't clear the email — let the user see what they submitted
+    } catch (err: any) {
+      setResetError(err.response?.data?.detail || 'Something went wrong. Please try again.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const toggleForgotPassword = () => {
+    setShowForgotPassword(!showForgotPassword);
+    // Pre-fill with login email if available
+    if (!showForgotPassword && formData.email) {
+      setResetEmail(formData.email);
+    }
+    // Clear messages when toggling
+    setResetMessage('');
+    setResetError('');
   };
 
   return (
@@ -111,9 +146,13 @@ const Login: React.FC = () => {
               </div>
 
               <div className="text-sm">
-                <a href="#" className="font-medium text-primary-600 dark:text-primary-400 hover:text-primary-500 dark:hover:text-primary-300">
+                <button
+                  type="button"
+                  onClick={toggleForgotPassword}
+                  className="font-medium text-primary-600 dark:text-primary-400 hover:text-primary-500 dark:hover:text-primary-300"
+                >
                   Forgot password?
-                </a>
+                </button>
               </div>
             </div>
 
@@ -127,6 +166,70 @@ const Login: React.FC = () => {
               </button>
             </div>
           </form>
+
+          {/* Forgot Password Expandable Section */}
+          {showForgotPassword && (
+            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-600">
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                Reset your password
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Enter the email address associated with your account and we'll send you a link to reset your password.
+              </p>
+
+              {resetMessage && (
+                <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 text-green-700 dark:text-green-400 px-4 py-3 rounded-lg mb-4 text-sm">
+                  {resetMessage}
+                </div>
+              )}
+
+              {resetError && (
+                <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg mb-4 text-sm">
+                  {resetError}
+                </div>
+              )}
+
+              {!resetMessage && (
+                <form onSubmit={handleForgotPassword} className="space-y-4">
+                  <div>
+                    <label htmlFor="reset-email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Email address
+                    </label>
+                    <div className="mt-1">
+                      <input
+                        id="reset-email"
+                        name="reset-email"
+                        type="email"
+                        autoComplete="email"
+                        required
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      type="submit"
+                      disabled={resetLoading}
+                      className="flex-1 flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {resetLoading ? 'Sending...' : 'Send Reset Link'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={toggleForgotPassword}
+                      className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
 
           <div className="mt-6">
             <div className="relative">

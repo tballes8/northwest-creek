@@ -57,6 +57,16 @@ const AccountSettings: React.FC = () => {
   const [cancelSuccess, setCancelSuccess] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
 
+  // Change password state
+  const [passwordData, setPasswordData] = useState({
+    current_password: '',
+    new_password: '',
+    confirm_password: '',
+  });
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
   useEffect(() => {
     loadUser();
   }, []);
@@ -106,6 +116,37 @@ const AccountSettings: React.FC = () => {
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     navigate('/login');
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordSuccess(null);
+    setPasswordError(null);
+
+    if (passwordData.new_password !== passwordData.confirm_password) {
+      setPasswordError('New passwords do not match.');
+      return;
+    }
+
+    if (passwordData.new_password.length < 8) {
+      setPasswordError('New password must be at least 8 characters.');
+      return;
+    }
+
+    setPasswordLoading(true);
+
+    try {
+      const response = await authAPI.changePassword({
+        current_password: passwordData.current_password,
+        new_password: passwordData.new_password,
+      });
+      setPasswordSuccess(response.data.message);
+      setPasswordData({ current_password: '', new_password: '', confirm_password: '' });
+    } catch (err: any) {
+      setPasswordError(err.response?.data?.detail || 'Failed to change password. Please try again.');
+    } finally {
+      setPasswordLoading(false);
+    }
   };
 
   const tierInfo = TIER_DETAILS[user?.subscription_tier || 'free'] || TIER_DETAILS.free;
@@ -198,6 +239,89 @@ const AccountSettings: React.FC = () => {
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Change Password */}
+        <div className="bg-white dark:bg-gray-700 rounded-xl shadow-lg border dark:border-gray-500 p-6 mb-6">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Change Password</h2>
+
+          {passwordSuccess && (
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-4">
+              <div className="flex items-start gap-3">
+                <span className="text-green-500 text-xl">✓</span>
+                <p className="text-green-700 dark:text-green-300">{passwordSuccess}</p>
+              </div>
+            </div>
+          )}
+
+          {passwordError && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">
+              <div className="flex items-start gap-3">
+                <span className="text-red-500 text-xl">✗</span>
+                <p className="text-red-700 dark:text-red-300">{passwordError}</p>
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+            <div>
+              <label htmlFor="current-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Current Password
+              </label>
+              <input
+                id="current-password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={passwordData.current_password}
+                onChange={(e) => setPasswordData({ ...passwordData, current_password: e.target.value })}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                New Password
+              </label>
+              <input
+                id="new-password"
+                type="password"
+                autoComplete="new-password"
+                required
+                minLength={8}
+                value={passwordData.new_password}
+                onChange={(e) => setPasswordData({ ...passwordData, new_password: e.target.value })}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Minimum 8 characters</p>
+            </div>
+
+            <div>
+              <label htmlFor="confirm-new-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Confirm New Password
+              </label>
+              <input
+                id="confirm-new-password"
+                type="password"
+                autoComplete="new-password"
+                required
+                minLength={8}
+                value={passwordData.confirm_password}
+                onChange={(e) => setPasswordData({ ...passwordData, confirm_password: e.target.value })}
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              />
+            </div>
+
+            <div>
+              <button
+                type="submit"
+                disabled={passwordLoading}
+                className="px-6 py-2.5 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {passwordLoading ? 'Updating...' : 'Update Password'}
+              </button>
+            </div>
+          </form>
         </div>
 
         {/* Subscription */}
