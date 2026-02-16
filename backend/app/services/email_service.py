@@ -417,68 +417,94 @@ class EmailService:
         settings = _get_settings()
         reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
 
-        subject = "Reset Your Northwest Creek Password"
+        print(f"📧 Sending password reset email to {to_email}")
+        print(f"   Reset URL: {reset_url}")
+
         html_content = f"""
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <div style="text-align: center; margin-bottom: 30px;">
-                <h1 style="color: #0d9488; margin: 0;">Northwest Creek</h1>
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ 
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                    line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f3f4f6;
+                }}
+                .container {{ 
+                    max-width: 600px; margin: 40px auto; background-color: #ffffff;
+                    border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                }}
+                .header {{ 
+                    background: linear-gradient(135deg, #0d9488 0%, #14b8a6 100%); 
+                    color: white; padding: 40px 30px; text-align: center; 
+                }}
+                .header h1 {{ margin: 0; font-size: 28px; font-weight: 700; }}
+                .content {{ padding: 40px 30px; }}
+                .content p {{ margin: 0 0 16px 0; color: #374151; }}
+                .button {{ 
+                    display: inline-block; background: #0d9488; color: white; 
+                    padding: 14px 32px; text-decoration: none; border-radius: 6px; 
+                    font-weight: 600; margin: 24px 0;
+                }}
+                .link-box {{
+                    background: #f3f4f6; padding: 16px; border-radius: 6px;
+                    word-break: break-all; margin: 20px 0; border-left: 4px solid #0d9488;
+                }}
+                .link-box p {{ margin: 0; font-size: 13px; color: #6b7280; }}
+                .warning {{
+                    background: #fef3c7; border-left: 4px solid #f59e0b;
+                    padding: 12px 16px; border-radius: 4px; margin: 20px 0;
+                }}
+                .warning p {{ margin: 0; color: #92400e; font-size: 14px; }}
+                .footer {{ 
+                    text-align: center; padding: 30px; background: #f9fafb;
+                    color: #6b7280; font-size: 14px; border-top: 1px solid #e5e7eb;
+                }}
+                .footer p {{ margin: 4px 0; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🔒 Password Reset</h1>
+                </div>
+                <div class="content">
+                    <p><strong>Hi {user_name},</strong></p>
+                    
+                    <p>We received a request to reset the password for your Northwest Creek account.</p>
+                    
+                    <p>Click the button below to choose a new password:</p>
+                    
+                    <div style="text-align: center;">
+                        <a href="{reset_url}" class="button">Reset Password</a>
+                    </div>
+                    
+                    <p style="font-size: 14px; color: #6b7280;">Or copy and paste this link into your browser:</p>
+                    <div class="link-box">
+                        <p>{reset_url}</p>
+                    </div>
+                    
+                    <div class="warning">
+                        <p><strong>⏰ This link will expire in 1 hour.</strong></p>
+                        <p style="margin-top: 8px;">If you didn't request a password reset, you can safely ignore this email — your password will not be changed.</p>
+                    </div>
+                    
+                    <p style="margin-top: 32px;"><strong>Best regards,</strong><br>The Northwest Creek Team</p>
+                </div>
+                <div class="footer">
+                    <p><strong>Northwest Creek</strong></p>
+                    <p>Intelligent Stock Analysis & Portfolio Management</p>
+                    <p style="margin-top: 12px;">This is an automated email, please do not reply.</p>
+                </div>
             </div>
-
-            <h2 style="color: #1f2937;">Password Reset Request</h2>
-
-            <p style="color: #4b5563; font-size: 16px;">
-                Hi {user_name},
-            </p>
-
-            <p style="color: #4b5563; font-size: 16px;">
-                We received a request to reset your password. Click the button below to choose a new password:
-            </p>
-
-            <div style="text-align: center; margin: 30px 0;">
-                <a href="{reset_url}"
-                style="background-color: #0d9488; color: white; padding: 14px 32px;
-                        text-decoration: none; border-radius: 8px; font-size: 16px;
-                        font-weight: bold; display: inline-block;">
-                    Reset Password
-                </a>
-            </div>
-
-            <p style="color: #6b7280; font-size: 14px;">
-                This link will expire in <strong>1 hour</strong>. If you didn't request a password reset,
-                you can safely ignore this email — your password will not be changed.
-            </p>
-
-            <p style="color: #6b7280; font-size: 14px;">
-                If the button doesn't work, copy and paste this URL into your browser:<br/>
-                <a href="{reset_url}" style="color: #0d9488; word-break: break-all;">{reset_url}</a>
-            </p>
-
-            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;" />
-
-            <p style="color: #9ca3af; font-size: 12px; text-align: center;">
-                Northwest Creek, LLC &mdash; Stock Analysis Platform
-            </p>
-        </div>
+        </body>
+        </html>
         """
 
-        try:
-            from sendgrid import SendGridAPIClient
-            from sendgrid.helpers.mail import Mail
-
-            message = Mail(
-                from_email=self.from_email,
-                to_emails=to_email,
-                subject=subject,
-                html_content=html_content
-            )
-            sg = SendGridAPIClient(self.sendgrid_api_key)
-            response = sg.send(message)
-            print(f"Password reset email sent to {to_email}, status: {response.status_code}")
-            return response.status_code in [200, 201, 202]
-        except Exception as e:
-            print(f"Failed to send password reset email to {to_email}: {e}")
-            return False
-
+        return self.send_email(
+            to_email=to_email,
+            subject="🔒 Reset Your Northwest Creek Password",
+            html_content=html_content
+        )
 
 
 # Singleton instance
