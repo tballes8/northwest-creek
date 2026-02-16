@@ -34,6 +34,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         frontend_url,  # Production frontend from environment
+        frontend_url.replace("://", "://www.") if "://www." not in frontend_url else frontend_url.replace("://www.", "://"),
         "http://localhost:3000",  # Local React dev
         "http://localhost:5173",  # Local Vite dev
     ],
