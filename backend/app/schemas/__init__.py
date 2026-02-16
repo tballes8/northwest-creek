@@ -9,6 +9,9 @@ from app.schemas import (
     stock,
     watchlist,
     daily_snapshot,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    ChangePasswordRequest
 )
 
 # Export commonly used schemas for convenience
@@ -42,5 +45,4 @@ __all__ = [
     # Daily snapshot schemas
     "DailySnapshotItem",
     "DailySnapshotResponse",    
-
 ]

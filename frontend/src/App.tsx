@@ -21,6 +21,7 @@ import Tutorials from './pages/Tutorials';
 import BlogList from './pages/BlogList';
 import BlogPost from './pages/BlogPost';
 import AdminContent from './pages/AdminContent';
+import ResetPassword from './pages/ResetPassword';
 
 
 // Protected Route Component
@@ -59,6 +60,7 @@ function App() {
           <Route path="/blogs" element={<BlogList />} />
           <Route path="/blogs/:slug" element={<BlogPost />} />
           <Route path="/admin" element={<AdminContent />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
         </Routes>
       </LivePriceProvider>
     </Router>
