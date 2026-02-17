@@ -66,8 +66,8 @@ const Alerts: React.FC = () => {
     // Check tier limits
     const limits = {
       free: 0,
-      casual: 20,
-      active: 45,
+      casual: 5,
+      active: 20,
       professional: 50
     };
     const limit = limits[user?.subscription_tier as keyof typeof limits] || 5;

@@ -87,10 +87,10 @@ export const alertsAPI = {
     axiosInstance.post('/alerts/', data),
   
   delete: (id: string) =>
-    axiosInstance.delete(`/alerts/${id}/`),
+    axiosInstance.delete(`/alerts/${id}`),
   
   update: (id: string, data: { is_active?: boolean; notes?: string }) =>
-    axiosInstance.put(`/alerts/${id}/`, data),
+    axiosInstance.put(`/alerts/${id}`, data),
 };
 
 // Stocks API
