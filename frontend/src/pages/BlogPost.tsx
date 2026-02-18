@@ -21,6 +21,92 @@ interface BlogPostFull {
   updated_at: string | null;
 }
 
+/**
+ * IframeContent — renders full HTML (including <style> blocks) in a sandboxed
+ * iframe that auto-resizes to its content height.  Injects a small base
+ * stylesheet so bare HTML still looks presentable, and listens for dark-mode
+ * changes on the parent document.
+ */
+const IframeContent: React.FC<{ html: string }> = ({ html }) => {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Strip <!DOCTYPE>, <html>, <head> wrappers — keep <style> + <body> content
+  const extractBody = (raw: string): string => {
+    // If there's a <body>, grab its innerHTML; otherwise treat as fragment
+    const bodyMatch = raw.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    const bodyContent = bodyMatch ? bodyMatch[1] : raw;
+
+    // Preserve any <style> blocks from <head> or anywhere in the doc
+    const styles: string[] = [];
+    raw.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, (match) => {
+      styles.push(match);
+      return '';
+    });
+
+    // Dedupe: if a <style> block already exists inside bodyContent, don't re-add
+    const uniqueStyles = styles.filter(s => !bodyContent.includes(s));
+    return uniqueStyles.join('\n') + '\n' + bodyContent;
+  };
+
+  const isDark = document.documentElement.classList.contains('dark');
+
+  // Base stylesheet: sensible defaults so unstyled HTML isn't raw white/black
+  const baseCSS = `
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 1.05rem; line-height: 1.7;
+      color: ${isDark ? '#d1d5db' : '#374151'};
+      background: transparent;
+      overflow-x: hidden;
+    }
+    img { max-width: 100%; height: auto; border-radius: 0.5rem; }
+    a { color: ${isDark ? '#5eead4' : '#0d9488'}; }
+    pre, code { overflow-x: auto; }
+  `;
+
+  const srcDoc = `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>${baseCSS}</style>
+</head>
+<body>${extractBody(html)}
+<script>
+  // Notify parent of content height so it can resize the iframe
+  function postHeight() {
+    const h = document.documentElement.scrollHeight;
+    window.parent.postMessage({ type: 'iframe-height', height: h }, '*');
+  }
+  window.addEventListener('load', () => { postHeight(); setTimeout(postHeight, 300); });
+  new MutationObserver(postHeight).observe(document.body, { childList: true, subtree: true, attributes: true });
+  new ResizeObserver(postHeight).observe(document.body);
+</script>
+</body></html>`;
+
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'iframe-height' && iframeRef.current) {
+        iframeRef.current.style.height = `${e.data.height + 16}px`;
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  return (
+    <iframe
+      ref={iframeRef}
+      srcDoc={srcDoc}
+      sandbox="allow-scripts allow-same-origin"
+      className="w-full border-0"
+      style={{ minHeight: '200px', overflow: 'hidden' }}
+      title="Blog post content"
+    />
+  );
+};
+
 const BlogPost: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -277,20 +363,8 @@ const BlogPost: React.FC = () => {
               </div>
             )}
 
-            {/* Content — prose handles typography, overflow-wrap prevents horizontal scroll */}
-            <div
-              className="prose prose-lg dark:prose-invert
-                prose-headings:text-gray-900 dark:prose-headings:text-white
-                prose-p:text-gray-700 dark:prose-p:text-gray-300
-                prose-a:text-primary-600 dark:prose-a:text-primary-400
-                prose-strong:text-gray-900 dark:prose-strong:text-white
-                prose-img:rounded-lg prose-img:shadow-md prose-img:max-w-full
-                prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-pre:overflow-x-auto
-                prose-code:text-primary-600 dark:prose-code:text-primary-400
-                prose-blockquote:border-primary-500"
-              style={{ overflowWrap: 'break-word' }}
-              dangerouslySetInnerHTML={{ __html: post.content }}
-            />
+            {/* Content — iframe isolates full HTML + <style> blocks from app styles */}
+            <IframeContent html={post.content} />
           </article>
         ) : null}
       </div>

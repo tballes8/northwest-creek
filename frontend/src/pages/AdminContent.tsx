@@ -1,16 +1,18 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import ThemeToggle from '../components/ThemeToggle';
 import { User } from '../types';
 import { authAPI } from '../services/api';
-// WYSIWYG Editor — install: npm install react-quill-new
-// If using the older package: npm install react-quill  (change import accordingly)
-import ReactQuillOriginal from 'react-quill-new';
-import 'react-quill-new/dist/quill.snow.css';
-
-// Fix: react-quill-new class component types are incompatible with React 18 JSX types
-const ReactQuill = ReactQuillOriginal as unknown as React.FC<any>;
+// HTML file upload utilities
+const readHtmlFile = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsText(file);
+  });
+};
 
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -41,26 +43,6 @@ interface BlogPostItem {
   created_at: string | null;
 }
 
-// Quill toolbar configuration
-const quillModules = {
-  toolbar: [
-    [{ header: [1, 2, 3, false] }],
-    ['bold', 'italic', 'underline', 'strike'],
-    [{ list: 'ordered' }, { list: 'bullet' }],
-    ['blockquote', 'code-block'],
-    ['link', 'image'],
-    [{ color: [] }, { background: [] }],
-    [{ align: [] }],
-    ['clean'],
-  ],
-};
-
-const quillFormats = [
-  'header', 'bold', 'italic', 'underline', 'strike',
-  'list', 'bullet', 'blockquote', 'code-block',
-  'link', 'image', 'color', 'background', 'align',
-];
-
 const AdminContent: React.FC = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
@@ -84,6 +66,8 @@ const AdminContent: React.FC = () => {
     title: '', content: '', excerpt: '', cover_image_url: '', category: 'Charts & Graphs', tags: '', is_published: false,
   });
   const [blogSaving, setBlogSaving] = useState(false);
+  const [blogPreview, setBlogPreview] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Feedback
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -183,6 +167,7 @@ const AdminContent: React.FC = () => {
       try {
         const res = await axios.get(`${API_URL}/api/v1/content/blogs/${post.slug}`, { headers: getHeaders() });
         setEditingBlog(post);
+        setBlogPreview(false);
         setBlogFormData({
           title: res.data.title,
           content: res.data.content,
@@ -201,6 +186,7 @@ const AdminContent: React.FC = () => {
       setBlogFormData({
         title: '', content: '', excerpt: '', cover_image_url: '', category: 'Charts & Graphs', tags: '', is_published: false,
       });
+      setBlogPreview(false);
     }
     setBlogForm(true);
   };
@@ -541,20 +527,101 @@ const AdminContent: React.FC = () => {
                     />
                   </div>
 
-                  {/* WYSIWYG Editor */}
+                  {/* HTML Content Editor */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Content *</label>
-                    <div className="bg-white rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden">
-                      <ReactQuill
-                        theme="snow"
-                        value={blogFormData.content}
-                        onChange={(content: string) => setBlogFormData({ ...blogFormData, content })}
-                        modules={quillModules}
-                        formats={quillFormats}
-                        placeholder="Write your blog post here..."
-                        style={{ minHeight: '300px' }}
+
+                    {/* Toolbar: Upload + Edit/Preview toggle */}
+                    <div className="flex items-center gap-3 mb-2">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".html,.htm"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          try {
+                            const html = await readHtmlFile(file);
+                            setBlogFormData({ ...blogFormData, content: html });
+                            setMessage({ type: 'success', text: `Loaded ${file.name} (${(html.length / 1024).toFixed(1)} KB)` });
+                            setTimeout(() => setMessage(null), 4000);
+                          } catch {
+                            setMessage({ type: 'error', text: 'Failed to read HTML file' });
+                            setTimeout(() => setMessage(null), 4000);
+                          }
+                          // Reset so the same file can be re-uploaded
+                          e.target.value = '';
+                        }}
                       />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                        Upload HTML
+                      </button>
+
+                      <div className="flex rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600">
+                        <button
+                          type="button"
+                          onClick={() => setBlogPreview(false)}
+                          className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                            !blogPreview
+                              ? 'bg-primary-600 text-white'
+                              : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                          }`}
+                        >
+                          Code
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBlogPreview(true)}
+                          className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                            blogPreview
+                              ? 'bg-primary-600 text-white'
+                              : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                          }`}
+                        >
+                          Preview
+                        </button>
+                      </div>
+
+                      {blogFormData.content && (
+                        <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto">
+                          {(blogFormData.content.length / 1024).toFixed(1)} KB
+                        </span>
+                      )}
                     </div>
+
+                    {/* Code Editor or Live Preview */}
+                    {!blogPreview ? (
+                      <textarea
+                        value={blogFormData.content}
+                        onChange={e => setBlogFormData({ ...blogFormData, content: e.target.value })}
+                        rows={18}
+                        spellCheck={false}
+                        className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-900 text-gray-100 font-mono text-sm leading-relaxed focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-y"
+                        placeholder="Paste or upload your HTML content..."
+                      />
+                    ) : (
+                      <div className="border border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden bg-white" style={{ minHeight: '400px' }}>
+                        {blogFormData.content ? (
+                          <iframe
+                            srcDoc={blogFormData.content}
+                            sandbox="allow-scripts allow-same-origin"
+                            className="w-full border-0"
+                            style={{ minHeight: '400px', height: '60vh' }}
+                            title="Blog preview"
+                          />
+                        ) : (
+                          <div className="flex items-center justify-center h-64 text-gray-400 dark:text-gray-500 text-sm">
+                            No content to preview — upload an HTML file or paste HTML in the Code tab.
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">
