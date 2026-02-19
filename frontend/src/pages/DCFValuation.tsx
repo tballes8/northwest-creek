@@ -959,6 +959,31 @@ const DCFValuation: React.FC = () => {
               </div>
             </div>
 
+            {/* Estimated Data Confidence Disclaimer — only shown when NOT using actual financials */}
+            {dcfData.assumptions.fcf_source?.startsWith('estimated') && (
+              <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-5 border-2 border-orange-400 dark:border-orange-600">
+                <div className="flex items-start gap-3">
+                  <div className="text-2xl leading-none mt-0.5">⚠️</div>
+                  <div className="flex-1">
+                    <h4 className="text-base font-bold text-orange-900 dark:text-orange-200 mb-1">
+                      Low Confidence — Estimated Data
+                    </h4>
+                    <p className="text-sm text-orange-800 dark:text-orange-300 mb-2">
+                      This valuation is based on <strong>estimated</strong> free cash flow and shares outstanding, not actual SEC filings.
+                      The company may not file with the SEC (foreign-domiciled, OTC, or pre-revenue), so the model is using a rough
+                      approximation of FCF derived from market capitalization.
+                    </p>
+                    <div className="text-xs text-orange-700 dark:text-orange-400 space-y-1">
+                      <p><strong>What this means:</strong> The intrinsic value, margin of safety, and recommendation above may be significantly
+                      inaccurate. Use this output as a rough directional indicator only — not as a basis for investment decisions.</p>
+                      <p><strong>For higher-confidence results:</strong> Look for stocks that display the <span className="inline-flex items-center text-green-700 dark:text-green-400 font-semibold">✓ Actual TTM FCF</span> badge
+                      in the Assumptions section below, which indicates the model is using real financial data from quarterly and annual filings.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Assumptions */}
             <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Assumptions</h3>
