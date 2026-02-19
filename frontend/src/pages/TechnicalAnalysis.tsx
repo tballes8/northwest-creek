@@ -37,6 +37,7 @@ ChartJS.register(
 interface TechnicalAnalysisData {
   ticker: string;
   company_name: string;
+  security_type?: string;  // CS, WARRANT, ETF, etc. from Polygon
   current_price: number;
   analysis_date: string;
   indicators: {
@@ -166,25 +167,25 @@ const TechnicalAnalysis: React.FC = () => {
   const [financialsLoading, setFinancialsLoading] = useState(false);
   const [financialsError, setFinancialsError] = useState<string | null>(null);
 
-  // Helper function to detect if a ticker is a warrant
-  const detectWarrant = (tickerSymbol: string): boolean => {
+  // Warrant detection is now API-driven using Polygon's `type` field (CS, WARRANT, ETF, etc.)
+  // These helpers are only used as a pre-fetch hint for explicit separator patterns
+  const detectWarrantHint = (tickerSymbol: string): boolean => {
     const upper = tickerSymbol.toUpperCase();
     return (
-      upper.endsWith('WW') || 
-      upper.endsWith('.W') || 
-      (upper.endsWith('W') && upper.length > 2 && /[A-Z]/.test(upper[upper.length - 2]))
+      upper.includes('.W') ||
+      upper.includes('+W') ||
+      upper.endsWith('/WS') ||
+      upper.endsWith('/WT')
     );
   };
 
-  // Helper function to get related common stock ticker
   const getRelatedCommonStock = (warrantTicker: string): string | null => {
     const upper = warrantTicker.toUpperCase();
-    if (upper.endsWith('WW')) {
-      return upper.slice(0, -2);
-    } else if (upper.endsWith('.W')) {
-      return upper.slice(0, -2);
-    } else if (upper.endsWith('W') && upper.length > 2 && /[A-Z]/.test(upper[upper.length - 2])) {
-      return upper.slice(0, -1);
+    const patterns = ['.WS', '.WT', '.W', '+WS', '+WT', '+W', '/WS', '/WT', '/W'];
+    for (const pat of patterns) {
+      if (upper.endsWith(pat)) {
+        return upper.slice(0, -pat.length);
+      }
     }
     return null;
   };
@@ -195,10 +196,10 @@ const TechnicalAnalysis: React.FC = () => {
     if (urlTicker) {
       setTicker(urlTicker);
       
-      // Check if warrant
-      const isWarrantStock = detectWarrant(urlTicker);
-      setIsWarrant(isWarrantStock);
-      if (isWarrantStock) {
+      // Pre-fetch hint only — real warrant detection happens after API response
+      const isWarrantHint = detectWarrantHint(urlTicker);
+      setIsWarrant(isWarrantHint);
+      if (isWarrantHint) {
         setRelatedCommonStock(getRelatedCommonStock(urlTicker));
       }
     }
@@ -234,6 +235,16 @@ const TechnicalAnalysis: React.FC = () => {
       const response = await technicalAPI.analyze(symbol.toUpperCase());
       setAnalysisData(response.data);
       setUsageCount(prev => prev + 1);
+      
+      // API-driven warrant detection — overrides any pre-fetch hint
+      const apiType = response.data.security_type || '';
+      if (apiType === 'WARRANT') {
+        setIsWarrant(true);
+        setRelatedCommonStock(getRelatedCommonStock(symbol) || symbol.replace(/W+$/i, ''));
+      } else if (apiType === 'CS' || apiType === 'ADRC' || apiType === 'PFD') {
+        setIsWarrant(false);
+        setRelatedCommonStock(null);
+      }
     } catch (err: any) {
       console.error('Analysis error:', err);
       setError(err.response?.data?.detail || 'Failed to analyze stock. Please check the ticker symbol.');
@@ -275,10 +286,10 @@ const TechnicalAnalysis: React.FC = () => {
   const handleTickerChange = (value: string) => {
     setTicker(value);
     
-    // Check if warrant when ticker changes
-    const isWarrantStock = detectWarrant(value);
-    setIsWarrant(isWarrantStock);
-    if (isWarrantStock) {
+    // Pre-fetch hint only — real warrant detection happens after API response
+    const isWarrantHint = detectWarrantHint(value);
+    setIsWarrant(isWarrantHint);
+    if (isWarrantHint) {
       setRelatedCommonStock(getRelatedCommonStock(value));
     } else {
       setRelatedCommonStock(null);

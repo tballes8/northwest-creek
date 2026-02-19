@@ -13,6 +13,7 @@ interface DCFSuggestions {
   current_price: number;
   market_cap: number;
   size_category: string;
+  security_type?: string;  // CS, WARRANT, ETF, etc. from Polygon
   suggestions: {
     growth_rate: number;
     terminal_growth: number;
@@ -50,6 +51,7 @@ interface DCFSuggestions {
 interface DCFData {
   ticker: string;
   company_name: string;
+  security_type?: string;  // CS, WARRANT, ETF, etc. from Polygon
   current_price: number;
   assumptions: {
     growth_rate: number;
@@ -116,25 +118,27 @@ const DCFValuation: React.FC = () => {
     deRatio: number | null;
   } | null>(null);
 
-  // Helper function to detect if a ticker is a warrant
-  const detectWarrant = (tickerSymbol: string): boolean => {
+  // Warrant detection is now API-driven using Polygon's `type` field (CS, WARRANT, ETF, etc.)
+  // These helpers are only used as a pre-fetch hint for explicit separator patterns
+  const detectWarrantHint = (tickerSymbol: string): boolean => {
     const upper = tickerSymbol.toUpperCase();
+    // Only match unambiguous separator-based warrant patterns
     return (
-      upper.endsWith('WW') || 
-      upper.endsWith('.W') || 
-      (upper.endsWith('W') && upper.length > 2 && /[A-Z]/.test(upper[upper.length - 2]))
+      upper.includes('.W') ||   // e.g. ACAH.W, ACAH.WS
+      upper.includes('+W') ||   // e.g. ACAH+W
+      upper.endsWith('/WS') ||  // e.g. ACAH/WS
+      upper.endsWith('/WT')     // e.g. ACAH/WT
     );
   };
 
-  // Helper function to get related common stock ticker
   const getRelatedCommonStock = (warrantTicker: string): string | null => {
     const upper = warrantTicker.toUpperCase();
-    if (upper.endsWith('WW')) {
-      return upper.slice(0, -2);
-    } else if (upper.endsWith('.W')) {
-      return upper.slice(0, -2);
-    } else if (upper.endsWith('W') && upper.length > 2 && /[A-Z]/.test(upper[upper.length - 2])) {
-      return upper.slice(0, -1);
+    // Strip explicit warrant suffixes with separators
+    const patterns = ['.WS', '.WT', '.W', '+WS', '+WT', '+W', '/WS', '/WT', '/W'];
+    for (const pat of patterns) {
+      if (upper.endsWith(pat)) {
+        return upper.slice(0, -pat.length);
+      }
     }
     return null;
   };
@@ -149,10 +153,10 @@ const DCFValuation: React.FC = () => {
       setTicker(urlTicker);
       setHasLoadedInitialSuggestions(true);
       
-      // Check if warrant
-      const isWarrantStock = detectWarrant(urlTicker);
-      setIsWarrant(isWarrantStock);
-      if (isWarrantStock) {
+      // Pre-fetch hint only — real warrant detection happens after API response
+      const isWarrantHint = detectWarrantHint(urlTicker);
+      setIsWarrant(isWarrantHint);
+      if (isWarrantHint) {
         setRelatedCommonStock(getRelatedCommonStock(urlTicker));
       }
       
@@ -211,6 +215,18 @@ const DCFValuation: React.FC = () => {
     try {
       const response = await dcfAPI.getSuggestions(symbol.toUpperCase());
       setSuggestions(response.data);
+      
+      // API-driven warrant detection — overrides any pre-fetch hint
+      const apiType = response.data.security_type || '';
+      if (apiType === 'WARRANT') {
+        setIsWarrant(true);
+        setRelatedCommonStock(getRelatedCommonStock(symbol) || symbol.replace(/W+$/i, ''));
+      } else if (apiType === 'CS' || apiType === 'ADRC' || apiType === 'PFD') {
+        // Confirmed common stock / ADR / preferred — clear any false positive
+        setIsWarrant(false);
+        setRelatedCommonStock(null);
+      }
+      // If apiType is empty/unknown, keep the hint-based detection as-is
       
       // Only set parameters if NOT pre-filled from Technical Analysis
       if (!skipParamOverride) {
@@ -280,10 +296,10 @@ const DCFValuation: React.FC = () => {
     setTicker(value);
     setPrefilledFromTA(null);
     
-    // Check if warrant when ticker changes
-    const isWarrantStock = detectWarrant(value);
-    setIsWarrant(isWarrantStock);
-    if (isWarrantStock) {
+    // Pre-fetch hint only — real warrant detection happens after API response
+    const isWarrantHint = detectWarrantHint(value);
+    setIsWarrant(isWarrantHint);
+    if (isWarrantHint) {
       setRelatedCommonStock(getRelatedCommonStock(value));
     } else {
       setRelatedCommonStock(null);

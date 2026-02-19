@@ -71,9 +71,11 @@ async def analyze_stock(
     """
     try:
         # Get company info
+        security_type = "CS"
         try:
             company = await market_data_service.get_company_info(ticker)
             company_name = company.get("name", ticker)
+            security_type = company.get("type", "CS")
         except:
             company_name = ticker
         
@@ -371,6 +373,7 @@ async def analyze_stock(
         return {
             "ticker": ticker,
             "company_name": company_name,
+            "security_type": security_type,  # CS, WARRANT, ETF, etc.
             "current_price": round(current_price, 2),
             "analysis_date": historical[-1]["date"],
             "indicators": {

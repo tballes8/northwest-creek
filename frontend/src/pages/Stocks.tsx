@@ -153,24 +153,26 @@ const Stocks: React.FC = () => {
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   // Helper function to detect if a ticker is a warrant
-  const detectWarrant = (tickerSymbol: string): boolean => {
+  // Warrant detection is now API-driven using Polygon's `type` field (CS, WARRANT, ETF, etc.)
+  // These helpers are only used as a pre-fetch hint for explicit separator patterns
+  const detectWarrantHint = (tickerSymbol: string): boolean => {
     const upper = tickerSymbol.toUpperCase();
     return (
-      upper.endsWith('WW') || 
-      upper.endsWith('.W') || 
-      (upper.endsWith('W') && upper.length > 2 && /[A-Z]/.test(upper[upper.length - 2]))
+      upper.includes('.W') ||
+      upper.includes('+W') ||
+      upper.endsWith('/WS') ||
+      upper.endsWith('/WT')
     );
   };
 
   // Helper function to get related common stock ticker
   const getRelatedCommonStock = (warrantTicker: string): string | null => {
     const upper = warrantTicker.toUpperCase();
-    if (upper.endsWith('WW')) {
-      return upper.slice(0, -2);
-    } else if (upper.endsWith('.W')) {
-      return upper.slice(0, -2);
-    } else if (upper.endsWith('W') && upper.length > 2 && /[A-Z]/.test(upper[upper.length - 2])) {
-      return upper.slice(0, -1);
+    const patterns = ['.WS', '.WT', '.W', '+WS', '+WT', '+W', '/WS', '/WT', '/W'];
+    for (const pat of patterns) {
+      if (upper.endsWith(pat)) {
+        return upper.slice(0, -pat.length);
+      }
     }
     return null;
   };
@@ -233,12 +235,6 @@ const Stocks: React.FC = () => {
   const handleSearchInputChange = (value: string) => {
     setSearchInput(value);
     
-    // If cleared, reset to empty state
-    if (!value.trim()) {
-      resetToEmptyState();
-      return;
-    }
-
     // Clear previous debounce
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
@@ -248,23 +244,6 @@ const Stocks: React.FC = () => {
     debounceRef.current = setTimeout(() => {
       searchTickers(value);
     }, 300);
-  };
-
-  const resetToEmptyState = () => {
-    setTicker('');
-    setSearchInput('');
-    setQuote(null);
-    setCompany(null);
-    setHistorical([]);
-    setNews([]);
-    setDividendInfo(null);
-    setError('');
-    setIsWarrant(false);
-    setRelatedCommonStock(null);
-    setSuggestions([]);
-    setShowSuggestions(false);
-    setWatchlistMsg(null);
-    navigate('/stocks', { replace: true });
   };
 
   const handleSuggestionClick = (suggestion: SearchSuggestion) => {
@@ -341,10 +320,10 @@ const Stocks: React.FC = () => {
     setError('');
     setTicker(symbol.toUpperCase());
     
-    // Detect if this is a warrant
-    const isWarrantStock = detectWarrant(symbol);
-    setIsWarrant(isWarrantStock);
-    if (isWarrantStock) {
+    // Pre-fetch hint only — real warrant detection happens after API response
+    const isWarrantHint = detectWarrantHint(symbol);
+    setIsWarrant(isWarrantHint);
+    if (isWarrantHint) {
       setRelatedCommonStock(getRelatedCommonStock(symbol));
     } else {
       setRelatedCommonStock(null);
@@ -361,6 +340,17 @@ const Stocks: React.FC = () => {
       setQuote(quoteRes.data);
       setCompany(companyRes.data);
       setHistorical(historicalRes.data.data);
+      
+      // API-driven warrant detection — overrides any pre-fetch hint
+      const apiType = companyRes.data?.type || '';
+      if (apiType === 'WARRANT') {
+        setIsWarrant(true);
+        setRelatedCommonStock(getRelatedCommonStock(symbol) || symbol.replace(/W+$/i, ''));
+      } else if (apiType === 'CS' || apiType === 'ADRC' || apiType === 'PFD' || apiType === 'ETF') {
+        // Confirmed non-warrant — clear any false positive from hint
+        setIsWarrant(false);
+        setRelatedCommonStock(null);
+      }
       loadDividends(symbol);
     } catch (err: any) {
       console.error('Stock API Error:', err);
@@ -703,23 +693,9 @@ const Stocks: React.FC = () => {
                 onChange={(e) => handleSearchInputChange(e.target.value)}
                 onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
                 placeholder="Search by ticker symbol or company name (e.g., AAPL or Apple)"
-                className="w-full px-4 py-3 pr-10 border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-transparent dark:bg-gray-600 dark:text-white"
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-transparent dark:bg-gray-600 dark:text-white"
                 autoComplete="off"
               />
-
-              {/* Clear button */}
-              {searchInput && (
-                <button
-                  type="button"
-                  onClick={resetToEmptyState}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
-                  title="Clear search"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
               
               {/* Suggestions Dropdown */}
               {showSuggestions && (
