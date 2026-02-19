@@ -135,6 +135,7 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
         "net_margin_pct": _pct(net_income_ttm, revenue_ttm),
         "ebitda": ebitda_ttm,
         "diluted_eps": _fmt(eps_diluted_ttm),
+        "diluted_shares_outstanding": income_ttm.get("diluted_average_shares"),
         "research_development": rd_ttm,
         "selling_general_administrative": sga_ttm,
     }
@@ -208,6 +209,7 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
             "gross_margin_pct": _pct(q.get("gross_profit"), q.get("revenue")),
             "operating_margin_pct": _pct(q.get("operating_income"), q.get("revenue")),
             "eps_diluted": _fmt(q.get("diluted_earnings_per_share")),
+            "diluted_shares_outstanding": q.get("diluted_average_shares"),
         })
 
     # ── DCF Suggestions (derived from actuals) ────────────────────────

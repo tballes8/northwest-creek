@@ -25,6 +25,26 @@ interface DCFSuggestions {
     discount_rate: string;
     projection_years: string;
   };
+  actuals?: {
+    revenue_ttm: number | null;
+    revenue_ttm_fmt: string | null;
+    net_income_ttm: number | null;
+    net_income_ttm_fmt: string | null;
+    fcf_ttm: number | null;
+    fcf_ttm_fmt: string | null;
+    operating_cf_ttm: number | null;
+    operating_cf_ttm_fmt: string | null;
+    gross_margin_pct: number | null;
+    operating_margin_pct: number | null;
+    net_margin_pct: number | null;
+    revenue_growth_yoy_pct: number | null;
+    pe_ratio: number | null;
+    ev_to_ebitda: number | null;
+    debt_to_equity: number | null;
+    current_ratio: number | null;
+    roe: number | null;
+    diluted_eps: number | null;
+  } | null;
 }
 
 interface DCFData {
@@ -38,6 +58,7 @@ interface DCFData {
     projection_years: number;
     current_fcf: number;
     shares_outstanding: number;
+    fcf_source?: string;
   };
   projections: Array<{
     year: number;
@@ -560,13 +581,35 @@ const DCFValuation: React.FC = () => {
                 Stock Ticker {isWarrant && <span className="text-yellow-600 dark:text-yellow-400 text-xs ml-2">(WARRANT - Not recommended for DCF)</span>}
               </label>
               <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={ticker}
-                  onChange={(e) => handleTickerChange(e.target.value.toUpperCase())}
-                  placeholder="e.g., AAPL, MSFT"
-                  className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500"
-                />
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={ticker}
+                    onChange={(e) => handleTickerChange(e.target.value.toUpperCase())}
+                    placeholder="e.g., AAPL, MSFT"
+                    className="w-full px-4 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500"
+                  />
+                  {ticker && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTicker('');
+                        setSuggestions(null);
+                        setShowSuggestions(false);
+                        setDcfData(null);
+                        setError('');
+                        setIsWarrant(false);
+                        setRelatedCommonStock(null);
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                      title="Clear search"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={handleGetSuggestions}
@@ -575,6 +618,23 @@ const DCFValuation: React.FC = () => {
                 >
                   {loadingSuggestions ? 'Loading...' : 'Get AI Suggestions'}
                 </button>
+                {(dcfData || suggestions) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTicker('');
+                      setSuggestions(null);
+                      setShowSuggestions(false);
+                      setDcfData(null);
+                      setError('');
+                      setIsWarrant(false);
+                      setRelatedCommonStock(null);
+                    }}
+                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 rounded-lg font-medium transition-colors text-sm whitespace-nowrap"
+                  >
+                    🔄 New Search
+                  </button>
+                )}
               </div>
             </div>
 
@@ -586,8 +646,47 @@ const DCFValuation: React.FC = () => {
                 </h3>
                 <div className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
                   <p><strong>Sector:</strong> {suggestions.sector} | <strong>Size:</strong> {suggestions.size_category.replace('_', ' ').toUpperCase()}</p>
-                  <p className="mt-2 italic">Click "Calculate DCF" below to use these parameters!</p>
                 </div>
+                
+                {/* Actual Financials Grid */}
+                {suggestions.actuals && (
+                  <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-700">
+                    <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wider mb-2">
+                      📊 From SEC Filings (TTM)
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+                      {[
+                        { label: 'Revenue', value: suggestions.actuals.revenue_ttm_fmt },
+                        { label: 'Net Income', value: suggestions.actuals.net_income_ttm_fmt },
+                        { label: 'Free Cash Flow', value: suggestions.actuals.fcf_ttm_fmt },
+                        { label: 'Gross Margin', value: suggestions.actuals.gross_margin_pct != null ? `${suggestions.actuals.gross_margin_pct.toFixed(1)}%` : null },
+                        { label: 'Op. Margin', value: suggestions.actuals.operating_margin_pct != null ? `${suggestions.actuals.operating_margin_pct.toFixed(1)}%` : null },
+                        { label: 'Net Margin', value: suggestions.actuals.net_margin_pct != null ? `${suggestions.actuals.net_margin_pct.toFixed(1)}%` : null },
+                        { label: 'Rev. Growth (YoY)', value: suggestions.actuals.revenue_growth_yoy_pct != null ? `${suggestions.actuals.revenue_growth_yoy_pct.toFixed(1)}%` : null },
+                        { label: 'P/E Ratio', value: suggestions.actuals.pe_ratio != null ? suggestions.actuals.pe_ratio.toFixed(1) : null },
+                        { label: 'EV/EBITDA', value: suggestions.actuals.ev_to_ebitda != null ? suggestions.actuals.ev_to_ebitda.toFixed(1) : null },
+                        { label: 'D/E Ratio', value: suggestions.actuals.debt_to_equity != null ? suggestions.actuals.debt_to_equity.toFixed(2) : null },
+                        { label: 'ROE', value: suggestions.actuals.roe != null ? `${(suggestions.actuals.roe * 100).toFixed(1)}%` : null },
+                        { label: 'EPS', value: suggestions.actuals.diluted_eps != null ? `$${suggestions.actuals.diluted_eps.toFixed(2)}` : null },
+                      ].filter(item => item.value != null).map((item) => (
+                        <div key={item.label} className="bg-white/60 dark:bg-gray-800/60 rounded px-2 py-1.5 text-center">
+                          <div className="text-[10px] text-blue-600 dark:text-blue-400 leading-tight">{item.label}</div>
+                          <div className="text-sm font-bold text-blue-900 dark:text-blue-100">{item.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                {!suggestions.actuals && (
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 italic">
+                    Financial data unavailable — using sector-based defaults. Company may not have SEC filings (foreign-listed, OTC, or pre-revenue).
+                  </p>
+                )}
+                
+                <p className="mt-3 italic text-sm text-blue-700 dark:text-blue-300">
+                  {suggestions.actuals ? 'Parameters are based on actual company financials. ' : ''}Click "Calculate DCF" below to use these parameters!
+                </p>
               </div>
             )}
 
@@ -805,6 +904,19 @@ const DCFValuation: React.FC = () => {
                   <div className="text-lg font-semibold text-gray-900 dark:text-white">
                     {formatCurrency(dcfData.assumptions.current_fcf)}
                   </div>
+                  {dcfData.assumptions.fcf_source && (
+                    <div className={`text-[10px] mt-0.5 font-medium ${
+                      dcfData.assumptions.fcf_source === 'actual_ttm' 
+                        ? 'text-green-600 dark:text-green-400' 
+                        : dcfData.assumptions.fcf_source === 'operating_cf'
+                        ? 'text-yellow-600 dark:text-yellow-400'
+                        : 'text-orange-600 dark:text-orange-400'
+                    }`}>
+                      {dcfData.assumptions.fcf_source === 'actual_ttm' && '✓ Actual TTM FCF'}
+                      {dcfData.assumptions.fcf_source === 'operating_cf' && '~ Operating CF (FCF unavailable)'}
+                      {dcfData.assumptions.fcf_source?.startsWith('estimated') && '⚠ Estimated (no filings)'}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">Shares Outstanding</div>

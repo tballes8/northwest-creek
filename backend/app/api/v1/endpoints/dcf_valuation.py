@@ -11,6 +11,7 @@ from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.services.market_data import market_data_service
 from app.services.company_info import get_sector_from_yfinance, get_company_basics
+from app.services.financials import get_company_financials
 
 router = APIRouter()
 
@@ -49,11 +50,26 @@ async def get_dcf_suggestions(
         # Get sector from yfinance (free, fast, accurate!)
         sector = get_sector_from_yfinance(ticker)
         
-        # Get company info and quote
+        # Get company info, quote, AND financials in parallel
+        financials_data = None
         try:
-            # Get real-time price and market cap from Massive API
-            quote = await market_data_service.get_quote(ticker)
-            company = await market_data_service.get_company_info(ticker)
+            import asyncio
+            
+            async def fetch_basics():
+                quote = await market_data_service.get_quote(ticker)
+                company = await market_data_service.get_company_info(ticker)
+                return quote, company
+            
+            async def fetch_financials():
+                try:
+                    return await get_company_financials(ticker)
+                except Exception as e:
+                    print(f"Financials fetch failed for {ticker} (non-fatal): {e}")
+                    return None
+            
+            (quote, company), financials_data = await asyncio.gather(
+                fetch_basics(), fetch_financials()
+            )
             
             company_name = company.get("name", ticker)
             market_cap = company.get("market_cap", 0)
@@ -227,12 +243,13 @@ async def get_dcf_suggestions(
         
         adjustment = size_adjustments.get(size_category, size_adjustments["large_cap"])
         
+        # Start with sector-based defaults
         suggested_growth = max(0.01, min(0.30, profile["growth"] + adjustment["growth"]))
         suggested_discount = max(0.06, min(0.20, profile["discount"] + adjustment["discount"]))
         suggested_terminal = profile["terminal"]
         suggested_years = profile["years"]
         
-        # Build reasoning with size adjustments
+        # Build reasoning — start with sector defaults
         growth_reasoning = profile["growth_reasoning"]
         if adjustment["growth_note"]:
             growth_reasoning += f" ({adjustment['growth_note']})"
@@ -240,6 +257,72 @@ async def get_dcf_suggestions(
         discount_reasoning = profile["discount_reasoning"]
         if adjustment["growth_note"]:
             discount_reasoning += f" ({adjustment['growth_note']})"
+        
+        terminal_reasoning = profile["terminal_reasoning"]
+        years_reasoning = profile["years_reasoning"]
+        
+        # ── Override with actual financials when available ─────────────
+        actuals = None
+        if financials_data:
+            dcf_sug = financials_data.get("dcf_suggestions", {})
+            income = financials_data.get("income_statement", {})
+            cash_flow = financials_data.get("cash_flow", {})
+            ratios = financials_data.get("ratios", {})
+            
+            # Revenue growth from actuals → suggested growth rate
+            actual_growth_yoy = dcf_sug.get("revenue_growth_yoy_pct")
+            actual_suggested = dcf_sug.get("suggested_growth_rate")
+            if actual_suggested is not None:
+                suggested_growth = max(0.01, min(0.40, actual_suggested / 100))
+                if actual_growth_yoy is not None:
+                    growth_reasoning = f"Based on actual YoY revenue growth of {actual_growth_yoy:.1f}% (conservatively discounted to {actual_suggested:.1f}%)"
+                else:
+                    growth_reasoning = f"Based on company financial data (suggested {actual_suggested:.1f}%)"
+            
+            # Estimated WACC from actuals → discount rate
+            actual_wacc = dcf_sug.get("estimated_wacc")
+            if actual_wacc is not None:
+                suggested_discount = max(0.06, min(0.20, actual_wacc / 100))
+                de_ratio = dcf_sug.get("debt_to_equity")
+                if de_ratio is not None:
+                    discount_reasoning = f"Estimated WACC of {actual_wacc:.1f}% based on D/E ratio of {de_ratio:.2f}"
+                else:
+                    discount_reasoning = f"Estimated WACC of {actual_wacc:.1f}% based on company capital structure"
+            
+            # Build actuals summary for frontend
+            def _fmt_b(val):
+                if val is None:
+                    return None
+                abs_v = abs(val)
+                if abs_v >= 1e12:
+                    return f"${val / 1e12:.2f}T"
+                if abs_v >= 1e9:
+                    return f"${val / 1e9:.2f}B"
+                if abs_v >= 1e6:
+                    return f"${val / 1e6:.1f}M"
+                return f"${val:,.0f}"
+            
+            actuals = {
+                "revenue_ttm": income.get("revenue"),
+                "revenue_ttm_fmt": _fmt_b(income.get("revenue")),
+                "net_income_ttm": income.get("net_income"),
+                "net_income_ttm_fmt": _fmt_b(income.get("net_income")),
+                "fcf_ttm": cash_flow.get("free_cash_flow"),
+                "fcf_ttm_fmt": _fmt_b(cash_flow.get("free_cash_flow")),
+                "operating_cf_ttm": cash_flow.get("operating_cash_flow"),
+                "operating_cf_ttm_fmt": _fmt_b(cash_flow.get("operating_cash_flow")),
+                "gross_margin_pct": income.get("gross_margin_pct"),
+                "operating_margin_pct": income.get("operating_margin_pct"),
+                "net_margin_pct": income.get("net_margin_pct"),
+                "revenue_growth_yoy_pct": actual_growth_yoy,
+                "pe_ratio": ratios.get("pe_ratio"),
+                "ev_to_ebitda": ratios.get("ev_to_ebitda"),
+                "debt_to_equity": ratios.get("debt_to_equity"),
+                "current_ratio": ratios.get("current_ratio"),
+                "roe": ratios.get("roe"),
+                "diluted_eps": income.get("diluted_eps"),
+                "shares_outstanding": income.get("diluted_shares_outstanding") if "diluted_shares_outstanding" in income else None,
+            }
         
         return {
             "ticker": ticker.upper(),
@@ -257,10 +340,11 @@ async def get_dcf_suggestions(
             },
             "reasoning": {
                 "growth_rate": growth_reasoning,
-                "terminal_growth": profile["terminal_reasoning"],
+                "terminal_growth": terminal_reasoning,
                 "discount_rate": discount_reasoning,
-                "projection_years": profile["years_reasoning"]
-            }
+                "projection_years": years_reasoning
+            },
+            "actuals": actuals,  # None if financials unavailable
         }
     
     except HTTPException:
@@ -328,14 +412,48 @@ async def calculate_dcf(
             company_name = ticker
             market_cap = None
         
-        # For MVP, we'll use estimated free cash flow based on market cap
-        # In production, you'd fetch actual financial statements
-        if market_cap:
-            # Estimate FCF as 5% of market cap (conservative estimate)
+        # ── Fetch actual financials for FCF and shares outstanding ────
+        actual_fcf = None
+        actual_shares = None
+        fcf_source = "estimated"
+        
+        try:
+            financials = await get_company_financials(ticker)
+            if financials:
+                cf = financials.get("cash_flow", {})
+                inc = financials.get("income_statement", {})
+                
+                # Use actual TTM free cash flow
+                if cf.get("free_cash_flow") is not None:
+                    actual_fcf = cf["free_cash_flow"]
+                    fcf_source = "actual_ttm"
+                elif cf.get("operating_cash_flow") is not None:
+                    # Fallback: use operating CF if FCF isn't available
+                    actual_fcf = cf["operating_cash_flow"]
+                    fcf_source = "operating_cf"
+                
+                # Use actual diluted shares outstanding from income statement
+                qt = financials.get("quarterly_trend", [])
+                if qt:
+                    # Most recent quarter's diluted shares
+                    for q in qt:
+                        raw = q.get("diluted_shares_outstanding")
+                        if raw is not None:
+                            actual_shares = raw
+                            break
+        except Exception as fin_err:
+            print(f"Financials unavailable for DCF calc (non-fatal): {fin_err}")
+        
+        # Determine current FCF to use
+        if actual_fcf is not None and actual_fcf != 0:
+            current_fcf = actual_fcf
+        elif market_cap:
+            # Fallback: estimate FCF as 5% of market cap
             current_fcf = market_cap * 0.05
+            fcf_source = "estimated_5pct_mktcap"
         else:
-            # Fallback: use a reasonable estimate based on stock price
-            current_fcf = current_price * 1000000  # Assume 1M shares outstanding
+            current_fcf = current_price * 1000000
+            fcf_source = "estimated_fallback"
         
         # Project future cash flows
         projected_cash_flows = []
@@ -358,8 +476,10 @@ async def calculate_dcf(
         sum_pv_cash_flows = sum(cf["present_value"] for cf in projected_cash_flows)
         enterprise_value = sum_pv_cash_flows + terminal_pv
         
-        # Estimate shares outstanding (in production, fetch from API)
-        if market_cap and current_price > 0:
+        # Use actual shares outstanding, or derive from market cap
+        if actual_shares is not None and actual_shares > 0:
+            shares_outstanding = actual_shares
+        elif market_cap and current_price > 0:
             shares_outstanding = market_cap / current_price
         else:
             shares_outstanding = 1000000  # Fallback estimate
@@ -402,7 +522,8 @@ async def calculate_dcf(
                 "discount_rate": discount_rate,
                 "projection_years": projection_years,
                 "current_fcf": round(current_fcf, 2),
-                "shares_outstanding": round(shares_outstanding, 0)
+                "shares_outstanding": round(shares_outstanding, 0),
+                "fcf_source": fcf_source
             },
             "projections": projected_cash_flows,
             "terminal_value": {
