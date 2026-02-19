@@ -1222,7 +1222,19 @@ const TechnicalAnalysis: React.FC = () => {
                         </div>
                         <div className="mt-3 text-right">
                           <Link
-                            to={`/dcf-valuation?ticker=${analysisData.ticker}`}
+                            to={`/dcf-valuation?ticker=${analysisData.ticker}&from=ta${
+                              financialsData.dcf_suggestions.suggested_growth_rate != null ? `&growth=${financialsData.dcf_suggestions.suggested_growth_rate}` : ''
+                            }${
+                              financialsData.dcf_suggestions.estimated_wacc != null ? `&wacc=${financialsData.dcf_suggestions.estimated_wacc}` : ''
+                            }${
+                              financialsData.dcf_suggestions.fcf_ttm != null ? `&fcf=${financialsData.dcf_suggestions.fcf_ttm}` : ''
+                            }${
+                              financialsData.dcf_suggestions.revenue_growth_yoy_pct != null ? `&revgrowth=${financialsData.dcf_suggestions.revenue_growth_yoy_pct}` : ''
+                            }${
+                              financialsData.dcf_suggestions.operating_margin_pct != null ? `&opmarg=${financialsData.dcf_suggestions.operating_margin_pct}` : ''
+                            }${
+                              financialsData.dcf_suggestions.debt_to_equity != null ? `&de=${financialsData.dcf_suggestions.debt_to_equity}` : ''
+                            }`}
                             className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
                           >
                             Open DCF Valuation with these inputs →

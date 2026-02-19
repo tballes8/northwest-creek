@@ -107,6 +107,14 @@ const DCFValuation: React.FC = () => {
   const [relatedCommonStock, setRelatedCommonStock] = useState<string | null>(null);
   const [watchlistMsg, setWatchlistMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [addingToWatchlist, setAddingToWatchlist] = useState(false);
+  const [prefilledFromTA, setPrefilledFromTA] = useState<{
+    growth: number | null;
+    wacc: number | null;
+    fcf: number | null;
+    revGrowth: number | null;
+    opMargin: number | null;
+    deRatio: number | null;
+  } | null>(null);
 
   // Helper function to detect if a ticker is a warrant
   const detectWarrant = (tickerSymbol: string): boolean => {
@@ -148,7 +156,36 @@ const DCFValuation: React.FC = () => {
         setRelatedCommonStock(getRelatedCommonStock(urlTicker));
       }
       
-      loadSuggestions(urlTicker);
+      // Check if we have pre-populated inputs from Technical Analysis
+      const fromTA = searchParams.get('from') === 'ta';
+      const urlGrowth = searchParams.get('growth');
+      const urlWacc = searchParams.get('wacc');
+      
+      if (fromTA && (urlGrowth || urlWacc)) {
+        // Apply actual financials directly — skip the suggestions API call
+        if (urlGrowth) setGrowthRate(parseFloat(urlGrowth));
+        if (urlWacc) setDiscountRate(parseFloat(urlWacc));
+        
+        // Build a lightweight "suggestions" object from URL params for display
+        const urlRevGrowth = searchParams.get('revgrowth');
+        const urlFcf = searchParams.get('fcf');
+        const urlOpMarg = searchParams.get('opmarg');
+        const urlDe = searchParams.get('de');
+        
+        setPrefilledFromTA({
+          growth: urlGrowth ? parseFloat(urlGrowth) : null,
+          wacc: urlWacc ? parseFloat(urlWacc) : null,
+          fcf: urlFcf ? parseFloat(urlFcf) : null,
+          revGrowth: urlRevGrowth ? parseFloat(urlRevGrowth) : null,
+          opMargin: urlOpMarg ? parseFloat(urlOpMarg) : null,
+          deRatio: urlDe ? parseFloat(urlDe) : null,
+        });
+        
+        // Still load full suggestions in background to get company name, sector, actuals grid
+        loadSuggestions(urlTicker, true);
+      } else {
+        loadSuggestions(urlTicker);
+      }
     }
   }, [urlTicker, hasLoadedInitialSuggestions]);
 
@@ -165,7 +202,7 @@ const DCFValuation: React.FC = () => {
     }
   };
   
-  const loadSuggestions = async (symbol: string) => {
+  const loadSuggestions = async (symbol: string, skipParamOverride: boolean = false) => {
     if (!symbol.trim()) return;
 
     setLoadingSuggestions(true);
@@ -175,11 +212,13 @@ const DCFValuation: React.FC = () => {
       const response = await dcfAPI.getSuggestions(symbol.toUpperCase());
       setSuggestions(response.data);
       
-      // Set the suggested parameters
-      setGrowthRate(response.data.suggestions.growth_rate * 100);
-      setTerminalGrowth(response.data.suggestions.terminal_growth * 100);
-      setDiscountRate(response.data.suggestions.discount_rate * 100);
-      setProjectionYears(response.data.suggestions.projection_years);
+      // Only set parameters if NOT pre-filled from Technical Analysis
+      if (!skipParamOverride) {
+        setGrowthRate(response.data.suggestions.growth_rate * 100);
+        setTerminalGrowth(response.data.suggestions.terminal_growth * 100);
+        setDiscountRate(response.data.suggestions.discount_rate * 100);
+        setProjectionYears(response.data.suggestions.projection_years);
+      }
       setShowSuggestions(true);
     } catch (err: any) {
       console.error('Failed to load suggestions:', err);
@@ -239,6 +278,7 @@ const DCFValuation: React.FC = () => {
 	
   const handleTickerChange = (value: string) => {
     setTicker(value);
+    setPrefilledFromTA(null);
     
     // Check if warrant when ticker changes
     const isWarrantStock = detectWarrant(value);
@@ -600,6 +640,7 @@ const DCFValuation: React.FC = () => {
                         setError('');
                         setIsWarrant(false);
                         setRelatedCommonStock(null);
+                        setPrefilledFromTA(null);
                       }}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
                       title="Clear search"
@@ -629,6 +670,7 @@ const DCFValuation: React.FC = () => {
                       setError('');
                       setIsWarrant(false);
                       setRelatedCommonStock(null);
+                      setPrefilledFromTA(null);
                     }}
                     className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 rounded-lg font-medium transition-colors text-sm whitespace-nowrap"
                   >
@@ -647,6 +689,46 @@ const DCFValuation: React.FC = () => {
                 <div className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
                   <p><strong>Sector:</strong> {suggestions.sector} | <strong>Size:</strong> {suggestions.size_category.replace('_', ' ').toUpperCase()}</p>
                 </div>
+
+                {/* Pre-filled from Technical Analysis banner */}
+                {prefilledFromTA && (
+                  <div className="mt-3 bg-green-50 dark:bg-green-900/30 rounded-lg p-3 border border-green-200 dark:border-green-700">
+                    <div className="flex items-start gap-2">
+                      <span className="text-green-600 dark:text-green-400 text-lg leading-none">✓</span>
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold text-green-800 dark:text-green-200">
+                          Inputs pre-filled from actual financial data
+                        </p>
+                        <p className="text-xs text-green-700 dark:text-green-300 mt-0.5">
+                          Growth rate and discount rate were derived from SEC filings via Technical Analysis.
+                          You can adjust them below before calculating.
+                        </p>
+                        <div className="flex flex-wrap gap-3 mt-2 text-xs">
+                          {prefilledFromTA.revGrowth != null && (
+                            <span className="text-green-700 dark:text-green-300">
+                              <strong>Trailing Rev. Growth:</strong> {prefilledFromTA.revGrowth.toFixed(1)}%
+                            </span>
+                          )}
+                          {prefilledFromTA.growth != null && (
+                            <span className="text-green-700 dark:text-green-300">
+                              <strong>→ Suggested Growth:</strong> {prefilledFromTA.growth.toFixed(1)}%
+                            </span>
+                          )}
+                          {prefilledFromTA.wacc != null && (
+                            <span className="text-green-700 dark:text-green-300">
+                              <strong>Est. WACC:</strong> {prefilledFromTA.wacc.toFixed(1)}%
+                            </span>
+                          )}
+                          {prefilledFromTA.deRatio != null && (
+                            <span className="text-green-700 dark:text-green-300">
+                              <strong>D/E:</strong> {prefilledFromTA.deRatio.toFixed(2)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 
                 {/* Actual Financials Grid */}
                 {suggestions.actuals && (
