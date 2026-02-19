@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import ThemeToggle from '../components/ThemeToggle';
 
 const Landing: React.FC = () => {
@@ -21,6 +22,52 @@ const Landing: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+      <Helmet>
+        <title>Northwest Creek — Professional Stock Analysis for Retail Investors</title>
+        <meta name="description" content="Real-time market data, 15+ technical indicators, DCF valuation models, live portfolio tracking, and price alerts — institutional-grade stock analysis built for retail investors." />
+        <link rel="canonical" href="https://northwestcreekllc.com" />
+
+        {/* Open Graph */}
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content="Northwest Creek — Professional Stock Analysis for Retail Investors" />
+        <meta property="og:description" content="Real-time market data, technical indicators, DCF valuations, portfolio tracking, and price alerts for retail investors." />
+        <meta property="og:url" content="https://northwestcreekllc.com" />
+        <meta property="og:image" content="https://northwestcreekllc.com/images/og-default.png" />
+        <meta property="og:site_name" content="Northwest Creek" />
+
+        {/* Twitter Card */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Northwest Creek — Professional Stock Analysis" />
+        <meta name="twitter:description" content="Institutional-grade stock analysis tools built for retail investors." />
+        <meta name="twitter:image" content="https://northwestcreekllc.com/images/og-default.png" />
+
+        {/* JSON-LD: Organization + WebSite */}
+        <script type="application/ld+json">{JSON.stringify({
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "Organization",
+              "name": "Northwest Creek LLC",
+              "url": "https://northwestcreekllc.com",
+              "logo": "https://northwestcreekllc.com/images/logo.png",
+              "description": "Professional stock analysis platform for retail investors.",
+              "address": {
+                "@type": "PostalAddress",
+                "addressLocality": "Post Falls",
+                "addressRegion": "ID",
+                "addressCountry": "US"
+              }
+            },
+            {
+              "@type": "WebSite",
+              "name": "Northwest Creek",
+              "url": "https://northwestcreekllc.com",
+              "description": "Real-time market data, technical indicators, DCF valuations, and portfolio tracking for retail investors.",
+              "publisher": { "@type": "Organization", "name": "Northwest Creek LLC" }
+            }
+          ]
+        })}</script>
+      </Helmet>
       {/* Navbar */}
       <nav className="bg-gray-800 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

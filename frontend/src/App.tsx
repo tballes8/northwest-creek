@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -37,9 +38,10 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 function App() {
   return (
-    <Router>
-      <LivePriceProvider>
-        <Routes>
+    <HelmetProvider>
+      <Router>
+        <LivePriceProvider>
+          <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -62,8 +64,9 @@ function App() {
           <Route path="/admin" element={<AdminContent />} />
           <Route path="/reset-password" element={<ResetPassword />} />
         </Routes>
-      </LivePriceProvider>
-    </Router>
+        </LivePriceProvider>
+      </Router>
+    </HelmetProvider>
   );
 }
 
