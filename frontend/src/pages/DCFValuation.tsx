@@ -910,7 +910,13 @@ const DCFValuation: React.FC = () => {
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">DCF Intrinsic Value</div>
-                  <div className="text-2xl font-bold text-primary-600 dark:text-primary-400">
+                  <div className={`text-2xl font-bold ${
+                    dcfData.valuation.intrinsic_value_per_share <= 0
+                      ? 'text-red-600 dark:text-red-400'
+                      : dcfData.valuation.intrinsic_value_per_share >= dcfData.current_price
+                      ? 'text-green-600 dark:text-green-400'
+                      : 'text-red-600 dark:text-red-400'
+                  }`}>
                     ${dcfData.valuation.intrinsic_value_per_share.toFixed(2)}
                   </div>
                 </div>
@@ -983,7 +989,9 @@ const DCFValuation: React.FC = () => {
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">Current FCF</div>
-                  <div className="text-lg font-semibold text-gray-900 dark:text-white">
+                  <div className={`text-lg font-semibold ${
+                    dcfData.assumptions.current_fcf >= 0 ? 'text-gray-900 dark:text-white' : 'text-red-600 dark:text-red-400'
+                  }`}>
                     {formatCurrency(dcfData.assumptions.current_fcf)}
                   </div>
                   {dcfData.assumptions.fcf_source && (
@@ -1028,13 +1036,17 @@ const DCFValuation: React.FC = () => {
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                           Year {projection.year}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 dark:text-white">
+                        <td className={`px-6 py-4 whitespace-nowrap text-sm text-right ${
+                          projection.cash_flow >= 0 ? 'text-gray-900 dark:text-white' : 'text-red-600 dark:text-red-400'
+                        }`}>
                           {formatCurrency(projection.cash_flow)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-600 dark:text-gray-400">
                           {projection.discount_factor.toFixed(4)}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-semibold text-primary-600 dark:text-primary-400">
+                        <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-semibold ${
+                          projection.present_value >= 0 ? 'text-primary-600 dark:text-primary-400' : 'text-red-600 dark:text-red-400'
+                        }`}>
                           {formatCurrency(projection.present_value)}
                         </td>
                       </tr>
@@ -1045,7 +1057,9 @@ const DCFValuation: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right"></td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right"></td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-bold text-primary-600 dark:text-primary-400">
+                      <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-bold ${
+                        dcfData.valuation.sum_pv_cash_flows >= 0 ? 'text-primary-600 dark:text-primary-400' : 'text-red-600 dark:text-red-400'
+                      }`}>
                         {formatCurrency(dcfData.valuation.sum_pv_cash_flows)}
                       </td>
                     </tr>
@@ -1057,7 +1071,9 @@ const DCFValuation: React.FC = () => {
                         {formatCurrency(dcfData.terminal_value.value)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right"></td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-bold text-primary-600 dark:text-primary-400">
+                      <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-bold ${
+                        dcfData.terminal_value.present_value >= 0 ? 'text-primary-600 dark:text-primary-400' : 'text-red-600 dark:text-red-400'
+                      }`}>
                         {formatCurrency(dcfData.terminal_value.present_value)}
                       </td>
                     </tr>
@@ -1067,7 +1083,9 @@ const DCFValuation: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right"></td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-right"></td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-bold text-primary-600 dark:text-primary-400">
+                      <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-bold ${
+                        dcfData.valuation.enterprise_value >= 0 ? 'text-primary-600 dark:text-primary-400' : 'text-red-600 dark:text-red-400'
+                      }`}>
                         {formatCurrency(dcfData.valuation.enterprise_value)}
                       </td>
                     </tr>
