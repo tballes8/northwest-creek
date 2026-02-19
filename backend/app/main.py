@@ -6,7 +6,7 @@ from app.config import get_settings
 from app.api.v1.endpoints import (
     alerts, auth, dcf_valuation, indicators, portfolio, 
     stocks, watchlist, technical_analysis, stripe_payments,
-    intraday, live_prices
+    intraday, live_prices, financials
 )
 from app.api.v1.endpoints.content import router as content_router
 
@@ -74,3 +74,4 @@ app.include_router(stripe_payments.router, prefix="/api/v1/stripe", tags=["Strip
 app.include_router(intraday.router, prefix="/api/v1/intraday", tags=["Intraday"])
 app.include_router(live_prices.router, prefix="/api/v1/live-prices", tags=["Live Prices"])
 app.include_router(content_router, prefix="/api/v1/content", tags=["content"])
+app.include_router(financials.router, prefix="/api/v1/financials", tags=["financials"])

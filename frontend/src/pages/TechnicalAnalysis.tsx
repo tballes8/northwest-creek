@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { authAPI, technicalAPI, watchlistAPI } from '../services/api';
+import { authAPI, technicalAPI, watchlistAPI, financialsAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import UpgradeRequired from '../components/UpgradeRequired';
@@ -160,6 +160,12 @@ const TechnicalAnalysis: React.FC = () => {
   const [addingToWatchlist, setAddingToWatchlist] = useState(false);
   const [usageCount, setUsageCount] = useState(0);
 
+  // Financials panel state
+  const [showFinancials, setShowFinancials] = useState(false);
+  const [financialsData, setFinancialsData] = useState<any>(null);
+  const [financialsLoading, setFinancialsLoading] = useState(false);
+  const [financialsError, setFinancialsError] = useState<string | null>(null);
+
   // Helper function to detect if a ticker is a warrant
   const detectWarrant = (tickerSymbol: string): boolean => {
     const upper = tickerSymbol.toUpperCase();
@@ -220,6 +226,9 @@ const TechnicalAnalysis: React.FC = () => {
     setLoading(true);
     setError('');
     setAnalysisData(null);
+    setFinancialsData(null);
+    setShowFinancials(false);
+    setFinancialsError(null);
 
     try {
       const response = await technicalAPI.analyze(symbol.toUpperCase());
@@ -305,6 +314,65 @@ const TechnicalAnalysis: React.FC = () => {
       setAddingToWatchlist(false);
     }
   };
+
+  // ── Financials helpers ───────────────────────────────────────────
+  const fmtB = (val: number | null | undefined): string => {
+    if (val == null) return '—';
+    const abs = Math.abs(val);
+    if (abs >= 1e12) return `${(val / 1e12).toFixed(2)}T`;
+    if (abs >= 1e9) return `${(val / 1e9).toFixed(2)}B`;
+    if (abs >= 1e6) return `${(val / 1e6).toFixed(1)}M`;
+    if (abs >= 1e3) return `${(val / 1e3).toFixed(1)}K`;
+    return val.toFixed(2);
+  };
+
+  const fmtPct = (val: number | null | undefined): string => {
+    if (val == null) return '—';
+    return `${val.toFixed(1)}%`;
+  };
+
+  const fmtNum = (val: number | null | undefined, decimals = 2): string => {
+    if (val == null) return '—';
+    return val.toFixed(decimals);
+  };
+
+  const handleFetchFinancials = async () => {
+    const t = analysisData?.ticker || ticker.trim().toUpperCase();
+    if (!t) return;
+
+    // Toggle off if already showing
+    if (showFinancials && financialsData) {
+      setShowFinancials(false);
+      return;
+    }
+
+    setFinancialsLoading(true);
+    setFinancialsError(null);
+    setShowFinancials(true);
+
+    try {
+      const response = await financialsAPI.get(t);
+      setFinancialsData(response.data);
+    } catch (err: any) {
+      const detail = err.response?.data?.detail;
+      if (err.response?.status === 403) {
+        setFinancialsError('Financial summaries require a paid subscription.');
+      } else if (err.response?.status === 404) {
+        setFinancialsError(typeof detail === 'string' ? detail : `No financial data available for ${t}.`);
+      } else {
+        setFinancialsError(typeof detail === 'string' ? detail : 'Failed to load financial data.');
+      }
+    } finally {
+      setFinancialsLoading(false);
+    }
+  };
+
+  // Reset financials when ticker changes
+  React.useEffect(() => {
+    setFinancialsData(null);
+    setShowFinancials(false);
+    setFinancialsError(null);
+  }, [ticker]);
 
   // Chart configurations
   const getPriceChartData = () => {
@@ -907,6 +975,13 @@ const TechnicalAnalysis: React.FC = () => {
                 >
                   💰 DCF Valuation
                 </Link>
+                <button
+                  onClick={handleFetchFinancials}
+                  disabled={financialsLoading}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  {financialsLoading ? '⏳ Loading...' : showFinancials && financialsData ? '📄 Hide Financials' : '📄 Financial Summary'}
+                </button>
                 {watchlistMsg && (
                   <span className={`text-sm font-medium ${watchlistMsg.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {watchlistMsg.text}
@@ -938,6 +1013,200 @@ const TechnicalAnalysis: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* ── Financial Summary Panel ────────────────────────── */}
+            {showFinancials && (
+              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">
+                  📄 Financial Summary — {analysisData.ticker}
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                  SEC filings via Massive API • Data updates daily
+                </p>
+
+                {financialsLoading && (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
+                    <span className="ml-3 text-gray-600 dark:text-gray-300">Loading financial data...</span>
+                  </div>
+                )}
+
+                {financialsError && (
+                  <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-600 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg">
+                    {financialsError}
+                  </div>
+                )}
+
+                {financialsData && !financialsLoading && (
+                  <div className="space-y-6">
+
+                    {/* ── Valuation & Ratios Row ── */}
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Valuation & Ratios</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+                        {[
+                          { label: 'P/E', value: fmtNum(financialsData.ratios?.pe_ratio) },
+                          { label: 'EV/EBITDA', value: fmtNum(financialsData.ratios?.ev_to_ebitda) },
+                          { label: 'P/S', value: fmtNum(financialsData.ratios?.ps_ratio) },
+                          { label: 'P/B', value: fmtNum(financialsData.ratios?.pb_ratio) },
+                          { label: 'P/FCF', value: fmtNum(financialsData.ratios?.price_to_fcf) },
+                          { label: 'EV/Sales', value: fmtNum(financialsData.ratios?.ev_to_sales) },
+                        ].map((item) => (
+                          <div key={item.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-center">
+                            <div className="text-xs text-gray-500 dark:text-gray-400">{item.label}</div>
+                            <div className="text-lg font-bold text-gray-900 dark:text-white">{item.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* ── Profitability Row ── */}
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Profitability (TTM)</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                        {[
+                          { label: 'Revenue', value: fmtB(financialsData.income_statement?.revenue) },
+                          { label: 'Gross Margin', value: fmtPct(financialsData.income_statement?.gross_margin_pct) },
+                          { label: 'Op. Margin', value: fmtPct(financialsData.income_statement?.operating_margin_pct) },
+                          { label: 'Net Margin', value: fmtPct(financialsData.income_statement?.net_margin_pct) },
+                          { label: 'ROE', value: financialsData.ratios?.roe != null ? `${(financialsData.ratios.roe * 100).toFixed(1)}%` : '—' },
+                          { label: 'ROA', value: financialsData.ratios?.roa != null ? `${(financialsData.ratios.roa * 100).toFixed(1)}%` : '—' },
+                        ].map((item) => (
+                          <div key={item.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-center">
+                            <div className="text-xs text-gray-500 dark:text-gray-400">{item.label}</div>
+                            <div className="text-lg font-bold text-gray-900 dark:text-white">{item.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* ── Financial Health Row ── */}
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Financial Health</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                        {[
+                          { label: 'Cash', value: fmtB(financialsData.balance_sheet?.cash_and_equivalents) },
+                          { label: 'Total Debt', value: fmtB(financialsData.balance_sheet?.long_term_debt) },
+                          { label: 'Total Equity', value: fmtB(financialsData.balance_sheet?.total_equity) },
+                          { label: 'D/E Ratio', value: fmtNum(financialsData.ratios?.debt_to_equity) },
+                          { label: 'Current Ratio', value: fmtNum(financialsData.ratios?.current_ratio) },
+                          { label: 'Quick Ratio', value: fmtNum(financialsData.ratios?.quick_ratio) },
+                        ].map((item) => (
+                          <div key={item.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-center">
+                            <div className="text-xs text-gray-500 dark:text-gray-400">{item.label}</div>
+                            <div className="text-lg font-bold text-gray-900 dark:text-white">{item.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* ── Cash Flow Row ── */}
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Cash Flow (TTM)</h4>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                        {[
+                          { label: 'Operating CF', value: fmtB(financialsData.cash_flow?.operating_cash_flow) },
+                          { label: 'CapEx', value: fmtB(financialsData.cash_flow?.capex) },
+                          { label: 'Free Cash Flow', value: fmtB(financialsData.cash_flow?.free_cash_flow) },
+                          { label: 'Dividends', value: fmtB(financialsData.cash_flow?.dividends) },
+                          { label: 'D&A', value: fmtB(financialsData.cash_flow?.depreciation_amortization) },
+                        ].map((item) => (
+                          <div key={item.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-center">
+                            <div className="text-xs text-gray-500 dark:text-gray-400">{item.label}</div>
+                            <div className="text-lg font-bold text-gray-900 dark:text-white">{item.value}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* ── Quarterly Revenue Trend ── */}
+                    {financialsData.quarterly_trend && financialsData.quarterly_trend.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Quarterly Trend</h4>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-600">
+                                <th className="pb-2 pr-4">Quarter</th>
+                                <th className="pb-2 pr-4 text-right">Revenue</th>
+                                <th className="pb-2 pr-4 text-right">Net Income</th>
+                                <th className="pb-2 pr-4 text-right">Gross Margin</th>
+                                <th className="pb-2 pr-4 text-right">Op. Margin</th>
+                                <th className="pb-2 text-right">EPS</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {[...financialsData.quarterly_trend].reverse().map((q: any, i: number) => (
+                                <tr key={i} className="border-b border-gray-100 dark:border-gray-700 text-gray-900 dark:text-gray-200">
+                                  <td className="py-2 pr-4 font-medium">
+                                    {q.fiscal_year ? `FY${q.fiscal_year} Q${q.fiscal_quarter}` : q.period_end}
+                                  </td>
+                                  <td className="py-2 pr-4 text-right">{fmtB(q.revenue)}</td>
+                                  <td className="py-2 pr-4 text-right">{fmtB(q.net_income)}</td>
+                                  <td className="py-2 pr-4 text-right">{fmtPct(q.gross_margin_pct)}</td>
+                                  <td className="py-2 pr-4 text-right">{fmtPct(q.operating_margin_pct)}</td>
+                                  <td className="py-2 text-right">{fmtNum(q.eps_diluted)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── DCF-Ready Suggestions ── */}
+                    {financialsData.dcf_suggestions && (
+                      <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-4 border border-indigo-200 dark:border-indigo-800">
+                        <h4 className="text-sm font-semibold text-indigo-700 dark:text-indigo-300 uppercase tracking-wider mb-3">
+                          💡 Derived DCF Inputs (from Actuals)
+                        </h4>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mb-3">
+                          These values replace sector-default assumptions with company-specific data. Use them to pre-populate your DCF model.
+                        </p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                          {[
+                            { label: 'YoY Rev. Growth', value: fmtPct(financialsData.dcf_suggestions.revenue_growth_yoy_pct) },
+                            { label: 'Suggested Growth', value: fmtPct(financialsData.dcf_suggestions.suggested_growth_rate) },
+                            { label: 'Op. Margin', value: fmtPct(financialsData.dcf_suggestions.operating_margin_pct) },
+                            { label: 'Est. WACC', value: fmtPct(financialsData.dcf_suggestions.estimated_wacc) },
+                            { label: 'TTM FCF', value: fmtB(financialsData.dcf_suggestions.fcf_ttm) },
+                          ].map((item) => (
+                            <div key={item.label} className="bg-white dark:bg-gray-800 rounded-lg p-3 text-center">
+                              <div className="text-xs text-gray-500 dark:text-gray-400">{item.label}</div>
+                              <div className="text-lg font-bold text-indigo-700 dark:text-indigo-300">{item.value}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-3 text-right">
+                          <Link
+                            to={`/dcf-valuation?ticker=${analysisData.ticker}`}
+                            className="text-sm text-indigo-600 dark:text-indigo-400 hover:underline font-medium"
+                          >
+                            Open DCF Valuation with these inputs →
+                          </Link>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Market cap & EV footer */}
+                    <div className="flex flex-wrap gap-4 text-xs text-gray-500 dark:text-gray-400 pt-2 border-t border-gray-200 dark:border-gray-600">
+                      {financialsData.ratios?.market_cap && (
+                        <span>Market Cap: <strong className="text-gray-700 dark:text-gray-300">{fmtB(financialsData.ratios.market_cap)}</strong></span>
+                      )}
+                      {financialsData.ratios?.enterprise_value && (
+                        <span>Enterprise Value: <strong className="text-gray-700 dark:text-gray-300">{fmtB(financialsData.ratios.enterprise_value)}</strong></span>
+                      )}
+                      {financialsData.ratios?.dividend_yield != null && financialsData.ratios.dividend_yield > 0 && (
+                        <span>Dividend Yield: <strong className="text-gray-700 dark:text-gray-300">{(financialsData.ratios.dividend_yield * 100).toFixed(2)}%</strong></span>
+                      )}
+                      {financialsData.ratios?.eps && (
+                        <span>EPS (TTM): <strong className="text-gray-700 dark:text-gray-300">${fmtNum(financialsData.ratios.eps)}</strong></span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Trading Signals */}
             {analysisData.signals && analysisData.signals.length > 0 && (
