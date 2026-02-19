@@ -102,61 +102,135 @@ const Dashboard: React.FC = () => {
     }
   }, [tickerList, isConnected, subscribe, unsubscribe]);
 
+  // Track previous portfolio value for flash animation (avoids stale closure on stats)
+  const prevPortfolioValueRef = useRef<number>(0);
+
   // Update positions and dashboard stats with live prices
+  // Uses functional updater to avoid stale closure on positions
   useEffect(() => {
-    if (prices.size === 0 || positions.length === 0) return;
+    if (prices.size === 0) return;
 
-    let hasChange = false;
+    setPositions(prevPositions => {
+      if (prevPositions.length === 0) return prevPositions;
 
-    const updatedPositions = positions.map(pos => {
-      const livePrice = prices.get(pos.ticker);
-      if (!livePrice) return pos;
+      let hasChange = false;
 
-      const previousPrice = previousPricesRef.current.get(pos.ticker) || pos.current_price || livePrice.price;
+      const updatedPositions = prevPositions.map(pos => {
+        const livePrice = prices.get(pos.ticker);
+        if (!livePrice) return pos;
 
-      if (livePrice.price !== previousPrice) {
-        hasChange = true;
-        previousPricesRef.current.set(pos.ticker, livePrice.price);
+        const previousPrice = previousPricesRef.current.get(pos.ticker) || pos.current_price || livePrice.price;
 
-        const totalValue = livePrice.price * pos.quantity;
-        const profitLoss = totalValue - (pos.buy_price * pos.quantity);
-        const profitLossPercent = ((livePrice.price - pos.buy_price) / pos.buy_price) * 100;
+        if (livePrice.price !== previousPrice) {
+          hasChange = true;
+          previousPricesRef.current.set(pos.ticker, livePrice.price);
 
-        return {
-          ...pos,
-          current_price: livePrice.price,
-          total_value: totalValue,
-          profit_loss: profitLoss,
-          profit_loss_percent: profitLossPercent,
-        };
+          const totalValue = livePrice.price * pos.quantity;
+          const profitLoss = totalValue - (pos.buy_price * pos.quantity);
+          const profitLossPercent = ((livePrice.price - pos.buy_price) / pos.buy_price) * 100;
+
+          return {
+            ...pos,
+            current_price: livePrice.price,
+            total_value: totalValue,
+            profit_loss: profitLoss,
+            profit_loss_percent: profitLossPercent,
+          };
+        }
+        return pos;
+      });
+
+      if (hasChange) {
+        // Recalculate dashboard totals
+        const totalValue = updatedPositions.reduce((sum, p) => sum + (p.total_value || 0), 0);
+        const totalCost = updatedPositions.reduce((sum, p) => sum + (p.buy_price * p.quantity), 0);
+        const totalPL = totalValue - totalCost;
+        const totalPLPercent = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
+
+        // Flash animation on the portfolio value card
+        const prevTotalValue = prevPortfolioValueRef.current;
+        if (totalValue !== prevTotalValue) {
+          setValueFlash(totalValue > prevTotalValue ? 'green' : 'red');
+          setTimeout(() => setValueFlash(null), 600);
+        }
+        prevPortfolioValueRef.current = totalValue;
+
+        setStats(prev => ({
+          ...prev,
+          portfolioValue: totalValue,
+          portfolioPL: totalPL,
+          portfolioPLPercent: totalPLPercent,
+        }));
+
+        return updatedPositions;
       }
-      return pos;
+
+      return prevPositions;
     });
-
-    if (hasChange) {
-      setPositions(updatedPositions);
-
-      // Recalculate dashboard totals
-      const totalValue = updatedPositions.reduce((sum, p) => sum + (p.total_value || 0), 0);
-      const totalCost = updatedPositions.reduce((sum, p) => sum + (p.buy_price * p.quantity), 0);
-      const totalPL = totalValue - totalCost;
-      const totalPLPercent = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
-
-      // Flash animation on the portfolio value card
-      const prevTotalValue = stats.portfolioValue;
-      if (totalValue !== prevTotalValue) {
-        setValueFlash(totalValue > prevTotalValue ? 'green' : 'red');
-        setTimeout(() => setValueFlash(null), 600);
-      }
-
-      setStats(prev => ({
-        ...prev,
-        portfolioValue: totalValue,
-        portfolioPL: totalPL,
-        portfolioPLPercent: totalPLPercent,
-      }));
-    }
   }, [prices]);
+
+  // Auto-refresh prices every 30 seconds via REST (matches Portfolio.tsx behavior)
+  useEffect(() => {
+    if (!tickerList) return;
+
+    const refreshPrices = async () => {
+      try {
+        const token = localStorage.getItem('access_token');
+        const priceResponse = await axios.get(
+          `${API_URL}/api/v1/intraday/batch?tickers=${tickerList}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        const freshPrices: Record<string, number> = {};
+        if (Array.isArray(priceResponse.data)) {
+          priceResponse.data.forEach((item: any) => {
+            if (item.ticker && item.price) {
+              freshPrices[item.ticker] = item.price;
+            }
+          });
+        }
+
+        setPositions(prev => {
+          let totalValue = 0;
+          let totalCost = 0;
+          const updated = prev.map(pos => {
+            const freshPrice = freshPrices[pos.ticker];
+            const price = freshPrice || pos.current_price || pos.buy_price;
+            const tv = price * pos.quantity;
+            const cost = pos.buy_price * pos.quantity;
+            totalValue += tv;
+            totalCost += cost;
+            if (freshPrice && freshPrice !== pos.current_price) {
+              return {
+                ...pos,
+                current_price: freshPrice,
+                total_value: tv,
+                profit_loss: tv - cost,
+                profit_loss_percent: cost > 0 ? ((tv - cost) / cost) * 100 : 0,
+              };
+            }
+            return pos;
+          });
+
+          const totalPL = totalValue - totalCost;
+          setStats(s => ({
+            ...s,
+            portfolioValue: totalValue,
+            portfolioPL: totalPL,
+            portfolioPLPercent: totalCost > 0 ? (totalPL / totalCost) * 100 : 0,
+          }));
+          prevPortfolioValueRef.current = totalValue;
+
+          return updated;
+        });
+      } catch {
+        // Silent fail — WebSocket and initial load are primary
+      }
+    };
+
+    const interval = setInterval(refreshPrices, 30000);
+    return () => clearInterval(interval);
+  }, [tickerList]);
 
   // Close user menu on outside click
   useEffect(() => {
@@ -171,18 +245,23 @@ const Dashboard: React.FC = () => {
 
   const loadDashboardData = async () => {
     try {
-      // Get current user
+      // Get current user first (needed for auth check)
       const userResponse = await authAPI.getCurrentUser();
       setUser(userResponse.data);
 
-      // Get watchlist count
-      const watchlistResponse = await watchlistAPI.getAll();
+      // Fetch watchlist, portfolio, and alerts in parallel
+      const [watchlistResponse, portfolioResponse, alertsResponse] = await Promise.all([
+        watchlistAPI.getAll(),
+        portfolioAPI.getAll(),
+        alertsAPI.getAll(),
+      ]);
+
+      // Process watchlist
       const watchlistItems = watchlistResponse.data.items || [];
       const watchlistCount = watchlistItems.length;
       setWatchlistTickers(watchlistItems.map((item: any) => item.ticker));
 
-      // Get portfolio data
-      const portfolioResponse = await portfolioAPI.getAll();
+      // Process portfolio
       const portfolioData = portfolioResponse.data;
       const portfolioPositions: DashboardPosition[] = (portfolioData.positions || []).map((p: any) => ({
         ticker: p.ticker,
@@ -194,15 +273,66 @@ const Dashboard: React.FC = () => {
         profit_loss_percent: p.profit_loss_percent,
       }));
       const portfolioCount = portfolioPositions.length;
-      const portfolioValue = portfolioData.total_current_value || 0;
-      const portfolioPL = portfolioData.total_profit_loss || 0;
-      const portfolioPLPercent = portfolioData.total_profit_loss_percent || 0;
 
-      // Get alerts count
-      const alertsResponse = await alertsAPI.getAll();
+      // Process alerts
       const alertsCount = alertsResponse.data.alerts?.filter((a: Alert) => a.is_active).length || 0;
 
-      setPositions(portfolioPositions);
+      // Fetch fresh intraday prices (same as Portfolio.tsx) to override stale prev-day close
+      let finalPositions = portfolioPositions;
+      let portfolioValue = portfolioData.total_current_value || 0;
+      let portfolioPL = portfolioData.total_profit_loss || 0;
+      let portfolioPLPercent = portfolioData.total_profit_loss_percent || 0;
+
+      if (portfolioPositions.length > 0) {
+        try {
+          const tickers = portfolioPositions.map(p => p.ticker).join(',');
+          const token = localStorage.getItem('access_token');
+          const priceResponse = await axios.get(
+            `${API_URL}/api/v1/intraday/batch?tickers=${tickers}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+
+          const freshPrices: Record<string, number> = {};
+          if (Array.isArray(priceResponse.data)) {
+            priceResponse.data.forEach((item: any) => {
+              if (item.ticker && item.price) {
+                freshPrices[item.ticker] = item.price;
+              }
+            });
+          }
+
+          // Recalculate with fresh prices
+          let totalValue = 0;
+          let totalCost = 0;
+          finalPositions = portfolioPositions.map(pos => {
+            const freshPrice = freshPrices[pos.ticker];
+            const price = freshPrice || pos.current_price || pos.buy_price;
+            const tv = price * pos.quantity;
+            const cost = pos.buy_price * pos.quantity;
+            totalValue += tv;
+            totalCost += cost;
+            if (freshPrice) {
+              return {
+                ...pos,
+                current_price: freshPrice,
+                total_value: tv,
+                profit_loss: tv - cost,
+                profit_loss_percent: cost > 0 ? ((tv - cost) / cost) * 100 : 0,
+              };
+            }
+            return pos;
+          });
+
+          portfolioValue = totalValue;
+          portfolioPL = totalValue - totalCost;
+          portfolioPLPercent = totalCost > 0 ? (portfolioPL / totalCost) * 100 : 0;
+        } catch (priceErr) {
+          console.warn('⚠️ Could not fetch fresh intraday prices for dashboard, using cached:', priceErr);
+        }
+      }
+
+      setPositions(finalPositions);
+      prevPortfolioValueRef.current = portfolioValue;
       setStats({
         watchlistCount,
         portfolioCount,
@@ -212,19 +342,8 @@ const Dashboard: React.FC = () => {
         portfolioPLPercent,
       });
 
-      // Fetch IPO data
-      try {
-        setIpoLoading(true);
-        const token = localStorage.getItem('access_token');
-        const ipoResponse = await axios.get(`${API_URL}/api/v1/stocks/ipos`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setIpoData(ipoResponse.data);
-      } catch (ipoErr) {
-        console.warn('Could not fetch IPO data:', ipoErr);
-      } finally {
-        setIpoLoading(false);
-      }
+      // IPO is non-critical — load without blocking render
+      loadIPOData();
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
       // If unauthorized, redirect to login
@@ -235,6 +354,22 @@ const Dashboard: React.FC = () => {
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  // Non-blocking IPO loader
+  const loadIPOData = async () => {
+    try {
+      setIpoLoading(true);
+      const token = localStorage.getItem('access_token');
+      const ipoResponse = await axios.get(`${API_URL}/api/v1/stocks/ipos`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setIpoData(ipoResponse.data);
+    } catch (ipoErr) {
+      console.warn('Could not fetch IPO data:', ipoErr);
+    } finally {
+      setIpoLoading(false);
     }
   };
 
