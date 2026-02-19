@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Helmet } from 'react-helmet-async';
 import axios from 'axios';
 import ThemeToggle from '../components/ThemeToggle';
 
@@ -50,21 +49,18 @@ const BlogList: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-800">
-      <Helmet>
-        <title>Blog — Northwest Creek | Stock Analysis Insights &amp; Guides</title>
-        <meta name="description" content="Expert stock analysis articles, technical indicator guides, portfolio strategies, and market insights for retail investors." />
-        <link rel="canonical" href="https://northwestcreekllc.com/blogs" />
-
-        <meta property="og:type" content="website" />
-        <meta property="og:title" content="Blog — Northwest Creek" />
-        <meta property="og:description" content="Expert stock analysis articles, technical indicator guides, and market insights." />
-        <meta property="og:url" content="https://northwestcreekllc.com/blogs" />
-        <meta property="og:image" content="https://northwestcreekllc.com/images/og-default.png" />
-
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Blog — Northwest Creek" />
-        <meta name="twitter:description" content="Expert stock analysis articles and market insights for retail investors." />
-      </Helmet>
+      {/* SEO — React 19 hoists to <head> */}
+      <title>Blog — Northwest Creek | Stock Analysis Insights &amp; Guides</title>
+      <meta name="description" content="Expert stock analysis articles, technical indicator guides, portfolio strategies, and market insights for retail investors." />
+      <link rel="canonical" href="https://northwestcreekllc.com/blogs" />
+      <meta property="og:type" content="website" />
+      <meta property="og:title" content="Blog — Northwest Creek" />
+      <meta property="og:description" content="Expert stock analysis articles, technical indicator guides, and market insights." />
+      <meta property="og:url" content="https://northwestcreekllc.com/blogs" />
+      <meta property="og:image" content="https://northwestcreekllc.com/images/og-default.png" />
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:title" content="Blog — Northwest Creek" />
+      <meta name="twitter:description" content="Expert stock analysis articles and market insights for retail investors." />
       {/* Nav */}
       <nav className="bg-gray-900 shadow-sm border-b border-gray-700">
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">

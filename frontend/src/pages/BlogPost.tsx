@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Helmet } from 'react-helmet-async';
 import axios from 'axios';
 import ThemeToggle from '../components/ThemeToggle';
 import { User } from '../types';
@@ -310,54 +309,49 @@ const BlogPost: React.FC = () => {
           </div>
         ) : post ? (
           <article className="max-w-4xl">
-            <Helmet>
-              <title>{post.title} — Northwest Creek Blog</title>
-              <meta name="description" content={post.excerpt || `${post.title} — stock analysis insights from Northwest Creek.`} />
-              <link rel="canonical" href={`https://northwestcreekllc.com/blogs/${post.slug}`} />
+            {/* SEO — React 19 hoists to <head> automatically */}
+            <title>{post.title} — Northwest Creek Blog</title>
+            <meta name="description" content={post.excerpt || `${post.title} — stock analysis insights from Northwest Creek.`} />
+            <link rel="canonical" href={`https://northwestcreekllc.com/blogs/${post.slug}`} />
+            <meta property="og:type" content="article" />
+            <meta property="og:title" content={post.title} />
+            <meta property="og:description" content={post.excerpt || `${post.title} — stock analysis insights from Northwest Creek.`} />
+            <meta property="og:url" content={`https://northwestcreekllc.com/blogs/${post.slug}`} />
+            {post.cover_image_url && <meta property="og:image" content={post.cover_image_url} />}
+            <meta property="og:site_name" content="Northwest Creek" />
+            {post.created_at && <meta property="article:published_time" content={new Date(post.created_at).toISOString()} />}
+            {post.updated_at && <meta property="article:modified_time" content={new Date(post.updated_at).toISOString()} />}
+            <meta property="article:section" content={post.category} />
+            <meta name="twitter:card" content={post.cover_image_url ? 'summary_large_image' : 'summary'} />
+            <meta name="twitter:title" content={post.title} />
+            <meta name="twitter:description" content={post.excerpt || `${post.title} — stock analysis insights.`} />
+            {post.cover_image_url && <meta name="twitter:image" content={post.cover_image_url} />}
 
-              {/* Open Graph */}
-              <meta property="og:type" content="article" />
-              <meta property="og:title" content={post.title} />
-              <meta property="og:description" content={post.excerpt || `${post.title} — stock analysis insights from Northwest Creek.`} />
-              <meta property="og:url" content={`https://northwestcreekllc.com/blogs/${post.slug}`} />
-              {post.cover_image_url && <meta property="og:image" content={post.cover_image_url} />}
-              <meta property="og:site_name" content="Northwest Creek" />
-              {post.created_at && <meta property="article:published_time" content={new Date(post.created_at).toISOString()} />}
-              {post.updated_at && <meta property="article:modified_time" content={new Date(post.updated_at).toISOString()} />}
-              <meta property="article:section" content={post.category} />
-
-              {/* Twitter Card */}
-              <meta name="twitter:card" content={post.cover_image_url ? 'summary_large_image' : 'summary'} />
-              <meta name="twitter:title" content={post.title} />
-              <meta name="twitter:description" content={post.excerpt || `${post.title} — stock analysis insights.`} />
-              {post.cover_image_url && <meta name="twitter:image" content={post.cover_image_url} />}
-
-              {/* JSON-LD: BlogPosting */}
-              <script type="application/ld+json">{JSON.stringify({
-                "@context": "https://schema.org",
-                "@type": "BlogPosting",
-                "headline": post.title,
-                "description": post.excerpt || post.title,
-                "url": `https://northwestcreekllc.com/blogs/${post.slug}`,
-                ...(post.cover_image_url && { "image": post.cover_image_url }),
-                "datePublished": post.created_at ? new Date(post.created_at).toISOString() : undefined,
-                "dateModified": post.updated_at ? new Date(post.updated_at).toISOString() : undefined,
-                "articleSection": post.category,
-                ...(post.tags && { "keywords": post.tags }),
-                "publisher": {
-                  "@type": "Organization",
-                  "name": "Northwest Creek LLC",
-                  "logo": {
-                    "@type": "ImageObject",
-                    "url": "https://northwestcreekllc.com/images/logo.png"
-                  }
-                },
-                "mainEntityOfPage": {
-                  "@type": "WebPage",
-                  "@id": `https://northwestcreekllc.com/blogs/${post.slug}`
+            {/* JSON-LD: BlogPosting (Google reads from anywhere in DOM) */}
+            <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "BlogPosting",
+              "headline": post.title,
+              "description": post.excerpt || post.title,
+              "url": `https://northwestcreekllc.com/blogs/${post.slug}`,
+              ...(post.cover_image_url && { "image": post.cover_image_url }),
+              ...(post.created_at && { "datePublished": new Date(post.created_at).toISOString() }),
+              ...(post.updated_at && { "dateModified": new Date(post.updated_at).toISOString() }),
+              "articleSection": post.category,
+              ...(post.tags && { "keywords": post.tags }),
+              "publisher": {
+                "@type": "Organization",
+                "name": "Northwest Creek LLC",
+                "logo": {
+                  "@type": "ImageObject",
+                  "url": "https://northwestcreekllc.com/images/logo.png"
                 }
-              })}</script>
-            </Helmet>
+              },
+              "mainEntityOfPage": {
+                "@type": "WebPage",
+                "@id": `https://northwestcreekllc.com/blogs/${post.slug}`
+              }
+            }) }} />
             {/* Cover Image */}
             {post.cover_image_url && (
               <div className="rounded-lg overflow-hidden mb-8 aspect-[21/9]">
