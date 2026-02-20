@@ -511,9 +511,6 @@ class MarketDataService:
                 "has_dividends": False,
             }
 
-    # Security types allowed in gainers/losers (excludes WARRANT, RIGHT, UNIT)
-    ALLOWED_SECURITY_TYPES = {'CS', 'ADRC', 'PFD', 'ETF', 'ETS', 'ETN', 'ETV'}
-
     async def get_top_gainers(self, limit: int = 10) -> Dict[str, Any]:
         """
         Get top stock gainers from Massive API
@@ -537,22 +534,13 @@ class MarketDataService:
             snapshot = self.rest_client.get_snapshot_all("stocks")
             results = []
             
-            # Process snapshots — capture type field inline for filtering
+            # Process snapshots
             for item in snapshot:
                 if isinstance(item, TickerSnapshot):
                     if isinstance(item.prev_day, Agg):
                         if isinstance(item.prev_day.open, float) and isinstance(item.prev_day.close, float):
                             # Avoid division by zero
                             if item.prev_day.open != 0:
-                                # Check security type — TickerSnapshot may carry it
-                                sec_type = getattr(item, 'type', None) or ''
-                                
-                                # Filter: only allowed types, or pass through if
-                                # type is unknown (empty) to avoid dropping stocks
-                                # whose type field isn't populated in this endpoint
-                                if sec_type and sec_type not in self.ALLOWED_SECURITY_TYPES:
-                                    continue  # Skip WARRANT, RIGHT, UNIT, etc.
-                                
                                 percent_change = (
                                     (item.prev_day.close - item.prev_day.open)
                                     / item.prev_day.open
@@ -567,8 +555,10 @@ class MarketDataService:
             
             # Sort by percentage change (biggest gainers first)
             results.sort(key=lambda x: x['change_percent'], reverse=True)
+            
+            # Get top gainers
             top_gainers = results[:limit]
-
+            
             return {
                 'timestamp': datetime.now().isoformat(),
                 'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -601,17 +591,13 @@ class MarketDataService:
             snapshot = self.rest_client.get_snapshot_all("stocks")
             results = []
             
-            # Process snapshots — capture type field inline for filtering
+            # Process snapshots
             for item in snapshot:
                 if isinstance(item, TickerSnapshot):
                     if isinstance(item.prev_day, Agg):
                         if isinstance(item.prev_day.open, float) and isinstance(item.prev_day.close, float):
                             # Avoid division by zero
                             if item.prev_day.open != 0:
-                                sec_type = getattr(item, 'type', None) or ''
-                                if sec_type and sec_type not in self.ALLOWED_SECURITY_TYPES:
-                                    continue
-                                
                                 percent_change = (
                                     (item.prev_day.close - item.prev_day.open)
                                     / item.prev_day.open
@@ -626,6 +612,8 @@ class MarketDataService:
             
             # Sort by percentage change (biggest losers first)
             results.sort(key=lambda x: x['change_percent'])
+            
+            # Get top losers
             top_losers = results[:limit]
             
             return {
