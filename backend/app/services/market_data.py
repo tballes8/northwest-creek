@@ -2,7 +2,6 @@
 Market data service - Polygon.io integration
 """
 import httpx, os
-import pandas as pd
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone, timedelta
 from app.config import get_settings
@@ -515,75 +514,126 @@ class MarketDataService:
     # Security types allowed in gainers/losers (excludes WARRANT, RIGHT, UNIT)
     ALLOWED_SECURITY_TYPES = {'CS', 'ADRC', 'PFD', 'ETF', 'ETS', 'ETN', 'ETV'}
 
-    def _snapshot_to_df(self) -> pd.DataFrame:
-        """
-        Load all stock snapshots into a DataFrame and filter out
-        non-equity security types (warrants, rights, units, etc.).
-        """
-        snapshot = self.rest_client.get_snapshot_all("stocks")
-
-        rows = []
-        for item in snapshot:
-            if isinstance(item, TickerSnapshot) and isinstance(item.prev_day, Agg):
-                o = item.prev_day.open
-                c = item.prev_day.close
-                if isinstance(o, float) and isinstance(c, float) and o != 0:
-                    rows.append({
-                        'ticker': item.ticker,
-                        'type': getattr(item, 'type', None) or '',
-                        'open': round(o, 2),
-                        'close': round(c, 2),
-                        'change_percent': round((c - o) / o * 100, 2),
-                    })
-
-        df = pd.DataFrame(rows)
-        if df.empty:
-            return df
-
-        # Keep allowed types + unknown (empty) so we don't drop stocks
-        # whose type field isn't populated on the v2 snapshot endpoint
-        df = df[df['type'].isin(self.ALLOWED_SECURITY_TYPES) | (df['type'] == '')]
-        return df.drop(columns=['type'])
-
     async def get_top_gainers(self, limit: int = 10) -> Dict[str, Any]:
-        """Get top stock gainers, excluding warrants/rights/units"""
+        """
+        Get top stock gainers from Massive API
+        
+        Args:
+            limit: Number of top gainers to return (default: 10, max: 50)
+        
+        Returns:
+            dict: Response containing timestamp and list of top gainers
+            
+        Raises:
+            ValueError: If limit is invalid
+            Exception: If API request fails
+        """
         try:
+            # Validate limit
             if limit < 1 or limit > 50:
                 raise ValueError("Limit must be between 1 and 50")
-
-            df = self._snapshot_to_df()
-            top = (
-                df.sort_values('change_percent', ascending=False)
-                  .head(limit)
-                  .to_dict('records')
-            ) if not df.empty else []
+            
+            # Fetch stock snapshots using the initialized REST client
+            snapshot = self.rest_client.get_snapshot_all("stocks")
+            results = []
+            
+            # Process snapshots — capture type field inline for filtering
+            for item in snapshot:
+                if isinstance(item, TickerSnapshot):
+                    if isinstance(item.prev_day, Agg):
+                        if isinstance(item.prev_day.open, float) and isinstance(item.prev_day.close, float):
+                            # Avoid division by zero
+                            if item.prev_day.open != 0:
+                                # Check security type — TickerSnapshot may carry it
+                                sec_type = getattr(item, 'type', None) or ''
+                                
+                                # Filter: only allowed types, or pass through if
+                                # type is unknown (empty) to avoid dropping stocks
+                                # whose type field isn't populated in this endpoint
+                                if sec_type and sec_type not in self.ALLOWED_SECURITY_TYPES:
+                                    continue  # Skip WARRANT, RIGHT, UNIT, etc.
+                                
+                                percent_change = (
+                                    (item.prev_day.close - item.prev_day.open)
+                                    / item.prev_day.open
+                                    * 100
+                                )
+                                results.append({
+                                    'ticker': item.ticker,
+                                    'open': round(item.prev_day.open, 2),
+                                    'close': round(item.prev_day.close, 2),
+                                    'change_percent': round(percent_change, 2)
+                                })
+            
+            # Sort by percentage change (biggest gainers first)
+            results.sort(key=lambda x: x['change_percent'], reverse=True)
+            top_gainers = results[:limit]
 
             return {
                 'timestamp': datetime.now().isoformat(),
                 'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'top_gainers': top,
+                'top_gainers': top_gainers
             }
+            
         except Exception as e:
             raise Exception(f"Failed to fetch top gainers: {str(e)}")
-
+    
     async def get_top_losers(self, limit: int = 10) -> Dict[str, Any]:
-        """Get top stock losers, excluding warrants/rights/units"""
+        """
+        Get top stock losers from Massive API
+        
+        Args:
+            limit: Number of top losers to return (default: 10, max: 50)
+        
+        Returns:
+            dict: Response containing timestamp and list of top losers
+            
+        Raises:
+            ValueError: If limit is invalid
+            Exception: If API request fails
+        """
         try:
+            # Validate limit
             if limit < 1 or limit > 50:
                 raise ValueError("Limit must be between 1 and 50")
-
-            df = self._snapshot_to_df()
-            top = (
-                df.sort_values('change_percent', ascending=True)
-                  .head(limit)
-                  .to_dict('records')
-            ) if not df.empty else []
-
+            
+            # Fetch stock snapshots using the initialized REST client
+            snapshot = self.rest_client.get_snapshot_all("stocks")
+            results = []
+            
+            # Process snapshots — capture type field inline for filtering
+            for item in snapshot:
+                if isinstance(item, TickerSnapshot):
+                    if isinstance(item.prev_day, Agg):
+                        if isinstance(item.prev_day.open, float) and isinstance(item.prev_day.close, float):
+                            # Avoid division by zero
+                            if item.prev_day.open != 0:
+                                sec_type = getattr(item, 'type', None) or ''
+                                if sec_type and sec_type not in self.ALLOWED_SECURITY_TYPES:
+                                    continue
+                                
+                                percent_change = (
+                                    (item.prev_day.close - item.prev_day.open)
+                                    / item.prev_day.open
+                                    * 100
+                                )
+                                results.append({
+                                    'ticker': item.ticker,
+                                    'open': round(item.prev_day.open, 2),
+                                    'close': round(item.prev_day.close, 2),
+                                    'change_percent': round(percent_change, 2)
+                                })
+            
+            # Sort by percentage change (biggest losers first)
+            results.sort(key=lambda x: x['change_percent'])
+            top_losers = results[:limit]
+            
             return {
                 'timestamp': datetime.now().isoformat(),
                 'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'top_losers': top,
+                'top_losers': top_losers
             }
+            
         except Exception as e:
             raise Exception(f"Failed to fetch top losers: {str(e)}")
         
