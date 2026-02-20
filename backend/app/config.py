@@ -41,9 +41,9 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = Field(default="http://localhost:3000", env="FRONTEND_URL")
     
     # Twilio SMS Settings
-    TWILIO_ACCOUNT_SID: str = "AC62d56fecf4b599e4aeb745ea19315160"
-    TWILIO_AUTH_TOKEN: str = "9c8f34caaf3e7ffe67356805d8326406"
-    TWILIO_FROM_NUMBER: str = "+18887115474"
+    TWILIO_ACCOUNT_SID: str = Field(default="", env="TWILIO_ACCOUNT_SID")
+    TWILIO_AUTH_TOKEN: str = Field(default="", env="TWILIO_AUTH_TOKEN")
+    TWILIO_FROM_NUMBER: str = Field(default="", env="TWILIO_FROM_NUMBER")
 
     # Stripe Settings
     STRIPE_SECRET_KEY: str = Field(default="", env="STRIPE_SECRET_KEY")
@@ -79,6 +79,8 @@ def get_settings() -> Settings:
         print(f"   STRIPE_CASUAL_PRICE_ID = {settings.STRIPE_CASUAL_PRICE_ID or '❌ NOT SET'}")
         print(f"   STRIPE_ACTIVE_PRICE_ID = {settings.STRIPE_ACTIVE_PRICE_ID or '❌ NOT SET'}")
         print(f"   STRIPE_PROFESSIONAL_PRICE_ID = {settings.STRIPE_PROFESSIONAL_PRICE_ID or '❌ NOT SET'}")
+        print(f"   TWILIO_ACCOUNT_SID = {'✅ SET' if settings.TWILIO_ACCOUNT_SID else '❌ NOT SET'}")
+        print(f"   TWILIO_FROM_NUMBER = {settings.TWILIO_FROM_NUMBER or '❌ NOT SET'}")
         print(f"   DATABASE_URL = {'✅ SET' if settings.DATABASE_URL else '❌ NOT SET'}")
         print(f"   MASSIVE_API_KEY = {'✅ SET' if settings.MASSIVE_API_KEY else '❌ NOT SET'}")
     return settings
