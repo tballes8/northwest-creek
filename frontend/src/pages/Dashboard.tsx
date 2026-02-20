@@ -1159,9 +1159,9 @@ return (
                 )}
 
                 {/* ── News Articles ───────────────────────────────── */}
-                {ipoModalNews.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">Recent News</h3>
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">Recent News</h3>
+                  {ipoModalNews.length > 0 ? (
                     <div className="space-y-2">
                       {ipoModalNews.map((article: any, i: number) => (
                         <a
@@ -1183,29 +1183,12 @@ return (
                         </a>
                       ))}
                     </div>
-                  </div>
-                )}
-
-                {/* ── Action Buttons ──────────────────────────────── */}
-                <div className="flex items-center gap-3 pt-2 border-t border-gray-200 dark:border-gray-600">
-                  <button
-                    onClick={() => { closeIpoModal(); navigate(`/stocks?ticker=${encodeURIComponent(ipoModalTicker)}`); }}
-                    className="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors"
-                  >
-                    📊 Stock Details
-                  </button>
-                  <button
-                    onClick={() => { closeIpoModal(); navigate(`/technical-analysis?ticker=${encodeURIComponent(ipoModalTicker)}`); }}
-                    className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg transition-colors"
-                  >
-                    📈 Technical Analysis
-                  </button>
-                  <button
-                    onClick={() => { closeIpoModal(); navigate(`/dcf-valuation?ticker=${encodeURIComponent(ipoModalTicker)}`); }}
-                    className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg transition-colors"
-                  >
-                    🏦 DCF Valuation
-                  </button>
+                  ) : (
+                    <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 text-center">
+                      <p className="text-sm text-gray-500 dark:text-gray-400">No news articles found for {ipoModalTicker}.</p>
+                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">News coverage typically appears closer to or after the listing date.</p>
+                    </div>
+                  )}
                 </div>
 
               </div>

@@ -1009,7 +1009,7 @@ const TechnicalAnalysis: React.FC = () => {
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                    ${analysisData.current_price.toFixed(2)}
+                    ${analysisData.current_price?.toFixed(2) ?? '—'}
                   </div>
                 </div>
               </div>
@@ -1418,19 +1418,19 @@ const TechnicalAnalysis: React.FC = () => {
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600 dark:text-gray-400">Upper Band:</span>
                     <span className="font-semibold text-red-500">
-                      ${analysisData.indicators.bollinger_bands.upper_band.toFixed(2)}
+                      ${analysisData.indicators.bollinger_bands.upper_band?.toFixed(2) ?? 'N/A'}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600 dark:text-gray-400">Middle Band:</span>
                     <span className="font-semibold text-gray-900 dark:text-white">
-                      ${analysisData.indicators.bollinger_bands.middle_band.toFixed(2)}
+                      ${analysisData.indicators.bollinger_bands.middle_band?.toFixed(2) ?? 'N/A'}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600 dark:text-gray-400">Lower Band:</span>
                     <span className="font-semibold text-green-500">
-                      ${analysisData.indicators.bollinger_bands.lower_band.toFixed(2)}
+                      ${analysisData.indicators.bollinger_bands.lower_band?.toFixed(2) ?? 'N/A'}
                     </span>
                   </div>
                   <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
