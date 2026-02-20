@@ -31,12 +31,6 @@ interface BlogPostFull {
 const IframeContent: React.FC<{ html: string }> = ({ html }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // Strip <!DOCTYPE>, <html>, <head> wrappers — keep <style> + <body> content
-  const extractBody = (raw: string): string => {
-    // If there's a <body>, grab its innerHTML; otherwise treat as fragment
-    const bodyMatch = raw.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    const bodyContent = bodyMatch ? bodyMatch[1] : raw;
-
     // Preserve any <style> blocks from <head> or anywhere in the doc
   const extractBody = (raw: string): string => {
     const bodyMatch = raw.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
