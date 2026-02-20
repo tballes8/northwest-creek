@@ -118,10 +118,12 @@ def _is_warrant(ticker: str) -> bool:
 
 @router.get("/top-gainers")
 async def get_top_gainers(limit: int = 10):
-    """Get top stock gainers, excluding warrants"""
+    """Get top stock gainers, excluding warrants and non-CS securities"""
     try:
-        # Fetch extra to compensate for filtered-out warrants
-        result = await market_data_service.get_top_gainers(limit + 20)
+        # market_data_service now does primary filtering via Polygon type field.
+        # Heuristic _is_warrant() is a secondary safety net for separator-pattern
+        # warrants that might slip through if the type batch-check fails.
+        result = await market_data_service.get_top_gainers(limit + 10)
         
         if "top_gainers" in result and isinstance(result["top_gainers"], list):
             filtered = [g for g in result["top_gainers"] if not _is_warrant(g.get("ticker", ""))]
@@ -133,9 +135,9 @@ async def get_top_gainers(limit: int = 10):
 
 @router.get("/top-losers")
 async def get_top_losers(limit: int = 10):
-    """Get top stock losers, excluding warrants"""
+    """Get top stock losers, excluding warrants and non-CS securities"""
     try:
-        result = await market_data_service.get_top_losers(limit + 20)
+        result = await market_data_service.get_top_losers(limit + 10)
         
         if "top_losers" in result and isinstance(result["top_losers"], list):
             filtered = [g for g in result["top_losers"] if not _is_warrant(g.get("ticker", ""))]

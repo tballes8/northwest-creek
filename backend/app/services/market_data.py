@@ -511,6 +511,28 @@ class MarketDataService:
                 "has_dividends": False,
             }
 
+    def batch_get_ticker_types(self, tickers: List[str]) -> Dict[str, str]:
+        """
+        Batch-fetch security types (CS, WARRANT, ETF, etc.) using universal snapshots.
+        Returns dict of ticker → type.  Missing tickers return empty string.
+        """
+        if not tickers:
+            return {}
+        try:
+            snapshots = list(self.rest_client.list_universal_snapshots(
+                ticker_any_of=tickers
+            ))
+            type_map: Dict[str, str] = {}
+            for snap in snapshots:
+                t = getattr(snap, 'ticker', None)
+                st = getattr(snap, 'type', None) or ''
+                if t:
+                    type_map[t] = st
+            return type_map
+        except Exception as e:
+            print(f"⚠️ batch_get_ticker_types failed: {e}")
+            return {}
+
     async def get_top_gainers(self, limit: int = 10) -> Dict[str, Any]:
         """
         Get top stock gainers from Massive API
@@ -556,8 +578,28 @@ class MarketDataService:
             # Sort by percentage change (biggest gainers first)
             results.sort(key=lambda x: x['change_percent'], reverse=True)
             
-            # Get top gainers
-            top_gainers = results[:limit]
+            # ── Type-based warrant filtering ──────────────────────────────
+            # Take extra candidates, batch-check their Polygon type, keep only
+            # common stocks (CS) and ADRs (ADRC).  This catches single-W
+            # warrants like SOUNW that heuristic filters can't safely detect
+            # without false-positiving on legit tickers like MATW.
+            candidate_pool = results[:limit * 5]
+            candidate_tickers = [r['ticker'] for r in candidate_pool]
+            type_map = self.batch_get_ticker_types(candidate_tickers)
+
+            ALLOWED_TYPES = {'CS', 'ADRC', 'PFD', 'ETF', 'ETS', 'ETN', 'ETV'}
+            filtered = []
+            for r in candidate_pool:
+                tkr_type = type_map.get(r['ticker'], '')
+                if tkr_type in ALLOWED_TYPES:
+                    filtered.append(r)
+                elif tkr_type == '':
+                    # Type unknown (not in snapshot) — keep it, heuristic filter
+                    # in stocks.py will catch separator-pattern warrants
+                    filtered.append(r)
+                # else: WARRANT, RIGHT, UNIT, ETF, etc. — excluded
+
+            top_gainers = filtered[:limit]
             
             return {
                 'timestamp': datetime.now().isoformat(),
@@ -613,8 +655,21 @@ class MarketDataService:
             # Sort by percentage change (biggest losers first)
             results.sort(key=lambda x: x['change_percent'])
             
-            # Get top losers
-            top_losers = results[:limit]
+            # ── Type-based warrant filtering (same logic as gainers) ──────
+            candidate_pool = results[:limit * 5]
+            candidate_tickers = [r['ticker'] for r in candidate_pool]
+            type_map = self.batch_get_ticker_types(candidate_tickers)
+
+            ALLOWED_TYPES = {'CS', 'ADRC', 'PFD', 'ETF', 'ETS', 'ETN', 'ETV'}
+            filtered = []
+            for r in candidate_pool:
+                tkr_type = type_map.get(r['ticker'], '')
+                if tkr_type in ALLOWED_TYPES:
+                    filtered.append(r)
+                elif tkr_type == '':
+                    filtered.append(r)
+
+            top_losers = filtered[:limit]
             
             return {
                 'timestamp': datetime.now().isoformat(),
