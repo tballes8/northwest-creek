@@ -9,8 +9,4 @@
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> a9e5a3e138dc3ecef6ca590bf8d675b192142daa
