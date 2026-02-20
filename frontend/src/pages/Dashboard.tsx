@@ -16,13 +16,19 @@ interface IPOItem {
   ticker: string;
   issuer_name: string;
   listing_date: string | null;
+  announced_date: string | null;
   final_issue_price: number | null;
   lowest_offer_price: number | null;
   highest_offer_price: number | null;
   total_offer_size: number | null;
   primary_exchange: string | null;
   security_type: string | null;
+  security_description: string | null;
   ipo_status: string | null;
+  last_updated: string | null;
+  currency_code: string | null;
+  min_shares_offered: number | null;
+  max_shares_offered: number | null;
 }
 
 interface DashboardPosition {
@@ -61,6 +67,15 @@ const Dashboard: React.FC = () => {
   const [ipoData, setIpoData] = useState<{ upcoming: IPOItem[]; pending: IPOItem[]; rumored: IPOItem[] }>({ upcoming: [], pending: [], rumored: [] });
   const [ipoLoading, setIpoLoading] = useState(false);
   const [ipoTab, setIpoTab] = useState<'upcoming' | 'pending' | 'rumored'>('upcoming');
+
+  // IPO detail modal
+  const [ipoModalOpen, setIpoModalOpen] = useState(false);
+  const [ipoModalTicker, setIpoModalTicker] = useState<string>('');
+  const [ipoModalIpo, setIpoModalIpo] = useState<IPOItem | null>(null);
+  const [ipoModalQuote, setIpoModalQuote] = useState<any>(null);
+  const [ipoModalCompany, setIpoModalCompany] = useState<any>(null);
+  const [ipoModalNews, setIpoModalNews] = useState<any[]>([]);
+  const [ipoModalLoading, setIpoModalLoading] = useState(false);
 
   // User dropdown menu
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -371,6 +386,39 @@ const Dashboard: React.FC = () => {
     } finally {
       setIpoLoading(false);
     }
+  };
+
+  // IPO detail modal — fetch quote, company, and news for a ticker
+  const openIpoModal = async (ipo: IPOItem) => {
+    setIpoModalIpo(ipo);
+    setIpoModalTicker(ipo.ticker);
+    setIpoModalOpen(true);
+    setIpoModalLoading(true);
+    setIpoModalQuote(null);
+    setIpoModalCompany(null);
+    setIpoModalNews([]);
+
+    const token = localStorage.getItem('access_token');
+    const headers = { Authorization: `Bearer ${token}` };
+
+    // Fetch all three in parallel — each is non-fatal
+    const [quoteRes, companyRes, newsRes] = await Promise.allSettled([
+      axios.get(`${API_URL}/api/v1/stocks/quote/${ipo.ticker}`, { headers }),
+      axios.get(`${API_URL}/api/v1/stocks/company/${ipo.ticker}`, { headers }),
+      axios.get(`${API_URL}/api/v1/stocks/news/${ipo.ticker}?limit=5`, { headers }),
+    ]);
+
+    if (quoteRes.status === 'fulfilled') setIpoModalQuote(quoteRes.value.data);
+    if (companyRes.status === 'fulfilled') setIpoModalCompany(companyRes.value.data);
+    if (newsRes.status === 'fulfilled') setIpoModalNews(newsRes.value.data?.data || []);
+
+    setIpoModalLoading(false);
+  };
+
+  const closeIpoModal = () => {
+    setIpoModalOpen(false);
+    setIpoModalTicker('');
+    setIpoModalIpo(null);
   };
 
   const handleRefresh = async () => {
@@ -864,15 +912,29 @@ return (
                 {ipoData[ipoTab].map((ipo, idx) => (
                   <tr key={`${ipo.ticker}-${idx}`} className="hover:bg-gray-50 dark:hover:bg-gray-600/50 transition-colors">
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="text-sm font-semibold text-primary-600 dark:text-primary-400">
-                        {ipo.ticker || '—'}
-                      </span>
+                      {ipo.ticker && ipo.ticker !== 'N/A' ? (
+                        <button
+                          onClick={() => openIpoModal(ipo)}
+                          className="text-sm font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300 hover:underline cursor-pointer"
+                        >
+                          {ipo.ticker}
+                        </button>
+                      ) : (
+                        <span className="text-sm text-gray-400 dark:text-gray-500">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-sm text-gray-900 dark:text-white font-medium truncate max-w-xs">{ipo.issuer_name}</div>
-                      {ipo.security_type && (
-                        <div className="text-xs text-gray-500 dark:text-gray-400">{ipo.security_type}</div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {ipo.security_type && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400">{ipo.security_type}</span>
+                        )}
+                        {ipo.announced_date && (
+                          <span className="text-xs text-gray-400 dark:text-gray-500">
+                            Announced {new Date(ipo.announced_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {ipoTab === 'rumored' ? (
@@ -940,6 +1002,218 @@ return (
           </button>
         </div>
       )}
+
+      {/* ── IPO Detail Modal ─────────────────────────────────────── */}
+      {ipoModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeIpoModal} />
+
+          {/* Modal */}
+          <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto border border-gray-200 dark:border-gray-600">
+            {/* Header */}
+            <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-600 px-6 py-4 flex items-center justify-between z-10">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  <span className="text-primary-600 dark:text-primary-400">{ipoModalTicker}</span>
+                  {ipoModalCompany?.name && (
+                    <span className="text-base font-normal text-gray-500 dark:text-gray-400">· {ipoModalCompany.name}</span>
+                  )}
+                </h2>
+                {ipoModalIpo?.security_type && (
+                  <span className="text-xs text-gray-500 dark:text-gray-400">{ipoModalIpo.security_type}</span>
+                )}
+              </div>
+              <button onClick={closeIpoModal} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {ipoModalLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+                <span className="ml-3 text-gray-500 dark:text-gray-400">Loading data for {ipoModalTicker}...</span>
+              </div>
+            ) : (
+              <div className="px-6 py-4 space-y-5">
+
+                {/* ── Price & Quote Row ───────────────────────────── */}
+                {ipoModalQuote ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 uppercase">Current Price</div>
+                      <div className="text-xl font-bold text-gray-900 dark:text-white">
+                        ${ipoModalQuote.price?.toFixed(2) ?? '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 uppercase">Change</div>
+                      <div className={`text-lg font-semibold ${(ipoModalQuote.change_percent ?? 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        {(ipoModalQuote.change_percent ?? 0) >= 0 ? '+' : ''}{ipoModalQuote.change_percent?.toFixed(2) ?? '—'}%
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 uppercase">Volume</div>
+                      <div className="text-sm font-medium text-gray-900 dark:text-white">
+                        {ipoModalQuote.volume ? (ipoModalQuote.volume >= 1e6 ? `${(ipoModalQuote.volume / 1e6).toFixed(1)}M` : ipoModalQuote.volume.toLocaleString()) : '—'}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 uppercase">Day Range</div>
+                      <div className="text-sm font-medium text-gray-900 dark:text-white">
+                        {ipoModalQuote.low?.toFixed(2) ?? '—'} – {ipoModalQuote.high?.toFixed(2) ?? '—'}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3">
+                    <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                      No live quote available — this ticker may not be actively trading yet.
+                    </p>
+                  </div>
+                )}
+
+                {/* ── IPO Details ─────────────────────────────────── */}
+                {ipoModalIpo && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">IPO Details</h3>
+                    <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+                      <div>
+                        <span className="text-gray-500 dark:text-gray-400">Listing Date</span>
+                        <div className="font-medium text-gray-900 dark:text-white">
+                          {ipoModalIpo.listing_date
+                            ? new Date(ipoModalIpo.listing_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            : 'TBD'}
+                        </div>
+                      </div>
+                      {ipoModalIpo.announced_date && (
+                        <div>
+                          <span className="text-gray-500 dark:text-gray-400">Announced</span>
+                          <div className="font-medium text-gray-900 dark:text-white">
+                            {new Date(ipoModalIpo.announced_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </div>
+                        </div>
+                      )}
+                      <div>
+                        <span className="text-gray-500 dark:text-gray-400">Issue Price</span>
+                        <div className="font-medium text-gray-900 dark:text-white">
+                          {ipoModalIpo.final_issue_price ? `$${ipoModalIpo.final_issue_price.toFixed(2)}` : '—'}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 dark:text-gray-400">Price Range</span>
+                        <div className="font-medium text-gray-900 dark:text-white">
+                          {ipoModalIpo.lowest_offer_price && ipoModalIpo.highest_offer_price
+                            ? `$${ipoModalIpo.lowest_offer_price.toFixed(2)} – $${ipoModalIpo.highest_offer_price.toFixed(2)}`
+                            : '—'}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 dark:text-gray-400">Offer Size</span>
+                        <div className="font-medium text-gray-900 dark:text-white">
+                          {ipoModalIpo.total_offer_size ? `$${(ipoModalIpo.total_offer_size / 1e6).toFixed(1)}M` : '—'}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 dark:text-gray-400">Exchange</span>
+                        <div className="font-medium text-gray-900 dark:text-white">
+                          {ipoModalIpo.primary_exchange || '—'}
+                        </div>
+                      </div>
+                      {ipoModalIpo.max_shares_offered && (
+                        <div>
+                          <span className="text-gray-500 dark:text-gray-400">Shares Offered</span>
+                          <div className="font-medium text-gray-900 dark:text-white">
+                            {ipoModalIpo.min_shares_offered && ipoModalIpo.min_shares_offered !== ipoModalIpo.max_shares_offered
+                              ? `${(ipoModalIpo.min_shares_offered / 1e6).toFixed(1)}M – ${(ipoModalIpo.max_shares_offered / 1e6).toFixed(1)}M`
+                              : `${(ipoModalIpo.max_shares_offered / 1e6).toFixed(1)}M`}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Company Description ─────────────────────────── */}
+                {ipoModalCompany?.description && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">About</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed line-clamp-4">
+                      {ipoModalCompany.description}
+                    </p>
+                    {ipoModalCompany.sector && (
+                      <div className="mt-2 flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300">
+                          {ipoModalCompany.sector}
+                        </span>
+                        {ipoModalCompany.industry && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300">
+                            {ipoModalCompany.industry}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── News Articles ───────────────────────────────── */}
+                {ipoModalNews.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">Recent News</h3>
+                    <div className="space-y-2">
+                      {ipoModalNews.map((article: any, i: number) => (
+                        <a
+                          key={i}
+                          href={article.article_url || article.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-600/50 rounded-lg p-3 transition-colors"
+                        >
+                          <div className="text-sm font-medium text-gray-900 dark:text-white line-clamp-2">{article.title}</div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs text-gray-500 dark:text-gray-400">{article.publisher || article.source}</span>
+                            {article.published_utc && (
+                              <span className="text-xs text-gray-400 dark:text-gray-500">
+                                {new Date(article.published_utc).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              </span>
+                            )}
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Action Buttons ──────────────────────────────── */}
+                <div className="flex items-center gap-3 pt-2 border-t border-gray-200 dark:border-gray-600">
+                  <button
+                    onClick={() => { closeIpoModal(); navigate(`/stocks?ticker=${encodeURIComponent(ipoModalTicker)}`); }}
+                    className="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    📊 Stock Details
+                  </button>
+                  <button
+                    onClick={() => { closeIpoModal(); navigate(`/technical-analysis?ticker=${encodeURIComponent(ipoModalTicker)}`); }}
+                    className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg transition-colors"
+                  >
+                    📈 Technical Analysis
+                  </button>
+                  <button
+                    onClick={() => { closeIpoModal(); navigate(`/dcf-valuation?ticker=${encodeURIComponent(ipoModalTicker)}`); }}
+                    className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 text-sm font-medium rounded-lg transition-colors"
+                  >
+                    🏦 DCF Valuation
+                  </button>
+                </div>
+
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   </div>
 );

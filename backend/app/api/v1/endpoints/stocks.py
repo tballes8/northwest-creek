@@ -305,13 +305,19 @@ async def get_stock_news(
 @router.get("/ipos")
 async def get_ipos():
     """
-    Get upcoming, pending, and rumored IPOs from Massive API.
+    Get upcoming, pending, and rumored IPOs from Polygon API.
+    "Upcoming" (status=new) is filtered to the last 30 days to avoid
+    showing stale historical listings.
     """
     import httpx
     from app.config import settings
+    from datetime import datetime, timedelta
     
     api_key = settings.MASSIVE_API_KEY
     base_url = "https://api.polygon.io/vX/reference/ipos"
+    
+    # Only show "new" IPOs from the last 30 days
+    thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
     
     results = {
         "upcoming": [],
@@ -323,16 +329,18 @@ async def get_ipos():
         async with httpx.AsyncClient(timeout=15.0) as client:
             for status_key, ipo_status in [("upcoming", "new"), ("pending", "pending"), ("rumored", "rumor")]:
                 try:
-                    resp = await client.get(
-                        base_url,
-                        params={
-                            "ipo_status": ipo_status,
-                            "order": "desc",
-                            "sort": "listing_date",
-                            "limit": 15,
-                            "apiKey": api_key,
-                        },
-                    )
+                    params = {
+                        "ipo_status": ipo_status,
+                        "order": "desc",
+                        "sort": "listing_date",
+                        "limit": 25,
+                        "apiKey": api_key,
+                    }
+                    # Date filter: only "upcoming" gets the 30-day cutoff
+                    if ipo_status == "new":
+                        params["listing_date.gte"] = thirty_days_ago
+                    
+                    resp = await client.get(base_url, params=params)
                     if resp.status_code == 200:
                         data = resp.json()
                         items = []
@@ -341,6 +349,7 @@ async def get_ipos():
                                 "ticker": ipo.get("ticker", "N/A"),
                                 "issuer_name": ipo.get("issuer_name", "Unknown"),
                                 "listing_date": ipo.get("listing_date"),
+                                "announced_date": ipo.get("announced_date"),
                                 "final_issue_price": ipo.get("final_issue_price"),
                                 "lowest_offer_price": ipo.get("lowest_offer_price"),
                                 "highest_offer_price": ipo.get("highest_offer_price"),
@@ -348,7 +357,12 @@ async def get_ipos():
                                 "shares_outstanding": ipo.get("shares_outstanding"),
                                 "primary_exchange": ipo.get("primary_exchange"),
                                 "security_type": ipo.get("security_type"),
+                                "security_description": ipo.get("security_description"),
                                 "ipo_status": ipo.get("ipo_status"),
+                                "last_updated": ipo.get("last_updated"),
+                                "currency_code": ipo.get("currency_code"),
+                                "min_shares_offered": ipo.get("min_shares_offered"),
+                                "max_shares_offered": ipo.get("max_shares_offered"),
                             })
                         results[status_key] = items
                     else:
