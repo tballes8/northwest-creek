@@ -41,9 +41,9 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = Field(default="http://localhost:3000", env="FRONTEND_URL")
     
     # Twilio SMS Settings
-    TWILIO_ACCOUNT_SID: str = ""
-    TWILIO_AUTH_TOKEN: str = ""
-    TWILIO_FROM_NUMBER: str = ""  # E.164: +12085559999
+    TWILIO_ACCOUNT_SID: str = "AC62d56fecf4b599e4aeb745ea19315160"
+    TWILIO_AUTH_TOKEN: str = "9c8f34caaf3e7ffe67356805d8326406"
+    TWILIO_FROM_NUMBER: str = "+18887115474"  # E.164: +12085559999
 
     # Stripe Settings
     STRIPE_SECRET_KEY: str = Field(default="", env="STRIPE_SECRET_KEY")
