@@ -39,6 +39,10 @@ class UserInDB(UserBase):
     subscription_tier: str
     created_at: datetime
     
+    # Phone / SMS fields (never expose raw number — mask in response)
+    phone_verified: bool = False
+    phone_last_four: Optional[str] = None
+    
     class Config:
         from_attributes = True
 
@@ -76,3 +80,28 @@ class ChangePasswordRequest(BaseModel):
     """Schema for authenticated password change (requires current password)"""
     current_password: str
     new_password: str = Field(..., min_length=8, description="Password must be at least 8 characters")
+
+
+# --- Phone / SMS Verification ---
+
+class PhoneSubmitRequest(BaseModel):
+    """Submit a phone number to receive an OTP code"""
+    phone_number: str = Field(
+        ...,
+        min_length=10,
+        max_length=20,
+        description="US phone number in any format — will be normalized to E.164"
+    )
+
+
+class PhoneVerifyRequest(BaseModel):
+    """Verify phone ownership with the OTP code"""
+    code: str = Field(..., min_length=6, max_length=6, description="6-digit verification code")
+
+
+class PhoneStatusResponse(BaseModel):
+    """Current phone verification status"""
+    has_phone: bool
+    phone_verified: bool
+    phone_last_four: Optional[str] = None
+    message: str

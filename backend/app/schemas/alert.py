@@ -13,6 +13,7 @@ class AlertCreate(BaseModel):
     target_price: float = Field(..., gt=0, description="Target price to trigger alert")
     condition: str = Field(..., pattern="^(above|below)$", description="'above' or 'below'")
     notes: Optional[str] = Field(None, max_length=500)
+    sms_enabled: bool = Field(False, description="Send SMS text when this alert triggers")
 
 
 class AlertUpdate(BaseModel):
@@ -21,6 +22,7 @@ class AlertUpdate(BaseModel):
     condition: Optional[str] = Field(None, pattern="^(above|below)$")
     notes: Optional[str] = Field(None, max_length=500)
     is_active: Optional[bool] = None
+    sms_enabled: Optional[bool] = None
 
 
 class AlertResponse(BaseModel):
@@ -30,6 +32,7 @@ class AlertResponse(BaseModel):
     target_price: float
     condition: str
     is_active: bool
+    sms_enabled: bool = False
     triggered_at: Optional[datetime] = None
     notes: Optional[str] = None
     created_at: datetime
@@ -54,4 +57,3 @@ class AlertsSummary(BaseModel):
     triggered_alerts: int
     alerts_used: int
     alerts_limit: int
-    

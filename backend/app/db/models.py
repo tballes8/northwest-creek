@@ -25,6 +25,13 @@ class User(Base):
     
     # Subscription tiers: free, casual, active, professional
     subscription_tier = Column(String(50), default="free")
+    
+    # Phone / SMS alert fields
+    phone_number = Column(String(20), nullable=True)
+    phone_verified = Column(Boolean, default=False)
+    phone_otp_hash = Column(String(255), nullable=True)
+    phone_otp_expires = Column(DateTime(timezone=True), nullable=True)
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
@@ -32,6 +39,11 @@ class User(Base):
     watchlists = relationship("Watchlist", back_populates="user", cascade="all, delete-orphan")
     portfolio = relationship("Portfolio", back_populates="user", cascade="all, delete-orphan")
     alerts = relationship("PriceAlert", back_populates="user", cascade="all, delete-orphan")
+
+    @property
+    def phone_last_four(self) -> str | None:
+        """Masked phone number for API responses — never expose full number."""
+        return self.phone_number[-4:] if self.phone_number else None
 
 
 class Watchlist(Base):
@@ -74,6 +86,7 @@ class PriceAlert(Base):
     target_price = Column(Numeric(precision=18, scale=2), nullable=False)
     condition = Column(String(10), nullable=False)  # 'above' or 'below'
     is_active = Column(Boolean, default=True)
+    sms_enabled = Column(Boolean, default=False)
     triggered_at = Column(DateTime(timezone=True), nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

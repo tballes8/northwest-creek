@@ -9,6 +9,8 @@ from app.api.v1.endpoints import (
     intraday, live_prices, financials
 )
 from app.api.v1.endpoints.content import router as content_router
+from app.api.v1.endpoints import phone
+
 
 settings = get_settings()
 
@@ -75,3 +77,4 @@ app.include_router(intraday.router, prefix="/api/v1/intraday", tags=["Intraday"]
 app.include_router(live_prices.router, prefix="/api/v1/live-prices", tags=["Live Prices"])
 app.include_router(content_router, prefix="/api/v1/content", tags=["content"])
 app.include_router(financials.router, prefix="/api/v1/financials", tags=["financials"])
+app.include_router(phone.router, prefix=f"/api/{settings.API_VERSION}/phone", tags=["Phone"])

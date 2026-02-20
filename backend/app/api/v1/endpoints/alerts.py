@@ -17,6 +17,7 @@ from app.schemas.alert import (
 from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.services.market_data import market_data_service
+from app.core.tier_limits import can_use_sms_alerts
 
 router = APIRouter()
 
@@ -98,12 +99,27 @@ async def create_alert(
             detail=f"Target price ${alert.target_price} is already above current price ${current_price:.2f}. Use 'above' condition or set a lower target."
         )
     
+    # Validate SMS opt-in: tier must allow it and phone must be verified
+    sms_enabled = alert.sms_enabled if hasattr(alert, 'sms_enabled') else False
+    if sms_enabled:
+        if not can_use_sms_alerts(current_user.subscription_tier):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="SMS text alerts require an Active or Professional subscription."
+            )
+        if not current_user.phone_verified:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Phone verification required for text alerts. Please verify your phone first."
+            )
+    
     # Create alert
     price_alert = PriceAlert(
         user_id=current_user.id,
         ticker=alert.ticker.upper(),
         target_price=Decimal(str(alert.target_price)),
         condition=alert.condition,
+        sms_enabled=sms_enabled,
         notes=alert.notes
     )
     
@@ -122,6 +138,7 @@ async def create_alert(
         target_price=float(price_alert.target_price),
         condition=price_alert.condition,
         is_active=price_alert.is_active,
+        sms_enabled=price_alert.sms_enabled,
         triggered_at=price_alert.triggered_at,
         notes=price_alert.notes,
         created_at=price_alert.created_at,
@@ -218,6 +235,7 @@ async def get_alerts(
             target_price=float(alert.target_price),
             condition=alert.condition,
             is_active=alert.is_active,
+            sms_enabled=alert.sms_enabled,
             triggered_at=alert.triggered_at,
             notes=alert.notes,
             created_at=alert.created_at,
@@ -302,6 +320,20 @@ async def update_alert(
         alert.notes = update_data.notes
     if update_data.is_active is not None:
         alert.is_active = update_data.is_active
+    if update_data.sms_enabled is not None:
+        if update_data.sms_enabled:
+            # Validate tier + phone before enabling
+            if not can_use_sms_alerts(current_user.subscription_tier):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="SMS text alerts require an Active or Professional subscription."
+                )
+            if not current_user.phone_verified:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Phone verification required for text alerts."
+                )
+        alert.sms_enabled = update_data.sms_enabled
     
     await db.commit()
     await db.refresh(alert)
@@ -330,6 +362,7 @@ async def update_alert(
         target_price=float(alert.target_price),
         condition=alert.condition,
         is_active=alert.is_active,
+        sms_enabled=alert.sms_enabled,
         triggered_at=alert.triggered_at,
         notes=alert.notes,
         created_at=alert.created_at,

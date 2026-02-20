@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     SALES_EMAIL: str = Field(default="", env="SALES_EMAIL")
     FROM_NAME: str = Field(default="Northwest Creek", env="FROM_NAME")
     FRONTEND_URL: str = Field(default="http://localhost:3000", env="FRONTEND_URL")
+    
+    # Twilio SMS Settings
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_FROM_NUMBER: str = ""  # E.164: +12085559999
 
     # Stripe Settings
     STRIPE_SECRET_KEY: str = Field(default="", env="STRIPE_SECRET_KEY")
