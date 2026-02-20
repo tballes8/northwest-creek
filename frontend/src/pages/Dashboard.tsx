@@ -397,6 +397,10 @@ const Dashboard: React.FC = () => {
     setIpoModalQuote(null);
     setIpoModalCompany(null);
     setIpoModalNews([]);
+    // Pre-check watchlist status
+    setIpoWatchlistStatus(
+      watchlistTickers.includes(ipo.ticker.toUpperCase()) ? 'already' : 'idle'
+    );
 
     const token = localStorage.getItem('access_token');
     const headers = { Authorization: `Bearer ${token}` };
@@ -419,6 +423,35 @@ const Dashboard: React.FC = () => {
     setIpoModalOpen(false);
     setIpoModalTicker('');
     setIpoModalIpo(null);
+    setIpoWatchlistStatus('idle');
+  };
+
+  const [ipoWatchlistStatus, setIpoWatchlistStatus] = useState<'idle' | 'adding' | 'added' | 'already' | 'error'>('idle');
+
+  const handleIpoAddToWatchlist = async () => {
+    if (!ipoModalTicker || ipoModalTicker === 'N/A') return;
+
+    // Check if already on watchlist
+    if (watchlistTickers.includes(ipoModalTicker.toUpperCase())) {
+      setIpoWatchlistStatus('already');
+      return;
+    }
+
+    setIpoWatchlistStatus('adding');
+    try {
+      await watchlistAPI.add({ ticker: ipoModalTicker, notes: `IPO — ${ipoModalIpo?.issuer_name || ''}` });
+      setIpoWatchlistStatus('added');
+      // Update local watchlist state so the check works immediately
+      setWatchlistTickers(prev => [...prev, ipoModalTicker.toUpperCase()]);
+      setStats(prev => ({ ...prev, watchlistCount: prev.watchlistCount + 1 }));
+    } catch (err: any) {
+      // Backend may return 400 if duplicate
+      if (err.response?.status === 400) {
+        setIpoWatchlistStatus('already');
+      } else {
+        setIpoWatchlistStatus('error');
+      }
+    }
   };
 
   const handleRefresh = async () => {
@@ -1024,11 +1057,50 @@ return (
                   <span className="text-xs text-gray-500 dark:text-gray-400">{ipoModalIpo.security_type}</span>
                 )}
               </div>
-              <button onClick={closeIpoModal} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleIpoAddToWatchlist}
+                  disabled={ipoWatchlistStatus === 'adding' || ipoWatchlistStatus === 'added' || ipoWatchlistStatus === 'already'}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors flex items-center gap-1.5 ${
+                    ipoWatchlistStatus === 'added'
+                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                      : ipoWatchlistStatus === 'already'
+                      ? 'bg-gray-100 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-default'
+                      : ipoWatchlistStatus === 'error'
+                      ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50'
+                      : 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 hover:bg-primary-200 dark:hover:bg-primary-900/50'
+                  }`}
+                >
+                  {ipoWatchlistStatus === 'adding' ? (
+                    <>
+                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-current"></div>
+                      Adding...
+                    </>
+                  ) : ipoWatchlistStatus === 'added' ? (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      Added to Watchlist
+                    </>
+                  ) : ipoWatchlistStatus === 'already' ? (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      On Watchlist
+                    </>
+                  ) : ipoWatchlistStatus === 'error' ? (
+                    <>⚠ Retry</>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
+                      Add to Watchlist
+                    </>
+                  )}
+                </button>
+                <button onClick={closeIpoModal} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                  <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             {ipoModalLoading ? (
