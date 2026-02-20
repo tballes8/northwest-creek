@@ -51,6 +51,9 @@ const Alerts: React.FC = () => {
   // Which alert row is being toggled for SMS (inline verify trigger)
   const [smsToggleAlertId, setSmsToggleAlertId] = useState<string | null>(null);
 
+  // Upgrade prompt modal
+  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -227,6 +230,11 @@ const Alerts: React.FC = () => {
   };
 
   const handleToggleSms = async (alertId: string, currentSms: boolean) => {
+    // Gate: lower tiers see upgrade prompt
+    if (!canUseSms()) {
+      setShowUpgradePrompt(true);
+      return;
+    }
     if (!currentSms) {
       // Turning ON — need verified phone
       if (!hasVerifiedPhone()) {
@@ -539,9 +547,8 @@ const Alerts: React.FC = () => {
                 />
               </div>
 
-              {/* SMS Text Alert Section */}
-              {canUseSms() && (
-                <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-800">
+              {/* SMS Text Alert Section — visible to all tiers */}
+              <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-800">
                   <div className="flex items-start gap-3">
                     <input
                       type="checkbox"
@@ -549,6 +556,11 @@ const Alerts: React.FC = () => {
                       checked={newSmsEnabled}
                       onChange={(e) => {
                         const checked = e.target.checked;
+                        if (!canUseSms()) {
+                          e.preventDefault();
+                          setShowUpgradePrompt(true);
+                          return;
+                        }
                         if (checked && !hasVerifiedPhone()) {
                           openPhoneVerify();
                         }
@@ -563,7 +575,7 @@ const Alerts: React.FC = () => {
                         </svg>
                         Send me a text when this alert triggers
                       </label>
-                      {hasVerifiedPhone() ? (
+                      {canUseSms() && hasVerifiedPhone() ? (
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           Texts will go to &bull;&bull;&bull;-{phoneStatus?.phone_last_four}.{' '}
                           <button
@@ -574,9 +586,13 @@ const Alerts: React.FC = () => {
                             Change number
                           </button>
                         </p>
-                      ) : (
+                      ) : canUseSms() ? (
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           You'll need to verify your phone number first.
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          Available on Active and Professional plans.
                         </p>
                       )}
                       <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
@@ -585,20 +601,6 @@ const Alerts: React.FC = () => {
                     </div>
                   </div>
                 </div>
-              )}
-
-              {/* Upgrade prompt for lower tiers */}
-              {!canUseSms() && user?.subscription_tier !== 'free' && (
-                <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-800">
-                  <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                    </svg>
-                    Text alerts available on Active ($40/mo) and Professional ($100/mo) plans.{' '}
-                    <Link to="/pricing" className="text-primary-500 hover:text-primary-400 underline">Upgrade</Link>
-                  </div>
-                </div>
-              )}
 
               <div className="flex gap-3">
                 <button
@@ -655,9 +657,7 @@ const Alerts: React.FC = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Condition</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Target Price</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                  {canUseSms() && (
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">SMS</th>
-                  )}
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">SMS</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Notes</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -710,8 +710,7 @@ const Alerts: React.FC = () => {
                         </span>
                       )}
                     </td>
-                    {canUseSms() && (
-                      <td className="px-4 py-4 whitespace-nowrap text-center">
+                    <td className="px-4 py-4 whitespace-nowrap text-center">
                         {!alert.triggered_at ? (
                           <button
                             onClick={() => handleToggleSms(alert.id, alert.sms_enabled)}
@@ -733,7 +732,6 @@ const Alerts: React.FC = () => {
                           <span className="text-gray-300 dark:text-gray-600">—</span>
                         )}
                       </td>
-                    )}
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
                         {alert.notes || '-'}
@@ -762,6 +760,54 @@ const Alerts: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* ─── Upgrade Prompt Modal ─────────────────────────────── */}
+      {showUpgradePrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+            <div className="bg-gradient-to-r from-primary-50 to-purple-50 dark:from-primary-900/30 dark:to-purple-900/30 px-6 py-5 border-b dark:border-gray-700 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <svg className="w-5 h-5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+                Text Alerts
+              </h3>
+              <button
+                onClick={() => setShowUpgradePrompt(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="px-6 py-5">
+              <p className="text-gray-700 dark:text-gray-300 mb-4">
+                SMS text alerts are available on the <strong className="text-blue-500">Active</strong> ($40/mo) and <strong className="text-purple-500">Professional</strong> ($100/mo) plans.
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                Get a text message the moment your price alerts trigger — never miss a move.
+              </p>
+              <div className="flex gap-3">
+                <Link
+                  to="/pricing"
+                  onClick={() => setShowUpgradePrompt(false)}
+                  className="flex-1 text-center px-5 py-2.5 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-700 hover:to-primary-600 text-white rounded-lg font-semibold transition-all shadow"
+                >
+                  View Plans
+                </Link>
+                <button
+                  onClick={() => setShowUpgradePrompt(false)}
+                  className="flex-1 px-5 py-2.5 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-semibold transition-colors"
+                >
+                  Maybe Later
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── Phone Verification Modal ─────────────────────────── */}
       {showPhoneVerify && (
