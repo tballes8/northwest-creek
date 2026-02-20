@@ -1,6 +1,7 @@
 """
 Tier limits and validation
 Updated to match tier_levels.txt — all features have numeric limits
+Sprint 8: added sms_alerts and indicator_alerts limits
 """
 
 TIER_LIMITS = {
@@ -8,6 +9,8 @@ TIER_LIMITS = {
         "watchlist_stocks": 5,
         "portfolio_entries": 5,
         "alerts": 0,
+        "sms_alerts": False,
+        "indicator_alerts": 0,
         "stock_reviews": 5,           # total (lifetime)
         "dcf_valuations": 5,          # total (lifetime)
         "technical_analysis": 5,      # total (lifetime)
@@ -18,6 +21,8 @@ TIER_LIMITS = {
         "watchlist_stocks": 20,
         "portfolio_entries": 20,
         "alerts": 5,
+        "sms_alerts": False,
+        "indicator_alerts": 0,
         "stock_reviews": 5,           # per week
         "dcf_valuations": 5,          # per week
         "technical_analysis": 5,      # per week
@@ -28,6 +33,8 @@ TIER_LIMITS = {
         "watchlist_stocks": 45,
         "portfolio_entries": 45,
         "alerts": 20,
+        "sms_alerts": True,
+        "indicator_alerts": 0,
         "stock_reviews": 5,           # per day
         "dcf_valuations": 5,          # per day
         "technical_analysis": 5,      # per day
@@ -38,6 +45,8 @@ TIER_LIMITS = {
         "watchlist_stocks": 75,
         "portfolio_entries": 75,
         "alerts": 50,
+        "sms_alerts": True,
+        "indicator_alerts": 20,
         "stock_reviews": 20,          # per day
         "dcf_valuations": 20,         # per day
         "technical_analysis": 20,     # per day
@@ -74,6 +83,11 @@ def can_add_alert_entry(tier: str, current_count: int) -> bool:
     """Check if user can add more alerts"""
     limit = get_tier_limit(tier, "alerts")
     return current_count < limit
+
+
+def can_use_sms_alerts(tier: str) -> bool:
+    """Check if user's tier allows SMS text alerts"""
+    return bool(get_tier_limit(tier, "sms_alerts"))
 
 
 def can_use_feature(tier: str, feature: str, current_count: int) -> bool:

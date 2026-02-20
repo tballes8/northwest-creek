@@ -6,10 +6,9 @@ from app.config import get_settings
 from app.api.v1.endpoints import (
     alerts, auth, dcf_valuation, indicators, portfolio, 
     stocks, watchlist, technical_analysis, stripe_payments,
-    intraday, live_prices, financials
+    intraday, live_prices, financials, phone
 )
 from app.api.v1.endpoints.content import router as content_router
-from app.api.v1.endpoints import phone
 
 
 settings = get_settings()
