@@ -2,6 +2,7 @@
 Market data service - Polygon.io integration
 """
 import httpx, os
+import pandas as pd
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone, timedelta
 from app.config import get_settings
@@ -511,172 +512,78 @@ class MarketDataService:
                 "has_dividends": False,
             }
 
-    def batch_get_ticker_types(self, tickers: List[str]) -> Dict[str, str]:
+    # Security types allowed in gainers/losers (excludes WARRANT, RIGHT, UNIT)
+    ALLOWED_SECURITY_TYPES = {'CS', 'ADRC', 'PFD', 'ETF', 'ETS', 'ETN', 'ETV'}
+
+    def _snapshot_to_df(self) -> pd.DataFrame:
         """
-        Batch-fetch security types (CS, WARRANT, ETF, etc.) using universal snapshots.
-        Returns dict of ticker → type.  Missing tickers return empty string.
+        Load all stock snapshots into a DataFrame and filter out
+        non-equity security types (warrants, rights, units, etc.).
         """
-        if not tickers:
-            return {}
-        try:
-            snapshots = list(self.rest_client.list_universal_snapshots(
-                ticker_any_of=tickers
-            ))
-            type_map: Dict[str, str] = {}
-            for snap in snapshots:
-                t = getattr(snap, 'ticker', None)
-                st = getattr(snap, 'type', None) or ''
-                if t:
-                    type_map[t] = st
-            return type_map
-        except Exception as e:
-            print(f"⚠️ batch_get_ticker_types failed: {e}")
-            return {}
+        snapshot = self.rest_client.get_snapshot_all("stocks")
+
+        rows = []
+        for item in snapshot:
+            if isinstance(item, TickerSnapshot) and isinstance(item.prev_day, Agg):
+                o = item.prev_day.open
+                c = item.prev_day.close
+                if isinstance(o, float) and isinstance(c, float) and o != 0:
+                    rows.append({
+                        'ticker': item.ticker,
+                        'type': getattr(item, 'type', None) or '',
+                        'open': round(o, 2),
+                        'close': round(c, 2),
+                        'change_percent': round((c - o) / o * 100, 2),
+                    })
+
+        df = pd.DataFrame(rows)
+        if df.empty:
+            return df
+
+        # Keep allowed types + unknown (empty) so we don't drop stocks
+        # whose type field isn't populated on the v2 snapshot endpoint
+        df = df[df['type'].isin(self.ALLOWED_SECURITY_TYPES) | (df['type'] == '')]
+        return df.drop(columns=['type'])
 
     async def get_top_gainers(self, limit: int = 10) -> Dict[str, Any]:
-        """
-        Get top stock gainers from Massive API
-        
-        Args:
-            limit: Number of top gainers to return (default: 10, max: 50)
-        
-        Returns:
-            dict: Response containing timestamp and list of top gainers
-            
-        Raises:
-            ValueError: If limit is invalid
-            Exception: If API request fails
-        """
+        """Get top stock gainers, excluding warrants/rights/units"""
         try:
-            # Validate limit
             if limit < 1 or limit > 50:
                 raise ValueError("Limit must be between 1 and 50")
-            
-            # Fetch stock snapshots using the initialized REST client
-            snapshot = self.rest_client.get_snapshot_all("stocks")
-            results = []
-            
-            # Process snapshots
-            for item in snapshot:
-                if isinstance(item, TickerSnapshot):
-                    if isinstance(item.prev_day, Agg):
-                        if isinstance(item.prev_day.open, float) and isinstance(item.prev_day.close, float):
-                            # Avoid division by zero
-                            if item.prev_day.open != 0:
-                                percent_change = (
-                                    (item.prev_day.close - item.prev_day.open)
-                                    / item.prev_day.open
-                                    * 100
-                                )
-                                results.append({
-                                    'ticker': item.ticker,
-                                    'open': round(item.prev_day.open, 2),
-                                    'close': round(item.prev_day.close, 2),
-                                    'change_percent': round(percent_change, 2)
-                                })
-            
-            # Sort by percentage change (biggest gainers first)
-            results.sort(key=lambda x: x['change_percent'], reverse=True)
-            
-            # ── Type-based warrant filtering ──────────────────────────────
-            # Take extra candidates, batch-check their Polygon type, keep only
-            # common stocks (CS) and ADRs (ADRC).  This catches single-W
-            # warrants like SOUNW that heuristic filters can't safely detect
-            # without false-positiving on legit tickers like MATW.
-            candidate_pool = results[:limit * 5]
-            candidate_tickers = [r['ticker'] for r in candidate_pool]
-            type_map = self.batch_get_ticker_types(candidate_tickers)
 
-            ALLOWED_TYPES = {'CS', 'ADRC', 'PFD', 'ETF', 'ETS', 'ETN', 'ETV'}
-            filtered = []
-            for r in candidate_pool:
-                tkr_type = type_map.get(r['ticker'], '')
-                if tkr_type in ALLOWED_TYPES:
-                    filtered.append(r)
-                elif tkr_type == '':
-                    # Type unknown (not in snapshot) — keep it, heuristic filter
-                    # in stocks.py will catch separator-pattern warrants
-                    filtered.append(r)
-                # else: WARRANT, RIGHT, UNIT, ETF, etc. — excluded
+            df = self._snapshot_to_df()
+            top = (
+                df.sort_values('change_percent', ascending=False)
+                  .head(limit)
+                  .to_dict('records')
+            ) if not df.empty else []
 
-            top_gainers = filtered[:limit]
-            
             return {
                 'timestamp': datetime.now().isoformat(),
                 'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'top_gainers': top_gainers
+                'top_gainers': top,
             }
-            
         except Exception as e:
             raise Exception(f"Failed to fetch top gainers: {str(e)}")
-    
+
     async def get_top_losers(self, limit: int = 10) -> Dict[str, Any]:
-        """
-        Get top stock losers from Massive API
-        
-        Args:
-            limit: Number of top losers to return (default: 10, max: 50)
-        
-        Returns:
-            dict: Response containing timestamp and list of top losers
-            
-        Raises:
-            ValueError: If limit is invalid
-            Exception: If API request fails
-        """
+        """Get top stock losers, excluding warrants/rights/units"""
         try:
-            # Validate limit
             if limit < 1 or limit > 50:
                 raise ValueError("Limit must be between 1 and 50")
-            
-            # Fetch stock snapshots using the initialized REST client
-            snapshot = self.rest_client.get_snapshot_all("stocks")
-            results = []
-            
-            # Process snapshots
-            for item in snapshot:
-                if isinstance(item, TickerSnapshot):
-                    if isinstance(item.prev_day, Agg):
-                        if isinstance(item.prev_day.open, float) and isinstance(item.prev_day.close, float):
-                            # Avoid division by zero
-                            if item.prev_day.open != 0:
-                                percent_change = (
-                                    (item.prev_day.close - item.prev_day.open)
-                                    / item.prev_day.open
-                                    * 100
-                                )
-                                results.append({
-                                    'ticker': item.ticker,
-                                    'open': round(item.prev_day.open, 2),
-                                    'close': round(item.prev_day.close, 2),
-                                    'change_percent': round(percent_change, 2)
-                                })
-            
-            # Sort by percentage change (biggest losers first)
-            results.sort(key=lambda x: x['change_percent'])
-            
-            # ── Type-based warrant filtering (same logic as gainers) ──────
-            candidate_pool = results[:limit * 5]
-            candidate_tickers = [r['ticker'] for r in candidate_pool]
-            type_map = self.batch_get_ticker_types(candidate_tickers)
 
-            ALLOWED_TYPES = {'CS', 'ADRC', 'PFD', 'ETF', 'ETS', 'ETN', 'ETV'}
-            filtered = []
-            for r in candidate_pool:
-                tkr_type = type_map.get(r['ticker'], '')
-                if tkr_type in ALLOWED_TYPES:
-                    filtered.append(r)
-                elif tkr_type == '':
-                    filtered.append(r)
+            df = self._snapshot_to_df()
+            top = (
+                df.sort_values('change_percent', ascending=True)
+                  .head(limit)
+                  .to_dict('records')
+            ) if not df.empty else []
 
-            top_losers = filtered[:limit]
-            
             return {
                 'timestamp': datetime.now().isoformat(),
                 'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'top_losers': top_losers
+                'top_losers': top,
             }
-            
         except Exception as e:
             raise Exception(f"Failed to fetch top losers: {str(e)}")
         
