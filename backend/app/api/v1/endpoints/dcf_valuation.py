@@ -11,6 +11,7 @@ from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.services.market_data import market_data_service
 from app.services.company_info import get_sector_from_yfinance, get_company_basics
+from app.services.financials import get_company_financials
 
 router = APIRouter()
 
@@ -242,6 +243,70 @@ async def get_dcf_suggestions(
         if adjustment["growth_note"]:
             discount_reasoning += f" ({adjustment['growth_note']})"
         
+        # ── Fetch actual financials from Polygon (non-blocking) ───────
+        actuals = None
+        dcf_sug = None
+        try:
+            fin_data = await get_company_financials(ticker)
+            dcf_sug = fin_data.get("dcf_suggestions") or {}
+            income = fin_data.get("income_statement") or {}
+            cash_flow_data = fin_data.get("cash_flow") or {}
+            ratios_data = fin_data.get("ratios") or {}
+
+            def _fmt_big(val):
+                """Format large numbers for display (e.g. 29800000 -> '29.8M')"""
+                if val is None:
+                    return None
+                aval = abs(val)
+                if aval >= 1e12:
+                    return f"${val / 1e12:.2f}T"
+                if aval >= 1e9:
+                    return f"${val / 1e9:.2f}B"
+                if aval >= 1e6:
+                    return f"${val / 1e6:.1f}M"
+                if aval >= 1e3:
+                    return f"${val / 1e3:.1f}K"
+                return f"${val:.2f}"
+
+            actuals = {
+                "revenue_ttm": income.get("revenue"),
+                "revenue_ttm_fmt": _fmt_big(income.get("revenue")),
+                "net_income_ttm": income.get("net_income"),
+                "net_income_ttm_fmt": _fmt_big(income.get("net_income")),
+                "fcf_ttm": cash_flow_data.get("free_cash_flow"),
+                "fcf_ttm_fmt": _fmt_big(cash_flow_data.get("free_cash_flow")),
+                "operating_cf_ttm": cash_flow_data.get("operating_cash_flow"),
+                "operating_cf_ttm_fmt": _fmt_big(cash_flow_data.get("operating_cash_flow")),
+                "gross_margin_pct": income.get("gross_margin_pct"),
+                "operating_margin_pct": income.get("operating_margin_pct"),
+                "net_margin_pct": income.get("net_margin_pct"),
+                "revenue_growth_yoy_pct": dcf_sug.get("revenue_growth_yoy_pct"),
+                "pe_ratio": ratios_data.get("pe_ratio"),
+                "ev_to_ebitda": ratios_data.get("ev_to_ebitda"),
+                "debt_to_equity": ratios_data.get("debt_to_equity"),
+                "current_ratio": ratios_data.get("current_ratio"),
+                "roe": ratios_data.get("roe"),
+                "diluted_eps": income.get("diluted_eps"),
+            }
+
+            # Check if we got meaningful actuals
+            has_actuals = actuals["revenue_ttm"] is not None or actuals["fcf_ttm"] is not None
+            if not has_actuals:
+                actuals = None
+
+            # Override sector defaults with actual-derived values when available
+            if dcf_sug:
+                if dcf_sug.get("suggested_growth_rate") is not None:
+                    suggested_growth = max(0.01, min(0.30, dcf_sug["suggested_growth_rate"] / 100))
+                    growth_reasoning = f"Based on trailing revenue growth of {dcf_sug['revenue_growth_yoy_pct']:.1f}%, conservatively adjusted" if dcf_sug.get("revenue_growth_yoy_pct") is not None else growth_reasoning
+                if dcf_sug.get("estimated_wacc") is not None:
+                    suggested_discount = max(0.06, min(0.20, dcf_sug["estimated_wacc"] / 100))
+                    discount_reasoning = f"Estimated WACC based on D/E ratio of {dcf_sug['debt_to_equity']:.2f}" if dcf_sug.get("debt_to_equity") is not None else discount_reasoning
+
+        except Exception as fin_err:
+            print(f"⚠️ Could not fetch financials for DCF suggestions ({ticker}): {fin_err}")
+            # Non-fatal — continue with sector defaults
+        
         return {
             "ticker": ticker.upper(),
             "company_name": company_name,
@@ -250,7 +315,7 @@ async def get_dcf_suggestions(
             "current_price": round(current_price, 2),
             "market_cap": market_cap,
             "size_category": size_category,
-            "security_type": security_type,  # CS, WARRANT, ETF, etc.
+            "security_type": security_type,
             "suggestions": {
                 "growth_rate": round(suggested_growth, 4),
                 "terminal_growth": round(suggested_terminal, 4),
@@ -262,7 +327,8 @@ async def get_dcf_suggestions(
                 "terminal_growth": profile["terminal_reasoning"],
                 "discount_rate": discount_reasoning,
                 "projection_years": profile["years_reasoning"]
-            }
+            },
+            "actuals": actuals,
         }
     
     except HTTPException:
@@ -332,15 +398,53 @@ async def calculate_dcf(
             market_cap = None
             security_type = "CS"
         
-        # For MVP, we'll use estimated free cash flow based on market cap
-        # In production, you'd fetch actual financial statements
-        if market_cap:
-            # Estimate FCF as 5% of market cap (conservative estimate)
-            current_fcf = market_cap * 0.05
-        else:
-            # Fallback: use a reasonable estimate based on stock price
-            current_fcf = current_price * 1000000  # Assume 1M shares outstanding
-        
+        # ── Fetch actual financials from Polygon ──────────────────────
+        current_fcf = None
+        shares_outstanding = None
+        fcf_source = None
+
+        try:
+            fin_data = await get_company_financials(ticker)
+            cash_flow_data = fin_data.get("cash_flow") or {}
+            income_data = fin_data.get("income_statement") or {}
+
+            # Priority 1: Actual TTM FCF (Operating CF - CapEx)
+            actual_fcf = cash_flow_data.get("free_cash_flow")
+            if actual_fcf is not None:
+                current_fcf = actual_fcf
+                fcf_source = "actual_ttm"
+            else:
+                # Priority 2: Operating cash flow alone (no CapEx data)
+                operating_cf = cash_flow_data.get("operating_cash_flow")
+                if operating_cf is not None:
+                    current_fcf = operating_cf
+                    fcf_source = "operating_cf"
+
+            # Shares outstanding from income statement (diluted)
+            diluted_shares = income_data.get("diluted_shares_outstanding")
+            if diluted_shares is not None and diluted_shares > 0:
+                shares_outstanding = diluted_shares
+
+        except Exception as fin_err:
+            print(f"⚠️ Could not fetch financials for DCF calc ({ticker}): {fin_err}")
+            # Non-fatal — fall through to market cap estimate
+
+        # Priority 3: Market cap estimate (fallback when no filings exist)
+        if current_fcf is None:
+            if market_cap:
+                current_fcf = market_cap * 0.05
+                fcf_source = "estimated_market_cap"
+            else:
+                current_fcf = current_price * 1000000
+                fcf_source = "estimated_price"
+
+        # Shares outstanding fallback
+        if shares_outstanding is None:
+            if market_cap and current_price > 0:
+                shares_outstanding = market_cap / current_price
+            else:
+                shares_outstanding = 1000000
+
         # Project future cash flows
         projected_cash_flows = []
         for year in range(1, projection_years + 1):
@@ -361,12 +465,6 @@ async def calculate_dcf(
         # Calculate enterprise value
         sum_pv_cash_flows = sum(cf["present_value"] for cf in projected_cash_flows)
         enterprise_value = sum_pv_cash_flows + terminal_pv
-        
-        # Estimate shares outstanding (in production, fetch from API)
-        if market_cap and current_price > 0:
-            shares_outstanding = market_cap / current_price
-        else:
-            shares_outstanding = 1000000  # Fallback estimate
         
         # Calculate intrinsic value per share
         intrinsic_value = enterprise_value / shares_outstanding
@@ -407,7 +505,8 @@ async def calculate_dcf(
                 "discount_rate": discount_rate,
                 "projection_years": projection_years,
                 "current_fcf": round(current_fcf, 2),
-                "shares_outstanding": round(shares_outstanding, 0)
+                "shares_outstanding": round(shares_outstanding, 0),
+                "fcf_source": fcf_source
             },
             "projections": projected_cash_flows,
             "terminal_value": {
