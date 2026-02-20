@@ -5,6 +5,8 @@ import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 const Pricing: React.FC = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
@@ -29,7 +31,7 @@ const Pricing: React.FC = () => {
 
   const loadStripeConfig = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/api/v1/stripe/config');
+      const response = await axios.get(`${API_URL}/api/v1/stripe/config`);
       setStripeConfig(response.data);
     } catch (error) {
       console.error('Failed to load Stripe config:', error);
@@ -37,26 +39,15 @@ const Pricing: React.FC = () => {
   };
 
   const handleUpgrade = async (tier: string, priceId: string) => {
-    try {
-        const token = localStorage.getItem('access_token');
-        if (!token) {
-        navigate('/login');
-        return;
-        }
-
-        const response = await axios.post(
-        'http://localhost:8000/api/v1/stripe/create-checkout-session',
-        { price_id: priceId },
-        { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        // Redirect to Stripe Checkout
-        window.location.href = response.data.checkout_url;
-        } catch (error) {
-            console.error('Failed to create checkout session:', error);
-            alert('Failed to start checkout. Please try again.');
-        }
-    };
+    const token = localStorage.getItem('access_token');
+    if (!token) {
+      // Not logged in — send to registration with tier
+      navigate(`/registerwithpayment?tier=${tier}`);
+      return;
+    }
+    // Logged in — go directly to in-app payment page
+    navigate(`/payment?tier=${tier}`);
+  };
 
     const handleLogout = () => {
     localStorage.removeItem('access_token');
@@ -68,7 +59,7 @@ const Pricing: React.FC = () => {
       free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
       casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
       active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
-      unlimited: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Unlimited' },
+      professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
     };
     const badge = badges[tier as keyof typeof badges] || badges.free;
     return (
@@ -133,6 +124,7 @@ const Pricing: React.FC = () => {
       features: [
         { text: '45 watchlist stocks', included: true },
         { text: '45 portfolio entries', included: true },
+        { text: '20 Custom alerts', included: true },
         { text: '5 stock reviews daily', included: true },
         { text: '5 DCF valuations daily', included: true },
         { text: 'Real-time market data', included: true },
@@ -140,7 +132,6 @@ const Pricing: React.FC = () => {
         { text: 'Premium charting tools', included: true },
         { text: 'Historical data (5 years)', included: true },
         { text: 'Priority email support', included: true },
-        { text: 'Custom alerts', included: true },
       ],
       buttonText: user?.subscription_tier === 'active' ? 'Current Plan' : 'Upgrade to Active',
       buttonLink: '/registerwithpayments',
@@ -149,29 +140,29 @@ const Pricing: React.FC = () => {
       highlight: false,
     },
     {
-      name: 'Unlimited Investor',
-      tierSlug: 'unlimited',
+      name: 'Professional Investor',
+      tierSlug: 'professional',
       price: '$100',
       period: 'per month',
       description: 'Ultimate tools for professional traders',
       features: [
-        { text: 'Unlimited watchlist stocks', included: true },
-        { text: 'Unlimited portfolio entries', included: true },
-        { text: 'Unlimited stock reviews', included: true },
-        { text: 'Unlimited DCF valuations', included: true },
-        { text: 'Real-time market data', included: true },
+        { text: '75 watchlist stocks', included: true },
+        { text: '75 portfolio entries', included: true },
+        { text: '20 stock reviews daily', included: true },
+        { text: '20 DCF valuations daily', included: true },
+        // { text: 'Real-time market data', included: true },
         { text: 'Advanced Technical Analysis', included: true },
         { text: 'Professional charting suite', included: true },
-        { text: 'Historical data (unlimited)', included: true },
-        { text: 'API access', included: true },
+        { text: 'Historical data - 20 Stocks daily', included: true },
+        // { text: 'API access', included: true },
         { text: 'Priority chat support', included: true },
         { text: 'Custom integrations', included: true },
         { text: 'White-glove onboarding', included: true },
       ],
-      buttonText: user?.subscription_tier === 'unlimited' ? 'Current Plan' : 'Upgrade to Unlimited',
+      buttonText: user?.subscription_tier === 'professional' ? 'Current Plan' : 'Upgrade to Professional',
       buttonLink: '/registerwithpayments',
-      priceId: 'unlimited',
-      current: user?.subscription_tier === 'unlimited',
+      priceId: 'professional',
+      current: user?.subscription_tier === 'professional',
       highlight: false,
     },
   ];
@@ -185,7 +176,7 @@ const Pricing: React.FC = () => {
             <div className="flex items-center">
               <Link to="/" className="flex items-center">
                 <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
-                <span className="text-xl font-bold text-primary-400">Northwest Creek</span>
+                <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>Northwest Creek</span>
               </Link>
             </div>
             
@@ -223,7 +214,7 @@ const Pricing: React.FC = () => {
           Choose Your Plan
         </h1>
         <p className="text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
-          Start with our free tier and upgrade anytime as your needs grow. All plans include real-time market data.
+          Start with our free tier and upgrade anytime as your needs grow. Currenly, market data on 15 minute delay.
         </p>
         {user && (
           <div className="mt-4 inline-flex items-center px-4 py-2 bg-primary-50 dark:bg-primary-900/30 rounded-lg border border-primary-200 dark:border-primary-800">
@@ -305,7 +296,7 @@ const Pricing: React.FC = () => {
                 ) : tier.priceId ? (
                 <button
                     onClick={() => handleUpgrade(tier.name, 
-                    tier.priceId === 'pro' ? stripeConfig?.pro_price_id : stripeConfig?.enterprise_price_id
+                    tier.priceId === 'pro' ? stripeConfig?.pro_price_id : stripeConfig?.professional_price_id
                     )}
                     className={`w-full px-6 py-3 font-semibold rounded-lg transition-colors ${
                     tier.highlight
@@ -352,7 +343,7 @@ const Pricing: React.FC = () => {
                     Active
                   </th>
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Unlimited
+                    Professional
                   </th>
                 </tr>
               </thead>
@@ -364,7 +355,7 @@ const Pricing: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">20</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">45</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">Unlimited</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">75</td>
                 </tr>
                 <tr className="bg-gray-50 dark:bg-gray-800">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
@@ -373,7 +364,7 @@ const Pricing: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">20</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">45</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">Unlimited</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">75</td>
                 </tr>
                 <tr>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
@@ -382,7 +373,7 @@ const Pricing: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5 total</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5/week</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5/day</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">Unlimited</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">20 Daily</td>
                 </tr>
                 <tr className="bg-gray-50 dark:bg-gray-800">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
@@ -393,7 +384,7 @@ const Pricing: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5/week</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5/day</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">Unlimited</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">20 Daily</td>
                 </tr>
                 <tr>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
@@ -489,10 +480,10 @@ const Pricing: React.FC = () => {
             Our team is here to help you find the perfect plan for your needs.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            
+            <a
               href="mailto:support@northwestcreek.com"
               className="px-8 py-3 bg-white text-primary-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
-            <a>
+            >
               Email Us
             </a>
             <Link

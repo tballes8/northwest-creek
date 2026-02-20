@@ -1,28 +1,280 @@
 """
 DCF Valuation API Endpoints - Discounted Cash Flow Analysis
-⭐ ENTERPRISE TIER ONLY ⭐
+⭐ PAID TIERS ONLY 
+Uses yfinance for sector data (simple, free, accurate)
 """
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
-
 from app.db.models import User
 from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.services.market_data import market_data_service
+from app.services.company_info import get_sector_from_yfinance, get_company_basics
 
 router = APIRouter()
 
 
 def require_paid_tier(current_user: User = Depends(get_current_user)):
-    """Require paid tier (Casual, Active, or Unlimited) for Technical Analysis access"""
-    allowed_tiers = ["casual", "active", "unlimited"]
+    """Require paid tier (Casual, Active, or Professsional) for Technical Analysis access"""
+    allowed_tiers = ["casual", "active", "professional"]
     if current_user.subscription_tier not in allowed_tiers:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Technical Analysis requires a paid subscription! Current tier: {current_user.subscription_tier.title()}. Upgrade to access this feature!"
+            detail=f"DCF Valuation requires a paid subscription! Current tier: {current_user.subscription_tier.title()}. Upgrade to access this feature!"
         )
     return current_user
+
+
+@router.get("/suggestions/{ticker}")
+async def get_dcf_suggestions(
+    ticker: str,
+    current_user: User = Depends(require_paid_tier),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    🔒 PAID TIERS ONLY - Get AI-suggested DCF parameters for a stock
+    
+    Returns intelligent default parameters based on:
+    - Company sector and industry (from yfinance - free and accurate!)
+    - Market capitalization
+    - Growth characteristics
+    
+    **Returns:**
+    - Suggested growth rate, terminal growth, discount rate, and projection years
+    - Reasoning for each parameter
+    - Company information
+    """
+    try:
+        # Get sector from yfinance (free, fast, accurate!)
+        sector = get_sector_from_yfinance(ticker)
+        
+        # Get company info and quote
+        try:
+            # Get real-time price and market cap from Massive API
+            quote = await market_data_service.get_quote(ticker)
+            company = await market_data_service.get_company_info(ticker)
+            
+            company_name = company.get("name", ticker)
+            market_cap = company.get("market_cap", 0)
+            current_price = float(quote.get('price', 0))
+            industry = company.get("industry", "Unknown")
+            security_type = company.get("type", "CS")  # CS, WARRANT, ETF, etc.
+        except Exception as api_error:
+            # Fallback to yfinance for everything if Massive API fails
+            print(f"Massive API failed, using yfinance fallback: {api_error}")
+            company_data = get_company_basics(ticker)
+            
+            company_name = company_data["name"]
+            market_cap = company_data["market_cap"]
+            current_price = company_data["current_price"]
+            industry = company_data["industry"]
+            sector = company_data["sector"]  # Use yfinance sector
+            security_type = "CS"  # yfinance fallback doesn't have type info
+            
+            if current_price == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Could not fetch price data for {ticker}"
+                )
+        
+        # Determine company size category
+        if market_cap >= 200_000_000_000:  # $200B+
+            size_category = "mega_cap"
+        elif market_cap >= 10_000_000_000:  # $10B+
+            size_category = "large_cap"
+        elif market_cap >= 2_000_000_000:   # $2B+
+            size_category = "mid_cap"
+        elif market_cap >= 300_000_000:     # $300M+
+            size_category = "small_cap"
+        else:
+            size_category = "micro_cap"
+        
+        # Sector-based growth and risk profiles
+        # Note: yfinance returns standardized sector names, no mapping needed!
+        sector_profiles = {
+            "Technology": {
+                "growth": 0.15,
+                "terminal": 0.03,
+                "discount": 0.12,
+                "years": 7,
+                "growth_reasoning": "Tech companies typically show high growth potential",
+                "terminal_reasoning": "Mature tech companies stabilize around GDP growth",
+                "discount_reasoning": "Higher risk due to rapid innovation and competition",
+                "years_reasoning": "Longer projection captures growth runway"
+            },
+            "Healthcare": {
+                "growth": 0.08,
+                "terminal": 0.025,
+                "discount": 0.09,
+                "years": 5,
+                "growth_reasoning": "Healthcare shows steady, predictable growth",
+                "terminal_reasoning": "Aging demographics support steady long-term growth",
+                "discount_reasoning": "Moderate risk with regulatory considerations",
+                "years_reasoning": "Standard period for stable industries"
+            },
+            "Financial Services": {
+                "growth": 0.06,
+                "terminal": 0.02,
+                "discount": 0.11,
+                "years": 5,
+                "growth_reasoning": "Financial services grow with economic expansion",
+                "terminal_reasoning": "Long-term growth tied to GDP",
+                "discount_reasoning": "Higher risk due to economic sensitivity",
+                "years_reasoning": "Standard period for cyclical industries"
+            },
+            "Consumer Cyclical": {
+                "growth": 0.07,
+                "terminal": 0.025,
+                "discount": 0.10,
+                "years": 5,
+                "growth_reasoning": "Growth linked to consumer spending trends",
+                "terminal_reasoning": "Mature markets stabilize near GDP growth",
+                "discount_reasoning": "Moderate risk with economic cycles",
+                "years_reasoning": "Captures full economic cycle"
+            },
+            "Consumer Defensive": {
+                "growth": 0.05,
+                "terminal": 0.02,
+                "discount": 0.08,
+                "years": 5,
+                "growth_reasoning": "Defensive sectors show stable, lower growth",
+                "terminal_reasoning": "Stable demand supports steady terminal growth",
+                "discount_reasoning": "Lower risk due to consistent demand",
+                "years_reasoning": "Standard period for stable sectors"
+            },
+            "Energy": {
+                "growth": 0.04,
+                "terminal": 0.015,
+                "discount": 0.12,
+                "years": 5,
+                "growth_reasoning": "Energy sector faces transition challenges",
+                "terminal_reasoning": "Long-term growth uncertainty due to energy transition",
+                "discount_reasoning": "Higher risk from commodity prices and regulation",
+                "years_reasoning": "Captures near-term trends"
+            },
+            "Industrials": {
+                "growth": 0.06,
+                "terminal": 0.025,
+                "discount": 0.09,
+                "years": 5,
+                "growth_reasoning": "Industrial growth follows economic expansion",
+                "terminal_reasoning": "Mature industrials stabilize with GDP",
+                "discount_reasoning": "Moderate risk with economic sensitivity",
+                "years_reasoning": "Standard period for cyclical industries"
+            },
+            "Real Estate": {
+                "growth": 0.04,
+                "terminal": 0.02,
+                "discount": 0.09,
+                "years": 5,
+                "growth_reasoning": "Real estate shows stable, dividend-focused returns",
+                "terminal_reasoning": "Long-term growth tied to population and GDP",
+                "discount_reasoning": "Moderate risk with interest rate sensitivity",
+                "years_reasoning": "Standard period for income-focused assets"
+            },
+            "Utilities": {
+                "growth": 0.03,
+                "terminal": 0.02,
+                "discount": 0.07,
+                "years": 5,
+                "growth_reasoning": "Utilities show very stable, regulated growth",
+                "terminal_reasoning": "Long-term growth matches population and usage",
+                "discount_reasoning": "Low risk due to regulated monopolies",
+                "years_reasoning": "Standard period for stable sectors"
+            },
+            "Communication Services": {
+                "growth": 0.08,
+                "terminal": 0.025,
+                "discount": 0.10,
+                "years": 6,
+                "growth_reasoning": "Communications show steady digital transformation growth",
+                "terminal_reasoning": "Mature markets stabilize near GDP growth",
+                "discount_reasoning": "Moderate risk with technology evolution",
+                "years_reasoning": "Longer period captures digital shift"
+            },
+            "Materials": {
+                "growth": 0.05,
+                "terminal": 0.02,
+                "discount": 0.10,
+                "years": 5,
+                "growth_reasoning": "Materials growth linked to industrial demand",
+                "terminal_reasoning": "Commodity nature limits long-term growth",
+                "discount_reasoning": "Moderate risk from commodity cycles",
+                "years_reasoning": "Captures commodity cycle"
+            }
+        }
+
+        # Get profile for sector, or use default for unknown sectors
+        profile = sector_profiles.get(sector, {
+            "growth": 0.06,
+            "terminal": 0.025,
+            "discount": 0.10,
+            "years": 5,
+            "growth_reasoning": "Conservative growth estimate for unclassified sector",
+            "terminal_reasoning": "Standard terminal growth near GDP growth",
+            "discount_reasoning": "Moderate risk assessment",
+            "years_reasoning": "Standard projection period"
+        })
+        
+        # Adjust for company size
+        size_adjustments = {
+            "mega_cap": {"growth": -0.01, "discount": -0.01, "growth_note": "adjusted down for large cap stability"},
+            "large_cap": {"growth": 0, "discount": 0, "growth_note": ""},
+            "mid_cap": {"growth": 0.01, "discount": 0.01, "growth_note": "adjusted up for mid-cap growth potential"},
+            "small_cap": {"growth": 0.02, "discount": 0.02, "growth_note": "adjusted for small-cap growth and risk"},
+            "micro_cap": {"growth": 0.03, "discount": 0.03, "growth_note": "adjusted for micro-cap high growth and risk"}
+        }
+        
+        adjustment = size_adjustments.get(size_category, size_adjustments["large_cap"])
+        
+        suggested_growth = max(0.01, min(0.30, profile["growth"] + adjustment["growth"]))
+        suggested_discount = max(0.06, min(0.20, profile["discount"] + adjustment["discount"]))
+        suggested_terminal = profile["terminal"]
+        suggested_years = profile["years"]
+        
+        # Build reasoning with size adjustments
+        growth_reasoning = profile["growth_reasoning"]
+        if adjustment["growth_note"]:
+            growth_reasoning += f" ({adjustment['growth_note']})"
+        
+        discount_reasoning = profile["discount_reasoning"]
+        if adjustment["growth_note"]:
+            discount_reasoning += f" ({adjustment['growth_note']})"
+        
+        return {
+            "ticker": ticker.upper(),
+            "company_name": company_name,
+            "sector": sector,
+            "industry": industry,
+            "current_price": round(current_price, 2),
+            "market_cap": market_cap,
+            "size_category": size_category,
+            "security_type": security_type,  # CS, WARRANT, ETF, etc.
+            "suggestions": {
+                "growth_rate": round(suggested_growth, 4),
+                "terminal_growth": round(suggested_terminal, 4),
+                "discount_rate": round(suggested_discount, 4),
+                "projection_years": suggested_years
+            },
+            "reasoning": {
+                "growth_rate": growth_reasoning,
+                "terminal_growth": profile["terminal_reasoning"],
+                "discount_rate": discount_reasoning,
+                "projection_years": profile["years_reasoning"]
+            }
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"DCF suggestions error for {ticker}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Could not generate suggestions for {ticker}: {str(e)}"
+        )
 
 
 @router.get("/calculate/{ticker}")
@@ -57,7 +309,7 @@ async def calculate_dcf(
     - Current price vs intrinsic value comparison
     - Buy/Hold/Sell recommendation
     
-    ⭐ **Enterprise Feature:** Unlimited DCF valuations with customizable assumptions!
+    ⭐ **Professional Feature:** 20 DCF valuations daily with customizable assumptions!
     """
     try:
         # Get current stock price and company info
@@ -74,9 +326,11 @@ async def calculate_dcf(
             company = await market_data_service.get_company_info(ticker)
             company_name = company.get("name", ticker)
             market_cap = company.get("market_cap")
+            security_type = company.get("type", "CS")
         except:
             company_name = ticker
             market_cap = None
+            security_type = "CS"
         
         # For MVP, we'll use estimated free cash flow based on market cap
         # In production, you'd fetch actual financial statements
@@ -145,6 +399,7 @@ async def calculate_dcf(
         return {
             "ticker": ticker,
             "company_name": company_name,
+            "security_type": security_type,  # CS, WARRANT, ETF, etc.
             "current_price": round(current_price, 2),
             "assumptions": {
                 "growth_rate": growth_rate,

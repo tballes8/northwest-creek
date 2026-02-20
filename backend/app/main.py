@@ -1,20 +1,22 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.config import get_settings
-from app.api.v1.endpoints import (alerts, auth, dcf_valuation, indicators, portfolio, 
-    stocks, watchlist, technical_analysis, stripe_payments
+from app.api.v1.endpoints import (
+    alerts, auth, dcf_valuation, indicators, portfolio, 
+    stocks, watchlist, technical_analysis, stripe_payments,
+    intraday, live_prices, financials
 )
+from app.api.v1.endpoints.content import router as content_router
 
 settings = get_settings()
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 Northwest Creek API starting...")
     yield
     print("👋 Northwest Creek API shutting down...")
-
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -24,19 +26,18 @@ app = FastAPI(
     redoc_url=f"/api/{settings.API_VERSION}/redoc"
 )
 
+# Get frontend URL from environment (Railway will provide this)
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
-# Configure CORS
-# CORS - Allow both development and production origins
-origins = [
-    "http://localhost:3000",  # Local development
-    "http://localhost:5173",  # Vite local dev
-    # Add your production frontend URL here after deployment
-    "https://northwest-creek.up.railway.app",
-]
-
+# Configure CORS - Allow frontend to make requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[
+        frontend_url,  # Production frontend from environment
+        frontend_url.replace("://", "://www.") if "://www." not in frontend_url else frontend_url.replace("://www.", "://"),
+        "http://localhost:3000",  # Local React dev
+        "http://localhost:5173",  # Local Vite dev
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -50,7 +51,6 @@ async def root():
         "status": "operational"
     }
 
-
 # Health check endpoint
 @app.get("/api/v1/health")
 async def health_check():
@@ -60,7 +60,6 @@ async def health_check():
         "service": "Northwest Creek API",
         "version": "1.0.0"
     }
-
 
 # Include routers
 app.include_router(auth.router, prefix=f"/api/{settings.API_VERSION}/auth", tags=["auth"])
@@ -72,3 +71,7 @@ app.include_router(alerts.router, prefix=f"/api/{settings.API_VERSION}/alerts", 
 app.include_router(technical_analysis.router, prefix="/api/v1/technical-analysis", tags=["Technical Analysis"])
 app.include_router(dcf_valuation.router, prefix="/api/v1/dcf", tags=["DCF Valuation"])
 app.include_router(stripe_payments.router, prefix="/api/v1/stripe", tags=["Stripe"])
+app.include_router(intraday.router, prefix="/api/v1/intraday", tags=["Intraday"])
+app.include_router(live_prices.router, prefix="/api/v1/live-prices", tags=["Live Prices"])
+app.include_router(content_router, prefix="/api/v1/content", tags=["content"])
+app.include_router(financials.router, prefix="/api/v1/financials", tags=["financials"])

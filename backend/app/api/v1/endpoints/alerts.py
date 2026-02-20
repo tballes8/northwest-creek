@@ -25,7 +25,7 @@ ALERT_LIMITS = {
     "free": 0,
     "casual": 5,
     "active": 20,
-    "unlimited": 999999
+    "professional": 50
 }
 
 
@@ -46,7 +46,7 @@ async def create_alert(
     - Free: 0 alerts
     - Casual: 5 alerts
     - Active: 20 alerts
-    - Unlimited: Unlimited
+    - Professional: 50 alerts
     
     **Examples:**
     - "Alert me when TSLA goes above $500"
@@ -65,9 +65,9 @@ async def create_alert(
         if current_user.subscription_tier == "free":
             upgrade_msg = "Upgrade to Casual for 5 alerts ($20/month) or Active for 20 alerts ($40/month)!"
         elif current_user.subscription_tier == "casual":
-            upgrade_msg = "Upgrade to Active for 20 alerts ($40/month) or Unlimited for unlimited alerts ($100/month)!"
+            upgrade_msg = "Upgrade to Active for 20 alerts ($40/month) or Professional for 50 alerts ($100/month)!"
         elif current_user.subscription_tier == "active":
-            upgrade_msg = "Upgrade to Unlimited for unlimited alerts ($100/month)!"            
+            upgrade_msg = "Upgrade to Professional for 50 alerts ($100/month)!"            
         else:
             upgrade_msg = "Contact support for custom limits."
         
@@ -138,7 +138,7 @@ async def create_alert(
         if current_user.subscription_tier == "casual":
             warning = f"⚠️ Warning: Only {remaining} alert{'s' if remaining != 1 else ''} remaining! Upgrade to Active for 20 alerts ($40/month)."
         elif current_user.subscription_tier == "active":
-            warning = f"⚠️ Warning: Only {remaining} alert{'s' if remaining != 1 else ''} remaining! Upgrade to Unlimited for unlimited alerts ($100/month)."
+            warning = f"⚠️ Warning: Only {remaining} alert{'s' if remaining != 1 else ''} remaining! Upgrade to Professional for 50 alerts ($100/month)."
         else:
             warning = None
         

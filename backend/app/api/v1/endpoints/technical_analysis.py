@@ -1,12 +1,11 @@
 """
 Stock Screener API Endpoints - Filter stocks by technical indicators
-⭐ ENTERPRISE TIER ONLY ⭐
+⭐ PAID TIERS ONLY ⭐
 """
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Optional
-
 from app.db.models import User, Watchlist
 from app.api.dependencies import get_current_user
 from app.db.session import get_db
@@ -16,8 +15,8 @@ from app.services.technical_indicators import technical_indicators
 router = APIRouter()
 
 def require_paid_tier(current_user: User = Depends(get_current_user)):
-    """Require paid tier (Casual, Active, or Unlimited) for Technical Analysis access"""
-    allowed_tiers = ["casual", "active", "unlimited"]
+    """Require paid tier (Casual, Active, or Professional) for Technical Analysis access"""
+    allowed_tiers = ["casual", "active", "professional"]
     if current_user.subscription_tier not in allowed_tiers:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -54,6 +53,12 @@ def _determine_bb_position(price: float, upper: float | None, lower: float | Non
     else:
         return "within_bands"        
 
+def _strip_history(indicator_data):
+    """Remove large history arrays from indicator summary (history is in chart_data)."""
+    if indicator_data is None:
+        return None
+    return {k: v for k, v in indicator_data.items() if not k.endswith("_history") and k != "history"}
+
 @router.get("/analyze/{ticker}")
 async def analyze_stock(
     ticker: str,
@@ -66,9 +71,11 @@ async def analyze_stock(
     """
     try:
         # Get company info
+        security_type = "CS"
         try:
             company = await market_data_service.get_company_info(ticker)
             company_name = company.get("name", ticker)
+            security_type = company.get("type", "CS")
         except:
             company_name = ticker
         
@@ -84,6 +91,10 @@ async def analyze_stock(
         print(f"DEBUG: Fetched {len(historical)} days of data for {ticker}")
 
         prices = [float(day["close"]) for day in historical]
+        opens = [float(day["open"]) for day in historical]
+        highs = [float(day["high"]) for day in historical]
+        lows = [float(day["low"]) for day in historical]
+        volumes = [float(day["volume"]) for day in historical]
         current_price = prices[-1]
         
         # Calculate indicators
@@ -225,6 +236,13 @@ async def analyze_stock(
                 macd_signal_history.append(None)
                 macd_histogram_history.append(None)                    
         
+        # ── Calculate all advanced indicators ──────────────────────────────
+        try:
+            advanced = technical_indicators.calculate_all_advanced(highs, lows, prices, volumes)
+        except Exception as e:
+            print(f"Advanced indicators error: {e}")
+            advanced = {}
+
         # Generate trading signals
         signals = []
         if rsi is not None:
@@ -269,10 +287,44 @@ async def analyze_stock(
                     "message": "Above upper band - overbought territory"
                 })
         
-        # Enrich historical data with indicators
+        # ── Advanced indicator signals ─────────────────────────────────────
+        stoch = advanced.get("stochastic")
+        if stoch:
+            if stoch.get("signal") == "oversold":
+                signals.append({"type": "buy", "indicator": "Stochastic", "message": f"Oversold (%K: {stoch['k']:.1f}) - potential reversal"})
+            elif stoch.get("signal") == "overbought":
+                signals.append({"type": "sell", "indicator": "Stochastic", "message": f"Overbought (%K: {stoch['k']:.1f}) - potential pullback"})
+        
+        adx_data = advanced.get("adx")
+        if adx_data:
+            if adx_data.get("strength") in ("trending", "very_strong"):
+                signals.append({"type": "buy" if adx_data["direction"] == "bullish" else "sell", "indicator": "ADX",
+                    "message": f"Strong {adx_data['direction']} trend (ADX: {adx_data['adx']:.1f})"})
+        
+        cci_data = advanced.get("cci")
+        if cci_data and cci_data.get("value") is not None:
+            if cci_data["signal"] == "oversold":
+                signals.append({"type": "buy", "indicator": "CCI", "message": f"Oversold (CCI: {cci_data['value']:.0f})"})
+            elif cci_data["signal"] == "overbought":
+                signals.append({"type": "sell", "indicator": "CCI", "message": f"Overbought (CCI: {cci_data['value']:.0f})"})
+        
+        sar_data = advanced.get("parabolic_sar")
+        if sar_data:
+            signals.append({"type": "buy" if sar_data["trend"] == "uptrend" else "sell", "indicator": "Parabolic SAR",
+                "message": f"SAR ${sar_data['value']:.2f} — {sar_data['trend']}"})
+        
+        ich_data = advanced.get("ichimoku")
+        if ich_data:
+            if ich_data["signal"] == "bullish":
+                signals.append({"type": "buy", "indicator": "Ichimoku Cloud", "message": "Price above cloud — bullish"})
+            elif ich_data["signal"] == "bearish":
+                signals.append({"type": "sell", "indicator": "Ichimoku Cloud", "message": "Price below cloud — bearish"})
+
+        # Enrich historical data with indicators (existing + advanced)
+        n = len(historical)
         enriched_chart_data = []
         for i, day in enumerate(historical):
-            enriched_chart_data.append({
+            entry = {
                 **day,
                 "sma_20": sma_20_history[i],
                 "sma_50": sma_50_history[i],
@@ -284,11 +336,44 @@ async def analyze_stock(
                 "macd_line": macd_history[i],
                 "macd_signal": macd_signal_history[i],
                 "macd_histogram": macd_histogram_history[i],
-            })
+            }
+            # Add advanced indicator histories (safely index each)
+            def safe_idx(data, key, idx):
+                if data and key in data and data[key] and idx < len(data[key]):
+                    return data[key][idx]
+                return None
+            
+            entry["vwap"] = safe_idx(advanced.get("vwap"), "history", i)
+            entry["obv"] = safe_idx(advanced.get("obv"), "history", i)
+            entry["ad_line"] = safe_idx(advanced.get("ad_line"), "history", i)
+            entry["stoch_k"] = safe_idx(advanced.get("stochastic"), "k_history", i)
+            entry["stoch_d"] = safe_idx(advanced.get("stochastic"), "d_history", i)
+            entry["adx"] = safe_idx(advanced.get("adx"), "adx_history", i)
+            entry["plus_di"] = safe_idx(advanced.get("adx"), "plus_di_history", i)
+            entry["minus_di"] = safe_idx(advanced.get("adx"), "minus_di_history", i)
+            entry["cci"] = safe_idx(advanced.get("cci"), "history", i)
+            entry["roc"] = safe_idx(advanced.get("roc"), "history", i)
+            entry["atr"] = safe_idx(advanced.get("atr"), "history", i)
+            entry["keltner_upper"] = safe_idx(advanced.get("keltner"), "upper_history", i)
+            entry["keltner_middle"] = safe_idx(advanced.get("keltner"), "middle_history", i)
+            entry["keltner_lower"] = safe_idx(advanced.get("keltner"), "lower_history", i)
+            entry["std_dev"] = safe_idx(advanced.get("std_dev"), "history", i)
+            entry["sar"] = safe_idx(advanced.get("parabolic_sar"), "sar_history", i)
+            entry["sar_trend"] = safe_idx(advanced.get("parabolic_sar"), "trend_history", i)
+            entry["ichimoku_tenkan"] = safe_idx(advanced.get("ichimoku"), "tenkan_history", i)
+            entry["ichimoku_kijun"] = safe_idx(advanced.get("ichimoku"), "kijun_history", i)
+            entry["ichimoku_senkou_a"] = safe_idx(advanced.get("ichimoku"), "senkou_a_history", i)
+            entry["ichimoku_senkou_b"] = safe_idx(advanced.get("ichimoku"), "senkou_b_history", i)
+            entry["donchian_upper"] = safe_idx(advanced.get("donchian"), "upper_history", i)
+            entry["donchian_lower"] = safe_idx(advanced.get("donchian"), "lower_history", i)
+            entry["donchian_middle"] = safe_idx(advanced.get("donchian"), "middle_history", i)
+            
+            enriched_chart_data.append(entry)
 
         return {
             "ticker": ticker,
             "company_name": company_name,
+            "security_type": security_type,  # CS, WARRANT, ETF, etc.
             "current_price": round(current_price, 2),
             "analysis_date": historical[-1]["date"],
             "indicators": {
@@ -313,12 +398,26 @@ async def analyze_stock(
                     "description": "Price above MA = uptrend, Price below MA = downtrend"
                 },
                 "bollinger_bands": {
-                    "upper_band": round(bb_upper_history[-1], 2) if bb_upper_history[-1] is not None else None,  # ← Use last BB Upper from history
-                    "middle_band": round(bb_middle_history[-1], 2) if bb_middle_history[-1] is not None else None,  # ← Use last BB Middle from history
-                    "lower_band": round(bb_lower_history[-1], 2) if bb_lower_history[-1] is not None else None,  # ← Use last BB Lower from history
+                    "upper_band": round(bb_upper_history[-1], 2) if bb_upper_history[-1] is not None else None,
+                    "middle_band": round(bb_middle_history[-1], 2) if bb_middle_history[-1] is not None else None,
+                    "lower_band": round(bb_lower_history[-1], 2) if bb_lower_history[-1] is not None else None,
                     "position": _determine_bb_position(current_price, bb_upper_history[-1], bb_lower_history[-1]),
                     "description": "Bands show volatility. Price at edges = potential reversal opportunity"
-                }
+                },
+                # ── Advanced Indicators (summaries only — history in chart_data) ──
+                "vwap": _strip_history(advanced.get("vwap")),
+                "obv": _strip_history(advanced.get("obv")),
+                "ad_line": _strip_history(advanced.get("ad_line")),
+                "stochastic": _strip_history(advanced.get("stochastic")),
+                "adx": _strip_history(advanced.get("adx")),
+                "cci": _strip_history(advanced.get("cci")),
+                "roc": _strip_history(advanced.get("roc")),
+                "atr": _strip_history(advanced.get("atr")),
+                "keltner": _strip_history(advanced.get("keltner")),
+                "std_dev": _strip_history(advanced.get("std_dev")),
+                "parabolic_sar": _strip_history(advanced.get("parabolic_sar")),
+                "ichimoku": _strip_history(advanced.get("ichimoku")),
+                "donchian": _strip_history(advanced.get("donchian")),
             },
             "signals": signals,
             "chart_data": enriched_chart_data,
@@ -423,7 +522,7 @@ async def screen_watchlist(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    🔒 ENTERPRISE ONLY - Screen your watchlist by technical indicators
+    🔒 PAID TIERS ONLY - Screen your watchlist by technical indicators
     
     **Find trading opportunities in your watchlist:**
     
@@ -448,9 +547,9 @@ async def screen_watchlist(
     - `/screener/watchlist?macd_bullish=true&above_sma_50=true` → Strong uptrends
     - `/screener/watchlist?bollinger_oversold=true` → Potential bounce opportunities
     
-    ⭐ **Enterprise Feature:** Unlimited screening on unlimited watchlist stocks!
+    ⭐ **Professional Feature:** 20 stock screenings daily and 75 watchlist stocks!
     """
-    # Get user's watchlist (no limit for Enterprise!)
+    # Get user's watchlist
     result = await db.execute(
         select(Watchlist)
         .where(Watchlist.user_id == current_user.id)
@@ -574,8 +673,8 @@ async def screen_watchlist(
             rsi_below, rsi_above, macd_bullish, macd_bearish,
             above_sma_20, above_sma_50, bollinger_oversold, bollinger_overbought
         ),
-        "subscription_tier": "Enterprise",
-        "enterprise_perks": "✅ Unlimited screening ✅ Unlimited watchlist ✅ Unlimited alerts"
+        "subscription_tier": "professional",
+        "professional_perks": "✅ 20 stock screenings daily ✅ 75 watchlist entries ✅  50 alerts"
     }
 
 
@@ -585,7 +684,7 @@ async def screen_oversold(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    🔒 ENTERPRISE ONLY - Find oversold stocks in your watchlist
+    🔒 PROFESSIONL ONLY - Find oversold stocks in your watchlist
     
     **Criteria:**
     - RSI < 30 (oversold)
@@ -607,7 +706,7 @@ async def screen_overbought(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    🔒 ENTERPRISE ONLY - Find overbought stocks in your watchlist
+    🔒 PAID TIERS ONLY - Find overbought stocks in your watchlist
     
     **Criteria:**
     - RSI > 70 (overbought)
@@ -629,7 +728,7 @@ async def screen_strong_uptrend(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    🔒 ENTERPRISE ONLY - Find stocks in strong uptrends
+    🔒 PAID TIERS ONLY - Find stocks in strong uptrends
     
     **Criteria:**
     - MACD bullish
@@ -653,7 +752,7 @@ async def screen_reversal_candidates(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    🔒 ENTERPRISE ONLY - Find potential reversal candidates
+    🔒 PAID TIERS ONLY - Find potential reversal candidates
     
     **Criteria:**
     - RSI < 30 (oversold)

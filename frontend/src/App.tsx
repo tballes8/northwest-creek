@@ -14,7 +14,14 @@ import Pricing from './pages/Pricing';
 import PaymentSuccess from './pages/PaymentSuccess';
 import RegisterWithPayment from './pages/RegisterWithPayment';
 import Stocks from './pages/Stocks';
-
+import { LivePriceProvider } from './contexts/LivePriceContext';
+import Payment from './pages/Payment';
+import AccountSettings from './pages/AccountSettings';
+import Tutorials from './pages/Tutorials';
+import BlogList from './pages/BlogList';
+import BlogPost from './pages/BlogPost';
+import AdminContent from './pages/AdminContent';
+import ResetPassword from './pages/ResetPassword';
 
 
 // Protected Route Component
@@ -31,7 +38,8 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 function App() {
   return (
     <Router>
-      <Routes>
+      <LivePriceProvider>
+        <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -41,40 +49,20 @@ function App() {
         <Route path="/registerwithpayment" element={<RegisterWithPayment />} />
         <Route path="/stocks" element={<ProtectedRoute><Stocks /></ProtectedRoute>} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/payment" element={<Payment />} />
+        <Route path="/account" element={<AccountSettings />} />          
         <Route path="/watchlist" element={<ProtectedRoute><Watchlist /></ProtectedRoute>} />
-
-        <Route path="/portfolio" 
-          element={
-            <ProtectedRoute>
-              <Portfolio />
-            </ProtectedRoute>
-          } 
-        />
-
-        <Route path="/alerts" 
-          element={
-            <ProtectedRoute>
-              <Alerts />
-            </ProtectedRoute>
-          } 
-        />
-
-        <Route path="/technical-analysis" 
-          element={
-            <ProtectedRoute>
-              <TechnicalAnalysis />
-            </ProtectedRoute>
-          } 
-        />
-
-        <Route path="/dcf-valuation" 
-          element={
-            <ProtectedRoute>
-              <DCFValuation />
-            </ProtectedRoute>
-          } 
-        />
+        <Route path="/portfolio" element={<ProtectedRoute><Portfolio /></ProtectedRoute>} />
+        <Route path="/alerts" element={<ProtectedRoute><Alerts /></ProtectedRoute>} />
+        <Route path="/technical-analysis" element={<ProtectedRoute><TechnicalAnalysis /></ProtectedRoute>} />
+        <Route path="/dcf-valuation" element={<ProtectedRoute><DCFValuation /></ProtectedRoute>} />
+        <Route path="/tutorials" element={<Tutorials />} />
+        <Route path="/blogs" element={<BlogList />} />
+        <Route path="/blogs/:slug" element={<BlogPost />} />
+        <Route path="/admin" element={<AdminContent />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
       </Routes>
+      </LivePriceProvider>
     </Router>
   );
 }

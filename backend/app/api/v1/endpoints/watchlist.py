@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from typing import List
-
 from app.db.session import get_db
 from app.core.security import get_current_user
 from app.db.models import User, Watchlist  # ← SQLAlchemy models
@@ -13,9 +12,7 @@ from app.schemas import watchlist as schemas  # ← Pydantic schemas
 from app.services.market_data import market_data_service
 from uuid import UUID
 
-
 router = APIRouter()
-
 
 async def check_watchlist_limit(user: User, current_count: int) -> None:
     """Check if user has reached their watchlist limit"""
@@ -23,7 +20,7 @@ async def check_watchlist_limit(user: User, current_count: int) -> None:
         "free": 5,
         "casual": 20,
         "active": 45,
-        "unlimited": float('inf')
+        "professional": 75
     }
     
     limit = limits.get(user.subscription_tier, 0)
@@ -63,7 +60,7 @@ async def enrich_watchlist_with_prices(items: List[Watchlist]) -> List[schemas.W
                 notes=item.notes,
                 target_price=float(item.target_price) if item.target_price else None,  # ← Convert to float
                 added_at=item.added_at,
-                created_at=getattr(item, 'created_at', None),  # ← Include created_at if exists
+                # created_at=getattr(item, 'created_at', None),  # ← Include created_at if exists
                 price=float(quote.get('price')) if quote.get('price') else None,
                 change=float(quote.get('change')) if quote.get('change') else None,
                 change_percent=float(quote.get('change_percent')) if quote.get('change_percent') else None,
@@ -80,7 +77,7 @@ async def enrich_watchlist_with_prices(items: List[Watchlist]) -> List[schemas.W
                 notes=item.notes,
                 target_price=float(item.target_price) if item.target_price else None,
                 added_at=item.added_at,
-                created_at=getattr(item, 'created_at', None)
+                # created_at=getattr(item, 'created_at', None)
             ))
     
     return enriched_items
@@ -95,7 +92,7 @@ async def get_watchlist(
     result = await db.execute(
         select(Watchlist)
         .where(Watchlist.user_id == current_user.id)
-        .order_by(Watchlist.created_at.desc())
+        .order_by(Watchlist.added_at.desc())
     )
     items = result.scalars().all()
     

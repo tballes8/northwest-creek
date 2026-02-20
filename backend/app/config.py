@@ -35,8 +35,10 @@ class Settings(BaseSettings):
     # SendGrid Email Settings
     SENDGRID_API_KEY: str = Field(default="", env="SENDGRID_API_KEY")
     FROM_EMAIL: str = Field(default="", env="FROM_EMAIL")
+    SUPPORT_EMAIL: str = Field(default="", env="SUPPORT_EMAIL")
+    SALES_EMAIL: str = Field(default="", env="SALES_EMAIL")
     FROM_NAME: str = Field(default="Northwest Creek", env="FROM_NAME")
-    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str = Field(default="http://localhost:3000", env="FRONTEND_URL")
 
     # Stripe Settings
     STRIPE_SECRET_KEY: str = Field(default="", env="STRIPE_SECRET_KEY")
@@ -44,7 +46,7 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: str = Field(default="", env="STRIPE_WEBHOOK_SECRET")
     STRIPE_CASUAL_PRICE_ID: str = Field(default="", env="STRIPE_CASUAL_PRICE_ID")
     STRIPE_ACTIVE_PRICE_ID: str = Field(default="", env="STRIPE_ACTIVE_PRICE_ID")
-    STRIPE_UNLIMITED_PRICE_ID: str = Field(default="", env="STRIPE_UNLIMITED_PRICE_ID")
+    STRIPE_PROFESSIONAL_PRICE_ID: str = Field(default="", env="STRIPE_PROFESSIONAL_PRICE_ID")
     
     class Config:
         env_file = ".env"
@@ -60,4 +62,18 @@ def get_settings() -> Settings:
     global settings
     if settings is None:
         settings = Settings()
+        # Diagnostic logging (masked) to help debug config issues
+        print(f"✅ Config loaded:")
+        print(f"   FRONTEND_URL = {settings.FRONTEND_URL}")
+        print(f"   FROM_EMAIL = {settings.FROM_EMAIL}")
+        print(f"   SUPPORT_EMAIL = {settings.SUPPORT_EMAIL}")
+        print(f"   SALES_EMAIL = {settings.SALES_EMAIL}")
+        print(f"   SENDGRID_API_KEY = {'✅ SET (' + settings.SENDGRID_API_KEY[:8] + '...)' if settings.SENDGRID_API_KEY else '❌ NOT SET'}")
+        print(f"   STRIPE_SECRET_KEY = {'✅ SET' if settings.STRIPE_SECRET_KEY else '❌ NOT SET'}")
+        print(f"   STRIPE_PUBLISHABLE_KEY = {'✅ SET' if settings.STRIPE_PUBLISHABLE_KEY else '❌ NOT SET'}")
+        print(f"   STRIPE_CASUAL_PRICE_ID = {settings.STRIPE_CASUAL_PRICE_ID or '❌ NOT SET'}")
+        print(f"   STRIPE_ACTIVE_PRICE_ID = {settings.STRIPE_ACTIVE_PRICE_ID or '❌ NOT SET'}")
+        print(f"   STRIPE_PROFESSIONAL_PRICE_ID = {settings.STRIPE_PROFESSIONAL_PRICE_ID or '❌ NOT SET'}")
+        print(f"   DATABASE_URL = {'✅ SET' if settings.DATABASE_URL else '❌ NOT SET'}")
+        print(f"   MASSIVE_API_KEY = {'✅ SET' if settings.MASSIVE_API_KEY else '❌ NOT SET'}")
     return settings

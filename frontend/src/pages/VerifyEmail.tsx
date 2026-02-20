@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 const VerifyEmail: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -9,8 +11,9 @@ const VerifyEmail: React.FC = () => {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    const verifyEmail = async () => {
+    const verifyAndRedirect = async () => {
       const token = searchParams.get('token');
+      const tier = searchParams.get('tier');
       
       if (!token) {
         setStatus('error');
@@ -19,17 +22,33 @@ const VerifyEmail: React.FC = () => {
       }
 
       try {
+        // Step 1: Verify email — backend returns access_token for auto-login
         const response = await axios.get(
-          `http://localhost:8000/api/v1/auth/verify-email?token=${token}`
+          `${API_URL}/api/v1/auth/verify-email?token=${token}`
         );
         
-        setStatus('success');
-        setMessage(response.data.message);
+        const accessToken = response.data.access_token;
         
-        // Redirect to login after 3 seconds
-        setTimeout(() => {
-          navigate('/login');
-        }, 3000);
+        if (accessToken) {
+          localStorage.setItem('access_token', accessToken);
+        }
+
+        // Step 2: Redirect based on tier
+        if (tier && tier !== 'free' && accessToken) {
+          // Paid tier — redirect to in-app payment page
+          setStatus('success');
+          setMessage('Email verified! Redirecting to payment...');
+          setTimeout(() => navigate(`/payment?tier=${tier}`), 1500);
+        } else if (accessToken) {
+          // Free tier — go to dashboard
+          setStatus('success');
+          setMessage('Email verified successfully! Redirecting to dashboard...');
+          setTimeout(() => navigate('/dashboard'), 2000);
+        } else {
+          setStatus('success');
+          setMessage('Email verified successfully! Please log in.');
+          setTimeout(() => navigate('/login'), 2000);
+        }
         
       } catch (err: any) {
         setStatus('error');
@@ -37,18 +56,15 @@ const VerifyEmail: React.FC = () => {
       }
     };
 
-    verifyEmail();
+    verifyAndRedirect();
   }, [searchParams, navigate]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <Link to="/" className="flex justify-center">
-          <img 
-            src="/images/logo.png" 
-            alt="Northwest Creek" 
-            className="h-50 w-50"
-          />
+          <img src="/images/logo.png" alt="Northwest Creek" className="h-50 w-50" />
+          <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1rem', fontStyle: 'italic' }}>Northwest Creek</span>
         </Link>
         
         <div className="mt-8 bg-white dark:bg-gray-700 py-8 px-4 shadow-xl dark:shadow-gray-200/20 sm:rounded-lg sm:px-10 border dark:border-gray-500">
@@ -75,14 +91,11 @@ const VerifyEmail: React.FC = () => {
                 </div>
                 <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">Email Verified!</h3>
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{message}</p>
-                <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Redirecting to login...</p>
-                <div className="mt-6">
-                  <Link
-                    to="/login"
-                    className="text-primary-600 dark:text-primary-400 hover:text-primary-500 dark:hover:text-primary-300 font-medium"
-                  >
-                    Go to Login Now
-                  </Link>
+                <div className="mt-4">
+                  <svg className="animate-spin h-5 w-5 text-primary-500 mx-auto" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
                 </div>
               </>
             )}
@@ -97,16 +110,10 @@ const VerifyEmail: React.FC = () => {
                 <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">Verification Failed</h3>
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{message}</p>
                 <div className="mt-6 space-y-3">
-                  <Link
-                    to="/register"
-                    className="block text-primary-600 dark:text-primary-400 hover:text-primary-500 dark:hover:text-primary-300 font-medium"
-                  >
+                  <Link to="/register" className="block text-primary-600 dark:text-primary-400 hover:text-primary-500 font-medium">
                     Register Again
                   </Link>
-                  <Link
-                    to="/login"
-                    className="block text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                  >
+                  <Link to="/login" className="block text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
                     Back to Login
                   </Link>
                 </div>

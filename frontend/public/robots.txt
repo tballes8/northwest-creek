@@ -1,3 +1,29 @@
 # https://www.robotstxt.org/robotstxt.html
 User-agent: *
-Disallow:
+
+# Public pages — allow
+Allow: /
+Allow: /pricing
+Allow: /blogs
+Allow: /blogs/*
+Allow: /login
+Allow: /register
+
+# Authenticated pages — no indexing
+Disallow: /dashboard
+Disallow: /watchlist
+Disallow: /portfolio
+Disallow: /alerts
+Disallow: /stocks
+Disallow: /technical-analysis
+Disallow: /dcf-valuation
+Disallow: /account
+Disallow: /payment
+Disallow: /payment-success
+Disallow: /admin
+Disallow: /tutorials
+Disallow: /verify-email
+Disallow: /reset-password
+Disallow: /registerwithpayment
+
+Sitemap: https://northwestcreekllc.com/sitemap.xml
