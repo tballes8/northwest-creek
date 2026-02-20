@@ -368,7 +368,17 @@ const Stocks: React.FC = () => {
       const apiType = companyRes.data?.type || '';
       if (apiType === 'WARRANT') {
         setIsWarrant(true);
-        setRelatedCommonStock(getRelatedCommonStock(symbol) || symbol.replace(/W+$/i, ''));
+        // Use separator-based extraction first; only fall back to W-stripping
+        // for API-confirmed warrants where the pattern is unambiguous
+        const related = getRelatedCommonStock(symbol);
+        if (related) {
+          setRelatedCommonStock(related);
+        } else {
+          // API confirmed warrant but no separator — try stripping trailing W(s)
+          // e.g. SOUNW → SOUN.  Guard: result must be >= 2 chars and differ from input
+          const stripped = symbol.toUpperCase().replace(/W+$/, '');
+          setRelatedCommonStock(stripped.length >= 2 && stripped !== symbol.toUpperCase() ? stripped : null);
+        }
       } else if (apiType === 'CS' || apiType === 'ADRC' || apiType === 'PFD' || apiType === 'ETF') {
         // Confirmed non-warrant — clear any false positive from hint
         setIsWarrant(false);
@@ -786,7 +796,7 @@ const Stocks: React.FC = () => {
         )}
 
         {/* Warrant Alert */}
-        {isWarrant && relatedCommonStock && (
+        {isWarrant && (
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 mb-6">
             <div className="flex items-start">
               <div className="flex-shrink-0">

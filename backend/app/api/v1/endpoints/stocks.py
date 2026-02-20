@@ -87,17 +87,31 @@ async def get_daily_snapshot(
         raise HTTPException(status_code=500, detail=f"Error fetching daily snapshot: {str(e)}")
 
 def _is_warrant(ticker: str) -> bool:
-    """Detect if a ticker is a warrant (e.g., ABCDW, ABCWW, ABCD.WS, ABCD+)"""
+    """
+    Heuristic filter to exclude likely warrants from gainers/losers lists.
+    
+    Only matches unambiguous patterns — separator-based suffixes and
+    double-W endings.  Single trailing 'W' without a separator is NOT
+    matched because it produces too many false positives on legitimate
+    tickers (MATW, PLOW, BMW, etc.).
+    
+    The authoritative warrant check happens on the frontend via Polygon's
+    `type` field from the /v3/reference/tickers endpoint.
+    """
     t = ticker.upper().strip()
-    if t.endswith('WS') or t.endswith('.WS'):
-        return True
+    # Explicit separator patterns (always warrants)
+    for suffix in ('.WS', '.WT', '.W', '+WS', '+WT', '+W', '/WS', '/WT', '/W'):
+        if t.endswith(suffix):
+            return True
+    # Double-W ending (e.g., BRKHWW) — always a warrant
     if t.endswith('WW'):
         return True
+    # Ends with + (units / warrants on some exchanges)
     if t.endswith('+'):
         return True
-    # Ends in W preceded by a letter (e.g., SOUNW, BRKHW) — common warrant pattern
-    # But exclude legitimate tickers like BMW, VEW (short tickers ending in W)
-    if len(t) > 3 and t.endswith('W') and t[-2].isalpha():
+    # Ends with 'WS' without separator (e.g., SOUNWS) — very likely warrant
+    # Only for length > 4 to avoid short legitimate tickers like NWS
+    if len(t) > 4 and t.endswith('WS') and t[-3].isalpha():
         return True
     return False
 

@@ -60,7 +60,7 @@ async def get_dcf_suggestions(
             market_cap = company.get("market_cap", 0)
             current_price = float(quote.get('price', 0))
             industry = company.get("industry", "Unknown")
-            security_type = company.get("type", "CS")  # CS, WARRANT, ETF, etc.
+            security_type = company.get("type", "")  # CS, WARRANT, ETF, etc.
         except Exception as api_error:
             # Fallback to yfinance for everything if Massive API fails
             print(f"Massive API failed, using yfinance fallback: {api_error}")
@@ -71,7 +71,7 @@ async def get_dcf_suggestions(
             current_price = company_data["current_price"]
             industry = company_data["industry"]
             sector = company_data["sector"]  # Use yfinance sector
-            security_type = "CS"  # yfinance fallback doesn't have type info
+            security_type = ""  # yfinance fallback doesn't have Polygon type info
             
             if current_price == 0:
                 raise HTTPException(
@@ -392,11 +392,11 @@ async def calculate_dcf(
             company = await market_data_service.get_company_info(ticker)
             company_name = company.get("name", ticker)
             market_cap = company.get("market_cap")
-            security_type = company.get("type", "CS")
+            security_type = company.get("type", "")
         except:
             company_name = ticker
             market_cap = None
-            security_type = "CS"
+            security_type = ""
         
         # ── Fetch actual financials from Polygon ──────────────────────
         current_fcf = None

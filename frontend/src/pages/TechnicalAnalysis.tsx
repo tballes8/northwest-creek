@@ -240,7 +240,13 @@ const TechnicalAnalysis: React.FC = () => {
       const apiType = response.data.security_type || '';
       if (apiType === 'WARRANT') {
         setIsWarrant(true);
-        setRelatedCommonStock(getRelatedCommonStock(symbol) || symbol.replace(/W+$/i, ''));
+        const related = getRelatedCommonStock(symbol);
+        if (related) {
+          setRelatedCommonStock(related);
+        } else {
+          const stripped = symbol.toUpperCase().replace(/W+$/, '');
+          setRelatedCommonStock(stripped.length >= 2 && stripped !== symbol.toUpperCase() ? stripped : null);
+        }
       } else if (apiType === 'CS' || apiType === 'ADRC' || apiType === 'PFD') {
         setIsWarrant(false);
         setRelatedCommonStock(null);
