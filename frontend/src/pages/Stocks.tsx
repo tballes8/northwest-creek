@@ -235,6 +235,12 @@ const Stocks: React.FC = () => {
   const handleSearchInputChange = (value: string) => {
     setSearchInput(value);
     
+    // If cleared, reset to empty state
+    if (!value.trim()) {
+      resetToEmptyState();
+      return;
+    }
+
     // Clear previous debounce
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
@@ -244,6 +250,23 @@ const Stocks: React.FC = () => {
     debounceRef.current = setTimeout(() => {
       searchTickers(value);
     }, 300);
+  };
+
+  const resetToEmptyState = () => {
+    setTicker('');
+    setSearchInput('');
+    setQuote(null);
+    setCompany(null);
+    setHistorical([]);
+    setNews([]);
+    setDividendInfo(null);
+    setError('');
+    setIsWarrant(false);
+    setRelatedCommonStock(null);
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setWatchlistMsg(null);
+    navigate('/stocks', { replace: true });
   };
 
   const handleSuggestionClick = (suggestion: SearchSuggestion) => {
@@ -693,9 +716,23 @@ const Stocks: React.FC = () => {
                 onChange={(e) => handleSearchInputChange(e.target.value)}
                 onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
                 placeholder="Search by ticker symbol or company name (e.g., AAPL or Apple)"
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-transparent dark:bg-gray-600 dark:text-white"
+                className="w-full px-4 py-3 pr-10 border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-transparent dark:bg-gray-600 dark:text-white"
                 autoComplete="off"
               />
+
+              {/* Clear button */}
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={resetToEmptyState}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                  title="Clear search"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
               
               {/* Suggestions Dropdown */}
               {showSuggestions && (

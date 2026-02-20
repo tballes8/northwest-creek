@@ -23,25 +23,50 @@ interface BlogPostFull {
 
 /**
  * IframeContent — renders full HTML (including <style> blocks) in a sandboxed
+<<<<<<< HEAD
+ * iframe that auto-resizes to its content height.  Injects a small base
+ * stylesheet so bare HTML still looks presentable, and listens for dark-mode
+ * changes on the parent document.
+=======
  * iframe that auto-resizes to its content height.
+>>>>>>> 48fe68647ee4b7f0186af519c8c53fab63fbde0f
  */
 const IframeContent: React.FC<{ html: string }> = ({ html }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+<<<<<<< HEAD
+  // Strip <!DOCTYPE>, <html>, <head> wrappers — keep <style> + <body> content
+  const extractBody = (raw: string): string => {
+    // If there's a <body>, grab its innerHTML; otherwise treat as fragment
+    const bodyMatch = raw.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    const bodyContent = bodyMatch ? bodyMatch[1] : raw;
+
+    // Preserve any <style> blocks from <head> or anywhere in the doc
+=======
   const extractBody = (raw: string): string => {
     const bodyMatch = raw.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
     const bodyContent = bodyMatch ? bodyMatch[1] : raw;
+>>>>>>> 48fe68647ee4b7f0186af519c8c53fab63fbde0f
     const styles: string[] = [];
     raw.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, (match) => {
       styles.push(match);
       return '';
     });
+<<<<<<< HEAD
+
+    // Dedupe: if a <style> block already exists inside bodyContent, don't re-add
+=======
+>>>>>>> 48fe68647ee4b7f0186af519c8c53fab63fbde0f
     const uniqueStyles = styles.filter(s => !bodyContent.includes(s));
     return uniqueStyles.join('\n') + '\n' + bodyContent;
   };
 
   const isDark = document.documentElement.classList.contains('dark');
 
+<<<<<<< HEAD
+  // Base stylesheet: sensible defaults so unstyled HTML isn't raw white/black
+=======
+>>>>>>> 48fe68647ee4b7f0186af519c8c53fab63fbde0f
   const baseCSS = `
     *, *::before, *::after { box-sizing: border-box; }
     html, body {
@@ -65,6 +90,10 @@ const IframeContent: React.FC<{ html: string }> = ({ html }) => {
 </head>
 <body>${extractBody(html)}
 <script>
+<<<<<<< HEAD
+  // Notify parent of content height so it can resize the iframe
+=======
+>>>>>>> 48fe68647ee4b7f0186af519c8c53fab63fbde0f
   function postHeight() {
     const h = document.documentElement.scrollHeight;
     window.parent.postMessage({ type: 'iframe-height', height: h }, '*');
