@@ -4,7 +4,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { authAPI } from '../services/api';
+import { authAPI, phoneAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import axios from 'axios';
@@ -37,14 +37,14 @@ const TIER_DETAILS: Record<string, {
     price: '$40/mo',
     color: 'text-blue-400',
     bgClass: 'bg-blue-500',
-    features: ['45 watchlist stocks', '45 portfolio entries', '5 reviews/day', '5 TA/day', '5 DCF/day', '20 alerts'],
+    features: ['45 watchlist stocks', '45 portfolio entries', '5 reviews/day', '5 TA/day', '5 DCF/day', '20 alerts', 'SMS text alerts'],
   },
   professional: {
     name: 'Professional Investor',
     price: '$100/mo',
     color: 'text-purple-400',
     bgClass: 'bg-purple-500',
-    features: ['75 watchlist stocks', '75 portfolio entries', '20 reviews/day', '20 TA/day', '20 DCF/day', '50 alerts', 'Ad-free'],
+    features: ['75 watchlist stocks', '75 portfolio entries', '20 reviews/day', '20 TA/day', '20 DCF/day', '50 alerts', 'SMS text alerts', 'Ad-free'],
   },
 };
 
@@ -67,6 +67,14 @@ const AccountSettings: React.FC = () => {
   const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
 
+  // Phone / SMS state
+  const [phoneStatus, setPhoneStatus] = useState<{ has_phone: boolean; phone_verified: boolean; phone_last_four: string | null; message: string } | null>(null);
+  const [phoneInput, setPhoneInput] = useState('');
+  const [otpInput, setOtpInput] = useState('');
+  const [phoneStep, setPhoneStep] = useState<'view' | 'input' | 'verify'>('view');
+  const [phoneLoading, setPhoneLoading] = useState(false);
+  const [phoneMessage, setPhoneMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   useEffect(() => {
     loadUser();
   }, []);
@@ -75,6 +83,17 @@ const AccountSettings: React.FC = () => {
     try {
       const response = await authAPI.getCurrentUser();
       setUser(response.data);
+
+      // Load phone status if tier supports SMS
+      const smsTiers = ['active', 'professional'];
+      if (smsTiers.includes(response.data.subscription_tier)) {
+        try {
+          const phoneResp = await phoneAPI.getStatus();
+          setPhoneStatus(phoneResp.data);
+        } catch {
+          // Non-fatal
+        }
+      }
     } catch (error) {
       console.error('Failed to load user:', error);
       if ((error as any).response?.status === 401) {
@@ -83,6 +102,64 @@ const AccountSettings: React.FC = () => {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const canUseSms = () => ['active', 'professional'].includes(user?.subscription_tier || '');
+
+  const handlePhoneSubmit = async () => {
+    setPhoneMessage(null);
+    if (!phoneInput.trim()) {
+      setPhoneMessage({ type: 'error', text: 'Please enter your phone number.' });
+      return;
+    }
+    setPhoneLoading(true);
+    try {
+      const resp = await phoneAPI.submitPhone({ phone_number: phoneInput.trim() });
+      setPhoneStatus(resp.data);
+      setPhoneStep('verify');
+      setPhoneMessage({ type: 'success', text: resp.data.message });
+    } catch (err: any) {
+      setPhoneMessage({ type: 'error', text: err.response?.data?.detail || 'Failed to send code.' });
+    } finally {
+      setPhoneLoading(false);
+    }
+  };
+
+  const handlePhoneVerify = async () => {
+    setPhoneMessage(null);
+    if (otpInput.length !== 6) {
+      setPhoneMessage({ type: 'error', text: 'Enter the 6-digit code from your text.' });
+      return;
+    }
+    setPhoneLoading(true);
+    try {
+      const resp = await phoneAPI.verifyCode({ code: otpInput });
+      setPhoneStatus(resp.data);
+      setPhoneStep('view');
+      setPhoneInput('');
+      setOtpInput('');
+      setPhoneMessage({ type: 'success', text: resp.data.message });
+    } catch (err: any) {
+      setPhoneMessage({ type: 'error', text: err.response?.data?.detail || 'Invalid or expired code.' });
+    } finally {
+      setPhoneLoading(false);
+    }
+  };
+
+  const handlePhoneRemove = async () => {
+    if (!window.confirm('Remove your phone number? This will disable all SMS alerts.')) return;
+    setPhoneLoading(true);
+    setPhoneMessage(null);
+    try {
+      const resp = await phoneAPI.removePhone();
+      setPhoneStatus(resp.data);
+      setPhoneStep('view');
+      setPhoneMessage({ type: 'success', text: 'Phone removed. All SMS alerts disabled.' });
+    } catch (err: any) {
+      setPhoneMessage({ type: 'error', text: err.response?.data?.detail || 'Failed to remove phone.' });
+    } finally {
+      setPhoneLoading(false);
     }
   };
 
@@ -458,6 +535,146 @@ const AccountSettings: React.FC = () => {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Text Notifications / Phone Management */}
+        {canUseSms() && (
+          <div className="bg-white dark:bg-gray-700 rounded-xl shadow-lg border dark:border-gray-500 p-6 mb-6">
+            <div className="flex items-center gap-2 mb-4">
+              <svg className="w-5 h-5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+              </svg>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Text Notifications</h2>
+            </div>
+
+            {phoneMessage && (
+              <div className={`${phoneMessage.type === 'success' ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300' : 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300'} border rounded-lg p-3 mb-4 text-sm`}>
+                {phoneMessage.text}
+              </div>
+            )}
+
+            {phoneStep === 'view' && (
+              <>
+                {phoneStatus?.phone_verified ? (
+                  <div className="bg-gray-50 dark:bg-gray-750 rounded-lg p-4 border dark:border-gray-600">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                          Phone verified
+                        </p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Texts go to &bull;&bull;&bull;-{phoneStatus.phone_last_four}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => { setPhoneStep('input'); setPhoneMessage(null); }}
+                          className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-medium transition-colors"
+                        >
+                          Change
+                        </button>
+                        <button
+                          onClick={handlePhoneRemove}
+                          disabled={phoneLoading}
+                          className="px-4 py-2 text-sm border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg font-medium transition-colors disabled:opacity-50"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-3">
+                      Manage which alerts send texts on the <Link to="/alerts" className="text-primary-500 hover:text-primary-400 underline">Alerts page</Link>. Text STOP to opt out anytime.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 dark:bg-gray-750 rounded-lg p-4 border dark:border-gray-600">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                      Add your phone number to receive text messages when your price alerts trigger.
+                    </p>
+                    <button
+                      onClick={() => { setPhoneStep('input'); setPhoneMessage(null); }}
+                      className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors text-sm"
+                    >
+                      Add Phone Number
+                    </button>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-3">
+                      We will ONLY text you for alerts you opt into. We will never text you for any other reason.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {phoneStep === 'input' && (
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Number</label>
+                  <input
+                    type="tel"
+                    value={phoneInput}
+                    onChange={(e) => setPhoneInput(e.target.value)}
+                    placeholder="(208) 555-1234"
+                    className="w-full max-w-xs px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handlePhoneSubmit}
+                    disabled={phoneLoading}
+                    className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors text-sm disabled:opacity-50"
+                  >
+                    {phoneLoading ? 'Sending...' : 'Send Verification Code'}
+                  </button>
+                  <button
+                    onClick={() => { setPhoneStep('view'); setPhoneMessage(null); }}
+                    className="px-5 py-2.5 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-medium transition-colors text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {phoneStep === 'verify' && (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Enter the 6-digit code we sent to &bull;&bull;&bull;-{phoneStatus?.phone_last_four}.
+                </p>
+                <div>
+                  <input
+                    type="text"
+                    value={otpInput}
+                    onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="123456"
+                    maxLength={6}
+                    className="w-full max-w-[200px] px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-center text-xl tracking-widest font-mono"
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handlePhoneVerify}
+                    disabled={phoneLoading}
+                    className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors text-sm disabled:opacity-50"
+                  >
+                    {phoneLoading ? 'Verifying...' : 'Verify Code'}
+                  </button>
+                  <button
+                    onClick={handlePhoneSubmit}
+                    disabled={phoneLoading}
+                    className="px-5 py-2.5 text-primary-500 hover:text-primary-400 text-sm font-medium disabled:opacity-50"
+                  >
+                    Resend
+                  </button>
+                  <button
+                    onClick={() => { setPhoneStep('view'); setPhoneMessage(null); }}
+                    className="px-5 py-2.5 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-medium transition-colors text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

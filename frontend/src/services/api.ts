@@ -1,13 +1,8 @@
 import axios from 'axios';
 
-const rawBaseUrl = process.env.REACT_APP_API_URL 
+const API_BASE_URL = process.env.REACT_APP_API_URL 
   ? `${process.env.REACT_APP_API_URL}/api/v1`
   : 'http://localhost:8000/api/v1';
-
-// Force HTTPS in production to prevent mixed-content blocks
-const API_BASE_URL = process.env.NODE_ENV === 'production'
-  ? rawBaseUrl.replace(/^http:\/\//, 'https://')
-  : rawBaseUrl;
 
 // Create axios instance with interceptor for auth token
 const axiosInstance = axios.create({
@@ -20,6 +15,7 @@ axiosInstance.interceptors.request.use(
     const token = localStorage.getItem('access_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      console.log('Sending token:', token.substring(0, 20) + '...');
     }
     return config;
   },
@@ -87,14 +83,29 @@ export const alertsAPI = {
   getAll: () =>
     axiosInstance.get('/alerts/'),
   
-  create: (data: { ticker: string; condition: 'above' | 'below'; target_price: number; notes?: string }) =>
+  create: (data: { ticker: string; condition: 'above' | 'below'; target_price: number; notes?: string; sms_enabled?: boolean }) =>
     axiosInstance.post('/alerts/', data),
   
   delete: (id: string) =>
     axiosInstance.delete(`/alerts/${id}`),
   
-  update: (id: string, data: { is_active?: boolean; notes?: string }) =>
+  update: (id: string, data: { is_active?: boolean; notes?: string; sms_enabled?: boolean }) =>
     axiosInstance.patch(`/alerts/${id}`, data),
+};
+
+// Phone / SMS Verification API
+export const phoneAPI = {
+  getStatus: () =>
+    axiosInstance.get('/phone/status'),
+
+  submitPhone: (data: { phone_number: string }) =>
+    axiosInstance.post('/phone/submit', data),
+
+  verifyCode: (data: { code: string }) =>
+    axiosInstance.post('/phone/verify', data),
+
+  removePhone: () =>
+    axiosInstance.delete('/phone/'),
 };
 
 // Stocks API
