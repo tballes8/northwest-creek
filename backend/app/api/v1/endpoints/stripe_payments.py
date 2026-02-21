@@ -81,16 +81,22 @@ async def create_subscription(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Create a Stripe Customer + Subscription for in-app payment via Stripe Elements.
-    Returns the client_secret for the frontend to confirm payment.
+    Create or upgrade a Stripe subscription.
+
+    - **New subscriber:** Creates a Customer + Subscription, returns client_secret
+      for the frontend to confirm payment via Stripe Elements.
+    - **Existing subscriber (upgrade/downgrade):** Modifies the current subscription
+      in-place, swapping the price item with proration. Stripe automatically
+      calculates the credit from the old plan and charges the difference.
+      If the customer already has a payment method on file, the prorated
+      invoice is paid automatically — no client_secret needed.
     """
     try:
-        price_id = get_price_id_for_tier(request.tier)
-        
-        # Step 1: Find or create Stripe Customer
-        # Search by email to avoid duplicates
+        new_price_id = get_price_id_for_tier(request.tier)
+
+        # ── Step 1: Find or create Stripe Customer ────────────
         customers = stripe.Customer.list(email=current_user.email, limit=1)
-        
+
         if customers.data:
             customer = customers.data[0]
         else:
@@ -101,31 +107,125 @@ async def create_subscription(
                     'user_id': str(current_user.id),
                 }
             )
-        
-        # Step 2: Create Subscription with incomplete payment
-        # This creates an Invoice + PaymentIntent automatically
-        subscription = stripe.Subscription.create(
+
+        # ── Step 2: Check for existing active subscription ────
+        existing_subs = stripe.Subscription.list(
             customer=customer.id,
-            items=[{'price': price_id}],
-            payment_behavior='default_incomplete',
-            payment_settings={
-                'save_default_payment_method': 'on_subscription',
-            },
-            expand=['latest_invoice.payment_intent'],
-            metadata={
-                'user_id': str(current_user.id),
-                'plan_name': get_plan_name_for_price(price_id),
-            },
+            status='active',
+            limit=10,
         )
-        
-        # Extract client_secret from the PaymentIntent
-        client_secret = subscription.latest_invoice.payment_intent.client_secret
-        
-        return {
-            "subscription_id": subscription.id,
-            "client_secret": client_secret,
-        }
-        
+
+        # Also check for subscriptions scheduled to cancel (cancel_at_period_end)
+        # — the user may have cancelled but still has an active sub until period end
+        if not existing_subs.data:
+            existing_subs = stripe.Subscription.list(
+                customer=customer.id,
+                status='trialing',
+                limit=10,
+            )
+
+        active_sub = existing_subs.data[0] if existing_subs.data else None
+
+        if active_sub:
+            # ── UPGRADE PATH: Modify existing subscription ────
+            current_item = active_sub['items']['data'][0]
+            current_price_id = current_item['price']['id']
+
+            if current_price_id == new_price_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="You're already on this plan."
+                )
+
+            # If user had scheduled a cancellation, undo it
+            if active_sub.get('cancel_at_period_end'):
+                stripe.Subscription.modify(
+                    active_sub.id,
+                    cancel_at_period_end=False,
+                )
+
+            # Swap the price item with proration
+            # Stripe calculates: (new price × remaining days) - (old price × remaining days)
+            updated_sub = stripe.Subscription.modify(
+                active_sub.id,
+                items=[{
+                    'id': current_item['id'],
+                    'price': new_price_id,
+                }],
+                proration_behavior='create_prorations',
+                metadata={
+                    'user_id': str(current_user.id),
+                    'plan_name': get_plan_name_for_price(new_price_id),
+                },
+                expand=['latest_invoice.payment_intent'],
+            )
+
+            # The prorated invoice is usually paid automatically if the customer
+            # has a default payment method on file. Check if we need a client_secret.
+            latest_invoice = updated_sub.latest_invoice
+            payment_intent = latest_invoice.payment_intent if latest_invoice else None
+
+            if payment_intent and payment_intent.status in ('requires_payment_method', 'requires_confirmation', 'requires_action'):
+                # Customer needs to confirm payment (e.g., no card on file, 3D Secure)
+                return {
+                    "subscription_id": updated_sub.id,
+                    "client_secret": payment_intent.client_secret,
+                    "upgrade": True,
+                }
+            else:
+                # Payment succeeded automatically — update tier immediately
+                new_tier = get_tier_for_price(new_price_id)
+                old_tier = current_user.subscription_tier
+                current_user.subscription_tier = new_tier
+                await db.commit()
+                print(f"✅ User {current_user.email} upgraded from {old_tier} to {new_tier} (prorated)")
+
+                # Send upgrade email
+                try:
+                    plan_name = get_plan_name_for_price(new_price_id)
+                    email_service.send_payment_success_email(
+                        to_email=current_user.email,
+                        user_name=current_user.full_name or current_user.email,
+                        plan_name=plan_name,
+                        tier=new_tier,
+                    )
+                except Exception as email_err:
+                    print(f"⚠️ Upgrade email failed: {email_err}")
+
+                return {
+                    "subscription_id": updated_sub.id,
+                    "client_secret": None,
+                    "upgrade": True,
+                    "message": f"Upgraded to {get_plan_name_for_price(new_price_id)}! Prorated charge applied.",
+                    "new_tier": new_tier,
+                }
+
+        else:
+            # ── NEW SUBSCRIPTION PATH ─────────────────────────
+            subscription = stripe.Subscription.create(
+                customer=customer.id,
+                items=[{'price': new_price_id}],
+                payment_behavior='default_incomplete',
+                payment_settings={
+                    'save_default_payment_method': 'on_subscription',
+                },
+                expand=['latest_invoice.payment_intent'],
+                metadata={
+                    'user_id': str(current_user.id),
+                    'plan_name': get_plan_name_for_price(new_price_id),
+                },
+            )
+
+            client_secret = subscription.latest_invoice.payment_intent.client_secret
+
+            return {
+                "subscription_id": subscription.id,
+                "client_secret": client_secret,
+                "upgrade": False,
+            }
+
+    except HTTPException:
+        raise
     except stripe.error.StripeError as e:
         print(f"Stripe error in create-subscription: {str(e)}")
         raise HTTPException(

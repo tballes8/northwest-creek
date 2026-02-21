@@ -114,14 +114,20 @@ const CheckoutForm: React.FC<{ tier: Tier; onSuccess: () => void }> = ({ tier, o
         return;
       }
 
-      // Step 1: Create subscription on backend — returns client_secret
+      // Step 1: Create or upgrade subscription on backend
       const response = await axios.post(
         `${API_URL}/api/v1/stripe/create-subscription`,
         { tier },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      const { client_secret, subscription_id } = response.data;
+      const { client_secret, subscription_id, upgrade, message, new_tier } = response.data;
+
+      // If upgrade was auto-charged (card already on file), no confirmation needed
+      if (upgrade && !client_secret) {
+        onSuccess();
+        return;
+      }
 
       // Step 2: Confirm the payment with card details
       const cardNumber = elements.getElement(CardNumberElement);
