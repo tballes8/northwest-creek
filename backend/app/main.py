@@ -9,15 +9,28 @@ from app.api.v1.endpoints import (
     intraday, live_prices, financials, phone
 )
 from app.api.v1.endpoints.content import router as content_router
+from app.services.alert_checker import alert_checker
+from app.services.websocket_service import live_price_service
 
 
 settings = get_settings()
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 Northwest Creek API starting...")
+
+    # Sprint 9: Wire alert checker into price stream
+    alert_checker.set_broadcast_fn(live_price_service.broadcast_to_clients)
+    live_price_service.on_price_update = alert_checker.on_price_update
+    await alert_checker.load_alert_tickers(live_price_service)
+    await live_price_service.start()
+
     yield
+
+    await live_price_service.stop()
     print("👋 Northwest Creek API shutting down...")
+
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -43,6 +56,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.get("/")
 async def root():

@@ -1,17 +1,22 @@
 """
 Live Price WebSocket Service
 Connects to Polygon.io and streams real-time stock prices
+
+Sprint 9 addition: on_price_update callback for alert_checker integration.
+When a price updates, the callback is invoked (if set) so the alert checker
+can evaluate active alerts without blocking the price stream.
 """
 import asyncio
 import json
 import websockets
 import os
-from typing import Set, Dict, Optional
+from typing import Set, Dict, Optional, Callable, Awaitable
 from datetime import datetime, time as dt_time
 import pytz
 from app.config import get_settings
 
 settings = get_settings()
+
 
 class LivePriceService:
     """Service to manage live price streaming from Polygon.io"""
@@ -24,6 +29,10 @@ class LivePriceService:
         self.clients: Set[websockets.WebSocketServerProtocol] = set()
         self.price_cache: Dict[str, Dict] = {}  # Cache latest prices
         self.running = False
+
+        # Sprint 9: alert checker callback
+        # Signature: async def callback(ticker: str, price: float)
+        self.on_price_update: Optional[Callable[[str, float], Awaitable[None]]] = None
         
     async def connect_to_polygon(self):
         """Connect to Polygon.io WebSocket"""
@@ -164,6 +173,14 @@ class LivePriceService:
                                 "type": "price_update",
                                 "data": self.price_cache[ticker]
                             })
+
+                            # ── Sprint 9: Alert checker hook ─────
+                            if self.on_price_update:
+                                try:
+                                    await self.on_price_update(ticker, price)
+                                except Exception as e:
+                                    # Never let alert checking crash the price stream
+                                    print(f"⚠️ Alert check error for {ticker}: {e}")
             
             except asyncio.TimeoutError:
                 # No message received in 30 seconds, send ping
