@@ -85,6 +85,8 @@ const Pricing: React.FC = () => {
         { text: 'Technical Analysis', included: false },
         { text: 'DCF Valuation', included: false },
         { text: 'Advanced charts', included: false },
+        { text: 'Email support', included: false },
+        { text: 'Instant SMS Alerts', included: false },
       ],
       buttonText: 'Get Started',
       buttonLink: '/register',
@@ -107,7 +109,8 @@ const Pricing: React.FC = () => {
         { text: 'Technical Analysis', included: true },
         { text: 'Advanced charts', included: true },
         { text: 'Email support', included: true },
-        { text: 'Export to Excel/CSV', included: true },
+        { text: 'Instant SMS Alerts', included: false },
+        //{ text: 'Export to Excel/CSV', included: true },
       ],
       buttonText: user?.subscription_tier === 'casual' ? 'Current Plan' : 'Upgrade to Casual',
       buttonLink: '/registerwithpayments',
@@ -132,6 +135,7 @@ const Pricing: React.FC = () => {
         { text: 'Premium charting tools', included: true },
         { text: 'Historical data (5 years)', included: true },
         { text: 'Priority email support', included: true },
+        { text: 'Instant SMS Alerts', included: true },
       ],
       buttonText: user?.subscription_tier === 'active' ? 'Current Plan' : 'Upgrade to Active',
       buttonLink: '/registerwithpayments',
@@ -150,14 +154,13 @@ const Pricing: React.FC = () => {
         { text: '75 portfolio entries', included: true },
         { text: '20 stock reviews daily', included: true },
         { text: '20 DCF valuations daily', included: true },
-        // { text: 'Real-time market data', included: true },
+        { text: 'Real-time market data', included: true },
         { text: 'Advanced Technical Analysis', included: true },
         { text: 'Professional charting suite', included: true },
         { text: 'Historical data - 20 Stocks daily', included: true },
-        // { text: 'API access', included: true },
         { text: 'Priority chat support', included: true },
         { text: 'Custom integrations', included: true },
-        { text: 'White-glove onboarding', included: true },
+        { text: 'Instant SMS Alerts', included: true },
       ],
       buttonText: user?.subscription_tier === 'professional' ? 'Current Plan' : 'Upgrade to Professional',
       buttonLink: '/registerwithpayments',
@@ -214,7 +217,7 @@ const Pricing: React.FC = () => {
           Choose Your Plan
         </h1>
         <p className="text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
-          Start with our free tier and upgrade anytime as your needs grow. Currenly, market data on 15 minute delay.
+          Start with our free tier and upgrade anytime as your needs grow.
         </p>
         {user && (
           <div className="mt-4 inline-flex items-center px-4 py-2 bg-primary-50 dark:bg-primary-900/30 rounded-lg border border-primary-200 dark:border-primary-800">
