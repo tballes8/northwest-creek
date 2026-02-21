@@ -295,7 +295,7 @@ const Pricing: React.FC = () => {
                 </button>
                 ) : tier.priceId ? (
                 <button
-                    onClick={() => handleUpgrade(tier.name, 
+                    onClick={() => handleUpgrade(tier.tierSlug, 
                     tier.priceId === 'pro' ? stripeConfig?.pro_price_id : stripeConfig?.professional_price_id
                     )}
                     className={`w-full px-6 py-3 font-semibold rounded-lg transition-colors ${
