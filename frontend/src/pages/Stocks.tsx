@@ -136,6 +136,8 @@ const Stocks: React.FC = () => {
   const [dailySnapshots, setDailySnapshots] = useState<DailySnapshot[]>([]);
   const [sectorSnapshots, setSectorSnapshots] = useState<DailySnapshot[]>([]);
   const [sectorLoading, setSectorLoading] = useState(false);
+  // Sector context — persists across search/clear cycles until explicit dismissal
+  const [activeSector, setActiveSector] = useState(sectorParam);
   const [isWarrant, setIsWarrant] = useState(false);
   const [relatedCommonStock, setRelatedCommonStock] = useState<string | null>(null);
   const [watchlistMsg, setWatchlistMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -191,7 +193,11 @@ const Stocks: React.FC = () => {
     }
     // Load sector-specific stocks when sector param is present
     if (sectorParam) {
-      loadSectorSnapshots(sectorParam);
+      setActiveSector(sectorParam);
+      // Only fetch if we don't already have cached snapshots for this sector
+      if (sectorSnapshots.length === 0) {
+        loadSectorSnapshots(sectorParam);
+      }
     }
   }, [initialTicker, showTopGainers, sectorParam]);
 
@@ -266,6 +272,17 @@ const Stocks: React.FC = () => {
     setSuggestions([]);
     setShowSuggestions(false);
     setWatchlistMsg(null);
+    // Preserve sector context in URL if we have an active sector
+    if (activeSector) {
+      navigate(`/stocks?sector=${encodeURIComponent(activeSector)}`, { replace: true });
+    } else {
+      navigate('/stocks', { replace: true });
+    }
+  };
+
+  const clearSectorContext = () => {
+    setActiveSector('');
+    setSectorSnapshots([]);
     navigate('/stocks', { replace: true });
   };
 
@@ -1234,19 +1251,28 @@ const Stocks: React.FC = () => {
           <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-12 border dark:border-gray-500 text-center">
             
             {/* Sector Explorer Banner — shown when navigating from Dashboard pie chart */}
-            {sectorParam && (
+            {activeSector && (
               <div className="mb-8 pb-8 border-b border-gray-200 dark:border-gray-600">
                 <div className="flex items-center justify-center gap-3 mb-3">
                   <span
                     className="inline-block w-4 h-4 rounded-full"
-                    style={{ backgroundColor: SECTOR_COLORS[sectorParam] || SECTOR_COLORS['Other'] }}
+                    style={{ backgroundColor: SECTOR_COLORS[activeSector] || SECTOR_COLORS['Other'] }}
                   />
                   <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {sectorParam} Sector
+                    {activeSector} Sector
                   </h3>
+                  <button
+                    onClick={clearSectorContext}
+                    className="ml-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                    title="Exit sector view"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                 </div>
                 <p className="text-gray-600 dark:text-gray-400 mb-1">
-                  Explore companies in the {sectorParam} sector to diversify your portfolio
+                  Explore companies in the {activeSector} sector to diversify your portfolio
                 </p>
                 <p className="text-xs text-gray-400 dark:text-gray-500 mb-6">
                   Showing random stocks from today's market snapshot
@@ -1255,7 +1281,7 @@ const Stocks: React.FC = () => {
                 {sectorLoading ? (
                   <div className="text-center py-6">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto mb-2"></div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Loading {sectorParam} stocks...</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Loading {activeSector} stocks...</p>
                   </div>
                 ) : sectorSnapshots.length > 0 ? (
                   <>
@@ -1266,14 +1292,14 @@ const Stocks: React.FC = () => {
                           onClick={() => handleTickerClick(snap.ticker)}
                           className="p-4 rounded-lg transition-all text-left group hover:scale-[1.03]"
                           style={{
-                            backgroundColor: `${SECTOR_COLORS[sectorParam] || SECTOR_COLORS['Other']}15`,
+                            backgroundColor: `${SECTOR_COLORS[activeSector] || SECTOR_COLORS['Other']}15`,
                             borderWidth: '1px',
-                            borderColor: `${SECTOR_COLORS[sectorParam] || SECTOR_COLORS['Other']}30`,
+                            borderColor: `${SECTOR_COLORS[activeSector] || SECTOR_COLORS['Other']}30`,
                           }}
                         >
                           <div
                             className="font-semibold text-lg transition-colors"
-                            style={{ color: SECTOR_COLORS[sectorParam] || SECTOR_COLORS['Other'] }}
+                            style={{ color: SECTOR_COLORS[activeSector] || SECTOR_COLORS['Other'] }}
                           >
                             {snap.ticker}
                           </div>
@@ -1284,17 +1310,17 @@ const Stocks: React.FC = () => {
                       ))}
                     </div>
                     <button
-                      onClick={() => loadSectorSnapshots(sectorParam)}
+                      onClick={() => loadSectorSnapshots(activeSector)}
                       className="mt-4 px-4 py-2 text-white rounded-lg text-sm transition-colors font-medium hover:opacity-90"
-                      style={{ backgroundColor: SECTOR_COLORS[sectorParam] || SECTOR_COLORS['Other'] }}
+                      style={{ backgroundColor: SECTOR_COLORS[activeSector] || SECTOR_COLORS['Other'] }}
                     >
-                      🔄 Load Different {sectorParam} Stocks
+                      🔄 Load Different {activeSector} Stocks
                     </button>
                   </>
                 ) : (
                   <div className="text-center py-6">
                     <p className="text-gray-500 dark:text-gray-400">
-                      No {sectorParam} stocks found in today's snapshot. Try running the daily snapshot fetch first.
+                      No {activeSector} stocks found in today's snapshot. Try running the daily snapshot fetch first.
                     </p>
                   </div>
                 )}
@@ -1302,7 +1328,7 @@ const Stocks: React.FC = () => {
             )}
 
             {/* Default empty state content */}
-            {!sectorParam && (
+            {!activeSector && (
               <>
                 <div className="text-6xl mb-4">📊</div>
                 <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Search for a Stock</h3>
