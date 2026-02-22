@@ -95,6 +95,23 @@ class PriceAlert(Base):
     user = relationship("User", back_populates="alerts")
 
 
+class WaitlistSignup(Base):
+    """Collects opt-in emails from the public landing page.
+
+    No FK to users — these are pre-registration leads from social media
+    links. The `source` column captures utm_source / ref param / referrer
+    so you can measure which social channel is converting.
+    """
+    __tablename__ = "waitlist_signups"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    source = Column(String(255), nullable=True)          # utm_source, ref param, or document.referrer
+    ip_address = Column(String(45), nullable=True)        # IPv4 or IPv6, for rate-limit / abuse detection
+    converted = Column(Boolean, default=False)            # flipped True when they register a real account
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class DailyStockSnapshot(Base):
     __tablename__ = "daily_stock_snapshots"
     

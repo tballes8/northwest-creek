@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     intraday, live_prices, financials, phone
 )
 from app.api.v1.endpoints.content import router as content_router
+from app.api.v1.endpoints.waitlist import router as waitlist_router
 from app.services.alert_checker import alert_checker
 from app.services.websocket_service import live_price_service
 
@@ -91,3 +92,4 @@ app.include_router(live_prices.router, prefix="/api/v1/live-prices", tags=["Live
 app.include_router(content_router, prefix="/api/v1/content", tags=["content"])
 app.include_router(financials.router, prefix="/api/v1/financials", tags=["financials"])
 app.include_router(phone.router, prefix=f"/api/{settings.API_VERSION}/phone", tags=["Phone"])
+app.include_router(waitlist_router, prefix="/api/v1/waitlist", tags=["waitlist"])

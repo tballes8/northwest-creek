@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Northwest Creek — Professional Stock Analysis for Retail Investors</title>
+<meta name="description" content="Real-time market data, 15+ technical indicators, DCF valuation models, live portfolio tracking, and price alerts — institutional-grade stock analysis built for retail investors." />
+<link rel="canonical" href="https://northwestcreekllc.com" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Northwest Creek — Professional Stock Analysis for Retail Investors" />
+<meta property="og:description" content="Real-time market data, technical indicators, DCF valuations, portfolio tracking, and price alerts for retail investors." />
+<meta property="og:url" content="https://northwestcreekllc.com" />
+<meta property="og:image" content="https://northwestcreekllc.com/images/og-default.png" />
+<meta property="og:site_name" content="Northwest Creek" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Northwest Creek — Professional Stock Analysis" />
+<meta name="twitter:description" content="Institutional-grade stock analysis tools built for retail investors." />
+<meta name="twitter:image" content="https://northwestcreekllc.com/images/og-default.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;0,9..40,800;1,9..40,400&display=swap" rel="stylesheet"/>
+
+<!-- JSON-LD structured data (matches Landing.tsx) -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "name": "Northwest Creek LLC",
+      "url": "https://northwestcreekllc.com",
+      "logo": "https://northwestcreekllc.com/images/logo.png",
+      "description": "Professional stock analysis platform for retail investors.",
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": "Post Falls",
+        "addressRegion": "ID",
+        "addressCountry": "US"
+      }
+    },
+    {
+      "@type": "WebSite",
+      "name": "Northwest Creek",
+      "url": "https://northwestcreekllc.com",
+      "description": "Real-time market data, technical indicators, DCF valuations, and portfolio tracking for retail investors.",
+      "publisher": { "@type": "Organization", "name": "Northwest Creek LLC" }
+    }
+  ]
+}
+</script>
+
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --primary-400:#2dd4bf;
+    --primary-500:#14b8a6;
+    --primary-600:#0d9488;
+    --primary-700:#0f766e;
+    --primary-900-30:rgba(13,148,136,.15);
+    --emerald-400:#34d399;
+    --emerald-500:#10b981;
+    --emerald-900-30:rgba(16,185,129,.15);
+    --purple-400:#c084fc;
+    --purple-600:#9333ea;
+    --purple-900-30:rgba(147,51,234,.15);
+    --green-400:#4ade80;
+    --green-900-30:rgba(22,163,74,.15);
+    --gray-50:#f9fafb;
+    --gray-100:#f3f4f6;
+    --gray-300:#d1d5db;
+    --gray-400:#9ca3af;
+    --gray-500:#6b7280;
+    --gray-600:#4b5563;
+    --gray-700:#374151;
+    --gray-800:#1f2937;
+    --gray-900:#111827;
+    --gray-950:#030712;
+    --white:#ffffff;
+    --red-400:#f87171;
+    --red-500:#ef4444;
+  }
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--gray-800);
+    color:var(--white);
+    font-family:'DM Sans',system-ui,-apple-system,sans-serif;
+    overflow-x:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ═══════════ NAV ═══════════ */
+  nav{
+    position:sticky;top:0;width:100%;z-index:50;
+    background:var(--gray-900);
+    border-bottom:1px solid var(--gray-700);
+    box-shadow:0 1px 3px rgba(0,0,0,.3);
+  }
+  .nav-inner{
+    max-width:1280px;margin:auto;height:64px;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 1rem;
+  }
+  @media(min-width:640px){.nav-inner{padding:0 1.5rem}}
+  @media(min-width:1024px){.nav-inner{padding:0 2rem}}
+  .nav-brand{display:flex;align-items:center;gap:.75rem}
+  .nav-logo{height:48px;width:48px;border-radius:8px}
+  .nav-wordmark{
+    font-family:'Viner Hand ITC','Caveat',cursive;
+    font-style:italic;font-size:1.8rem;font-weight:700;
+    color:var(--primary-400);
+  }
+  .nav-links{display:flex;align-items:center;gap:1rem}
+  .nav-link{
+    color:var(--gray-400);text-decoration:none;font-size:.875rem;font-weight:500;
+    padding:.5rem .75rem;border-radius:6px;transition:color .2s;
+  }
+  .nav-link:hover{color:var(--primary-400)}
+  .nav-cta{
+    background:var(--primary-600);color:var(--white);border:none;
+    padding:.5rem 1rem;border-radius:6px;font-weight:600;cursor:pointer;
+    font-size:.875rem;transition:background .2s;text-decoration:none;
+    box-shadow:0 1px 2px rgba(0,0,0,.2);
+  }
+  .nav-cta:hover{background:var(--primary-500)}
+
+  /* ═══════════ HERO ═══════════ */
+  .hero{
+    max-width:1280px;margin:0 auto;
+    padding:5rem 1rem 4rem;text-align:center;
+  }
+  @media(min-width:640px){.hero{padding:5rem 1.5rem 4rem}}
+  @media(min-width:1024px){.hero{padding:5rem 2rem 4rem}}
+  h1{font-size:clamp(2.4rem,5.5vw,3.75rem);font-weight:800;line-height:1.1}
+  h1 .accent{display:block;color:var(--primary-400);margin-top:.5rem}
+  .hero-sub{
+    margin-top:1.5rem;max-width:768px;margin-left:auto;margin-right:auto;
+    font-size:clamp(1rem,2vw,1.25rem);color:var(--gray-400);line-height:1.7;
+  }
+
+  /* Stat highlights */
+  .highlights{
+    display:grid;grid-template-columns:repeat(2,1fr);
+    gap:1.5rem;max-width:640px;margin:3rem auto 0;text-align:center;
+  }
+  @media(min-width:768px){.highlights{grid-template-columns:repeat(4,1fr);max-width:900px}}
+  .hl-num{font-size:1.75rem;font-weight:800;color:var(--primary-400)}
+  .hl-label{font-size:.82rem;color:var(--gray-400);margin-top:.2rem}
+
+  /* ═══════════ SIGNUP CARD ═══════════ */
+  .signup-section{max-width:500px;margin:3rem auto 0;animation:fadeUp .5s ease-out both}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+  .signup-card{
+    background:var(--gray-700);border:1px solid var(--gray-600);
+    border-radius:12px;padding:1.75rem;
+    box-shadow:0 4px 24px rgba(0,0,0,.25);
+  }
+  .signup-title{font-size:1.05rem;font-weight:700;margin-bottom:.3rem}
+  .signup-sub{font-size:.85rem;color:var(--gray-400);margin-bottom:1.1rem}
+  .input-row{display:flex;gap:.5rem;flex-wrap:wrap}
+  .input-row input{
+    flex:1;min-width:180px;padding:.7rem 1rem;border-radius:8px;
+    border:1px solid var(--gray-600);background:var(--gray-900);
+    color:var(--white);font-size:.9rem;font-family:inherit;
+    outline:none;transition:border-color .2s,box-shadow .2s;
+  }
+  .input-row input:focus{border-color:var(--primary-400);box-shadow:0 0 0 3px rgba(45,212,191,.15)}
+  .input-row input::placeholder{color:var(--gray-600)}
+  .submit-btn{
+    padding:.7rem 1.4rem;background:var(--primary-600);color:var(--white);
+    border:none;border-radius:8px;font-weight:700;cursor:pointer;
+    font-size:.9rem;font-family:inherit;transition:background .2s;
+    white-space:nowrap;box-shadow:0 1px 2px rgba(0,0,0,.2);
+  }
+  .submit-btn:hover{background:var(--primary-500)}
+  .submit-btn:disabled{opacity:.6;cursor:not-allowed}
+  .privacy-note{font-size:.75rem;color:var(--gray-500);margin-top:.7rem;text-align:center}
+  .form-error{font-size:.8rem;color:var(--red-400);margin-top:.5rem;text-align:center;display:none}
+  .form-success{display:none;text-align:center;padding:1rem;color:var(--primary-400);font-weight:600;font-size:1rem}
+  .check-circle{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:40px;height:40px;border-radius:50%;
+    background:var(--primary-900-30);border:2px solid var(--primary-400);
+    margin:0 auto .6rem;
+  }
+  .check-circle svg{width:20px;height:20px;color:var(--primary-400)}
+
+  /* Social proof */
+  .social-bar{margin-top:1.5rem;display:flex;flex-direction:column;align-items:center;gap:.4rem}
+  .avatars{display:flex}
+  .avatar{
+    width:30px;height:30px;border-radius:50%;
+    border:2px solid var(--gray-700);margin-left:-7px;
+    background:var(--gray-600);display:flex;align-items:center;
+    justify-content:center;font-size:.55rem;font-weight:700;color:var(--primary-400);
+  }
+  .avatar:first-child{margin-left:0}
+  .social-text{font-size:.78rem;color:var(--gray-500)}
+
+  /* ═══════════ FEATURES ═══════════ */
+  .features{padding:5rem 1rem;max-width:1280px;margin:0 auto}
+  @media(min-width:640px){.features{padding:5rem 1.5rem}}
+  @media(min-width:1024px){.features{padding:5rem 2rem}}
+  .section-heading{font-size:clamp(1.5rem,3vw,1.875rem);font-weight:800;text-align:center;margin-bottom:1rem}
+  .section-desc{color:var(--gray-400);text-align:center;max-width:640px;margin:0 auto 3rem;line-height:1.7;font-size:.95rem}
+  .grid-3{display:grid;gap:2rem;grid-template-columns:1fr}
+  @media(min-width:768px){.grid-3{grid-template-columns:repeat(3,1fr)}}
+  .card{
+    background:var(--gray-700);border:1px solid var(--gray-600);
+    border-radius:12px;padding:2rem;
+    transition:border-color .25s,box-shadow .25s,transform .25s;
+  }
+  .card:hover{border-color:var(--primary-600);box-shadow:0 8px 24px rgba(0,0,0,.25);transform:translateY(-2px)}
+  .card-icon{width:48px;height:48px;border-radius:8px;display:flex;align-items:center;justify-content:center;margin-bottom:1rem}
+  .card-icon.teal{background:var(--primary-900-30)}
+  .card-icon.emerald{background:var(--emerald-900-30)}
+  .card-icon.purple{background:var(--purple-900-30)}
+  .card h3{font-size:1.15rem;font-weight:700;margin-bottom:.4rem}
+  .card p{font-size:.875rem;color:var(--gray-400);line-height:1.65}
+
+  /* ═══════════ EXTRAS ═══════════ */
+  .extras{padding:0 1rem 5rem;max-width:1280px;margin:0 auto}
+  @media(min-width:640px){.extras{padding:0 1.5rem 5rem}}
+  @media(min-width:1024px){.extras{padding:0 2rem 5rem}}
+  .grid-4{display:grid;gap:1.25rem;grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+  .extra-card{
+    background:var(--gray-700);border:1px solid var(--gray-600);
+    border-radius:12px;padding:1.5rem;text-align:center;transition:border-color .2s;
+  }
+  .extra-card:hover{border-color:var(--gray-500)}
+  .extra-icon{font-size:1.75rem;margin-bottom:.6rem}
+  .extra-card h4{font-size:1rem;font-weight:700;margin-bottom:.3rem}
+  .extra-card p{font-size:.82rem;color:var(--gray-400);line-height:1.6}
+
+  /* ═══════════ PRICING ═══════════ */
+  .pricing{padding:5rem 1rem;max-width:1280px;margin:0 auto;border-top:1px solid var(--gray-700)}
+  @media(min-width:640px){.pricing{padding:5rem 1.5rem}}
+  @media(min-width:1024px){.pricing{padding:5rem 2rem}}
+  .tier-grid{display:grid;gap:2rem;grid-template-columns:1fr;max-width:1100px;margin:0 auto}
+  @media(min-width:768px){.tier-grid{grid-template-columns:repeat(4,1fr)}}
+  .tier{
+    background:var(--gray-700);border:1px solid var(--gray-600);
+    border-radius:12px;padding:2rem;
+    transition:border-color .25s,transform .25s,box-shadow .25s;
+  }
+  .tier:hover{border-color:var(--primary-600);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.25)}
+  .tier.popular{
+    border-color:var(--primary-500);position:relative;
+    transform:scale(1.03);box-shadow:0 8px 30px rgba(13,148,136,.2);
+  }
+  .tier.popular:hover{transform:scale(1.05)}
+  .popular-badge{
+    position:absolute;top:-14px;left:50%;transform:translateX(-50%);
+    background:var(--primary-600);color:var(--white);
+    font-size:.75rem;font-weight:700;padding:.3rem 1rem;border-radius:999px;white-space:nowrap;
+  }
+  .tier-name{font-size:1.35rem;font-weight:800;margin-bottom:.5rem}
+  .tier-price{font-size:2.25rem;font-weight:800;margin-bottom:.15rem}
+  .tier-price span{font-size:.9rem;font-weight:500;color:var(--gray-400)}
+  .tier-features{list-style:none;margin:1.25rem 0 1.5rem;padding:0}
+  .tier-features li{font-size:.85rem;color:var(--gray-300);padding:.35rem 0;display:flex;align-items:flex-start;gap:.5rem}
+  .tier-features li svg{flex-shrink:0;margin-top:2px}
+  .tier-cta{
+    display:block;width:100%;text-align:center;
+    background:var(--primary-600);color:var(--white);
+    font-weight:600;font-size:.9rem;padding:.75rem;
+    border-radius:8px;border:none;cursor:pointer;
+    transition:background .2s;text-decoration:none;font-family:inherit;
+  }
+  .tier-cta:hover{background:var(--primary-500)}
+
+  /* ═══════════ CTA BANNER ═══════════ */
+  .cta-banner{max-width:1280px;margin:0 auto 5rem;padding:0 1rem}
+  @media(min-width:640px){.cta-banner{padding:0 1.5rem}}
+  @media(min-width:1024px){.cta-banner{padding:0 2rem}}
+  .cta-banner-inner{background:var(--primary-700);border-radius:16px;padding:3rem 2rem;text-align:center}
+  .cta-banner h2{font-size:clamp(1.4rem,3vw,1.875rem);font-weight:800;margin-bottom:1rem}
+  .cta-banner .cta-sub{color:rgba(255,255,255,.8);margin-bottom:2rem;font-size:1.1rem}
+  .cta-form{display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;max-width:440px;margin:0 auto}
+  .cta-form input{
+    flex:1;min-width:200px;padding:.7rem 1rem;border-radius:8px;
+    border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);
+    color:var(--white);font-size:.9rem;font-family:inherit;outline:none;transition:border-color .2s;
+  }
+  .cta-form input::placeholder{color:rgba(255,255,255,.5)}
+  .cta-form input:focus{border-color:var(--white);background:rgba(255,255,255,.15)}
+  .cta-form .submit-btn{background:var(--white);color:var(--primary-700)}
+  .cta-form .submit-btn:hover{background:var(--gray-100)}
+
+  /* ═══════════ FOOTER ═══════════ */
+  footer{background:var(--gray-950);border-top:1px solid var(--gray-700);padding:3rem 1rem;color:var(--gray-400)}
+  .footer-inner{
+    max-width:1280px;margin:0 auto;
+    display:flex;flex-direction:column;align-items:center;gap:1rem;text-align:center;
+  }
+  @media(min-width:768px){.footer-inner{flex-direction:row;justify-content:space-between;text-align:left}}
+  .footer-brand{display:flex;align-items:center;gap:.75rem}
+  .footer-brand img{height:48px;width:48px;border-radius:8px}
+  .footer-brand-text p:first-child{font-size:1.15rem;font-weight:700;color:var(--white)}
+  .footer-brand-text p:last-child{font-size:.82rem;color:var(--gray-400)}
+  .footer-right{font-size:.82rem}
+  .footer-right p+p{margin-top:.25rem}
+
+  /* ═══════════ UTILITIES ═══════════ */
+  @media(max-width:640px){
+    .input-row{flex-direction:column}
+    .submit-btn,.input-row input{width:100%}
+    .cta-form{flex-direction:column}
+    .cta-form input,.cta-form .submit-btn{width:100%}
+    .nav-links .nav-link{display:none}
+  }
+  .spinner{
+    display:inline-block;width:16px;height:16px;
+    border:2px solid rgba(255,255,255,.3);border-top-color:var(--white);
+    border-radius:50%;animation:spin .6s linear infinite;
+  }
+  .spinner.dark{border-color:rgba(13,148,136,.3);border-top-color:var(--primary-700)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* SVG checkmark helper */
+  .ck{flex-shrink:0;margin-top:2px}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <div class="nav-brand">
+      <img src="/images/logo.png" alt="Northwest Creek LLC" class="nav-logo" onerror="this.style.display='none'"/>
+      <span class="nav-wordmark">Northwest Creek</span>
+    </div>
+    <div class="nav-links">
+      <a href="#features" class="nav-link">Features</a>
+      <a href="#pricing" class="nav-link">Pricing</a>
+      <button class="nav-cta" onclick="document.getElementById('hero-email').focus()">Get Early Access</button>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <h1>
+    Professional Stock Analysis.
+    <span class="accent">For Retail Investors.</span>
+  </h1>
+  <p class="hero-sub">
+    Real-time market data, 15+ technical indicators, DCF valuation models, live portfolio tracking,
+    and price alerts — everything you need to make informed investment decisions, all in one platform.
+  </p>
+
+  <div class="highlights">
+    <div><div class="hl-num">15+</div><div class="hl-label">Technical Indicators</div></div>
+    <div><div class="hl-num">Live</div><div class="hl-label">WebSocket Market Data</div></div>
+    <div><div class="hl-num">DCF</div><div class="hl-label">Valuation Models</div></div>
+    <div><div class="hl-num">24/7</div><div class="hl-label">Price Alerts</div></div>
+  </div>
+
+  <div class="signup-section">
+    <div class="signup-card">
+      <div class="signup-title">Be the first to get access</div>
+      <div class="signup-sub">Join the waitlist — we'll notify you the moment we go live.</div>
+      <div id="hero-form">
+        <div class="input-row">
+          <input id="hero-email" type="email" placeholder="you@email.com" autocomplete="email" aria-label="Email address"/>
+          <button class="submit-btn" id="hero-btn" onclick="handleSignup('hero')">
+            <span id="hero-btn-text">Notify Me →</span>
+          </button>
+        </div>
+        <div class="form-error" id="hero-error"></div>
+        <p class="privacy-note">🔒 No spam, no credit card. Unsubscribe anytime.</p>
+      </div>
+      <div class="form-success" id="hero-success">
+        <div class="check-circle">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <div>You're on the list!</div>
+        <div style="font-size:.82rem;color:var(--gray-400);font-weight:400;margin-top:.25rem">We'll email you when Northwest Creek goes live.</div>
+      </div>
+    </div>
+    <div class="social-bar">
+      <div class="avatars">
+        <div class="avatar">NW</div><div class="avatar">JR</div><div class="avatar">AS</div>
+        <div class="avatar">TK</div><div class="avatar">ML</div>
+        <div class="avatar" style="background:var(--primary-900-30)">+</div>
+      </div>
+      <div class="social-text">Investors already on the waitlist</div>
+    </div>
+  </div>
+</section>
+
+<!-- CORE FEATURES -->
+<section class="features" id="features">
+  <h2 class="section-heading">Everything You Need to Succeed</h2>
+  <p class="section-desc">Institutional-grade analysis tools designed for retail investors — no Bloomberg terminal required.</p>
+  <div class="grid-3">
+    <div class="card">
+      <div class="card-icon teal">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2dd4bf" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+      </div>
+      <h3>Technical Analysis</h3>
+      <p>15+ professional indicators including RSI, MACD, Bollinger Bands, Stochastic Oscillator, ADX, Ichimoku Cloud, VWAP, and more — with clear buy/sell signals and educational descriptions for every indicator.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon emerald">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </div>
+      <h3>Portfolio Tracking</h3>
+      <p>Track multiple purchase lots per stock, monitor real-time P&L, and view your sector diversification with interactive charts. See your total portfolio value update live via WebSocket connections.</p>
+    </div>
+    <div class="card">
+      <div class="card-icon purple">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#c084fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+      </div>
+      <h3>Customizable Alerts</h3>
+      <p>Set alerts based on key indicators or price targets. Get notified instantly via email or SMS. Never miss a breakout or buying opportunity.</p>
+    </div>
+  </div>
+</section>
+
+<!-- AND MUCH MORE -->
+<section class="extras">
+  <h2 class="section-heading" style="margin-bottom:2.5rem">And Much More</h2>
+  <div class="grid-4">
+    <div class="extra-card">
+      <div class="extra-icon">📈</div>
+      <h4>Trend Indicators</h4>
+      <p>Parabolic SAR, Ichimoku Cloud, and Donchian Channels — identify trend direction, reversals, and breakout setups all in one view.</p>
+    </div>
+    <div class="extra-card">
+      <div class="extra-icon">🌊</div>
+      <h4>Volatility &amp; Risk</h4>
+      <p>ATR-based stop-loss guidance, Keltner Channel squeeze detection, and position sizing context — manage risk like a pro.</p>
+    </div>
+    <div class="extra-card">
+      <div class="extra-icon">📄</div>
+      <h4>Financial Summary</h4>
+      <p>SEC-sourced income statements, balance sheets, cash flows, and key ratios pulled from live 10-K and 10-Q filings.</p>
+    </div>
+    <div class="extra-card">
+      <div class="extra-icon">🔥</div>
+      <h4>Momentum Indicators</h4>
+      <p>Understand what drives a trend, how long it lasts, and the key indicators every momentum trader should know.</p>
+    </div>
+    <div class="extra-card">
+      <div class="extra-icon">💰</div>
+      <h4>DCF Valuation</h4>
+      <p>Automatically pull a company's current SEC filings to calculate intrinsic value with AI-suggested assumptions.</p>
+    </div>
+    <div class="extra-card">
+      <div class="extra-icon">🔍</div>
+      <h4>Stock Discovery Engine</h4>
+      <p>Go beyond gainers and losers. Explore randomly surfaced stocks by sector or on demand — uncover opportunities the crowd hasn't found yet.</p>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing" id="pricing">
+  <h2 class="section-heading">Simple, Transparent Pricing</h2>
+  <p class="section-desc">Start free, upgrade when you need more</p>
+  <div class="tier-grid">
+
+    <!-- Free -->
+    <div class="tier">
+      <div class="tier-name">Free</div>
+      <div class="tier-price">$0<span>/month</span></div>
+      <ul class="tier-features">
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>5 watchlist stocks</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>5 portfolio entries</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>5 stock reviews (total)</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Real-time market data</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Basic stock search</li>
+      </ul>
+      <button class="tier-cta" onclick="document.getElementById('hero-email').focus()">Try For Free</button>
+    </div>
+
+    <!-- Casual — POPULAR -->
+    <div class="tier popular">
+      <div class="popular-badge">POPULAR</div>
+      <div class="tier-name">Casual Investor</div>
+      <div class="tier-price">$20<span>/month</span></div>
+      <ul class="tier-features">
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>20 watchlist stocks</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>20 portfolio entries</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>5 stock reviews per week</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>5 DCF valuations per week</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Technical Analysis</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Priority support</li>
+      </ul>
+      <button class="tier-cta" onclick="document.getElementById('hero-email').focus()">Get Started Now</button>
+    </div>
+
+    <!-- Active -->
+    <div class="tier">
+      <div class="tier-name">Active Investor</div>
+      <div class="tier-price">$40<span>/month</span></div>
+      <ul class="tier-features">
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>45 watchlist stocks</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>45 portfolio entries</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>20 price alerts</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>5 stock reviews per day</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>5 DCF valuations per day</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Advanced Technical Analysis</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Priority support</li>
+      </ul>
+      <button class="tier-cta" onclick="document.getElementById('hero-email').focus()">Get Active</button>
+    </div>
+
+    <!-- Professional -->
+    <div class="tier">
+      <div class="tier-name">Professional</div>
+      <div class="tier-price">$100<span>/month</span></div>
+      <ul class="tier-features">
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>75 watchlist stocks</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>75 portfolio entries</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>50 price alerts</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>20 stock reviews per day</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>20 DCF valuations per day</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Full Technical Analysis suite</li>
+        <li><svg class="ck" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>Priority support</li>
+      </ul>
+      <button class="tier-cta" onclick="document.getElementById('hero-email').focus()">Go Professional</button>
+    </div>
+
+  </div>
+</section>
+
+<!-- CTA BANNER -->
+<section class="cta-banner">
+  <div class="cta-banner-inner">
+    <h2>Ready to Take Control of Your Investments?</h2>
+    <p class="cta-sub">Join investors making smarter, data-driven decisions every day.</p>
+    <div id="cta-form" class="cta-form">
+      <input id="cta-email" type="email" placeholder="you@email.com" aria-label="Email address"/>
+      <button class="submit-btn" id="cta-btn" onclick="handleSignup('cta')">
+        <span id="cta-btn-text">Get Early Access →</span>
+      </button>
+    </div>
+    <div class="form-error" id="cta-error" style="color:#fecaca"></div>
+    <div class="form-success" id="cta-success">
+      <div class="check-circle">
+        <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+      </div>
+      <div style="color:var(--white)">You're on the list!</div>
+      <div style="font-size:.82rem;color:rgba(255,255,255,.7);font-weight:400;margin-top:.25rem">We'll be in touch soon.</div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <img src="/images/logo.png" alt="Northwest Creek LLC" onerror="this.style.display='none'"/>
+      <div class="footer-brand-text">
+        <p>Northwest Creek</p>
+        <p>Professional stock analysis for retail investors</p>
+      </div>
+    </div>
+    <div class="footer-right">
+      <p>© 2026 Northwest Creek LLC. All rights reserved.</p>
+      <p>Post Falls, Idaho</p>
+    </div>
+  </div>
+</footer>
+
+<!-- SCRIPT -->
+<script>
+  const API_URL = 'https://api.northwestcreekllc.com';
+
+  async function handleSignup(prefix) {
+    const input = document.getElementById(prefix + '-email');
+    const btn = document.getElementById(prefix + '-btn');
+    const btnText = document.getElementById(prefix + '-btn-text');
+    const errorEl = document.getElementById(prefix + '-error');
+    const formEl = document.getElementById(prefix + '-form');
+    const successEl = document.getElementById(prefix + '-success');
+    const email = input.value.trim().toLowerCase();
+
+    errorEl.style.display = 'none';
+    input.style.borderColor = '';
+
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!re.test(email)) {
+      input.style.borderColor = 'var(--red-500)';
+      errorEl.textContent = 'Please enter a valid email address.';
+      errorEl.style.display = 'block';
+      input.focus();
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const source = params.get('utm_source') || params.get('ref') || document.referrer || null;
+
+    btn.disabled = true;
+    btnText.innerHTML = '<span class="spinner"></span>';
+
+    try {
+      const res = await fetch(API_URL + '/api/v1/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, source }),
+      });
+
+      if (res.ok || res.status === 409) {
+        formEl.style.display = 'none';
+        successEl.style.display = 'block';
+      } else {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || 'Something went wrong. Please try again.');
+      }
+    } catch (err) {
+      errorEl.textContent = err.message || 'Network error. Please try again.';
+      errorEl.style.display = 'block';
+      btn.disabled = false;
+      btnText.textContent = prefix === 'hero' ? 'Notify Me →' : 'Get Early Access →';
+    }
+  }
+
+  document.querySelectorAll('input[type="email"]').forEach(input => {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const prefix = input.id.split('-')[0];
+        handleSignup(prefix);
+      }
+    });
+  });
+</script>
+</body>
+</html>
