@@ -22,6 +22,7 @@ import BlogList from './pages/BlogList';
 import BlogPost from './pages/BlogPost';
 import AdminContent from './pages/AdminContent';
 import ResetPassword from './pages/ResetPassword';
+import WaitlistLanding from './pages/WaitlistLanding';
 
 
 // Protected Route Component
@@ -41,6 +42,7 @@ function App() {
       <LivePriceProvider>
         <Routes>
         <Route path="/" element={<Landing />} />
+        <Route path="/waitlist" element={<WaitlistLanding />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/pricing" element={<Pricing />} />
