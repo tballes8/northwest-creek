@@ -19,16 +19,7 @@ async def fetch_and_store_snapshots():
     
     # Get environment variables
     api_key = os.getenv("MASSIVE_API_KEY")
-    
-    # Check if we're running locally or on Railway
-    # Railway cron will have DATABASE_URL pointing to internal network
     database_url = os.getenv("DATABASE_URL")
-    
-    # If the URL contains 'railway.internal', we're testing locally via railway run
-    # Replace with public URL
-    if database_url and "railway.internal" in database_url:
-        print("🔍 Detected local testing - using public database URL")
-        database_url = "postgresql://postgres:wZzGWpLKjwzGeTsXGdHVhBveBtJTrWDr@crossover.proxy.rlwy.net:21798/railway"
     
     if not api_key:
         print("❌ ERROR: MASSIVE_API_KEY not set in environment")
