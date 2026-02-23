@@ -33,6 +33,20 @@ class LivePriceService:
         # Sprint 9: alert checker callback
         # Signature: async def callback(ticker: str, price: float)
         self.on_price_update: Optional[Callable[[str, float], Awaitable[None]]] = None
+
+    def _ws_is_closed(self) -> bool:
+        """Check if Polygon WebSocket is closed (compatible with websockets v13+).
+        
+        The websockets library removed the .closed property on ClientConnection
+        in v13. We now check .close_code which is None while the connection is
+        open and set to an int once the closing handshake completes.
+        """
+        if self.polygon_ws is None:
+            return True
+        # websockets < 13 had .closed; >= 13 uses .close_code
+        if hasattr(self.polygon_ws, 'closed'):
+            return self.polygon_ws.closed
+        return self.polygon_ws.close_code is not None
         
     async def connect_to_polygon(self):
         """Connect to Polygon.io WebSocket"""
@@ -68,7 +82,7 @@ class LivePriceService:
     
     async def subscribe_to_tickers(self, tickers: Set[str]):
         """Subscribe to ticker updates"""
-        if not self.polygon_ws or self.polygon_ws.closed:
+        if self._ws_is_closed():
             if not await self.connect_to_polygon():
                 return
         
@@ -91,7 +105,7 @@ class LivePriceService:
     
     async def unsubscribe_from_tickers(self, tickers: Set[str]):
         """Unsubscribe from ticker updates"""
-        if not self.polygon_ws or self.polygon_ws.closed:
+        if self._ws_is_closed():
             return
         
         tickers_to_remove = tickers & self.subscribed_tickers
@@ -130,7 +144,7 @@ class LivePriceService:
         """Listen to Polygon.io WebSocket and broadcast to clients"""
         while self.running:
             try:
-                if not self.polygon_ws or self.polygon_ws.closed:
+                if self._ws_is_closed():
                     print("🔄 Reconnecting to Polygon.io...")
                     if not await self.connect_to_polygon():
                         await asyncio.sleep(5)
@@ -184,7 +198,7 @@ class LivePriceService:
             
             except asyncio.TimeoutError:
                 # No message received in 30 seconds, send ping
-                if self.polygon_ws and not self.polygon_ws.closed:
+                if not self._ws_is_closed():
                     try:
                         await self.polygon_ws.ping()
                     except:
@@ -232,6 +246,11 @@ class LivePriceService:
         """Handle messages from clients"""
         try:
             data = json.loads(message)
+
+            # Guard: client messages must be dicts; ignore lists/strings
+            if not isinstance(data, dict):
+                return
+
             action = data.get("action")
             
             if action == "subscribe":
@@ -270,7 +289,7 @@ class LivePriceService:
         """Stop the live price service"""
         self.running = False
         
-        if self.polygon_ws and not self.polygon_ws.closed:
+        if not self._ws_is_closed():
             await self.polygon_ws.close()
         
         print("🛑 Stopped Live Price Service")

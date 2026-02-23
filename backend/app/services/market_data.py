@@ -271,7 +271,7 @@ class MarketDataService:
                         "high": item.get("h", 0),
                         "low": item.get("l", 0),
                         "close": item.get("c", 0),
-                        "volume": item.get("v", 0)
+                        "volume": int(item.get("v", 0))
                     })
                 
                 # Sort by date ascending
