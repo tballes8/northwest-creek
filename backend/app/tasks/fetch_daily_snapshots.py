@@ -4,7 +4,7 @@ Fetches all stock snapshots from Massive API and stores in database
 """
 import asyncio
 import os
-from sqlalchemy import delete
+from sqlalchemy import delete, select, func
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from datetime import date
@@ -12,6 +12,7 @@ from massive import RESTClient
 from massive.rest.models import TickerSnapshot, Agg
 
 from app.db.models import DailyStockSnapshot
+from app.db.models import WaitlistSignup
 
 async def fetch_and_store_snapshots():
     """Fetch all stock snapshots and store in database"""
@@ -124,6 +125,70 @@ async def fetch_and_store_snapshots():
         await engine.dispose()
 
 
+async def fetch_waitlist_report():
+    """Fetch and log all waitlist signups"""
+    print("\n📋 Generating waitlist report...")
+
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        print("❌ ERROR: No DATABASE_URL found")
+        return
+
+    if database_url.startswith("postgresql://"):
+        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://")
+
+    engine = create_async_engine(database_url, echo=False)
+    async_session_factory = sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+
+    try:
+        async with async_session_factory() as session:
+
+            # Total count
+            total = (await session.execute(
+                select(func.count(WaitlistSignup.id))
+            )).scalar()
+
+            # All signups ordered by date
+            result = await session.execute(
+                select(WaitlistSignup).order_by(WaitlistSignup.created_at.desc())
+            )
+            signups = result.scalars().all()
+
+            print(f"📊 Total waitlist signups: {total}")
+            print("-" * 60)
+
+            for s in signups:
+                converted = "✅ converted" if s.converted else ""
+                source = s.source or "direct"
+                print(f"  {s.email:<35} {source:<15} {s.created_at.strftime('%Y-%m-%d %H:%M')}  {converted}")
+
+            print("-" * 60)
+
+            # Source breakdown
+            source_counts = (await session.execute(
+                select(
+                    func.coalesce(WaitlistSignup.source, 'direct'),
+                    func.count(WaitlistSignup.id)
+                ).group_by(WaitlistSignup.source)
+            )).all()
+
+            if source_counts:
+                print("📈 Signups by source:")
+                for source, count in source_counts:
+                    print(f"  {source or 'direct':<20} {count}")
+
+    except Exception as e:
+        print(f"❌ Waitlist report error: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        await engine.dispose()
+
+
 if __name__ == "__main__":
     asyncio.run(fetch_and_store_snapshots())
-    print("✅ Cron job completed - exiting")
+    print("✅ Snapshot job completed")
+    asyncio.run(fetch_waitlist_report())
+    print("✅ All cron tasks completed - exiting")
