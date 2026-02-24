@@ -6,11 +6,15 @@ Now includes TRUE 15-minute bars!
 from fastapi import APIRouter, HTTPException, status
 from typing import List, Dict, Any, Optional
 from massive import RESTClient
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
+import pytz
 import os
 import httpx
 
 router = APIRouter()
+
+# Polygon timestamps are Unix ms in UTC — convert to Eastern (market time) for display
+ET = pytz.timezone('US/Eastern')
 
 # Initialize Massive client - use environment variable in production
 MASSIVE_API_KEY = os.getenv("MASSIVE_API_KEY", "Vu377TX0oKEohsfLJjFXRXJjeA6yj7sA")
@@ -240,7 +244,7 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
             if "results" in intraday_data and intraday_data["results"]:
                 for bar in intraday_data["results"]:
                     bar_dict = {
-                        "timestamp": datetime.fromtimestamp(bar["t"] / 1000).isoformat() if "t" in bar else None,
+                        "timestamp": datetime.fromtimestamp(bar["t"] / 1000, tz=timezone.utc).astimezone(ET).isoformat() if "t" in bar else None,
                         "open": bar.get("o"),
                         "high": bar.get("h"),
                         "low": bar.get("l"),
