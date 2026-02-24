@@ -5,10 +5,8 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, Date
 from datetime import date
-from typing import Optional, Dict, List
-import httpx
+from typing import Optional
 from app.services.market_data import market_data_service
-from app.config import get_settings
 from app.db.session import get_db
 from app.schemas.daily_snapshot import DailySnapshotItem, DailySnapshotResponse
 from app.db.models import DailyStockSnapshot
@@ -88,122 +86,20 @@ async def get_daily_snapshot(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching daily snapshot: {str(e)}")
 
-def _is_warrant(ticker: str) -> bool:
-    """
-    Heuristic filter to exclude likely warrants from gainers/losers lists.
-    
-    Only matches unambiguous patterns — separator-based suffixes and
-    double-W endings.  Single trailing 'W' without a separator is NOT
-    matched because it produces too many false positives on legitimate
-    tickers (MATW, PLOW, BMW, etc.).
-    
-    The authoritative warrant check happens on the frontend via Polygon's
-    `type` field from the /v3/reference/tickers endpoint.
-    """
-    t = ticker.upper().strip()
-    # Explicit separator patterns (always warrants)
-    for suffix in ('.WS', '.WT', '.W', '+WS', '+WT', '+W', '/WS', '/WT', '/W'):
-        if t.endswith(suffix):
-            return True
-    # Double-W ending (e.g., BRKHWW) — always a warrant
-    if t.endswith('WW'):
-        return True
-    # Ends with + (units / warrants on some exchanges)
-    if t.endswith('+'):
-        return True
-    # Ends with 'WS' without separator (e.g., SOUNWS) — very likely warrant
-    # Only for length > 4 to avoid short legitimate tickers like NWS
-    if len(t) > 4 and t.endswith('WS') and t[-3].isalpha():
-        return True
-    return False
-
-
-# Types we want to keep in gainers/losers lists
-_ALLOWED_TYPES = {'CS', 'ADRC', 'PFD', 'ETF', 'ETS', 'ETN', 'ETV'}
-
-
-async def _batch_get_types(tickers: List[str]) -> Dict[str, str]:
-    """
-    Batch-fetch security types from Polygon /v3/reference/tickers.
-    Single lightweight HTTP call — returns {ticker: type} dict.
-    Unknown tickers return empty string.
-    """
-    if not tickers:
-        return {}
-    try:
-        settings = get_settings()
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            resp = await client.get(
-                "https://api.polygon.io/v3/reference/tickers",
-                params={
-                    "ticker.any_of": ",".join(tickers),
-                    "active": "true",
-                    "limit": len(tickers),
-                    "apiKey": settings.MASSIVE_API_KEY,
-                },
-            )
-            resp.raise_for_status()
-            results = resp.json().get("results", [])
-            return {r["ticker"]: r.get("type", "") for r in results}
-    except Exception as e:
-        print(f"⚠️ _batch_get_types failed: {e}")
-        return {}
-
-
 @router.get("/top-gainers")
 async def get_top_gainers(limit: int = 10):
-    """Get top stock gainers, excluding warrants and non-equity securities"""
+    """Get top stock gainers (warrant/non-equity filtering handled by market_data_service)"""
     try:
-        # Over-fetch to compensate for filtered-out warrants
-        result = await market_data_service.get_top_gainers(limit + 30)
-
-        if "top_gainers" in result and isinstance(result["top_gainers"], list):
-            # Pass 1: fast heuristic — catches separator-pattern warrants
-            candidates = [g for g in result["top_gainers"] if not _is_warrant(g.get("ticker", ""))]
-
-            # Pass 2: API type check on remaining candidates
-            tickers = [g["ticker"] for g in candidates[:limit + 15]]
-            type_map = await _batch_get_types(tickers)
-
-            filtered = []
-            for g in candidates:
-                t = g.get("ticker", "")
-                tkr_type = type_map.get(t, "")
-                # Keep if type is allowed OR unknown (empty = not in Polygon ref data)
-                if tkr_type in _ALLOWED_TYPES or tkr_type == "":
-                    filtered.append(g)
-                    if len(filtered) >= limit:
-                        break
-
-            result["top_gainers"] = filtered
-
+        result = await market_data_service.get_top_gainers(limit)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/top-losers")
 async def get_top_losers(limit: int = 10):
-    """Get top stock losers, excluding warrants and non-equity securities"""
+    """Get top stock losers (warrant/non-equity filtering handled by market_data_service)"""
     try:
-        result = await market_data_service.get_top_losers(limit + 30)
-
-        if "top_losers" in result and isinstance(result["top_losers"], list):
-            candidates = [g for g in result["top_losers"] if not _is_warrant(g.get("ticker", ""))]
-
-            tickers = [g["ticker"] for g in candidates[:limit + 15]]
-            type_map = await _batch_get_types(tickers)
-
-            filtered = []
-            for g in candidates:
-                t = g.get("ticker", "")
-                tkr_type = type_map.get(t, "")
-                if tkr_type in _ALLOWED_TYPES or tkr_type == "":
-                    filtered.append(g)
-                    if len(filtered) >= limit:
-                        break
-
-            result["top_losers"] = filtered
-
+        result = await market_data_service.get_top_losers(limit)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

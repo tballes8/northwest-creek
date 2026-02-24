@@ -12,12 +12,60 @@ settings = get_settings()
 
 
 class MarketDataService:
+    # Security types to keep in gainers/losers — everything else excluded
+    _ALLOWED_TYPES = {'CS', 'ADRC', 'PFD', 'ETF', 'ETS', 'ETN', 'ETV'}
+
     def __init__(self):
         self.base_url = "https://api.massive.com"
         self.api_key = settings.MASSIVE_API_KEY
         self.timeout = 10.0
         # Initialize Massive REST client for snapshot data
         self.rest_client = RESTClient(self.api_key)
+
+    @staticmethod
+    def _is_warrant_ticker(ticker: str) -> bool:
+        """Fast heuristic pre-filter for obvious warrant tickers."""
+        t = ticker.upper().strip()
+        for suffix in ('.WS', '.WT', '.W', '+WS', '+WT', '+W', '/WS', '/WT', '/W'):
+            if t.endswith(suffix):
+                return True
+        if t.endswith('WW') or t.endswith('+'):
+            return True
+        if len(t) > 4 and t.endswith('WS') and t[-3].isalpha():
+            return True
+        return False
+
+    async def _batch_get_types(self, tickers: List[str]) -> Dict[str, str]:
+        """
+        Batch-fetch security types from Polygon /v3/reference/tickers.
+        Returns {ticker: type} dict.  Unknown tickers get empty string.
+        """
+        if not tickers:
+            return {}
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.get(
+                    "https://api.polygon.io/v3/reference/tickers",
+                    params={
+                        "ticker.any_of": ",".join(tickers),
+                        "active": "true",
+                        "limit": len(tickers),
+                        "apiKey": self.api_key,
+                    },
+                )
+                resp.raise_for_status()
+                results = resp.json().get("results", [])
+                type_map = {r["ticker"]: r.get("type", "") for r in results}
+
+                blocked = {t: type_map.get(t, "?") for t in tickers
+                           if type_map.get(t, "") not in self._ALLOWED_TYPES}
+                if blocked:
+                    print(f"🚫 Type filter excluded: {blocked}")
+
+                return type_map
+        except Exception as e:
+            print(f"⚠️ _batch_get_types failed: {e}")
+            return {}
 
     def _map_sic_to_sector(self, sic_description: str) -> str:
         """
@@ -144,7 +192,7 @@ class MarketDataService:
                     "price": close_price,
                     "change": change,
                     "change_percent": change_percent,
-                    "volume": result.get("v", 0),
+                    "volume": int(result.get("v", 0)),
                     "high": result.get("h", 0),
                     "low": result.get("l", 0),
                     "open": open_price,
@@ -513,33 +561,21 @@ class MarketDataService:
 
     async def get_top_gainers(self, limit: int = 10) -> Dict[str, Any]:
         """
-        Get top stock gainers from Massive API
-        
-        Args:
-            limit: Number of top gainers to return (default: 10, max: 50)
-        
-        Returns:
-            dict: Response containing timestamp and list of top gainers
-            
-        Raises:
-            ValueError: If limit is invalid
-            Exception: If API request fails
+        Get top stock gainers from Massive API, excluding warrants and
+        non-equity securities.  Filtering is done here so the endpoint
+        layer receives clean data.
         """
         try:
-            # Validate limit
             if limit < 1 or limit > 50:
                 raise ValueError("Limit must be between 1 and 50")
             
-            # Fetch stock snapshots using the initialized REST client
             snapshot = self.rest_client.get_snapshot_all("stocks")
             results = []
             
-            # Process snapshots
             for item in snapshot:
                 if isinstance(item, TickerSnapshot):
                     if isinstance(item.prev_day, Agg):
                         if isinstance(item.prev_day.open, float) and isinstance(item.prev_day.close, float):
-                            # Avoid division by zero
                             if item.prev_day.open != 0:
                                 percent_change = (
                                     (item.prev_day.close - item.prev_day.open)
@@ -553,16 +589,30 @@ class MarketDataService:
                                     'change_percent': round(percent_change, 2)
                                 })
             
-            # Sort by percentage change (biggest gainers first)
+            # Sort biggest gainers first
             results.sort(key=lambda x: x['change_percent'], reverse=True)
-            
-            # Get top gainers
-            top_gainers = results[:limit]
-            
+
+            # ── Filter: heuristic pass then authoritative type check ──
+            # Over-take to leave room after filtering
+            candidates = [r for r in results[:limit + 40]
+                          if not self._is_warrant_ticker(r['ticker'])]
+
+            tickers = [r['ticker'] for r in candidates]
+            type_map = await self._batch_get_types(tickers)
+
+            filtered = []
+            for r in candidates:
+                tkr_type = type_map.get(r['ticker'], '')
+                if tkr_type in self._ALLOWED_TYPES:
+                    r['type'] = tkr_type          # pass type through to frontend
+                    filtered.append(r)
+                    if len(filtered) >= limit:
+                        break
+
             return {
                 'timestamp': datetime.now().isoformat(),
                 'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'top_gainers': top_gainers
+                'top_gainers': filtered
             }
             
         except Exception as e:
@@ -570,33 +620,20 @@ class MarketDataService:
     
     async def get_top_losers(self, limit: int = 10) -> Dict[str, Any]:
         """
-        Get top stock losers from Massive API
-        
-        Args:
-            limit: Number of top losers to return (default: 10, max: 50)
-        
-        Returns:
-            dict: Response containing timestamp and list of top losers
-            
-        Raises:
-            ValueError: If limit is invalid
-            Exception: If API request fails
+        Get top stock losers from Massive API, excluding warrants and
+        non-equity securities.
         """
         try:
-            # Validate limit
             if limit < 1 or limit > 50:
                 raise ValueError("Limit must be between 1 and 50")
             
-            # Fetch stock snapshots using the initialized REST client
             snapshot = self.rest_client.get_snapshot_all("stocks")
             results = []
             
-            # Process snapshots
             for item in snapshot:
                 if isinstance(item, TickerSnapshot):
                     if isinstance(item.prev_day, Agg):
                         if isinstance(item.prev_day.open, float) and isinstance(item.prev_day.close, float):
-                            # Avoid division by zero
                             if item.prev_day.open != 0:
                                 percent_change = (
                                     (item.prev_day.close - item.prev_day.open)
@@ -610,16 +647,29 @@ class MarketDataService:
                                     'change_percent': round(percent_change, 2)
                                 })
             
-            # Sort by percentage change (biggest losers first)
+            # Sort biggest losers first
             results.sort(key=lambda x: x['change_percent'])
-            
-            # Get top losers
-            top_losers = results[:limit]
-            
+
+            # ── Filter: heuristic pass then authoritative type check ──
+            candidates = [r for r in results[:limit + 40]
+                          if not self._is_warrant_ticker(r['ticker'])]
+
+            tickers = [r['ticker'] for r in candidates]
+            type_map = await self._batch_get_types(tickers)
+
+            filtered = []
+            for r in candidates:
+                tkr_type = type_map.get(r['ticker'], '')
+                if tkr_type in self._ALLOWED_TYPES:
+                    r['type'] = tkr_type
+                    filtered.append(r)
+                    if len(filtered) >= limit:
+                        break
+
             return {
                 'timestamp': datetime.now().isoformat(),
                 'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'top_losers': top_losers
+                'top_losers': filtered
             }
             
         except Exception as e:
