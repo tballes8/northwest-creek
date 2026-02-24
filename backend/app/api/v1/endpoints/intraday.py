@@ -8,18 +8,19 @@ from typing import List, Dict, Any, Optional
 from massive import RESTClient
 from datetime import datetime, date, timedelta, timezone
 import pytz
-import os
 import httpx
+from app.config import get_settings
+
+settings = get_settings()
 
 router = APIRouter()
 
 # Polygon timestamps are Unix ms in UTC — convert to Eastern (market time) for display
 ET = pytz.timezone('US/Eastern')
 
-# Initialize Massive client - use environment variable in production
-MASSIVE_API_KEY = os.getenv("MASSIVE_API_KEY", "Vu377TX0oKEohsfLJjFXRXJjeA6yj7sA")
-client = RESTClient(MASSIVE_API_KEY)
-BASE_URL = "https://api.massive.com"
+# Pull from Railway env via settings — no hardcoded keys or URLs
+client = RESTClient(settings.MASSIVE_API_KEY)
+BASE_URL = settings.MASSIVE_BASE_URL if hasattr(settings, 'MASSIVE_BASE_URL') else "https://api.massive.com"
 
 
 def safe_get_attr(obj, attr_path: str, default=None):
@@ -186,7 +187,7 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
             for days_back in range(8):  # Try today and up to 7 days back
                 check_date = today - timedelta(days=days_back)
                 intraday_url = f"{BASE_URL}/v2/aggs/ticker/{ticker_upper}/range/15/minute/{check_date.isoformat()}/{check_date.isoformat()}"
-                intraday_params = {"apiKey": MASSIVE_API_KEY, "adjusted": "true", "sort": "asc"}
+                intraday_params = {"apiKey": settings.MASSIVE_API_KEY, "adjusted": "true", "sort": "asc"}
                 
                 try:
                     intraday_response = await http_client.get(intraday_url, params=intraday_params)
@@ -220,7 +221,7 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
             start_date = today - timedelta(days=250)
             
             daily_url = f"{BASE_URL}/v2/aggs/ticker/{ticker_upper}/range/1/day/{start_date.isoformat()}/{end_date.isoformat()}"
-            daily_params = {"apiKey": MASSIVE_API_KEY, "adjusted": "true", "sort": "asc"}
+            daily_params = {"apiKey": settings.MASSIVE_API_KEY, "adjusted": "true", "sort": "asc"}
             
             daily_response = await http_client.get(daily_url, params=daily_params)
             daily_response.raise_for_status()
