@@ -133,7 +133,12 @@ const Stocks: React.FC = () => {
   const [gainersLoading, setGainersLoading] = useState(false);
   const [topLosers, setTopLosers] = useState<TopGainer[]>([]);
   const [losersLoading, setLosersLoading] = useState(false);
-  const [dailySnapshots, setDailySnapshots] = useState<DailySnapshot[]>([]);
+  const [dailySnapshots, setDailySnapshots] = useState<DailySnapshot[]>(() => {
+    try {
+      const cached = sessionStorage.getItem('nwc_daily_snapshots');
+      return cached ? JSON.parse(cached) : [];
+    } catch { return []; }
+  });
   const [sectorSnapshots, setSectorSnapshots] = useState<DailySnapshot[]>([]);
   const [sectorLoading, setSectorLoading] = useState(false);
   // Sector context — persists across search/clear cycles until explicit dismissal
@@ -181,7 +186,10 @@ const Stocks: React.FC = () => {
 
   useEffect(() => {
     loadUser();
-    loadDailySnapshots(); // Load daily snapshots on mount
+    // Only fetch daily snapshots if we don't have cached data
+    if (dailySnapshots.length === 0) {
+      loadDailySnapshots();
+    }
     if (initialTicker) {
       loadStockData(initialTicker);
       loadNews(initialTicker);
@@ -319,7 +327,9 @@ const Stocks: React.FC = () => {
   const loadDailySnapshots = async () => {
     try {
       const response = await stocksAPI.getDailySnapshot(10);
-      setDailySnapshots(response.data.snapshots || []);
+      const snaps = response.data.snapshots || [];
+      setDailySnapshots(snaps);
+      try { sessionStorage.setItem('nwc_daily_snapshots', JSON.stringify(snaps)); } catch {}
     } catch (error) {
       console.error('Failed to load daily snapshots:', error);
     }
@@ -1342,6 +1352,9 @@ const Stocks: React.FC = () => {
             {dailySnapshots.length > 0 && (
               <div className="mt-8 border-t border-gray-200 dark:border-gray-600 pt-8">
                 <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Randomly selected stocks from today's market</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                  To start researching a different 10 stocks click the Load Different Stocks button
+                </p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
                   {dailySnapshots.map((snap) => (
                     <button

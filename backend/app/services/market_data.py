@@ -35,17 +35,18 @@ class MarketDataService:
             return True
         return False
 
-    async def _batch_get_types(self, tickers: List[str]) -> Dict[str, str]:
+    async def _batch_get_types(self, tickers: List[str]) -> Optional[Dict[str, str]]:
         """
         Batch-fetch security types from Polygon /v3/reference/tickers.
-        Returns {ticker: type} dict.  Unknown tickers get empty string.
+        Returns {ticker: type} dict, or None if the API call fails entirely
+        (so callers can fall back to heuristic-only filtering).
         """
         if not tickers:
             return {}
         try:
             async with httpx.AsyncClient(timeout=8.0) as client:
                 resp = await client.get(
-                    "https://api.polygon.io/v3/reference/tickers",
+                    f"{self.base_url}/v3/reference/tickers",
                     params={
                         "ticker.any_of": ",".join(tickers),
                         "active": "true",
@@ -65,7 +66,7 @@ class MarketDataService:
                 return type_map
         except Exception as e:
             print(f"⚠️ _batch_get_types failed: {e}")
-            return {}
+            return None
 
     def _map_sic_to_sector(self, sic_description: str) -> str:
         """
@@ -600,14 +601,20 @@ class MarketDataService:
             tickers = [r['ticker'] for r in candidates]
             type_map = await self._batch_get_types(tickers)
 
-            filtered = []
-            for r in candidates:
-                tkr_type = type_map.get(r['ticker'], '')
-                if tkr_type in self._ALLOWED_TYPES:
-                    r['type'] = tkr_type          # pass type through to frontend
-                    filtered.append(r)
-                    if len(filtered) >= limit:
-                        break
+            if type_map is not None:
+                # API succeeded — strict type filter
+                filtered = []
+                for r in candidates:
+                    tkr_type = type_map.get(r['ticker'], '')
+                    if tkr_type in self._ALLOWED_TYPES:
+                        r['type'] = tkr_type
+                        filtered.append(r)
+                        if len(filtered) >= limit:
+                            break
+            else:
+                # API failed — fall back to heuristic-only (better than empty)
+                print("⚠️ Type API unavailable, using heuristic filter only for top gainers")
+                filtered = candidates[:limit]
 
             return {
                 'timestamp': datetime.now().isoformat(),
@@ -657,14 +664,18 @@ class MarketDataService:
             tickers = [r['ticker'] for r in candidates]
             type_map = await self._batch_get_types(tickers)
 
-            filtered = []
-            for r in candidates:
-                tkr_type = type_map.get(r['ticker'], '')
-                if tkr_type in self._ALLOWED_TYPES:
-                    r['type'] = tkr_type
-                    filtered.append(r)
-                    if len(filtered) >= limit:
-                        break
+            if type_map is not None:
+                filtered = []
+                for r in candidates:
+                    tkr_type = type_map.get(r['ticker'], '')
+                    if tkr_type in self._ALLOWED_TYPES:
+                        r['type'] = tkr_type
+                        filtered.append(r)
+                        if len(filtered) >= limit:
+                            break
+            else:
+                print("⚠️ Type API unavailable, using heuristic filter only for top losers")
+                filtered = candidates[:limit]
 
             return {
                 'timestamp': datetime.now().isoformat(),
