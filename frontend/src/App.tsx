@@ -22,6 +22,7 @@ import BlogPost from './pages/BlogPost';
 import AdminContent from './pages/AdminContent';
 import ResetPassword from './pages/ResetPassword';
 import WaitlistLanding from './pages/WaitlistLanding';
+import MICDecoder from './pages/MICDecoder';
 
 const Payment = React.lazy(() => import('./pages/Payment'));
 // Protected Route Component
@@ -51,7 +52,7 @@ function App() {
             <Route path="/registerwithpayment" element={<RegisterWithPayment />} />
             <Route path="/stocks" element={<ProtectedRoute><Stocks /></ProtectedRoute>} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path="/payment" element={<Payment />} />
+            <Route path="/mic-decoder" element={<MICDecoder />} />
             <Route path="/account" element={<AccountSettings />} />          
             <Route path="/watchlist" element={<ProtectedRoute><Watchlist /></ProtectedRoute>} />
             <Route path="/portfolio" element={<ProtectedRoute><Portfolio /></ProtectedRoute>} />
@@ -63,6 +64,7 @@ function App() {
             <Route path="/blogs/:slug" element={<BlogPost />} />
             <Route path="/admin" element={<AdminContent />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/payment" element={<Payment />} />
           </Routes>
         </Suspense>
       </LivePriceProvider>
