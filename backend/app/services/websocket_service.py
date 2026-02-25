@@ -218,7 +218,7 @@ class LivePriceService:
         
         for client in self.clients:
             try:
-                await client.send(message_str)
+                await client.send_text(message_str)
             except Exception:
                 disconnected_clients.add(client)
         
@@ -232,7 +232,7 @@ class LivePriceService:
         
         # Send cached prices to new client
         if self.price_cache:
-            await websocket.send(json.dumps({
+            await websocket.send_text(json.dumps({
                 "type": "price_cache",
                 "data": list(self.price_cache.values())
             }))
@@ -264,7 +264,7 @@ class LivePriceService:
                     await self.unsubscribe_from_tickers(tickers)
                     
             elif action == "ping":
-                await websocket.send(json.dumps({"type": "pong"}))
+                await websocket.send_text(json.dumps({"type": "pong"}))
                 
         except Exception as e:
             print(f"❌ Error handling client message: {e}")
