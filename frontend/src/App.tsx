@@ -23,6 +23,9 @@ import AdminContent from './pages/AdminContent';
 import ResetPassword from './pages/ResetPassword';
 import WaitlistLanding from './pages/WaitlistLanding';
 import MICDecoder from './pages/MICDecoder';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsConditions from './pages/TermsConditions';
+
 
 const Payment = React.lazy(() => import('./pages/Payment'));
 // Protected Route Component
@@ -65,6 +68,8 @@ function App() {
             <Route path="/admin" element={<AdminContent />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/payment" element={<Payment />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsConditions />} />
           </Routes>
         </Suspense>
       </LivePriceProvider>
