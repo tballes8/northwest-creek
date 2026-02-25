@@ -49,6 +49,7 @@ const Portfolio: React.FC = () => {
   const [editBuyPrice, setEditBuyPrice] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const previousPricesRef = useRef<Map<string, number>>(new Map());
+  const [prevCloseMap, setPrevCloseMap] = useState<Record<string, number>>({});
 
   useEffect(() => {
     loadData();
@@ -126,12 +127,21 @@ const Portfolio: React.FC = () => {
         );
 
         const freshPrices: Record<string, number> = {};
+        const freshPrevClose: Record<string, number> = {};
         if (Array.isArray(priceResponse.data)) {
           priceResponse.data.forEach((item: any) => {
             if (item.ticker && item.price) {
               freshPrices[item.ticker] = item.price;
             }
+            if (item.ticker && item.previous_close) {
+              freshPrevClose[item.ticker] = item.previous_close;
+            }
           });
+        }
+
+        // Update previous close map if we got fresh data
+        if (Object.keys(freshPrevClose).length > 0) {
+          setPrevCloseMap(prev => ({ ...prev, ...freshPrevClose }));
         }
 
         setPortfolio(prev => prev.map(pos => {
@@ -178,12 +188,21 @@ const Portfolio: React.FC = () => {
           
           // Build a price map from the fresh data
           const freshPrices: Record<string, number> = {};
+          const freshPrevClose: Record<string, number> = {};
           if (Array.isArray(priceResponse.data)) {
             priceResponse.data.forEach((item: any) => {
               if (item.ticker && item.price) {
                 freshPrices[item.ticker] = item.price;
               }
+              if (item.ticker && item.previous_close) {
+                freshPrevClose[item.ticker] = item.previous_close;
+              }
             });
+          }
+          
+          // Store previous close prices for daily change coloring
+          if (Object.keys(freshPrevClose).length > 0) {
+            setPrevCloseMap(prev => ({ ...prev, ...freshPrevClose }));
           }
           
           // Update positions with fresh prices
@@ -771,8 +790,18 @@ const Portfolio: React.FC = () => {
                         const displayPrice = prices.get(position.ticker)?.price ?? position.current_price;
                         const flashClass = priceFlash[position.ticker] ? `flash-${priceFlash[position.ticker]}` : '';
                         
+                        // Color based on current price vs previous close (daily change)
+                        const prevClose = prevCloseMap[position.ticker];
+                        const priceColor = displayPrice && prevClose
+                          ? displayPrice > prevClose
+                            ? 'text-green-600 dark:text-green-400'
+                            : displayPrice < prevClose
+                              ? 'text-red-600 dark:text-red-400'
+                              : 'text-gray-900 dark:text-white'
+                          : 'text-gray-900 dark:text-white';
+                        
                         return (
-                          <div className={`text-sm font-medium text-gray-900 dark:text-white ${flashClass}`}>
+                          <div className={`text-sm font-medium ${priceColor} ${flashClass}`}>
                             ${displayPrice ? displayPrice.toFixed(2) : 'N/A'}
                           </div>
                         );
