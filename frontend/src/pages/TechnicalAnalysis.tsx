@@ -1042,6 +1042,12 @@ const TechnicalAnalysis: React.FC = () => {
                 >
                   {financialsLoading ? '⏳ Loading...' : showFinancials && financialsData ? '📄 Hide Financials' : '📄 Financial Summary'}
                 </button>
+                <button
+                  onClick={() => document.getElementById('advanced-indicators')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  className="px-4 py-2 bg-teal-600 hover:bg-teal-700 dark:bg-teal-500 dark:hover:bg-teal-600 text-white rounded-lg font-medium text-sm transition-colors"
+                >
+                  📈 Advanced Indicators
+                </button>
                 {watchlistMsg && (
                   <span className={`text-sm font-medium ${watchlistMsg.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {watchlistMsg.text}
@@ -1451,7 +1457,7 @@ const TechnicalAnalysis: React.FC = () => {
             {/* ═══════════════════════════════════════════════════════════ */}
             {/* ADVANCED INDICATORS — Toggleable Panels                    */}
             {/* ═══════════════════════════════════════════════════════════ */}
-            <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+            <div id="advanced-indicators" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">📊 Advanced Indicators</h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Click a category to expand charts and details</p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
