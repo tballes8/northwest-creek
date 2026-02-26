@@ -217,7 +217,8 @@ const Landing: React.FC = () => {
               <ul className="space-y-3">
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Live price streaming via WebSocket for your entire watchlist</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Real-time portfolio value with automatic P&L calculations</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Market status badges — know when markets are open, closed, or in pre/after-hours</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Pre-market and after-hours price badges with % change</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Market status badges — know when markets are open, closed, or in extended hours</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Daily top gainers and sector-based stock discovery</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Company news feed with sentiment analysis</span></li>
               </ul>
@@ -232,15 +233,24 @@ const Landing: React.FC = () => {
               </div>
               <div className="space-y-3">
                 {[
-                  { ticker: 'AAPL', price: '$242.58', change: '+1.24%', up: true },
-                  { ticker: 'TSLA', price: '$338.12', change: '+3.87%', up: true },
-                  { ticker: 'MSFT', price: '$428.90', change: '-0.42%', up: false },
-                  { ticker: 'NVDA', price: '$142.67', change: '+5.21%', up: true },
-                  { ticker: 'AMZN', price: '$219.44', change: '+0.98%', up: true },
+                  { ticker: 'AAPL', price: '$242.58', change: '+1.24%', up: true, badge: null },
+                  { ticker: 'TSLA', price: '$338.12', change: '+3.87%', up: true, badge: { label: 'PM', pct: '+1.42%', up: true } },
+                  { ticker: 'MSFT', price: '$428.90', change: '-0.42%', up: false, badge: null },
+                  { ticker: 'NVDA', price: '$142.67', change: '+5.21%', up: true, badge: { label: 'AH', pct: '-0.38%', up: false } },
+                  { ticker: 'AMZN', price: '$219.44', change: '+0.98%', up: true, badge: null },
                 ].map(s => (
                   <div key={s.ticker} className="flex justify-between items-center py-2 border-b border-gray-700/50">
                     <span className="text-primary-400 font-mono font-bold">{s.ticker}</span>
-                    <span className="text-white font-medium">{s.price}</span>
+                    <div className="text-right">
+                      <span className="text-white font-medium">{s.price}</span>
+                      {s.badge && (
+                        <span className={`ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[0.6rem] font-semibold ${
+                          s.badge.up ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400'
+                        }`}>
+                          <span className="opacity-60">{s.badge.label}</span>{s.badge.pct}
+                        </span>
+                      )}
+                    </div>
                     <span className={`font-medium ${s.up ? 'text-green-400' : 'text-red-400'}`}>{s.change}</span>
                   </div>
                 ))}
@@ -368,33 +378,43 @@ const Landing: React.FC = () => {
             <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-12">
               And Much More
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {[
                 {
-                  icon: '📊',
-                  title: 'Sector Diversification',
-                  desc: 'Interactive pie charts showing your portfolio breakdown by sector with clickable exploration.'
+                  icon: '📈',
+                  title: 'Trend Indicators',
+                  desc: 'Parabolic SAR, Ichimoku Cloud, and Donchian Channels — identify trend direction, reversals, and breakout setups all in one view.'
                 },
                 {
-                  icon: '⭐',
-                  title: 'Smart Watchlist',
-                  desc: 'Track stocks with live prices, target prices, notes, and one-click access to analysis tools.'
+                  icon: '🌊',
+                  title: 'Volatility & Risk',
+                  desc: 'ATR-based stop-loss guidance, Keltner Channel squeeze detection, and position sizing context — manage risk like a pro.'
                 },
                 {
-                  icon: '📰',
-                  title: 'News & Sentiment',
-                  desc: 'Latest news for every stock with AI-powered sentiment analysis (positive, negative, neutral).'
+                  icon: '📄',
+                  title: 'Financial Summary',
+                  desc: 'SEC-sourced income statements, balance sheets, cash flows, and key ratios pulled from live 10-K and 10-Q filings.'
                 },
                 {
-                  icon: '⚠️',
-                  title: 'Warrant Detection',
-                  desc: 'Automatic warrant detection with warnings about derivative risks and links to underlying stock.'
+                  icon: '🔥',
+                  title: 'Momentum Indicators',
+                  desc: 'Understand what drives a trend, how long it lasts, and the key indicators every momentum trader should know.'
+                },
+                {
+                  icon: '💰',
+                  title: 'DCF Valuation',
+                  desc: "Automatically pull a company's current SEC filings to calculate intrinsic value with AI-suggested assumptions."
+                },
+                {
+                  icon: '🔍',
+                  title: 'Stock Discovery Engine',
+                  desc: "Go beyond gainers and losers. Explore randomly surfaced stocks by sector or on demand — uncover opportunities the crowd hasn't found yet."
                 },
               ].map(f => (
-                <div key={f.title} className="bg-white dark:bg-gray-600 p-6 rounded-xl shadow-lg dark:shadow-gray-200/50 border dark:border-gray-300 text-center">
+                <div key={f.title} className="bg-white dark:bg-gray-600 p-6 rounded-xl shadow-lg dark:shadow-gray-200/50 border dark:border-gray-300 text-center hover:shadow-xl transition-shadow">
                   <div className="text-3xl mb-3">{f.icon}</div>
                   <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">{f.title}</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">{f.desc}</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{f.desc}</p>
                 </div>
               ))}
             </div>

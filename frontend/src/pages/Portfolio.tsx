@@ -50,6 +50,13 @@ const Portfolio: React.FC = () => {
   const [editNotes, setEditNotes] = useState('');
   const previousPricesRef = useRef<Map<string, number>>(new Map());
   const [prevCloseMap, setPrevCloseMap] = useState<Record<string, number>>({});
+  const [extendedHoursMap, setExtendedHoursMap] = useState<Record<string, {
+    earlyChange?: number | null;
+    earlyChangePercent?: number | null;
+    lateChange?: number | null;
+    lateChangePercent?: number | null;
+    marketStatus?: string | null;
+  }>>({});
 
   useEffect(() => {
     loadData();
@@ -128,6 +135,7 @@ const Portfolio: React.FC = () => {
 
         const freshPrices: Record<string, number> = {};
         const freshPrevClose: Record<string, number> = {};
+        const freshExtended: Record<string, any> = {};
         if (Array.isArray(priceResponse.data)) {
           priceResponse.data.forEach((item: any) => {
             if (item.ticker && item.price) {
@@ -136,12 +144,26 @@ const Portfolio: React.FC = () => {
             if (item.ticker && item.previous_close) {
               freshPrevClose[item.ticker] = item.previous_close;
             }
+            if (item.ticker) {
+              freshExtended[item.ticker] = {
+                earlyChange: item.early_trading_change ?? null,
+                earlyChangePercent: item.early_trading_change_percent ?? null,
+                lateChange: item.late_trading_change ?? null,
+                lateChangePercent: item.late_trading_change_percent ?? null,
+                marketStatus: item.market_status ?? null,
+              };
+            }
           });
         }
 
         // Update previous close map if we got fresh data
         if (Object.keys(freshPrevClose).length > 0) {
           setPrevCloseMap(prev => ({ ...prev, ...freshPrevClose }));
+        }
+
+        // Update extended hours data
+        if (Object.keys(freshExtended).length > 0) {
+          setExtendedHoursMap(prev => ({ ...prev, ...freshExtended }));
         }
 
         setPortfolio(prev => prev.map(pos => {
@@ -189,6 +211,7 @@ const Portfolio: React.FC = () => {
           // Build a price map from the fresh data
           const freshPrices: Record<string, number> = {};
           const freshPrevClose: Record<string, number> = {};
+          const freshExtended: Record<string, any> = {};
           if (Array.isArray(priceResponse.data)) {
             priceResponse.data.forEach((item: any) => {
               if (item.ticker && item.price) {
@@ -197,12 +220,26 @@ const Portfolio: React.FC = () => {
               if (item.ticker && item.previous_close) {
                 freshPrevClose[item.ticker] = item.previous_close;
               }
+              if (item.ticker) {
+                freshExtended[item.ticker] = {
+                  earlyChange: item.early_trading_change ?? null,
+                  earlyChangePercent: item.early_trading_change_percent ?? null,
+                  lateChange: item.late_trading_change ?? null,
+                  lateChangePercent: item.late_trading_change_percent ?? null,
+                  marketStatus: item.market_status ?? null,
+                };
+              }
             });
           }
           
           // Store previous close prices for daily change coloring
           if (Object.keys(freshPrevClose).length > 0) {
             setPrevCloseMap(prev => ({ ...prev, ...freshPrevClose }));
+          }
+          
+          // Store extended hours data for pre-market/after-hours badges
+          if (Object.keys(freshExtended).length > 0) {
+            setExtendedHoursMap(prev => ({ ...prev, ...freshExtended }));
           }
           
           // Update positions with fresh prices
@@ -800,9 +837,43 @@ const Portfolio: React.FC = () => {
                               : 'text-gray-900 dark:text-white'
                           : 'text-gray-900 dark:text-white';
                         
+                        // Extended hours badge
+                        const ext = extendedHoursMap[position.ticker];
+                        const isEarlyTrading = ext?.marketStatus === 'early_trading';
+                        const isLateTrading = ext?.marketStatus === 'late_trading';
+                        
+                        const earlyPct = ext?.earlyChangePercent;
+                        const latePct = ext?.lateChangePercent;
+                        
+                        // Show pre-market badge during early trading, after-hours badge during late trading
+                        const showEarlyBadge = isEarlyTrading && earlyPct != null && earlyPct !== 0;
+                        const showLateBadge = isLateTrading && latePct != null && latePct !== 0;
+                        
                         return (
-                          <div className={`text-sm font-medium ${priceColor} ${flashClass}`}>
-                            ${displayPrice ? displayPrice.toFixed(2) : 'N/A'}
+                          <div>
+                            <div className={`text-sm font-medium ${priceColor} ${flashClass}`}>
+                              ${displayPrice ? displayPrice.toFixed(2) : 'N/A'}
+                            </div>
+                            {showEarlyBadge && (
+                              <span className={`inline-flex items-center gap-0.5 mt-1 px-1.5 py-0.5 rounded text-[0.65rem] font-semibold leading-none ${
+                                earlyPct! > 0
+                                  ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400'
+                                  : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400'
+                              }`}>
+                                <span className="opacity-60">PM</span>
+                                {earlyPct! > 0 ? '↑' : '↓'}{Math.abs(earlyPct!).toFixed(2)}%
+                              </span>
+                            )}
+                            {showLateBadge && (
+                              <span className={`inline-flex items-center gap-0.5 mt-1 px-1.5 py-0.5 rounded text-[0.65rem] font-semibold leading-none ${
+                                latePct! > 0
+                                  ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400'
+                                  : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400'
+                              }`}>
+                                <span className="opacity-60">AH</span>
+                                {latePct! > 0 ? '↑' : '↓'}{Math.abs(latePct!).toFixed(2)}%
+                              </span>
+                            )}
                           </div>
                         );
                       })()}

@@ -2,18 +2,16 @@
 Market data service - Polygon.io integration
 """
 import httpx, os
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, List
 from datetime import datetime, timezone, timedelta
 from app.config import get_settings
 from massive import RESTClient
-from massive.rest.models import TickerSnapshot, Agg
+from massive.rest.models import TickerSnapshot
 
 settings = get_settings()
 
 
 class MarketDataService:
-    # Security types to keep in gainers/losers — everything else excluded
-    _ALLOWED_TYPES = {'CS', 'ADRC', 'PFD', 'ETF', 'ETS', 'ETN', 'ETV'}
 
     def __init__(self):
         self.base_url = "https://api.massive.com"
@@ -34,39 +32,6 @@ class MarketDataService:
         if len(t) > 4 and t.endswith('WS') and t[-3].isalpha():
             return True
         return False
-
-    async def _batch_get_types(self, tickers: List[str]) -> Optional[Dict[str, str]]:
-        """
-        Batch-fetch security types from Polygon /v3/reference/tickers.
-        Returns {ticker: type} dict, or None if the API call fails entirely
-        (so callers can fall back to heuristic-only filtering).
-        """
-        if not tickers:
-            return {}
-        try:
-            async with httpx.AsyncClient(timeout=8.0) as client:
-                resp = await client.get(
-                    f"{self.base_url}/v3/reference/tickers",
-                    params={
-                        "ticker.any_of": ",".join(tickers),
-                        "active": "true",
-                        "limit": len(tickers),
-                        "apiKey": self.api_key,
-                    },
-                )
-                resp.raise_for_status()
-                results = resp.json().get("results", [])
-                type_map = {r["ticker"]: r.get("type", "") for r in results}
-
-                blocked = {t: type_map.get(t, "?") for t in tickers
-                           if type_map.get(t, "") not in self._ALLOWED_TYPES}
-                if blocked:
-                    print(f"🚫 Type filter excluded: {blocked}")
-
-                return type_map
-        except Exception as e:
-            print(f"⚠️ _batch_get_types failed: {e}")
-            return None
 
     def _map_sic_to_sector(self, sic_description: str) -> str:
         """
@@ -562,127 +527,86 @@ class MarketDataService:
 
     async def get_top_gainers(self, limit: int = 10) -> Dict[str, Any]:
         """
-        Get top stock gainers from Massive API, excluding warrants and
-        non-equity securities.  Filtering is done here so the endpoint
-        layer receives clean data.
+        Get top stock gainers using Massive REST client's native
+        get_snapshot_direction() — pre-ranked server-side.
+        Heuristic filter removes obvious warrants.
         """
         try:
             if limit < 1 or limit > 50:
                 raise ValueError("Limit must be between 1 and 50")
-            
-            snapshot = self.rest_client.get_snapshot_all("stocks")
-            results = []
-            
-            for item in snapshot:
-                if isinstance(item, TickerSnapshot):
-                    if isinstance(item.prev_day, Agg):
-                        if isinstance(item.prev_day.open, float) and isinstance(item.prev_day.close, float):
-                            if item.prev_day.open != 0:
-                                percent_change = (
-                                    (item.prev_day.close - item.prev_day.open)
-                                    / item.prev_day.open
-                                    * 100
-                                )
-                                results.append({
-                                    'ticker': item.ticker,
-                                    'open': round(item.prev_day.open, 2),
-                                    'close': round(item.prev_day.close, 2),
-                                    'change_percent': round(percent_change, 2)
-                                })
-            
-            # Sort biggest gainers first
-            results.sort(key=lambda x: x['change_percent'], reverse=True)
 
-            # ── Filter: heuristic pass then authoritative type check ──
-            # Over-take to leave room after filtering
-            candidates = [r for r in results[:limit + 40]
-                          if not self._is_warrant_ticker(r['ticker'])]
+            # Over-fetch to leave room after warrant filtering
+            snapshots = self.rest_client.get_snapshot_direction(
+                "stocks", direction="gainers"
+            )
 
-            tickers = [r['ticker'] for r in candidates]
-            type_map = await self._batch_get_types(tickers)
+            filtered = []
+            for item in snapshots:
+                if not isinstance(item, TickerSnapshot):
+                    continue
+                if not isinstance(item.todays_change_percent, (int, float)):
+                    continue
+                if self._is_warrant_ticker(item.ticker):
+                    continue
 
-            if type_map is not None:
-                # API succeeded — strict type filter
-                filtered = []
-                for r in candidates:
-                    tkr_type = type_map.get(r['ticker'], '')
-                    if tkr_type in self._ALLOWED_TYPES:
-                        r['type'] = tkr_type
-                        filtered.append(r)
-                        if len(filtered) >= limit:
-                            break
-            else:
-                # API failed — fall back to heuristic-only (better than empty)
-                print("⚠️ Type API unavailable, using heuristic filter only for top gainers")
-                filtered = candidates[:limit]
+                filtered.append({
+                    'ticker': item.ticker,
+                    'open': round(item.prev_day.open, 2) if hasattr(item.prev_day, 'open') and item.prev_day and item.prev_day.open else None,
+                    'close': round(item.prev_day.close, 2) if hasattr(item.prev_day, 'close') and item.prev_day and item.prev_day.close else None,
+                    'change_percent': round(item.todays_change_percent, 2),
+                })
+
+                if len(filtered) >= limit:
+                    break
 
             return {
                 'timestamp': datetime.now().isoformat(),
                 'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'top_gainers': filtered
             }
-            
+
         except Exception as e:
             raise Exception(f"Failed to fetch top gainers: {str(e)}")
     
     async def get_top_losers(self, limit: int = 10) -> Dict[str, Any]:
         """
-        Get top stock losers from Massive API, excluding warrants and
-        non-equity securities.
+        Get top stock losers using Massive REST client's native
+        get_snapshot_direction() — pre-ranked server-side.
+        Heuristic filter removes obvious warrants.
         """
         try:
             if limit < 1 or limit > 50:
                 raise ValueError("Limit must be between 1 and 50")
-            
-            snapshot = self.rest_client.get_snapshot_all("stocks")
-            results = []
-            
-            for item in snapshot:
-                if isinstance(item, TickerSnapshot):
-                    if isinstance(item.prev_day, Agg):
-                        if isinstance(item.prev_day.open, float) and isinstance(item.prev_day.close, float):
-                            if item.prev_day.open != 0:
-                                percent_change = (
-                                    (item.prev_day.close - item.prev_day.open)
-                                    / item.prev_day.open
-                                    * 100
-                                )
-                                results.append({
-                                    'ticker': item.ticker,
-                                    'open': round(item.prev_day.open, 2),
-                                    'close': round(item.prev_day.close, 2),
-                                    'change_percent': round(percent_change, 2)
-                                })
-            
-            # Sort biggest losers first
-            results.sort(key=lambda x: x['change_percent'])
 
-            # ── Filter: heuristic pass then authoritative type check ──
-            candidates = [r for r in results[:limit + 40]
-                          if not self._is_warrant_ticker(r['ticker'])]
+            snapshots = self.rest_client.get_snapshot_direction(
+                "stocks", direction="losers"
+            )
 
-            tickers = [r['ticker'] for r in candidates]
-            type_map = await self._batch_get_types(tickers)
+            filtered = []
+            for item in snapshots:
+                if not isinstance(item, TickerSnapshot):
+                    continue
+                if not isinstance(item.todays_change_percent, (int, float)):
+                    continue
+                if self._is_warrant_ticker(item.ticker):
+                    continue
 
-            if type_map is not None:
-                filtered = []
-                for r in candidates:
-                    tkr_type = type_map.get(r['ticker'], '')
-                    if tkr_type in self._ALLOWED_TYPES:
-                        r['type'] = tkr_type
-                        filtered.append(r)
-                        if len(filtered) >= limit:
-                            break
-            else:
-                print("⚠️ Type API unavailable, using heuristic filter only for top losers")
-                filtered = candidates[:limit]
+                filtered.append({
+                    'ticker': item.ticker,
+                    'open': round(item.prev_day.open, 2) if hasattr(item.prev_day, 'open') and item.prev_day and item.prev_day.open else None,
+                    'close': round(item.prev_day.close, 2) if hasattr(item.prev_day, 'close') and item.prev_day and item.prev_day.close else None,
+                    'change_percent': round(item.todays_change_percent, 2),
+                })
+
+                if len(filtered) >= limit:
+                    break
 
             return {
                 'timestamp': datetime.now().isoformat(),
                 'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'top_losers': filtered
             }
-            
+
         except Exception as e:
             raise Exception(f"Failed to fetch top losers: {str(e)}")
         

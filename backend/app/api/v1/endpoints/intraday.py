@@ -93,6 +93,7 @@ async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
                 "name": safe_get_attr(snapshot, 'name'),
                 "type": safe_get_attr(snapshot, 'type'),
                 "price": price,
+                "previous_close": safe_get_attr(snapshot, 'session.previous_close') if hasattr(snapshot, 'session') else None,
                 "change": safe_get_attr(snapshot, 'session.change') if hasattr(snapshot, 'session') else None,
                 "change_percent": safe_get_attr(snapshot, 'session.change_percent') if hasattr(snapshot, 'session') else None,
                 "market_status": safe_get_attr(snapshot, 'market_status'),
