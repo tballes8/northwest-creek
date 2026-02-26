@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI } from '../services/api';
 
 type Step = 'plan' | 'account' | 'success';
-type Tier = 'free' | 'casual' | 'active' | 'professional';
+type Tier = 'beginner' | 'casual' | 'active' | 'professional';
 
 const RegisterWithPayment: React.FC = () => {
   const navigate = useNavigate();
@@ -63,7 +63,7 @@ const RegisterWithPayment: React.FC = () => {
   };
 
   const tierLabels: Record<Tier, string> = {
-    free: 'Free',
+    beginner: 'Beginner — $10/mo',
     casual: 'Casual Investor — $20/mo',
     active: 'Active Investor — $40/mo',
     professional: 'Professional — $100/mo',
@@ -71,16 +71,19 @@ const RegisterWithPayment: React.FC = () => {
 
   const pricingTiers = [
     {
-      name: 'Free',
-      tier: 'free' as Tier,
-      price: '$0',
-      period: 'forever',
+      name: 'Beginner',
+      tier: 'beginner' as Tier,
+      price: '$10',
+      period: '/month',
+      trialBadge: '14-day free trial',
       features: [
-        '5 watchlist stocks',
-        '5 portfolio entries',
-        '5 stock reviews (total)',
+        '10 watchlist stocks',
+        '10 portfolio entries',
+        '5 price alerts',
+        '5 stock reviews/week',
+        '5 DCF valuations/week',
+        'Technical Analysis',
         'Real-time market data',
-        'Basic stock search',
       ],
       highlight: false,
     },
@@ -89,12 +92,15 @@ const RegisterWithPayment: React.FC = () => {
       tier: 'casual' as Tier,
       price: '$20',
       period: '/month',
+      trialBadge: '14-day free trial',
       features: [
         '20 watchlist stocks',
         '20 portfolio entries',
-        '5 stock reviews/week',
-        '5 DCF valuations/week',
+        '10 price alerts',
+        '15 stock reviews/week',
+        '15 DCF valuations/week',
         'Technical Analysis',
+        'SMS price alerts',
         'Priority support',
       ],
       highlight: true,
@@ -104,13 +110,15 @@ const RegisterWithPayment: React.FC = () => {
       tier: 'active' as Tier,
       price: '$40',
       period: '/month',
+      trialBadge: null,
       features: [
         '45 watchlist stocks',
         '45 portfolio entries',
         '20 price alerts',
-        '5 stock reviews/day',
-        '5 DCF valuations/day',
+        '10 stock reviews/day',
+        '10 DCF valuations/day',
         'Advanced Technical Analysis',
+        'SMS price alerts',
         'Priority support',
       ],
       highlight: false,
@@ -120,6 +128,7 @@ const RegisterWithPayment: React.FC = () => {
       tier: 'professional' as Tier,
       price: '$100',
       period: '/month',
+      trialBadge: null,
       features: [
         '75 watchlist stocks',
         '75 portfolio entries',
@@ -127,6 +136,7 @@ const RegisterWithPayment: React.FC = () => {
         '20 stock reviews/day',
         '20 DCF valuations/day',
         'Full Technical Analysis suite',
+        'SMS & indicator alerts',
         'Priority support',
       ],
       highlight: false,
@@ -231,6 +241,9 @@ const RegisterWithPayment: React.FC = () => {
                         {tier.period}
                       </span>
                     )}
+                    {tier.trialBadge && (
+                      <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium mt-1">{tier.trialBadge}</p>
+                    )}
                   </div>
 
                   <ul className="space-y-2 mb-6">
@@ -252,7 +265,7 @@ const RegisterWithPayment: React.FC = () => {
                         : 'bg-gray-900 hover:bg-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 text-white'
                     }`}
                   >
-                    {tier.tier === 'free' ? 'Start Free' : `Choose ${tier.name}`}
+                    {tier.tier === 'beginner' ? 'Start Free Trial' : `Choose ${tier.name}`}
                   </button>
                 </div>
               ))}
@@ -356,8 +369,8 @@ const RegisterWithPayment: React.FC = () => {
                 >
                   {loading 
                     ? 'Creating account...' 
-                    : selectedTier === 'free' 
-                    ? 'Create Free Account' 
+                    : (selectedTier === 'beginner' || selectedTier === 'casual')
+                    ? 'Create Account & Start Free Trial'
                     : 'Create Account & Continue to Payment'}
                 </button>
               </form>
@@ -392,7 +405,7 @@ const RegisterWithPayment: React.FC = () => {
                 We've sent a verification link to <strong className="text-gray-900 dark:text-white">{formData.email}</strong>
               </p>
 
-              {selectedTier !== 'free' && (
+              {selectedTier && (
                 <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-700 rounded-lg p-4 mb-4">
                   <p className="text-sm text-primary-800 dark:text-primary-200">
                     <strong>Next step:</strong> After verifying your email, you'll be automatically redirected to complete your <strong>{selectedTier}</strong> subscription payment.
