@@ -25,7 +25,7 @@ security = HTTPBearer()
 async def register(
     user_data: UserCreate,
     db: AsyncSession = Depends(get_db),
-    selected_tier: str = Query(default="free", description="Selected subscription tier")
+    selected_tier: str = Query(default="beginner", description="Selected subscription tier")
 ):
     """Register a new user and send verification email"""
     # Check if email exists
@@ -40,7 +40,7 @@ async def register(
     verification_token = secrets.token_urlsafe(32)
     token_expires = datetime.now(timezone.utc) + timedelta(hours=24)
     
-    # Create user (not verified yet — starts as free, upgraded after Stripe payment)
+    # Create user (not verified yet — starts as beginner, upgraded after Stripe payment)
     user = User(
         email=user_data.email,
         password_hash=get_password_hash(user_data.password),

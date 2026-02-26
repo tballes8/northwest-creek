@@ -29,7 +29,7 @@ class CheckoutRequest(BaseModel):
     price_id: str
 
 class SubscriptionRequest(BaseModel):
-    tier: str  # 'casual', 'active', 'professional'
+    tier: str  # 'beginner', 'casual', 'active', 'professional'
 
 
 # ---- Helper: Map tier to price ID ----
@@ -37,6 +37,7 @@ class SubscriptionRequest(BaseModel):
 def get_price_id_for_tier(tier: str) -> str:
     """Get Stripe Price ID for a given tier"""
     tier_map = {
+        'beginner': settings.STRIPE_BEGINNER_PRICE_ID,
         'casual': settings.STRIPE_CASUAL_PRICE_ID,
         'active': settings.STRIPE_ACTIVE_PRICE_ID,
         'professional': settings.STRIPE_PROFESSIONAL_PRICE_ID,
@@ -45,14 +46,16 @@ def get_price_id_for_tier(tier: str) -> str:
     if not price_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid tier: {tier}. Must be casual, active, or professional."
+            detail=f"Invalid tier: {tier}. Must be beginner, casual, active, or professional."
         )
     return price_id
 
 
 def get_plan_name_for_price(price_id: str) -> str:
     """Get plan name from price ID"""
-    if price_id == settings.STRIPE_CASUAL_PRICE_ID:
+    if price_id == getattr(settings, 'STRIPE_BEGINNER_PRICE_ID', None):
+        return "Beginner"
+    elif price_id == settings.STRIPE_CASUAL_PRICE_ID:
         return "Casual Retail Investor"
     elif price_id == settings.STRIPE_ACTIVE_PRICE_ID:
         return "Active Retail Investor"
@@ -63,13 +66,15 @@ def get_plan_name_for_price(price_id: str) -> str:
 
 def get_tier_for_price(price_id: str) -> str:
     """Get tier slug from price ID"""
-    if price_id == settings.STRIPE_CASUAL_PRICE_ID:
+    if price_id == getattr(settings, 'STRIPE_BEGINNER_PRICE_ID', None):
+        return 'beginner'
+    elif price_id == settings.STRIPE_CASUAL_PRICE_ID:
         return 'casual'
     elif price_id == settings.STRIPE_ACTIVE_PRICE_ID:
         return 'active'
     elif price_id == settings.STRIPE_PROFESSIONAL_PRICE_ID:
         return 'professional'
-    return 'free'
+    return 'beginner'
 
 
 # ---- Endpoints ----
@@ -445,7 +450,7 @@ async def handle_subscription_updated(subscription, db: AsyncSession):
 
         
 async def handle_subscription_deleted(subscription, db: AsyncSession):
-    """Handle subscription cancellation — downgrade to free"""
+    """Handle subscription cancellation — downgrade to beginner"""
     user_id = subscription['metadata'].get('user_id')
     if not user_id:
         return
@@ -454,9 +459,9 @@ async def handle_subscription_deleted(subscription, db: AsyncSession):
     user = result.scalar_one_or_none()
     
     if user:
-        user.subscription_tier = 'free'
+        user.subscription_tier = 'beginner'
         await db.commit()
-        print(f"⚠️ User {user.email} subscription canceled, downgraded to free")
+        print(f"⚠️ User {user.email} subscription canceled, downgraded to beginner")
 
 
 async def handle_payment_failed(invoice, db: AsyncSession):
@@ -477,7 +482,7 @@ async def cancel_subscription(
     Cancels at period end so user keeps access until billing cycle finishes.
     """
     try:
-        if current_user.subscription_tier == 'free':
+        if current_user.subscription_tier == 'beginner':
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No active subscription to cancel."
@@ -552,11 +557,11 @@ async def cancel_subscription_immediate(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Immediately cancel subscription and downgrade to free.
+    Immediately cancel subscription and downgrade to beginner.
     Used when user wants instant cancellation (no access until period end).
     """
     try:
-        if current_user.subscription_tier == 'free':
+        if current_user.subscription_tier == 'beginner':
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No active subscription to cancel."
@@ -582,15 +587,15 @@ async def cancel_subscription_immediate(
         
         # Downgrade user immediately
         old_tier = current_user.subscription_tier
-        current_user.subscription_tier = 'free'
+        current_user.subscription_tier = 'beginner'
         await db.commit()
         
-        print(f"⚠️ User {current_user.email} downgraded from {old_tier} to free (immediate cancel)")
+        print(f"⚠️ User {current_user.email} downgraded from {old_tier} to beginner (immediate cancel)")
         
         return {
             "status": "cancelled",
             "message": "Your subscription has been cancelled and your account has been downgraded to the Free tier.",
-            "new_tier": "free",
+            "new_tier": "beginner",
         }
         
     except HTTPException:
@@ -626,6 +631,7 @@ async def get_stripe_config():
     """Get Stripe publishable key for frontend"""
     return {
         "publishable_key": settings.STRIPE_PUBLISHABLE_KEY,
+        "beginner_price_id": settings.STRIPE_BEGINNER_PRICE_ID,
         "casual_price_id": settings.STRIPE_CASUAL_PRICE_ID,
         "active_price_id": settings.STRIPE_ACTIVE_PRICE_ID,
         "professional_price_id": settings.STRIPE_PROFESSIONAL_PRICE_ID

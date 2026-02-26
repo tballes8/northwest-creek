@@ -23,8 +23,8 @@ class User(Base):
     is_verified = Column(Boolean, default=False)
     is_admin = Column(Boolean, default=False)
     
-    # Subscription tiers: free, casual, active, professional
-    subscription_tier = Column(String(50), default="free")
+    # Subscription tiers: beginner, casual, active, professional
+    subscription_tier = Column(String(50), default="beginner")
     
     # Phone / SMS alert fields
     phone_number = Column(String(20), nullable=True)
