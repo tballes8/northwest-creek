@@ -1,33 +1,36 @@
 """
 Tier limits and validation
-Updated to match tier_levels.txt — all features have numeric limits
+Updated: Free → Beginner ($10/mo, 14-day trial), Casual gets SMS + 14-day trial
+All tiers now use "beginner" as the base tier (no free tier)
 Sprint 8: added sms_alerts and indicator_alerts limits
 """
 
 TIER_LIMITS = {
-    "free": {
-        "watchlist_stocks": 5,
-        "portfolio_entries": 5,
-        "alerts": 0,
-        "sms_alerts": False,
-        "indicator_alerts": 0,
-        "stock_reviews": 5,           # total (lifetime)
-        "dcf_valuations": 5,          # total (lifetime)
-        "technical_analysis": 5,      # total (lifetime)
-        "downloads": 0,
-        "review_period": "total",
-    },
-    "casual": {
-        "watchlist_stocks": 20,
-        "portfolio_entries": 20,
+    "beginner": {
+        "watchlist_stocks": 10,
+        "portfolio_entries": 10,
         "alerts": 5,
         "sms_alerts": False,
         "indicator_alerts": 0,
         "stock_reviews": 5,           # per week
         "dcf_valuations": 5,          # per week
         "technical_analysis": 5,      # per week
+        "downloads": 0,
+        "review_period": "week",
+        "trial_days": 14,
+    },
+    "casual": {
+        "watchlist_stocks": 20,
+        "portfolio_entries": 20,
+        "alerts": 10,
+        "sms_alerts": True,
+        "indicator_alerts": 0,
+        "stock_reviews": 15,          # per week
+        "dcf_valuations": 15,         # per week
+        "technical_analysis": 15,     # per week
         "downloads": 1,               # top 10 only
         "review_period": "week",
+        "trial_days": 14,
     },
     "active": {
         "watchlist_stocks": 45,
@@ -35,9 +38,9 @@ TIER_LIMITS = {
         "alerts": 20,
         "sms_alerts": True,
         "indicator_alerts": 0,
-        "stock_reviews": 5,           # per day
-        "dcf_valuations": 5,          # per day
-        "technical_analysis": 5,      # per day
+        "stock_reviews": 10,          # per day
+        "dcf_valuations": 10,         # per day
+        "technical_analysis": 10,     # per day
         "downloads": 2,               # level 2
         "review_period": "day",
     },
@@ -56,15 +59,23 @@ TIER_LIMITS = {
     },
 }
 
+# Default tier for new users and fallback lookups
+DEFAULT_TIER = "beginner"
+
 
 def get_tier_limit(tier: str, limit_type: str):
     """Get limit for a specific tier and limit type"""
-    return TIER_LIMITS.get(tier, TIER_LIMITS["free"]).get(limit_type, 0)
+    return TIER_LIMITS.get(tier, TIER_LIMITS[DEFAULT_TIER]).get(limit_type, 0)
 
 
 def get_review_period(tier: str) -> str:
     """Get the review period for a tier (total, week, or day)"""
-    return TIER_LIMITS.get(tier, TIER_LIMITS["free"]).get("review_period", "total")
+    return TIER_LIMITS.get(tier, TIER_LIMITS[DEFAULT_TIER]).get("review_period", "total")
+
+
+def get_trial_days(tier: str) -> int:
+    """Get the trial period in days for a tier (0 if no trial)"""
+    return TIER_LIMITS.get(tier, TIER_LIMITS[DEFAULT_TIER]).get("trial_days", 0)
 
 
 def can_add_watchlist_stock(tier: str, current_count: int) -> bool:
@@ -101,7 +112,7 @@ def can_use_feature(tier: str, feature: str, current_count: int) -> bool:
 def get_upgrade_tier(current_tier: str) -> str | None:
     """Get the next tier up for upgrade prompts"""
     upgrade_path = {
-        "free": "casual",
+        "beginner": "casual",
         "casual": "active",
         "active": "professional",
         "professional": None,
@@ -112,9 +123,9 @@ def get_upgrade_tier(current_tier: str) -> str | None:
 def get_tier_display_name(tier: str) -> str:
     """Get human-readable tier name"""
     names = {
-        "free": "Free",
+        "beginner": "Beginner",
         "casual": "Casual Retail Investor",
         "active": "Active Retail Investor",
         "professional": "Professional Investor",
     }
-    return names.get(tier, "Free")
+    return names.get(tier, "Beginner")
