@@ -201,12 +201,12 @@ const Watchlist: React.FC = () => {
 
   const getTierBadge = (tier: string) => {
     const badges: Record<string, { bg: string; text: string; label: string }> = {
-      free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
+      beginner: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Beginner' },
       casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
       active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
       professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
     };
-    const badge = badges[tier] || badges.free;
+    const badge = badges[tier] || badges.beginner;
     return (
       <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.bg} ${badge.text}`}>
         {badge.label}
@@ -224,13 +224,13 @@ const Watchlist: React.FC = () => {
     }
 
   const limits = {
-      free: 5,
+      beginner: 10,
       casual: 20,
       active: 45,
       professional: 75
     };
   
-    const limit = limits[user?.subscription_tier as keyof typeof limits] || 5;
+    const limit = limits[user?.subscription_tier as keyof typeof limits] || 10;
 
     if (watchlist.length >= limit) {
       setError(`You've reached your ${user?.subscription_tier} tier limit of ${limit} stocks`);
@@ -336,8 +336,8 @@ const Watchlist: React.FC = () => {
     );
   }
 
-  const watchlistLimits: Record<string, number> = { free: 5, casual: 20, active: 45, professional: 75 };
-  const watchlistLimit = watchlistLimits[user?.subscription_tier || 'free'] || 5;
+  const watchlistLimits: Record<string, number> = { beginner: 10, casual: 20, active: 45, professional: 75 };
+  const watchlistLimit = watchlistLimits[user?.subscription_tier || 'beginner'] || 10;
   const isAtLimit = watchlist.length >= watchlistLimit;
 
   return (
@@ -457,8 +457,8 @@ const Watchlist: React.FC = () => {
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">My Watchlist</h1>
               <p className="text-gray-600 dark:text-gray-400">
                 Track stocks you're interested in ({watchlist.length} / {(() => {
-                  const limits = { free: 5, casual: 20, active: 45, professional: 75 };
-                  return limits[user?.subscription_tier as keyof typeof limits] || 5;
+                  const limits = { beginner: 10, casual: 20, active: 45, professional: 75 };
+                  return limits[user?.subscription_tier as keyof typeof limits] || 10;
                 })()})
               </p>
             </div>

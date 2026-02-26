@@ -13,12 +13,12 @@ const TechnicalAnalysis403: React.FC<TechnicalAnalysis403Props> = ({ user, onLog
 
   const getTierBadge = (tier: string) => {
     const badges = {
-      free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
+      beginner: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Beginner' },
       casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
       active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
       professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
     };
-    const badge = badges[tier as keyof typeof badges] || badges.free;
+    const badge = badges[tier as keyof typeof badges] || badges.beginner;
     return (
       <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.bg} ${badge.text}`}>
         {badge.label}
@@ -74,7 +74,7 @@ const TechnicalAnalysis403: React.FC<TechnicalAnalysis403Props> = ({ user, onLog
               Access Restricted
             </h1>
             <p className="text-xl text-gray-600 dark:text-gray-400 mb-2">
-              Technical Analysis requires a paid subscription
+              You've reached your Technical Analysis usage limit
             </p>
             {user && (
               <p className="text-lg text-gray-500 dark:text-gray-400">
@@ -86,11 +86,10 @@ const TechnicalAnalysis403: React.FC<TechnicalAnalysis403Props> = ({ user, onLog
           <div className="max-w-2xl mx-auto">
             <div className="bg-gradient-to-br from-primary-50 to-purple-50 dark:from-gray-800 dark:to-gray-800 rounded-lg p-6 border border-primary-200 dark:border-gray-600 mb-6">
               <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
-                🚀 Unlock Advanced Technical Analysis
+                🚀 Upgrade for More Technical Analyses
               </h2>
               <p className="text-gray-700 dark:text-gray-300 mb-4">
-                Upgrade to Professional to access powerful technical indicators and real-time market analysis tools:
-              </p>
+                Upgrade your plan to unlock more technical analyses per week or per day:</p>
               <ul className="space-y-2 text-gray-700 dark:text-gray-300 mb-6">
                 <li className="flex items-start">
                   <span className="text-green-500 mr-2">✓</span>
@@ -122,7 +121,7 @@ const TechnicalAnalysis403: React.FC<TechnicalAnalysis403Props> = ({ user, onLog
                   to="/pricing"
                   className="flex-1 px-6 py-3 bg-gradient-to-r from-primary-600 to-purple-600 text-white font-semibold rounded-lg hover:from-primary-700 hover:to-purple-700 transition-all text-center shadow-lg"
                 >
-                  Upgrade to Professional
+                  Upgrade Plan
                 </Link>
                 <Link
                   to="/dashboard"
@@ -182,7 +181,7 @@ const TechnicalAnalysis403: React.FC<TechnicalAnalysis403Props> = ({ user, onLog
           {/* Comparison Table */}
           <div className="mt-8">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-              What You Get with Professional
+              Plan Comparison
             </h3>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
@@ -192,7 +191,7 @@ const TechnicalAnalysis403: React.FC<TechnicalAnalysis403Props> = ({ user, onLog
                       Feature
                     </th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Free
+                      Beginner
                     </th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       Casual Investor
@@ -201,45 +200,65 @@ const TechnicalAnalysis403: React.FC<TechnicalAnalysis403Props> = ({ user, onLog
                       Active Investor
                     </th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Professional Investor
+                      Professional
                     </th>
                   </tr>
                 </thead>
                 <tbody className="bg-white dark:bg-gray-700 divide-y divide-gray-200 dark:divide-gray-600">
                   <tr>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      Basic Stock Search
+                      Technical Analysis
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                      <span className="text-green-500">✓</span>
+                      <span className="text-gray-700 dark:text-gray-300">5/week</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                      <span className="text-green-500">✓</span>
+                      <span className="text-gray-700 dark:text-gray-300">15/week</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                      <span className="text-green-500">✓</span>
+                      <span className="text-gray-700 dark:text-gray-300">10/day</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                      <span className="text-gray-700 dark:text-gray-300">20/day</span>
                     </td>
                   </tr>
                   <tr className="bg-gray-50 dark:bg-gray-800">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      Watchlist
+                      Watchlist Stocks
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                      <span className="text-gray-400">—</span>
+                      <span className="text-gray-700 dark:text-gray-300">10</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                      <span className="text-green-500">✓</span>
+                      <span className="text-gray-700 dark:text-gray-300">20</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                      <span className="text-green-500">✓</span>
+                      <span className="text-gray-700 dark:text-gray-300">45</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                      <span className="text-gray-700 dark:text-gray-300">75</span>
                     </td>
                   </tr>
                   <tr>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      Technical Analysis
+                      Price Alerts
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                      <span className="text-gray-400">—</span>
+                      <span className="text-gray-700 dark:text-gray-300">5</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                      <span className="text-gray-700 dark:text-gray-300">10</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                      <span className="text-gray-700 dark:text-gray-300">20</span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                      <span className="text-gray-700 dark:text-gray-300">50</span>
+                    </td>
+                  </tr>
+                  <tr className="bg-gray-50 dark:bg-gray-800">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
+                      SMS Alerts
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
                       <span className="text-gray-400">—</span>
@@ -247,16 +266,8 @@ const TechnicalAnalysis403: React.FC<TechnicalAnalysis403Props> = ({ user, onLog
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
                       <span className="text-green-500">✓</span>
                     </td>
-                  </tr>
-                  <tr className="bg-gray-50 dark:bg-gray-800">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      Advanced Charts
-                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                      <span className="text-gray-400">—</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                      <span className="text-gray-400">—</span>
+                      <span className="text-green-500">✓</span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
                       <span className="text-green-500">✓</span>

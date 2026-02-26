@@ -20,9 +20,9 @@ import { User } from '../types';
 
 // ── Tier metadata ──────────────────────────────────────────────
 
-type TierKey = 'free' | 'casual' | 'active' | 'professional';
+type TierKey = 'beginner' | 'casual' | 'active' | 'professional';
 
-const TIER_ORDER: TierKey[] = ['free', 'casual', 'active', 'professional'];
+const TIER_ORDER: TierKey[] = ['beginner', 'casual', 'active', 'professional'];
 
 interface TierMeta {
   label: string;
@@ -35,19 +35,22 @@ interface TierMeta {
 }
 
 const TIERS: Record<TierKey, TierMeta> = {
-  free: {
-    label: 'Free',
-    price: '$0/mo',
+  beginner: {
+    label: 'Beginner',
+    price: '$10/mo',
     color: 'text-gray-400',
     badgeBg: 'bg-gray-100 dark:bg-gray-600',
     badgeText: 'text-gray-800 dark:text-gray-200',
     gradient: 'from-gray-500 to-gray-600',
     features: [
-      '5 watchlist stocks',
-      '5 portfolio entries',
-      '5 stock reviews',
-      '5 technical analyses',
-      '5 DCF valuations',
+      '10 watchlist stocks',
+      '10 portfolio entries',
+      '5 price alerts',
+      '5 stock reviews/week',
+      '5 technical analyses/week',
+      '5 DCF valuations/week',
+      'Real-time market data',
+      '14-day free trial',
     ],
   },
   casual: {
@@ -60,10 +63,12 @@ const TIERS: Record<TierKey, TierMeta> = {
     features: [
       '20 watchlist stocks',
       '20 portfolio entries',
-      '5 stock reviews per week',
-      '5 technical analyses per week',
-      '5 DCF valuations per week',
-      '5 price alerts',
+      '10 price alerts',
+      '15 stock reviews/week',
+      '15 technical analyses/week',
+      '15 DCF valuations/week',
+      'SMS text alerts',
+      '14-day free trial',
     ],
   },
   active: {
@@ -76,10 +81,10 @@ const TIERS: Record<TierKey, TierMeta> = {
     features: [
       '45 watchlist stocks',
       '45 portfolio entries',
-      '5 stock reviews per day',
-      '5 technical analyses per day',
-      '5 DCF valuations per day',
       '20 price alerts',
+      '10 stock reviews/day',
+      '10 technical analyses/day',
+      '10 DCF valuations/day',
       'SMS text alerts',
     ],
   },
@@ -93,13 +98,11 @@ const TIERS: Record<TierKey, TierMeta> = {
     features: [
       '75 watchlist stocks',
       '75 portfolio entries',
-      '20 stock reviews per day',
-      '20 technical analyses per day',
-      '20 DCF valuations per day',
       '50 price alerts',
-      'SMS text alerts',
-      'Indicator-based alerts',
-      'Ad-free experience',
+      '20 stock reviews/day',
+      '20 technical analyses/day',
+      '20 DCF valuations/day',
+      'SMS & indicator alerts',
     ],
   },
 };
@@ -127,7 +130,7 @@ const UpgradeRequired: React.FC<UpgradeRequiredProps> = ({
   onLogout,
 }) => {
   const navigate = useNavigate();
-  const currentTier: TierKey = (user?.subscription_tier as TierKey) || 'free';
+  const currentTier: TierKey = (user?.subscription_tier as TierKey) || 'beginner';
   const currentIndex = TIER_ORDER.indexOf(currentTier);
   const minIndex = TIER_ORDER.indexOf(minimumTier);
 
@@ -139,7 +142,7 @@ const UpgradeRequired: React.FC<UpgradeRequiredProps> = ({
   const userMenuRef = useRef<HTMLDivElement>(null);
 
   const getTierBadge = (tier: string) => {
-    const meta = TIERS[tier as TierKey] || TIERS.free;
+    const meta = TIERS[tier as TierKey] || TIERS.beginner;
     return (
       <span className={`px-3 py-1 rounded-full text-sm font-semibold ${meta.badgeBg} ${meta.badgeText}`}>
         {meta.label}
@@ -388,39 +391,39 @@ interface ComparisonRow {
 const COMPARISON_ROWS: ComparisonRow[] = [
   {
     label: 'Watchlist Stocks',
-    values: { free: '5', casual: '20', active: '45', professional: '75' },
+    values: { beginner: '10', casual: '20', active: '45', professional: '75' },
   },
   {
     label: 'Portfolio Entries',
-    values: { free: '5', casual: '20', active: '45', professional: '75' },
+    values: { beginner: '10', casual: '20', active: '45', professional: '75' },
   },
   {
     label: 'Stock Reviews',
-    values: { free: '5 total', casual: '5/week', active: '5/day', professional: '20/day' },
+    values: { beginner: '5/week', casual: '15/week', active: '10/day', professional: '20/day' },
   },
   {
     label: 'Technical Analysis',
-    values: { free: '5 total', casual: '5/week', active: '5/day', professional: '20/day' },
+    values: { beginner: '5/week', casual: '15/week', active: '10/day', professional: '20/day' },
   },
   {
     label: 'DCF Valuations',
-    values: { free: '5 total', casual: '5/week', active: '5/day', professional: '20/day' },
+    values: { beginner: '5/week', casual: '15/week', active: '10/day', professional: '20/day' },
   },
   {
     label: 'Price Alerts',
-    values: { free: false, casual: '5', active: '20', professional: '50' },
+    values: { beginner: '5', casual: '10', active: '20', professional: '50' },
   },
   {
     label: 'SMS Text Alerts',
-    values: { free: false, casual: false, active: true, professional: true },
+    values: { beginner: false, casual: true, active: true, professional: true },
   },
   {
     label: 'Indicator Alerts',
-    values: { free: false, casual: false, active: false, professional: true },
+    values: { beginner: false, casual: false, active: false, professional: true },
   },
   {
-    label: 'Ad-Free',
-    values: { free: false, casual: false, active: false, professional: true },
+    label: '14-Day Free Trial',
+    values: { beginner: true, casual: true, active: false, professional: false },
   },
 ];
 

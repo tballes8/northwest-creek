@@ -34,13 +34,13 @@ const VerifyEmail: React.FC = () => {
         }
 
         // Step 2: Redirect based on tier
-        if (tier && tier !== 'free' && accessToken) {
-          // Paid tier — redirect to in-app payment page
+        if (tier && accessToken) {
+          // All tiers require payment setup (beginner/casual start with 14-day trial)
           setStatus('success');
           setMessage('Email verified! Redirecting to payment...');
           setTimeout(() => navigate(`/payment?tier=${tier}`), 1500);
         } else if (accessToken) {
-          // Free tier — go to dashboard
+          // No tier param — go to dashboard
           setStatus('success');
           setMessage('Email verified successfully! Redirecting to dashboard...');
           setTimeout(() => navigate('/dashboard'), 2000);
