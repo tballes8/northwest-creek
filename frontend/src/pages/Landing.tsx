@@ -427,29 +427,32 @@ const Landing: React.FC = () => {
             Simple, Transparent Pricing
           </h2>
           <p className="text-center text-gray-600 dark:text-gray-400 mb-16">
-            Start free, upgrade when you need more
+            Every plan starts with a 14-day free trial — no credit card required
           </p>
           
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 max-w-25xl mx-auto">
-            {/* Free Tier */}
+            {/* Beginner Tier */}
             <div className="bg-white dark:bg-gray-600 p-8 rounded-xl shadow-lg dark:shadow-gray-200/50 hover:shadow-xl transition-shadow border dark:border-gray-300">
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Free</h3>
-              <div className="mb-6">
-                <span className="text-4xl font-bold text-gray-900 dark:text-white">$0</span>
+              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Beginner</h3>
+              <div className="mb-2">
+                <span className="text-4xl font-bold text-gray-900 dark:text-white">$10</span>
                 <span className="text-gray-600 dark:text-gray-400">/month</span>
               </div>
+              <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium mb-6">14-day free trial</p>
               <ul className="space-y-3 mb-8">
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">5 watchlist stocks</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">5 portfolio entries</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">5 stock reviews (total)</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">10 watchlist stocks</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">10 portfolio entries</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">5 price alerts</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">5 stock reviews per week</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">5 DCF valuations per week</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Technical Analysis</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Real-time market data</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Basic stock search</span></li>
               </ul>
               <Link
-                to="/register"
+                to="/registerwithpayment?tier=beginner"
                 className="block w-full text-center bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold py-3 rounded-lg transition-colors"
               >
-                Try For Free
+                Start Free Trial
               </Link>
             </div>
 
@@ -461,23 +464,26 @@ const Landing: React.FC = () => {
                 </span>
               </div>
               <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Casual Investor</h3>
-              <div className="mb-6">
+              <div className="mb-2">
                 <span className="text-4xl font-bold text-gray-900 dark:text-white">$20</span>
                 <span className="text-gray-600 dark:text-gray-400">/month</span>
               </div>
+              <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium mb-6">14-day free trial</p>
               <ul className="space-y-3 mb-8">
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">20 watchlist stocks</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">20 portfolio entries</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">5 stock reviews per week</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">5 DCF valuations per week</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">10 price alerts</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">15 stock reviews per week</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">15 DCF valuations per week</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Technical Analysis</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">SMS price alerts</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Priority support</span></li>
               </ul>
               <Link
                 to="/registerwithpayment?tier=casual"
                 className="block w-full text-center bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold py-3 rounded-lg transition-colors"
               >
-                Get Started Now
+                Start Free Trial
               </Link>
             </div>
 
@@ -492,9 +498,10 @@ const Landing: React.FC = () => {
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">45 watchlist stocks</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">45 portfolio entries</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">20 price alerts</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">5 stock reviews per day</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">5 DCF valuations per day</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">10 stock reviews per day</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">10 DCF valuations per day</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Advanced Technical Analysis</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">SMS price alerts</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Priority support</span></li>
               </ul>              
               <Link
@@ -519,6 +526,7 @@ const Landing: React.FC = () => {
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">20 stock reviews per day</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">20 DCF valuations per day</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Full Technical Analysis suite</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">SMS & indicator alerts</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Priority support</span></li>
               </ul>              
               <Link

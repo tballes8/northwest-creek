@@ -56,12 +56,12 @@ const Pricing: React.FC = () => {
 
   const getTierBadge = (tier: string) => {
     const badges = {
-      free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
+      beginner: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Beginner' },
       casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
       active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
       professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
     };
-    const badge = badges[tier as keyof typeof badges] || badges.free;
+    const badge = badges[tier as keyof typeof badges] || badges.beginner;
     return (
       <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.bg} ${badge.text}`}>
         {badge.label}
@@ -71,28 +71,27 @@ const Pricing: React.FC = () => {
 
   const pricingTiers = [
     {
-      name: 'Free',
-      tierSlug: 'free',
-      price: '$0',
-      period: 'forever',
-      description: 'Perfect for getting started with stock tracking',
+      name: 'Beginner',
+      tierSlug: 'beginner',
+      price: '$10',
+      period: 'per month',
+      description: 'Perfect for getting started — 14-day free trial',
       features: [
-        { text: '5 watchlist stocks', included: true },
-        { text: '5 portfolio entries', included: true },
-        { text: '5 stock reviews', included: true },
+        { text: '10 watchlist stocks', included: true },
+        { text: '10 portfolio entries', included: true },
+        { text: '5 price alerts', included: true },
+        { text: '5 stock reviews per week', included: true },
+        { text: '5 DCF valuations per week', included: true },
+        { text: 'Technical Analysis', included: true },
         { text: 'Real-time market data', included: true },
-        { text: 'Basic stock search', included: true },
-        { text: 'Technical Analysis', included: false },
-        { text: 'DCF Valuation', included: false },
         { text: 'Advanced charts', included: false },
-        { text: 'Email support', included: false },
         { text: 'Instant SMS Alerts', included: false },
         { text: 'Customizable Alerts', included: false },
       ],
-      buttonText: 'Get Started',
-      buttonLink: '/register',
-      priceId: '',
-      current: user?.subscription_tier === 'free',
+      buttonText: user?.subscription_tier === 'beginner' ? 'Current Plan' : 'Start Free Trial',
+      buttonLink: '/registerwithpayment?tier=beginner',
+      priceId: 'beginner',
+      current: user?.subscription_tier === 'beginner',
       highlight: false,
     },
     {
@@ -100,21 +99,20 @@ const Pricing: React.FC = () => {
       tierSlug: 'casual',
       price: '$20',
       period: 'per month',
-      description: 'For investors tracking a moderate portfolio',
+      description: 'For investors tracking a moderate portfolio — 14-day free trial',
       features: [
         { text: '20 watchlist stocks', included: true },
         { text: '20 portfolio entries', included: true },
-        { text: '5 stock reviews per week', included: true },
-        { text: '5 DCF valuations per week', included: true },
-        { text: 'Real-time market data', included: true },
+        { text: '10 price alerts', included: true },
+        { text: '15 stock reviews per week', included: true },
+        { text: '15 DCF valuations per week', included: true },
         { text: 'Technical Analysis', included: true },
+        { text: 'Real-time market data', included: true },
         { text: 'Advanced charts', included: true },
-        { text: 'Email support', included: true },
-        { text: 'Instant SMS Alerts', included: false },
-        { text: 'Customizable Alerts', included: false },
-        //{ text: 'Export to Excel/CSV', included: true },
+        { text: 'Instant SMS Alerts', included: true },
+        { text: 'Priority support', included: true },
       ],
-      buttonText: user?.subscription_tier === 'casual' ? 'Current Plan' : 'Upgrade to Casual',
+      buttonText: user?.subscription_tier === 'casual' ? 'Current Plan' : 'Start Free Trial',
       buttonLink: '/registerwithpayments',
       priceId: 'casual',
       current: user?.subscription_tier === 'casual',
@@ -129,16 +127,15 @@ const Pricing: React.FC = () => {
       features: [
         { text: '45 watchlist stocks', included: true },
         { text: '45 portfolio entries', included: true },
-        { text: '20 Custom alerts', included: true },
-        { text: '5 stock reviews daily', included: true },
-        { text: '5 DCF valuations daily', included: true },
-        { text: 'Real-time market data', included: true },
+        { text: '20 price alerts', included: true },
+        { text: '10 stock reviews per day', included: true },
+        { text: '10 DCF valuations per day', included: true },
         { text: 'Advanced Technical Analysis', included: true },
+        { text: 'Real-time market data', included: true },
         { text: 'Premium charting tools', included: true },
-        { text: 'Historical data (5 years)', included: true },
-        { text: 'Priority email support', included: true },
         { text: 'Instant SMS Alerts', included: true },
         { text: 'Customizable Alerts', included: true },
+        { text: 'Priority support', included: true },
       ],
       buttonText: user?.subscription_tier === 'active' ? 'Current Plan' : 'Upgrade to Active',
       buttonLink: '/registerwithpayments',
@@ -221,7 +218,7 @@ const Pricing: React.FC = () => {
           Choose Your Plan
         </h1>
         <p className="text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
-          Start with our free tier and upgrade anytime as your needs grow.
+          Start with a 14-day free trial and upgrade anytime as your needs grow.
         </p>
         {user && (
           <div className="mt-4 inline-flex items-center px-4 py-2 bg-primary-50 dark:bg-primary-900/30 rounded-lg border border-primary-200 dark:border-primary-800">
@@ -341,7 +338,7 @@ const Pricing: React.FC = () => {
                     Feature
                   </th>
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Free
+                    Beginner
                   </th>
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Casual
@@ -359,7 +356,7 @@ const Pricing: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
                     Watchlist Stocks
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">10</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">20</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">45</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">75</td>
@@ -368,36 +365,60 @@ const Pricing: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
                     Portfolio Entries
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">10</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">20</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">45</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">75</td>
                 </tr>
                 <tr>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
-                    Stock Reviews
+                    Price Alerts
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5 total</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5/week</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5/day</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">20 Daily</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">10</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">20</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">50</td>
                 </tr>
                 <tr className="bg-gray-50 dark:bg-gray-800">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
-                    DCF Valuations
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                    <span className="text-gray-400">—</span>
+                    Stock Reviews
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5/week</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5/day</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">20 Daily</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">15/week</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">10/day</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">20/day</td>
                 </tr>
                 <tr>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
+                    DCF Valuations
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5/week</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">15/week</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">10/day</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">20/day</td>
+                </tr>
+                <tr className="bg-gray-50 dark:bg-gray-800">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
                     Technical Analysis
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                    <span className="text-green-500">✓</span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                    <span className="text-green-500">✓</span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                    <span className="text-green-500">✓</span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                    <span className="text-green-500">✓</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
+                    SMS Alerts
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
                     <span className="text-gray-400">—</span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
@@ -412,19 +433,19 @@ const Pricing: React.FC = () => {
                 </tr>
                 <tr className="bg-gray-50 dark:bg-gray-800">
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
-                    API Access
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                    <span className="text-gray-400">—</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                    <span className="text-gray-400">—</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                    <span className="text-gray-400">—</span>
+                    14-Day Free Trial
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
                     <span className="text-green-500">✓</span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                    <span className="text-green-500">✓</span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                    <span className="text-gray-400">—</span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                    <span className="text-gray-400">—</span>
                   </td>
                 </tr>
               </tbody>
