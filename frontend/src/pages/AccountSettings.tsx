@@ -18,33 +18,33 @@ const TIER_DETAILS: Record<string, {
   bgClass: string;
   features: string[];
 }> = {
-  free: {
-    name: 'Free',
-    price: '$0/mo',
+  beginner: {
+    name: 'Beginner',
+    price: '$10/mo',
     color: 'text-gray-400',
     bgClass: 'bg-gray-600',
-    features: ['5 watchlist stocks', '5 portfolio entries', '5 stock reviews', '5 technical analyses', '5 DCF valuations'],
+    features: ['10 watchlist stocks', '10 portfolio entries', '5 reviews/week', '5 TA/week', '5 DCF/week', '5 alerts', '14-day free trial'],
   },
   casual: {
     name: 'Casual Retail Investor',
     price: '$20/mo',
     color: 'text-teal-400',
     bgClass: 'bg-teal-500',
-    features: ['20 watchlist stocks', '20 portfolio entries', '5 reviews/week', '5 TA/week', '5 DCF/week', '5 alerts'],
+    features: ['20 watchlist stocks', '20 portfolio entries', '15 reviews/week', '15 TA/week', '15 DCF/week', '10 alerts', 'SMS text alerts', '14-day free trial'],
   },
   active: {
     name: 'Active Retail Investor',
     price: '$40/mo',
     color: 'text-blue-400',
     bgClass: 'bg-blue-500',
-    features: ['45 watchlist stocks', '45 portfolio entries', '5 reviews/day', '5 TA/day', '5 DCF/day', '20 alerts', 'SMS text alerts'],
+    features: ['45 watchlist stocks', '45 portfolio entries', '10 reviews/day', '10 TA/day', '10 DCF/day', '20 alerts', 'SMS text alerts'],
   },
   professional: {
     name: 'Professional Investor',
     price: '$100/mo',
     color: 'text-purple-400',
     bgClass: 'bg-purple-500',
-    features: ['75 watchlist stocks', '75 portfolio entries', '20 reviews/day', '20 TA/day', '20 DCF/day', '50 alerts', 'SMS text alerts', 'Ad-free'],
+    features: ['75 watchlist stocks', '75 portfolio entries', '20 reviews/day', '20 TA/day', '20 DCF/day', '50 alerts', 'SMS & indicator alerts'],
   },
 };
 
@@ -85,7 +85,7 @@ const AccountSettings: React.FC = () => {
       setUser(response.data);
 
       // Load phone status if tier supports SMS
-      const smsTiers = ['active', 'professional'];
+      const smsTiers = ['casual', 'active', 'professional'];
       if (smsTiers.includes(response.data.subscription_tier)) {
         try {
           const phoneResp = await phoneAPI.getStatus();
@@ -105,7 +105,7 @@ const AccountSettings: React.FC = () => {
     }
   };
 
-  const canUseSms = () => ['active', 'professional'].includes(user?.subscription_tier || '');
+  const canUseSms = () => ['casual', 'active', 'professional'].includes(user?.subscription_tier || '');
 
   const handlePhoneSubmit = async () => {
     setPhoneMessage(null);
@@ -226,16 +226,16 @@ const AccountSettings: React.FC = () => {
     }
   };
 
-  const tierInfo = TIER_DETAILS[user?.subscription_tier || 'free'] || TIER_DETAILS.free;
+  const tierInfo = TIER_DETAILS[user?.subscription_tier || 'beginner'] || TIER_DETAILS.beginner;
 
   const getTierBadge = (tier: string) => {
     const badges: Record<string, { bg: string; text: string; label: string }> = {
-      free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
+      beginner: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Beginner' },
       casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
       active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
       professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
     };
-    const badge = badges[tier] || badges.free;
+    const badge = badges[tier] || badges.beginner;
     return (
       <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.bg} ${badge.text}`}>
         {badge.label}
@@ -405,7 +405,7 @@ const AccountSettings: React.FC = () => {
         <div className="bg-white dark:bg-gray-700 rounded-xl shadow-lg border dark:border-gray-500 p-6 mb-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Subscription</h2>
-            {getTierBadge(user?.subscription_tier || 'free')}
+            {getTierBadge(user?.subscription_tier || 'beginner')}
           </div>
 
           <div className="bg-gray-50 dark:bg-gray-750 rounded-lg p-5 mb-6 border dark:border-gray-600">
@@ -444,13 +444,23 @@ const AccountSettings: React.FC = () => {
 
           {/* Action buttons */}
           <div className="flex flex-wrap gap-3">
-            {user?.subscription_tier === 'free' ? (
-              <Link
-                to="/pricing"
-                className="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-700 hover:to-teal-600 text-white rounded-lg font-semibold transition-all shadow"
-              >
-                Upgrade Your Plan
-              </Link>
+            {user?.subscription_tier === 'beginner' ? (
+              <>
+                <Link
+                  to="/pricing"
+                  className="px-6 py-2.5 bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-700 hover:to-teal-600 text-white rounded-lg font-semibold transition-all shadow"
+                >
+                  Upgrade Your Plan
+                </Link>
+                {!cancelSuccess && (
+                  <button
+                    onClick={() => setShowCancelConfirm(true)}
+                    className="px-6 py-2.5 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg font-medium transition-colors"
+                  >
+                    Cancel Subscription
+                  </button>
+                )}
+              </>
             ) : (
               <>
                 <Link
