@@ -169,8 +169,8 @@ const Alerts: React.FC = () => {
 
     // Check tier limits
     const limits = {
-      free: 0,
-      casual: 5,
+      beginner: 5,
+      casual: 10,
       active: 20,
       professional: 50
     };
@@ -261,12 +261,12 @@ const Alerts: React.FC = () => {
 
   const getTierBadge = (tier: string) => {
     const badges = {
-      free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
+      beginner: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Beginner' },
       casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
       active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
       professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
     };
-    const badge = badges[tier as keyof typeof badges] || badges.free;
+    const badge = badges[tier as keyof typeof badges] || badges.beginner;
     return (
       <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.bg} ${badge.text}`}>
         {badge.label}
@@ -276,12 +276,12 @@ const Alerts: React.FC = () => {
 
   const getTierLimit = () => {
     const limits = {
-      free: 0,
-      casual: 5,
+      beginner: 5,
+      casual: 10,
       active: 20,
       professional: 50
     };
-    return limits[user?.subscription_tier as keyof typeof limits] || 0;
+    return limits[user?.subscription_tier as keyof typeof limits] || 5;
   };
 
   const getActiveAlertsCount = () => {

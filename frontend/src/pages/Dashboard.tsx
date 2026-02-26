@@ -474,12 +474,12 @@ const Dashboard: React.FC = () => {
 
   const getTierBadge = (tier: string) => {
     const badges = {
-      free: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Free' },
+      beginner: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Beginner' },
       casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
       active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
       professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
     };
-    const badge = badges[tier as keyof typeof badges] || badges.free;
+    const badge = badges[tier as keyof typeof badges] || badges.beginner;
     return (
       <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.bg} ${badge.text}`}>
         {badge.label}
@@ -489,12 +489,12 @@ const Dashboard: React.FC = () => {
 
   const getTierLimit = () => {
     const limits = {
-      free: 5,
+      beginner: 10,
       casual: 20,
       active: 45,
       professional: 75
     };
-    return limits[user?.subscription_tier as keyof typeof limits] || 5;
+    return limits[user?.subscription_tier as keyof typeof limits] || 10;
   };
 
   if (loading) {
@@ -1021,14 +1021,14 @@ return (
         )}
       </div>
 
-      {/* Upgrade CTA (for Free users) */}
-      {user?.subscription_tier === 'free' && (
+      {/* Upgrade CTA (for Beginner users) */}
+      {user?.subscription_tier === 'beginner' && (
         <div className="mt-8 bg-gradient-to-r from-primary-600 to-primary-700 dark:from-primary-700 dark:to-primary-800 rounded-lg shadow-lg p-8 text-center">
           <h3 className="text-2xl font-bold text-white mb-2">
             Upgrade to Casual Investor to unlock more features
           </h3>
           <p className="text-primary-100 dark:text-primary-200 mb-6">
-            Track 20 stocks, 20 positions, and 5 alerts. Only $20/month.
+            Track 20 stocks, 20 positions, SMS alerts, and 15 reviews per week. Only $20/month.
           </p>
           <button className="bg-white text-primary-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors">
             Upgrade to Casual Investor
