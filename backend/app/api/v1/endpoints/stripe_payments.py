@@ -77,6 +77,21 @@ def get_tier_for_price(price_id: str) -> str:
     return 'beginner'
 
 
+# Tiers that get a 14-day free trial
+TRIAL_TIERS = {'beginner', 'casual'}
+TRIAL_DAYS = 14
+
+
+def tier_gets_trial(tier: str) -> bool:
+    """Check if a tier is eligible for a free trial"""
+    return tier in TRIAL_TIERS
+
+
+def price_gets_trial(price_id: str) -> bool:
+    """Check if a price ID maps to a trial-eligible tier"""
+    return get_tier_for_price(price_id) in TRIAL_TIERS
+
+
 # ---- Endpoints ----
 
 @router.post("/create-subscription")
@@ -207,27 +222,63 @@ async def create_subscription(
 
         else:
             # ── NEW SUBSCRIPTION PATH ─────────────────────────
-            subscription = stripe.Subscription.create(
-                customer=customer.id,
-                items=[{'price': new_price_id}],
-                payment_behavior='default_incomplete',
-                payment_settings={
-                    'save_default_payment_method': 'on_subscription',
-                },
-                expand=['latest_invoice.payment_intent'],
-                metadata={
-                    'user_id': str(current_user.id),
-                    'plan_name': get_plan_name_for_price(new_price_id),
-                },
-            )
+            tier = get_tier_for_price(new_price_id)
+            is_trial = tier_gets_trial(tier)
 
-            client_secret = subscription.latest_invoice.payment_intent.client_secret
+            if is_trial:
+                # Trial subscription: $0 first invoice, collect card via SetupIntent
+                subscription = stripe.Subscription.create(
+                    customer=customer.id,
+                    items=[{'price': new_price_id}],
+                    trial_period_days=TRIAL_DAYS,
+                    payment_settings={
+                        'save_default_payment_method': 'on_subscription',
+                    },
+                    expand=['pending_setup_intent'],
+                    metadata={
+                        'user_id': str(current_user.id),
+                        'plan_name': get_plan_name_for_price(new_price_id),
+                    },
+                )
 
-            return {
-                "subscription_id": subscription.id,
-                "client_secret": client_secret,
-                "upgrade": False,
-            }
+                setup_intent = subscription.pending_setup_intent
+                client_secret = setup_intent.client_secret if setup_intent else None
+
+                # Trial starts immediately — upgrade user now
+                current_user.subscription_tier = tier
+                await db.commit()
+                print(f"✅ User {current_user.email} started {TRIAL_DAYS}-day trial on {tier}")
+
+                return {
+                    "subscription_id": subscription.id,
+                    "client_secret": client_secret,
+                    "is_trial": True,
+                    "upgrade": False,
+                }
+            else:
+                # Non-trial: collect payment upfront
+                subscription = stripe.Subscription.create(
+                    customer=customer.id,
+                    items=[{'price': new_price_id}],
+                    payment_behavior='default_incomplete',
+                    payment_settings={
+                        'save_default_payment_method': 'on_subscription',
+                    },
+                    expand=['latest_invoice.payment_intent'],
+                    metadata={
+                        'user_id': str(current_user.id),
+                        'plan_name': get_plan_name_for_price(new_price_id),
+                    },
+                )
+
+                client_secret = subscription.latest_invoice.payment_intent.client_secret
+
+                return {
+                    "subscription_id": subscription.id,
+                    "client_secret": client_secret,
+                    "is_trial": False,
+                    "upgrade": False,
+                }
 
     except HTTPException:
         raise
@@ -284,7 +335,11 @@ async def create_checkout_session(
             subscription_data={
                 'metadata': {
                     'user_id': str(current_user.id),
-                }
+                },
+                **(
+                    {'trial_period_days': TRIAL_DAYS}
+                    if price_gets_trial(price_id) else {}
+                ),
             }
         )
         
@@ -349,6 +404,12 @@ async def stripe_webhook(
     elif event_type == 'invoice.payment_failed':
         invoice = event['data']['object']
         await handle_payment_failed(invoice, db)
+    
+    elif event_type == 'customer.subscription.trial_will_end':
+        subscription = event['data']['object']
+        user_id = subscription['metadata'].get('user_id')
+        if user_id:
+            print(f"⏰ Trial ending soon for user {user_id}, subscription {subscription['id']}")
     
     return {"status": "success"}
 
@@ -482,12 +543,6 @@ async def cancel_subscription(
     Cancels at period end so user keeps access until billing cycle finishes.
     """
     try:
-        if current_user.subscription_tier == 'beginner':
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No active subscription to cancel."
-            )
-        
         # Find customer by email
         customers = stripe.Customer.list(email=current_user.email, limit=1)
         if not customers.data:
@@ -561,12 +616,6 @@ async def cancel_subscription_immediate(
     Used when user wants instant cancellation (no access until period end).
     """
     try:
-        if current_user.subscription_tier == 'beginner':
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No active subscription to cancel."
-            )
-        
         customers = stripe.Customer.list(email=current_user.email, limit=1)
         if not customers.data:
             raise HTTPException(
@@ -594,7 +643,7 @@ async def cancel_subscription_immediate(
         
         return {
             "status": "cancelled",
-            "message": "Your subscription has been cancelled and your account has been downgraded to the Free tier.",
+            "message": "Your subscription has been cancelled and your account has been downgraded to the Beginner tier.",
             "new_tier": "beginner",
         }
         
@@ -619,10 +668,38 @@ async def cancel_subscription_immediate(
 async def get_subscription_status(
     current_user: User = Depends(get_current_user)
 ):
-    """Get current user's subscription status"""
+    """Get current user's subscription status including trial info"""
+    trial_end = None
+    subscription_status = None
+    cancel_at_period_end = False
+
+    try:
+        customers = stripe.Customer.list(email=current_user.email, limit=1)
+        if customers.data:
+            customer = customers.data[0]
+            # Check trialing first, then active
+            for sub_status in ('trialing', 'active'):
+                subs = stripe.Subscription.list(
+                    customer=customer.id,
+                    status=sub_status,
+                    limit=1,
+                )
+                if subs.data:
+                    sub = subs.data[0]
+                    subscription_status = sub['status']
+                    cancel_at_period_end = sub.get('cancel_at_period_end', False)
+                    if sub.get('trial_end'):
+                        trial_end = sub['trial_end']  # Unix timestamp
+                    break
+    except Exception as e:
+        print(f"⚠️ Error fetching Stripe subscription status: {e}")
+
     return {
         "subscription_tier": current_user.subscription_tier,
-        "email": current_user.email
+        "email": current_user.email,
+        "subscription_status": subscription_status,
+        "trial_end": trial_end,
+        "cancel_at_period_end": cancel_at_period_end,
     }
 
 

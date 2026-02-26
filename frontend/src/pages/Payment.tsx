@@ -107,8 +107,9 @@ const CARD_ELEMENT_OPTIONS = {
   },
 };
 
-// ----- Checkout Form (inside Stripe Elements context) -----
-const CheckoutForm: React.FC<{ tier: Tier; onSuccess: () => void }> = ({ tier, onSuccess }) => {
+// Tiers that start with a 14-day free trial
+const TRIAL_TIERS: Tier[] = ['beginner', 'casual'];
+const CheckoutForm: React.FC<{ tier: Tier; onSuccess: (isTrial: boolean) => void }> = ({ tier, onSuccess }) => {
   const stripe = useStripe();
   const elements = useElements();
   const [loading, setLoading] = useState(false);
@@ -116,6 +117,7 @@ const CheckoutForm: React.FC<{ tier: Tier; onSuccess: () => void }> = ({ tier, o
   const [cardComplete, setCardComplete] = useState({ number: false, expiry: false, cvc: false });
 
   const tierInfo = TIER_INFO[tier];
+  const isTrial = TRIAL_TIERS.includes(tier);
   const allComplete = cardComplete.number && cardComplete.expiry && cardComplete.cvc;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -140,15 +142,15 @@ const CheckoutForm: React.FC<{ tier: Tier; onSuccess: () => void }> = ({ tier, o
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      const { client_secret, subscription_id, upgrade, message, new_tier } = response.data;
+      const { client_secret, subscription_id, upgrade, message, new_tier, is_trial } = response.data;
 
       // If upgrade was auto-charged (card already on file), no confirmation needed
       if (upgrade && !client_secret) {
-        onSuccess();
+        onSuccess(false);
         return;
       }
 
-      // Step 2: Confirm the payment with card details
+      // Step 2: Confirm card
       const cardNumber = elements.getElement(CardNumberElement);
       if (!cardNumber) {
         setError('Card element not found.');
@@ -156,23 +158,42 @@ const CheckoutForm: React.FC<{ tier: Tier; onSuccess: () => void }> = ({ tier, o
         return;
       }
 
-      const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(client_secret, {
-        payment_method: {
-          card: cardNumber,
-        },
-      });
+      if (is_trial) {
+        // Trial: save card for future charges via SetupIntent
+        const { error: setupError, setupIntent } = await stripe.confirmCardSetup(client_secret, {
+          payment_method: { card: cardNumber },
+        });
 
-      if (stripeError) {
-        setError(stripeError.message || 'Payment failed. Please try again.');
-        setLoading(false);
-        return;
-      }
+        if (setupError) {
+          setError(setupError.message || 'Card setup failed. Please try again.');
+          setLoading(false);
+          return;
+        }
 
-      if (paymentIntent?.status === 'succeeded') {
-        onSuccess();
+        if (setupIntent?.status === 'succeeded') {
+          onSuccess(true);
+        } else {
+          setError('Card verification is being processed. Please wait a moment.');
+          setLoading(false);
+        }
       } else {
-        setError('Payment is being processed. You will be notified once confirmed.');
-        setLoading(false);
+        // Non-trial: charge immediately via PaymentIntent
+        const { error: stripeError, paymentIntent } = await stripe.confirmCardPayment(client_secret, {
+          payment_method: { card: cardNumber },
+        });
+
+        if (stripeError) {
+          setError(stripeError.message || 'Payment failed. Please try again.');
+          setLoading(false);
+          return;
+        }
+
+        if (paymentIntent?.status === 'succeeded') {
+          onSuccess(false);
+        } else {
+          setError('Payment is being processed. You will be notified once confirmed.');
+          setLoading(false);
+        }
       }
     } catch (err: any) {
       console.error('Payment error:', err);
@@ -229,6 +250,13 @@ const CheckoutForm: React.FC<{ tier: Tier; onSuccess: () => void }> = ({ tier, o
         </div>
       </div>
 
+      {/* Trial notice */}
+      {isTrial && (
+        <div className="bg-primary-900/20 border border-primary-700/50 rounded-lg px-4 py-3 text-sm text-primary-300">
+          <strong>14-day free trial:</strong> Your card won't be charged today. After 14 days, you'll be automatically billed {tierInfo.price}{tierInfo.period}. Cancel anytime before to avoid charges.
+        </div>
+      )}
+
       {/* Security note */}
       <div className="flex items-center space-x-2 text-sm text-gray-400">
         <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
@@ -249,8 +277,10 @@ const CheckoutForm: React.FC<{ tier: Tier; onSuccess: () => void }> = ({ tier, o
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
-            <span>Processing Payment...</span>
+            <span>Processing...</span>
           </>
+        ) : isTrial ? (
+          <span>Start 14-Day Free Trial</span>
         ) : (
           <span>Subscribe — {tierInfo.price}{tierInfo.period}</span>
         )}
@@ -269,6 +299,7 @@ const Payment: React.FC = () => {
   const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
   const [loadError, setLoadError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [trialStarted, setTrialStarted] = useState(false);
 
   useEffect(() => {
     // Check if user is logged in
@@ -310,12 +341,16 @@ const Payment: React.FC = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h3 className="text-2xl font-bold text-white mb-2">Payment Successful!</h3>
+            <h3 className="text-2xl font-bold text-white mb-2">
+              {trialStarted ? 'Free Trial Started!' : 'Payment Successful!'}
+            </h3>
             <p className="text-gray-400 mb-2">
               Welcome to the <strong className="text-primary-400">{tierInfo.name}</strong> plan.
             </p>
             <p className="text-sm text-gray-500 mb-6">
-              Your subscription is now active. All premium features have been unlocked.
+              {trialStarted
+                ? `Your 14-day free trial is active. You'll be billed ${tierInfo.price}${tierInfo.period} after the trial ends unless you cancel.`
+                : 'Your subscription is now active. All premium features have been unlocked.'}
             </p>
             <Link
               to="/dashboard"
@@ -339,8 +374,14 @@ const Payment: React.FC = () => {
             <img src="/images/logo.png" alt="Northwest Creek" className="h-12 w-12 mx-auto" />
             <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1rem', fontStyle: 'italic' }}>Northwest Creek</span>
           </Link>
-          <h1 className="text-3xl font-bold text-white">Complete Your Subscription</h1>
-          <p className="mt-2 text-gray-400">Secure payment powered by Stripe</p>
+          <h1 className="text-3xl font-bold text-white">
+            {TRIAL_TIERS.includes(tier) ? 'Start Your Free Trial' : 'Complete Your Subscription'}
+          </h1>
+          <p className="mt-2 text-gray-400">
+            {TRIAL_TIERS.includes(tier) 
+              ? 'Enter your card to start your 14-day free trial. You won\'t be charged today.'
+              : 'Secure payment powered by Stripe'}
+          </p>
         </div>
 
         {/* Plan Summary Card */}
@@ -348,13 +389,23 @@ const Payment: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-400">Selected Plan</p>
-              <p className="text-lg font-bold text-white">{tierInfo.name}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-lg font-bold text-white">{tierInfo.name}</p>
+                {TRIAL_TIERS.includes(tier) && (
+                  <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-green-900/40 text-green-400 border border-green-700/50">
+                    14-day free trial
+                  </span>
+                )}
+              </div>
             </div>
             <div className="text-right">
               <p className="text-3xl font-bold text-white">
                 {tierInfo.price}
                 <span className="text-base font-normal text-gray-400">{tierInfo.period}</span>
               </p>
+              {TRIAL_TIERS.includes(tier) && (
+                <p className="text-xs text-gray-500">billed after trial</p>
+              )}
             </div>
           </div>
 
@@ -406,7 +457,8 @@ const Payment: React.FC = () => {
             <Elements stripe={stripePromise}>
               <CheckoutForm
                 tier={tier}
-                onSuccess={() => {
+                onSuccess={(isTrial: boolean) => {
+                  setTrialStarted(isTrial);
                   setSuccess(true);
                   setTimeout(() => navigate('/dashboard'), 5000);
                 }}

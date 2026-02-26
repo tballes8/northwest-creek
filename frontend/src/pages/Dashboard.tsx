@@ -81,6 +81,9 @@ const Dashboard: React.FC = () => {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
+  // Trial countdown
+  const [trialEnd, setTrialEnd] = useState<number | null>(null); // Unix timestamp
+
   // Sector breakdowns for pie charts
   const portfolioSectors = useMemo(
     () => computeSectorBreakdown(
@@ -359,6 +362,9 @@ const Dashboard: React.FC = () => {
 
       // IPO is non-critical — load without blocking render
       loadIPOData();
+
+      // Trial status — non-blocking
+      loadTrialStatus();
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
       // If unauthorized, redirect to login
@@ -387,6 +393,32 @@ const Dashboard: React.FC = () => {
       setIpoLoading(false);
     }
   };
+
+  // Non-blocking trial status loader
+  const loadTrialStatus = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const res = await axios.get(`${API_URL}/api/v1/payments/subscription-status`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data.trial_end) {
+        setTrialEnd(res.data.trial_end);
+      }
+    } catch (err) {
+      // Non-fatal
+    }
+  };
+
+  // Compute trial days remaining
+  const getTrialDaysRemaining = (): number | null => {
+    if (!trialEnd) return null;
+    const now = Math.floor(Date.now() / 1000);
+    const remaining = trialEnd - now;
+    if (remaining <= 0) return 0;
+    return Math.ceil(remaining / 86400);
+  };
+
+  const trialDaysRemaining = getTrialDaysRemaining();
 
   // IPO detail modal — fetch quote, company, and news for a ticker
   const openIpoModal = async (ipo: IPOItem) => {
@@ -605,6 +637,36 @@ return (
           </div>
         </div>
       </nav>
+
+      {/* Trial Countdown Banner */}
+      {trialDaysRemaining !== null && trialDaysRemaining > 0 && (
+        <div className={`border-b ${
+          trialDaysRemaining <= 1
+            ? 'bg-red-600 dark:bg-red-700 border-red-700'
+            : trialDaysRemaining <= 3
+            ? 'bg-amber-500 dark:bg-amber-600 border-amber-600'
+            : 'bg-gradient-to-r from-primary-600 to-teal-500 border-primary-700'
+        }`}>
+          <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-white text-sm font-medium">
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>
+                {trialDaysRemaining === 1
+                  ? 'Last day of your free trial — add a payment method to keep your access'
+                  : `${trialDaysRemaining} days remaining in your free trial`}
+              </span>
+            </div>
+            <Link
+              to="/pricing"
+              className="flex-shrink-0 px-4 py-1.5 bg-white/20 hover:bg-white/30 text-white text-sm font-semibold rounded-lg transition-colors backdrop-blur-sm"
+            >
+              View Plans
+            </Link>
+          </div>
+        </div>
+      )}
 
     {/* Main Content */}
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

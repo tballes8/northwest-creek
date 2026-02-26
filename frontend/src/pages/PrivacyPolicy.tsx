@@ -65,7 +65,7 @@ const PrivacyPolicy: React.FC = () => {
 
             <h3 className="text-base font-semibold text-gray-900 dark:text-white mt-6 mb-2">Account Information</h3>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              When you create an account, we collect your name, email address, and password. If you subscribe to a paid plan, we collect billing information through our payment processor, Stripe. We do not store your full credit card number on our servers.
+              When you create an account, we collect your name, email address, and password. If you subscribe to a paid plan or begin a free trial, we collect billing information through our payment processor, Stripe. During a free trial, your payment method is securely stored by Stripe to enable automatic billing at the end of the trial period if you do not cancel. We do not store your full credit card number on our servers.
             </p>
 
             <h3 className="text-base font-semibold text-gray-900 dark:text-white mt-6 mb-2">Phone Number</h3>
@@ -118,7 +118,7 @@ const PrivacyPolicy: React.FC = () => {
           <section>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">How We Use Your Information</h2>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              We use the information we collect to provide, maintain, and improve the Service; process transactions and manage your subscription; deliver SMS stock price alert notifications you have opted in to receive; send transactional communications related to your account (such as password resets and billing confirmations); respond to your inquiries and support requests; monitor and analyze usage patterns to improve the user experience; and protect against unauthorized access, fraud, and abuse.
+              We use the information we collect to provide, maintain, and improve the Service; process transactions and manage your subscription (including free trial periods and automatic conversion to paid plans); deliver SMS stock price alert notifications you have opted in to receive; send transactional communications related to your account (such as password resets, billing confirmations, and trial expiration reminders); respond to your inquiries and support requests; monitor and analyze usage patterns to improve the user experience; and protect against unauthorized access, fraud, and abuse.
             </p>
           </section>
 
@@ -129,7 +129,7 @@ const PrivacyPolicy: React.FC = () => {
               We do not sell your personal information to third parties. We may share your information with the following categories of service providers, solely to operate the Service:
             </p>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              <strong className="text-gray-900 dark:text-white">Payment Processing:</strong> Stripe processes your payment information. Stripe's use of your data is governed by their privacy policy.
+              <strong className="text-gray-900 dark:text-white">Payment Processing:</strong> Stripe processes your payment information and securely stores your payment method for recurring billing and free trial conversions. Stripe's use of your data is governed by their privacy policy.
               <br className="mb-2" />
               <strong className="text-gray-900 dark:text-white">SMS Delivery:</strong> Twilio delivers SMS alert notifications on our behalf. Only your phone number and alert message content are shared with Twilio for this purpose.
               <br className="mb-2" />

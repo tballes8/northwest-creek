@@ -94,6 +94,9 @@ const TermsConditions: React.FC = () => {
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
               Payments are processed through Stripe. By subscribing, you authorize us to charge your payment method on a recurring basis at the applicable subscription rate. You may cancel your subscription at any time through your account settings. Cancellation takes effect at the end of the current billing period — you will retain access to paid features until then.
             </p>
+            <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
+              <strong className="text-gray-900 dark:text-white">Free Trial:</strong> Certain subscription plans may include a 14-day free trial period. When you sign up for a trial-eligible plan, you must provide a valid payment method. <strong className="text-gray-900 dark:text-white">Your payment method will not be charged during the trial period.</strong> At the end of the 14-day trial, your subscription will automatically convert to a paid subscription and your payment method will be charged at the applicable subscription rate unless you cancel before the trial period ends. You may cancel your trial at any time through your account settings. If you cancel during the trial period, you will retain access to paid features until the trial expires, and you will not be charged. Trial offers are limited to one per user per plan. We reserve the right to modify or discontinue trial offers at any time.
+            </p>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
               We do not offer refunds for partial billing periods. If you believe you were charged in error, please contact us and we will review your case.
             </p>
