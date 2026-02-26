@@ -8,7 +8,7 @@ export interface User {
   full_name: string | null;
   is_active: boolean;
   is_verified: boolean;
-  subscription_tier: 'free' | 'casual' | 'active' | 'professional';
+  subscription_tier: 'beginner' | 'casual' | 'active' | 'professional';
   created_at: string;
   updated_at: string | null;
   is_admin?: boolean;
