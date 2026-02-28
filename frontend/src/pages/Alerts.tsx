@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { authAPI, alertsAPI, phoneAPI } from '../services/api';
+import { authAPI, alertsAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 
@@ -10,20 +10,10 @@ interface Alert {
   condition: 'above' | 'below';
   target_price: number;
   is_active: boolean;
-  sms_enabled: boolean;
   triggered_at?: string;
   notes?: string;
   created_at: string;
 }
-
-interface PhoneStatus {
-  has_phone: boolean;
-  phone_verified: boolean;
-  phone_last_four: string | null;
-  message: string;
-}
-
-const SMS_TIERS = ['active', 'professional'];
 
 const Alerts: React.FC = () => {
   const navigate = useNavigate();
@@ -35,24 +25,7 @@ const Alerts: React.FC = () => {
   const [newCondition, setNewCondition] = useState<'above' | 'below'>('above');
   const [newTargetPrice, setNewTargetPrice] = useState('');
   const [newNotes, setNewNotes] = useState('');
-  const [newSmsEnabled, setNewSmsEnabled] = useState(false);
   const [error, setError] = useState('');
-
-  // Phone verification state
-  const [phoneStatus, setPhoneStatus] = useState<PhoneStatus | null>(null);
-  const [showPhoneVerify, setShowPhoneVerify] = useState(false);
-  const [phoneInput, setPhoneInput] = useState('');
-  const [otpInput, setOtpInput] = useState('');
-  const [phoneStep, setPhoneStep] = useState<'input' | 'verify'>('input');
-  const [phoneLoading, setPhoneLoading] = useState(false);
-  const [phoneError, setPhoneError] = useState('');
-  const [phoneSuccess, setPhoneSuccess] = useState('');
-
-  // Which alert row is being toggled for SMS (inline verify trigger)
-  const [smsToggleAlertId, setSmsToggleAlertId] = useState<string | null>(null);
-
-  // Upgrade prompt modal
-  const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -65,16 +38,6 @@ const Alerts: React.FC = () => {
 
       const alertsResponse = await alertsAPI.getAll();
       setAlerts(alertsResponse.data.alerts || []);
-
-      // Load phone status if tier supports SMS
-      if (SMS_TIERS.includes(userResponse.data.subscription_tier)) {
-        try {
-          const phoneResp = await phoneAPI.getStatus();
-          setPhoneStatus(phoneResp.data);
-        } catch {
-          // Non-fatal — phone endpoint might 403 for lower tiers
-        }
-      }
     } catch (error) {
       console.error('Failed to load data:', error);
       if ((error as any).response?.status === 401) {
@@ -86,70 +49,6 @@ const Alerts: React.FC = () => {
     }
   };
 
-  const canUseSms = () => SMS_TIERS.includes(user?.subscription_tier || '');
-  const hasVerifiedPhone = () => phoneStatus?.phone_verified === true;
-
-  // ── Phone verification handlers ──────────────────────────────
-
-  const handleSubmitPhone = async () => {
-    setPhoneError('');
-    setPhoneSuccess('');
-    if (!phoneInput.trim()) {
-      setPhoneError('Please enter your phone number.');
-      return;
-    }
-    setPhoneLoading(true);
-    try {
-      const resp = await phoneAPI.submitPhone({ phone_number: phoneInput.trim() });
-      setPhoneStatus(resp.data);
-      setPhoneStep('verify');
-      setPhoneSuccess(resp.data.message);
-    } catch (err: any) {
-      setPhoneError(err.response?.data?.detail || 'Failed to send code.');
-    } finally {
-      setPhoneLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async () => {
-    setPhoneError('');
-    setPhoneSuccess('');
-    if (otpInput.length !== 6) {
-      setPhoneError('Enter the 6-digit code from your text.');
-      return;
-    }
-    setPhoneLoading(true);
-    try {
-      const resp = await phoneAPI.verifyCode({ code: otpInput });
-      setPhoneStatus(resp.data);
-      setPhoneSuccess(resp.data.message);
-      setShowPhoneVerify(false);
-      setPhoneStep('input');
-      setPhoneInput('');
-      setOtpInput('');
-
-      // If triggered from a table row toggle, enable SMS on that alert
-      if (smsToggleAlertId) {
-        await alertsAPI.update(smsToggleAlertId, { sms_enabled: true });
-        setSmsToggleAlertId(null);
-        await loadData();
-      }
-    } catch (err: any) {
-      setPhoneError(err.response?.data?.detail || 'Invalid or expired code.');
-    } finally {
-      setPhoneLoading(false);
-    }
-  };
-
-  const openPhoneVerify = (fromAlertId?: string) => {
-    setPhoneError('');
-    setPhoneSuccess('');
-    setPhoneStep('input');
-    setPhoneInput('');
-    setOtpInput('');
-    setShowPhoneVerify(true);
-    setSmsToggleAlertId(fromAlertId || null);
-  };
 
   // ── Alert CRUD handlers ──────────────────────────────────────
 
@@ -187,7 +86,6 @@ const Alerts: React.FC = () => {
         condition: newCondition,
         target_price: parseFloat(newTargetPrice),
         notes: newNotes.trim() || undefined,
-        sms_enabled: newSmsEnabled && hasVerifiedPhone(),
       });
 
       await loadData();
@@ -196,7 +94,6 @@ const Alerts: React.FC = () => {
       setNewCondition('above');
       setNewTargetPrice('');
       setNewNotes('');
-      setNewSmsEnabled(false);
       setAddingAlert(false);
     } catch (err: any) {
       console.error('Add alert error:', err.response?.data);
@@ -229,26 +126,6 @@ const Alerts: React.FC = () => {
     }
   };
 
-  const handleToggleSms = async (alertId: string, currentSms: boolean) => {
-    // Gate: lower tiers see upgrade prompt
-    if (!canUseSms()) {
-      setShowUpgradePrompt(true);
-      return;
-    }
-    if (!currentSms) {
-      // Turning ON — need verified phone
-      if (!hasVerifiedPhone()) {
-        openPhoneVerify(alertId);
-        return;
-      }
-    }
-    try {
-      await alertsAPI.update(alertId, { sms_enabled: !currentSms });
-      await loadData();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to update SMS setting');
-    }
-  };
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
@@ -310,8 +187,12 @@ const Alerts: React.FC = () => {
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
-              <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>Northwest Creek</span>
+              <img src="/images/logo.png" alt="NWC-Analytics" className="h-10 w-10 mr-3" />
+              <span className="text-xl font-bold tracking-tight" style={{ fontSize: '1.4rem' }}>
+                <span className="text-primary-400">NWC</span>
+                <span className="text-gray-500">-</span>
+                <span className="text-white">Analytics</span>
+              </span>
             </div>
             
             <div className="hidden md:flex items-center space-x-8">
@@ -547,61 +428,6 @@ const Alerts: React.FC = () => {
                 />
               </div>
 
-              {/* SMS Text Alert Section — visible to all tiers */}
-              <div className="border border-gray-200 dark:border-gray-600 rounded-lg p-4 bg-gray-50 dark:bg-gray-800">
-                  <div className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      id="sms-create-toggle"
-                      checked={newSmsEnabled}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        if (!canUseSms()) {
-                          e.preventDefault();
-                          setShowUpgradePrompt(true);
-                          return;
-                        }
-                        if (checked && !hasVerifiedPhone()) {
-                          openPhoneVerify();
-                        }
-                        setNewSmsEnabled(checked);
-                      }}
-                      className="mt-1 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 dark:border-gray-600 rounded"
-                    />
-                    <div className="flex-1">
-                      <label htmlFor="sms-create-toggle" className="text-sm font-medium text-gray-900 dark:text-white cursor-pointer flex items-center gap-2">
-                        <svg className="w-4 h-4 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                        </svg>
-                        Send me a text when this alert triggers
-                      </label>
-                      {canUseSms() && hasVerifiedPhone() ? (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          Texts will go to &bull;&bull;&bull;-{phoneStatus?.phone_last_four}.{' '}
-                          <button
-                            type="button"
-                            onClick={() => openPhoneVerify()}
-                            className="text-primary-500 hover:text-primary-400 underline"
-                          >
-                            Change number
-                          </button>
-                        </p>
-                      ) : canUseSms() ? (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          You'll need to verify your phone number first.
-                        </p>
-                      ) : (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          Available on Active and Professional plans.
-                        </p>
-                      )}
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                        You will ONLY receive a text for this specific alert. We will never text you for any other reason. Standard rates apply. Text STOP to opt out anytime.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
               <div className="flex gap-3">
                 <button
                   type="submit"
@@ -617,7 +443,6 @@ const Alerts: React.FC = () => {
                     setNewCondition('above');
                     setNewTargetPrice('');
                     setNewNotes('');
-                    setNewSmsEnabled(false);
                     setError('');
                   }}
                   className="px-6 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-medium transition-colors"
@@ -657,7 +482,6 @@ const Alerts: React.FC = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Condition</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Target Price</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">SMS</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Notes</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -710,28 +534,6 @@ const Alerts: React.FC = () => {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-4 whitespace-nowrap text-center">
-                        {!alert.triggered_at ? (
-                          <button
-                            onClick={() => handleToggleSms(alert.id, alert.sms_enabled)}
-                            className="group relative"
-                            title={alert.sms_enabled ? 'SMS enabled — click to disable' : 'Click to enable SMS'}
-                          >
-                            {alert.sms_enabled ? (
-                              <svg className="w-5 h-5 text-primary-500" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                                <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                              </svg>
-                            ) : (
-                              <svg className="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-primary-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                              </svg>
-                            )}
-                          </button>
-                        ) : (
-                          <span className="text-gray-300 dark:text-gray-600">—</span>
-                        )}
-                      </td>
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
                         {alert.notes || '-'}
@@ -761,165 +563,7 @@ const Alerts: React.FC = () => {
         )}
       </div>
 
-      {/* ─── Upgrade Prompt Modal ─────────────────────────────── */}
-      {showUpgradePrompt && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
-            <div className="bg-gradient-to-r from-primary-50 to-purple-50 dark:from-primary-900/30 dark:to-purple-900/30 px-6 py-5 border-b dark:border-gray-700 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <svg className="w-5 h-5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                </svg>
-                Text Alerts
-              </h3>
-              <button
-                onClick={() => setShowUpgradePrompt(false)}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
 
-            <div className="px-6 py-5">
-              <p className="text-gray-700 dark:text-gray-300 mb-4">
-                SMS text alerts are available on the <strong className="text-blue-500">Active</strong> ($40/mo) and <strong className="text-purple-500">Professional</strong> ($100/mo) plans.
-              </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-                Get a text message the moment your price alerts trigger — never miss a move.
-              </p>
-              <div className="flex gap-3">
-                <Link
-                  to="/pricing"
-                  onClick={() => setShowUpgradePrompt(false)}
-                  className="flex-1 text-center px-5 py-2.5 bg-gradient-to-r from-primary-600 to-primary-500 hover:from-primary-700 hover:to-primary-600 text-white rounded-lg font-semibold transition-all shadow"
-                >
-                  View Plans
-                </Link>
-                <button
-                  onClick={() => setShowUpgradePrompt(false)}
-                  className="flex-1 px-5 py-2.5 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-semibold transition-colors"
-                >
-                  Maybe Later
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── Phone Verification Modal ─────────────────────────── */}
-      {showPhoneVerify && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
-            <div className="bg-primary-50 dark:bg-primary-900/30 px-6 py-5 border-b dark:border-gray-700 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-primary-700 dark:text-primary-300 flex items-center gap-2">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                </svg>
-                Verify Your Phone
-              </h3>
-              <button
-                onClick={() => { setShowPhoneVerify(false); setSmsToggleAlertId(null); }}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="px-6 py-5 space-y-4">
-              {phoneError && (
-                <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg text-sm">
-                  {phoneError}
-                </div>
-              )}
-              {phoneSuccess && (
-                <div className="bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 text-green-600 dark:text-green-400 px-4 py-3 rounded-lg text-sm">
-                  {phoneSuccess}
-                </div>
-              )}
-
-              {phoneStep === 'input' ? (
-                <>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Enter your phone number and we'll text you a verification code.
-                  </p>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone Number</label>
-                    <input
-                      type="tel"
-                      value={phoneInput}
-                      onChange={(e) => setPhoneInput(e.target.value)}
-                      placeholder="(208) 555-1234"
-                      className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    />
-                  </div>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={handleSubmitPhone}
-                      disabled={phoneLoading}
-                      className="flex-1 px-4 py-2.5 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-semibold transition-colors disabled:opacity-50"
-                    >
-                      {phoneLoading ? 'Sending...' : 'Send Code'}
-                    </button>
-                    <button
-                      onClick={() => { setShowPhoneVerify(false); setSmsToggleAlertId(null); }}
-                      className="px-4 py-2.5 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-semibold transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-400 dark:text-gray-500">
-                    We will ONLY text you for alerts you opt into. Standard rates apply. Text STOP to opt out anytime.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    We sent a 6-digit code to &bull;&bull;&bull;-{phoneStatus?.phone_last_four}. Enter it below.
-                  </p>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Verification Code</label>
-                    <input
-                      type="text"
-                      value={otpInput}
-                      onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      placeholder="123456"
-                      maxLength={6}
-                      className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-center text-xl tracking-widest font-mono"
-                    />
-                  </div>
-                  <div className="flex gap-3">
-                    <button
-                      onClick={handleVerifyOtp}
-                      disabled={phoneLoading}
-                      className="flex-1 px-4 py-2.5 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-semibold transition-colors disabled:opacity-50"
-                    >
-                      {phoneLoading ? 'Verifying...' : 'Verify'}
-                    </button>
-                    <button
-                      onClick={() => setPhoneStep('input')}
-                      className="px-4 py-2.5 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-semibold transition-colors"
-                    >
-                      Back
-                    </button>
-                  </div>
-                  <button
-                    onClick={handleSubmitPhone}
-                    disabled={phoneLoading}
-                    className="text-sm text-primary-500 hover:text-primary-400 underline disabled:opacity-50"
-                  >
-                    Resend code
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

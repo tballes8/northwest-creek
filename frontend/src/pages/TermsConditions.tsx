@@ -102,37 +102,6 @@ const TermsConditions: React.FC = () => {
             </p>
           </section>
 
-          {/* SMS Alert Terms */}
-          <section>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">SMS Stock Price Alert Terms</h2>
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border border-gray-200 dark:border-gray-700">
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-                Northwest Creek offers SMS stock price alert notifications to eligible subscribers on qualifying subscription plans. By providing your phone number and configuring alerts through the Service at <strong className="text-gray-900 dark:text-white">northwestcreekllc.com/alerts</strong>, you agree to the following terms:
-              </p>
-
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-                <strong className="text-gray-900 dark:text-white">Consent:</strong> By providing your phone number and submitting an alert configuration, you expressly consent to receive automated SMS messages from Northwest Creek, LLC at the phone number you provide. Your consent is not a condition of purchase of any goods or services.
-              </p>
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-                <strong className="text-gray-900 dark:text-white">Message Content &amp; Frequency:</strong> You will receive SMS messages only for the specific stock price alerts you configure. Message frequency depends on how many alerts you set up and how frequently your alert conditions are triggered. No promotional or marketing messages will be sent via SMS.
-              </p>
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-                <strong className="text-gray-900 dark:text-white">Message &amp; Data Rates:</strong> Standard message and data rates may apply depending on your mobile carrier and plan. Northwest Creek is not responsible for any charges imposed by your carrier.
-              </p>
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-                <strong className="text-gray-900 dark:text-white">Opt-Out:</strong> You may opt out of SMS alerts at any time by replying <strong className="text-gray-900 dark:text-white">STOP</strong> to any message received from us, or by disabling alerts within the Service. You will receive a confirmation message upon opting out and will not receive further SMS messages unless you re-subscribe.
-              </p>
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-                <strong className="text-gray-900 dark:text-white">Help:</strong> Reply <strong className="text-gray-900 dark:text-white">HELP</strong> to any SMS message for assistance, or contact us at the email address listed below.
-              </p>
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-                <strong className="text-gray-900 dark:text-white">Carrier Disclaimer:</strong> Carriers are not liable for delayed or undelivered messages. Message delivery is subject to effective transmission by your wireless carrier.
-              </p>
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-                <strong className="text-gray-900 dark:text-white">No Guarantee of Delivery:</strong> While we make commercially reasonable efforts to deliver alert messages in a timely manner, we do not guarantee that SMS messages will be delivered, delivered on time, or delivered accurately. You should not rely solely on SMS alerts for time-sensitive trading decisions.
-              </p>
-            </div>
-          </section>
 
           {/* Data Accuracy */}
           <section>

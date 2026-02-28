@@ -67,7 +67,7 @@ const TIERS: Record<TierKey, TierMeta> = {
       '15 stock reviews/week',
       '15 technical analyses/week',
       '15 DCF valuations/week',
-      'SMS text alerts',
+      'Email alerts',
       '14-day free trial',
     ],
   },
@@ -85,7 +85,7 @@ const TIERS: Record<TierKey, TierMeta> = {
       '10 stock reviews/day',
       '10 technical analyses/day',
       '10 DCF valuations/day',
-      'SMS text alerts',
+      'Email alerts',
     ],
   },
   professional: {
@@ -102,7 +102,7 @@ const TIERS: Record<TierKey, TierMeta> = {
       '20 stock reviews/day',
       '20 technical analyses/day',
       '20 DCF valuations/day',
-      'SMS & indicator alerts',
+      'Email & indicator alerts',
     ],
   },
 };
@@ -111,7 +111,7 @@ const TIERS: Record<TierKey, TierMeta> = {
 
 interface UpgradeRequiredProps {
   user: User | null;
-  /** Human-readable feature name, e.g. "Technical Analysis" or "SMS Text Alerts" */
+  /** Human-readable feature name, e.g. "Technical Analysis" or "Email Alerts" */
   feature: string;
   /** One-liner description shown below the feature name */
   featureDescription?: string;
@@ -414,7 +414,7 @@ const COMPARISON_ROWS: ComparisonRow[] = [
     values: { beginner: '5', casual: '10', active: '20', professional: '50' },
   },
   {
-    label: 'SMS Text Alerts',
+    label: 'Email Alerts',
     values: { beginner: false, casual: true, active: true, professional: true },
   },
   {

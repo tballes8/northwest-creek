@@ -68,11 +68,6 @@ const PrivacyPolicy: React.FC = () => {
               When you create an account, we collect your name, email address, and password. If you subscribe to a paid plan or begin a free trial, we collect billing information through our payment processor, Stripe. During a free trial, your payment method is securely stored by Stripe to enable automatic billing at the end of the trial period if you do not cancel. We do not store your full credit card number on our servers.
             </p>
 
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white mt-6 mb-2">Phone Number</h3>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              We collect your phone number <strong className="text-gray-900 dark:text-white">only</strong> if you opt in to receive SMS stock price alert notifications. Phone numbers are collected exclusively during the alert configuration process and are not collected for any other purpose. Only subscribers on eligible high-level subscription plans have access to the SMS alert feature. Your phone number is stored securely and is used solely for delivering the stock price alerts you configure.
-            </p>
-
             <h3 className="text-base font-semibold text-gray-900 dark:text-white mt-6 mb-2">Usage Data</h3>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
               We automatically collect certain information when you use the Service, including your IP address, browser type, device information, pages visited, and timestamps. This data is used to maintain and improve the Service and is not sold to third parties.
@@ -84,41 +79,12 @@ const PrivacyPolicy: React.FC = () => {
             </p>
           </section>
 
-          {/* SMS Alerts & Consent */}
-          <section>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">SMS Stock Price Alerts & Consent</h2>
-
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border border-gray-200 dark:border-gray-700 mb-4">
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-                Northwest Creek offers SMS stock price alert notifications to eligible subscribers. By providing your phone number and configuring stock price alerts through our Service, you expressly consent to receive automated SMS messages from Northwest Creek, LLC regarding the alerts you have set up.
-              </p>
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-                <strong className="text-gray-900 dark:text-white">Opt-In:</strong> You opt in to SMS alerts by providing your phone number during the alert setup process at <strong className="text-gray-900 dark:text-white">northwestcreekllc.com/alerts</strong>. Before submitting, you must acknowledge consent to receive automated SMS notifications. Phone numbers are only collected at the point of opting in — we do not collect phone numbers for any other purpose.
-              </p>
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-                <strong className="text-gray-900 dark:text-white">Message Frequency:</strong> Message frequency varies based on the number of alerts you configure and how often your alert conditions are triggered. You will only receive messages related to alerts you have specifically set up.
-              </p>
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-                <strong className="text-gray-900 dark:text-white">Message & Data Rates:</strong> Standard message and data rates may apply depending on your mobile carrier and plan.
-              </p>
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-                <strong className="text-gray-900 dark:text-white">Opt-Out:</strong> You may opt out of SMS alerts at any time by replying <strong className="text-gray-900 dark:text-white">STOP</strong> to any message you receive from us. You may also disable or delete your alerts through the Service. Upon opting out, you will receive a confirmation message and no further SMS messages will be sent.
-              </p>
-              <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-                <strong className="text-gray-900 dark:text-white">Help:</strong> Reply <strong className="text-gray-900 dark:text-white">HELP</strong> to any SMS message for assistance, or contact us at the email address listed below.
-              </p>
-            </div>
-
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              We do not share, sell, or rent your phone number to third parties for marketing purposes. Your phone number is shared only with our SMS delivery provider (Twilio) solely for the purpose of delivering your configured alerts.
-            </p>
-          </section>
 
           {/* How We Use Your Information */}
           <section>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">How We Use Your Information</h2>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              We use the information we collect to provide, maintain, and improve the Service; process transactions and manage your subscription (including free trial periods and automatic conversion to paid plans); deliver SMS stock price alert notifications you have opted in to receive; send transactional communications related to your account (such as password resets, billing confirmations, and trial expiration reminders); respond to your inquiries and support requests; monitor and analyze usage patterns to improve the user experience; and protect against unauthorized access, fraud, and abuse.
+              We use the information we collect to provide, maintain, and improve the Service; process transactions and manage your subscription (including free trial periods and automatic conversion to paid plans); deliver email notifications for stock price alerts you have configured; send transactional communications related to your account (such as password resets, billing confirmations, and trial expiration reminders); respond to your inquiries and support requests; monitor and analyze usage patterns to improve the user experience; and protect against unauthorized access, fraud, and abuse.
             </p>
           </section>
 
@@ -130,8 +96,6 @@ const PrivacyPolicy: React.FC = () => {
             </p>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
               <strong className="text-gray-900 dark:text-white">Payment Processing:</strong> Stripe processes your payment information and securely stores your payment method for recurring billing and free trial conversions. Stripe's use of your data is governed by their privacy policy.
-              <br className="mb-2" />
-              <strong className="text-gray-900 dark:text-white">SMS Delivery:</strong> Twilio delivers SMS alert notifications on our behalf. Only your phone number and alert message content are shared with Twilio for this purpose.
               <br className="mb-2" />
               <strong className="text-gray-900 dark:text-white">Hosting & Infrastructure:</strong> Our application is hosted on Railway. Your data may be processed on their infrastructure.
             </p>
@@ -152,7 +116,7 @@ const PrivacyPolicy: React.FC = () => {
           <section>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">Data Retention</h2>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              We retain your account information for as long as your account is active or as needed to provide the Service. If you delete your account, we will delete or anonymize your personal information within a reasonable timeframe, except where retention is required by law or for legitimate business purposes (such as resolving disputes or enforcing agreements). Phone numbers associated with SMS alerts are deleted when you opt out of alerts or delete your account.
+              We retain your account information for as long as your account is active or as needed to provide the Service. If you delete your account, we will delete or anonymize your personal information within a reasonable timeframe, except where retention is required by law or for legitimate business purposes (such as resolving disputes or enforcing agreements).
             </p>
           </section>
 
@@ -176,7 +140,7 @@ const PrivacyPolicy: React.FC = () => {
           <section>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">Your Rights</h2>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              Depending on your jurisdiction, you may have certain rights regarding your personal information, including the right to access the personal data we hold about you; request correction of inaccurate information; request deletion of your personal data; opt out of SMS communications at any time by replying STOP; and withdraw consent for data processing where consent is the legal basis. To exercise any of these rights, please contact us at the email address below.
+              Depending on your jurisdiction, you may have certain rights regarding your personal information, including the right to access the personal data we hold about you; request correction of inaccurate information; request deletion of your personal data; and withdraw consent for data processing where consent is the legal basis. To exercise any of these rights, please contact us at the email address below.
             </p>
           </section>
 

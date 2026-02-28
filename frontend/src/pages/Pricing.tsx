@@ -85,7 +85,7 @@ const Pricing: React.FC = () => {
         { text: 'Technical Analysis', included: true },
         { text: 'Real-time market data', included: true },
         { text: 'Advanced charts', included: false },
-        { text: 'Instant SMS Alerts', included: false },
+        { text: 'Email Alerts', included: false },
         { text: 'Customizable Alerts', included: false },
       ],
       buttonText: user?.subscription_tier === 'beginner' ? 'Current Plan' : 'Start Free Trial',
@@ -109,7 +109,7 @@ const Pricing: React.FC = () => {
         { text: 'Technical Analysis', included: true },
         { text: 'Real-time market data', included: true },
         { text: 'Advanced charts', included: true },
-        { text: 'Instant SMS Alerts', included: true },
+        { text: 'Email Alerts', included: true },
         { text: 'Priority support', included: true },
       ],
       buttonText: user?.subscription_tier === 'casual' ? 'Current Plan' : 'Start Free Trial',
@@ -133,7 +133,7 @@ const Pricing: React.FC = () => {
         { text: 'Advanced Technical Analysis', included: true },
         { text: 'Real-time market data', included: true },
         { text: 'Premium charting tools', included: true },
-        { text: 'Instant SMS Alerts', included: true },
+        { text: 'Email Alerts', included: true },
         { text: 'Customizable Alerts', included: true },
         { text: 'Priority support', included: true },
       ],
@@ -160,7 +160,7 @@ const Pricing: React.FC = () => {
         { text: 'Historical data - 20 Stocks daily', included: true },
         { text: 'Priority chat support', included: true },
         { text: 'Custom integrations', included: true },
-        { text: 'Instant SMS Alerts', included: true },
+        { text: 'Email Alerts', included: true },
         { text: 'Customizable Alerts', included: true },
       ],
       buttonText: user?.subscription_tier === 'professional' ? 'Current Plan' : 'Upgrade to Professional',
@@ -416,7 +416,7 @@ const Pricing: React.FC = () => {
                 </tr>
                 <tr>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
-                    SMS Alerts
+                    Email Alerts
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
                     <span className="text-gray-400">—</span>

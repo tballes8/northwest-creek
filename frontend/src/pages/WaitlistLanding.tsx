@@ -260,7 +260,7 @@ const WaitlistLanding: React.FC = () => {
             <h3 className="text-xl font-bold text-white mb-2">Customizable Alerts</h3>
             <p className="text-gray-400 text-sm leading-relaxed">
               Set alerts based on key indicators or price targets. Get notified instantly via email
-              or SMS. Never miss a breakout or buying opportunity.
+              or email. Never miss a breakout or buying opportunity.
             </p>
           </div>
         </div>
@@ -323,7 +323,7 @@ const WaitlistLanding: React.FC = () => {
             </div>
             <p className="text-sm text-emerald-400 font-medium mb-6">14-day free trial</p>
             <ul className="space-y-3 mb-8">
-              {['20 watchlist stocks', '20 portfolio entries', '10 price alerts', '15 stock reviews per week', '15 DCF valuations per week', 'Technical Analysis', 'SMS price alerts', 'Priority support'].map(f => (
+              {['20 watchlist stocks', '20 portfolio entries', '10 price alerts', '15 stock reviews per week', '15 DCF valuations per week', 'Technical Analysis', 'Email price alerts', 'Priority support'].map(f => (
                 <li key={f} className="flex items-start gap-2 text-sm text-gray-300"><Check />{f}</li>
               ))}
             </ul>
@@ -340,7 +340,7 @@ const WaitlistLanding: React.FC = () => {
               <span className="text-gray-400">/month</span>
             </div>
             <ul className="space-y-3 mb-8">
-              {['45 watchlist stocks', '45 portfolio entries', '20 price alerts', '10 stock reviews per day', '10 DCF valuations per day', 'Advanced Technical Analysis', 'SMS price alerts', 'Priority support'].map(f => (
+              {['45 watchlist stocks', '45 portfolio entries', '20 price alerts', '10 stock reviews per day', '10 DCF valuations per day', 'Advanced Technical Analysis', 'Email price alerts', 'Priority support'].map(f => (
                 <li key={f} className="flex items-start gap-2 text-sm text-gray-300"><Check />{f}</li>
               ))}
             </ul>
@@ -357,7 +357,7 @@ const WaitlistLanding: React.FC = () => {
               <span className="text-gray-400">/month</span>
             </div>
             <ul className="space-y-3 mb-8">
-              {['75 watchlist stocks', '75 portfolio entries', '50 price alerts', '20 stock reviews per day', '20 DCF valuations per day', 'Full Technical Analysis suite', 'SMS & indicator alerts', 'Priority support'].map(f => (
+              {['75 watchlist stocks', '75 portfolio entries', '50 price alerts', '20 stock reviews per day', '20 DCF valuations per day', 'Full Technical Analysis suite', 'Email & indicator alerts', 'Priority support'].map(f => (
                 <li key={f} className="flex items-start gap-2 text-sm text-gray-300"><Check />{f}</li>
               ))}
             </ul>
