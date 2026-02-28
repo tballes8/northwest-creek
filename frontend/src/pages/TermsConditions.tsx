@@ -7,8 +7,8 @@ const TermsConditions: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-      <title>Terms &amp; Conditions — Northwest Creek</title>
-      <meta name="description" content="Terms and Conditions for Northwest Creek LLC. Read the terms governing your use of our stock analysis platform and services." />
+      <title>Terms &amp; Conditions — NWC-Analytics</title>
+      <meta name="description" content="Terms and Conditions for NWC-AnalyticsLLC. Read the terms governing your use of our stock analysis platform and services." />
       <link rel="canonical" href="https://northwestcreekllc.com/terms" />
 
       {/* Nav */}
@@ -16,9 +16,9 @@ const TermsConditions: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <Link to="/" className="flex items-center">
-              <img src="/images/logo.png" alt="Northwest Creek LLC" className="h-12 w-12 mr-3" />
+              <img src="/images/logo.png" alt="NWC-Analytics LLC" className="h-12 w-12 mr-3" />
               <span className="text-xl font-bold text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>
-                Northwest Creek
+                NWC-Analytics
               </span>
             </Link>
             <div className="flex items-center space-x-4">
@@ -52,7 +52,7 @@ const TermsConditions: React.FC = () => {
           {/* Introduction */}
           <section>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              These Terms and Conditions ("Terms") govern your access to and use of the website, applications, and services (collectively, the "Service") operated by Northwest Creek, LLC ("Northwest Creek," "we," "us," or "our"), a limited liability company registered in the State of Idaho, with its principal place of business in Post Falls, Idaho.
+              These Terms and Conditions ("Terms") govern your access to and use of the website, applications, and services (collectively, the "Service") operated by NWC-Analytics, LLC ("NWC-Analytics," "we," "us," or "our"), a limited liability company registered in the State of Idaho, with its principal place of business in Post Falls, Idaho.
             </p>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed mt-4">
               By creating an account or using the Service, you agree to be bound by these Terms. If you do not agree, you must not use the Service.
@@ -63,7 +63,7 @@ const TermsConditions: React.FC = () => {
           <section>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">Service Description</h2>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              Northwest Creek provides a web-based stock analysis platform designed for retail investors. Features include real-time and historical stock data, technical analysis tools, discounted cash flow (DCF) valuation models, portfolio tracking, watchlists, stock price alert notifications, and related financial research tools. Feature availability varies by subscription tier.
+              NWC-Analytics provides a web-based stock analysis platform designed for retail investors. Features include real-time and historical stock data, technical analysis tools, discounted cash flow (DCF) valuation models, portfolio tracking, watchlists, stock price alert notifications, and related financial research tools. Feature availability varies by subscription tier.
             </p>
           </section>
 
@@ -72,7 +72,7 @@ const TermsConditions: React.FC = () => {
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">Not Financial Advice</h2>
             <div className="bg-amber-50 dark:bg-amber-900/20 border-l-4 border-amber-500 rounded-r-lg p-6">
               <p className="text-gray-800 dark:text-gray-200 leading-relaxed">
-                <strong className="text-amber-700 dark:text-amber-400">Important:</strong> The Service is provided for informational and educational purposes only. Nothing on this platform constitutes financial advice, investment advice, tax advice, or legal advice. Northwest Creek is not a registered investment advisor, broker-dealer, or financial planner. All investment decisions are made solely by you, and you are solely responsible for evaluating the merits and risks of any investment or trading decision. Past performance is not indicative of future results. Always consult a qualified financial professional before making investment decisions.
+                <strong className="text-amber-700 dark:text-amber-400">Important:</strong> The Service is provided for informational and educational purposes only. Nothing on this platform constitutes financial advice, investment advice, tax advice, or legal advice. NWC-Analytics is not a registered investment advisor, broker-dealer, or financial planner. All investment decisions are made solely by you, and you are solely responsible for evaluating the merits and risks of any investment or trading decision. Past performance is not indicative of future results. Always consult a qualified financial professional before making investment decisions.
               </p>
             </div>
           </section>
@@ -107,7 +107,7 @@ const TermsConditions: React.FC = () => {
           <section>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">Data Accuracy &amp; Availability</h2>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              Market data, stock quotes, financial metrics, and other information displayed on the Service are sourced from third-party data providers. While we make reasonable efforts to ensure accuracy, we do not warrant that any data is complete, accurate, current, or error-free. Data may be delayed, unavailable, or subject to interruption. Northwest Creek is not liable for any losses, damages, or decisions arising from reliance on data provided through the Service.
+              Market data, stock quotes, financial metrics, and other information displayed on the Service are sourced from third-party data providers. While we make reasonable efforts to ensure accuracy, we do not warrant that any data is complete, accurate, current, or error-free. Data may be delayed, unavailable, or subject to interruption. NWC-Analytics is not liable for any losses, damages, or decisions arising from reliance on data provided through the Service.
             </p>
           </section>
 
@@ -123,7 +123,7 @@ const TermsConditions: React.FC = () => {
           <section>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">Intellectual Property</h2>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              All content, features, and functionality of the Service — including but not limited to text, graphics, logos, icons, software, and the overall design and layout — are the property of Northwest Creek, LLC or its licensors and are protected by copyright, trademark, and other intellectual property laws. You may not reproduce, distribute, modify, or create derivative works based on our content without prior written consent.
+              All content, features, and functionality of the Service — including but not limited to text, graphics, logos, icons, software, and the overall design and layout — are the property of NWC-Analytics, LLC or its licensors and are protected by copyright, trademark, and other intellectual property laws. You may not reproduce, distribute, modify, or create derivative works based on our content without prior written consent.
             </p>
           </section>
 
@@ -131,7 +131,7 @@ const TermsConditions: React.FC = () => {
           <section>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">Limitation of Liability</h2>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              To the maximum extent permitted by applicable law, Northwest Creek, LLC, its owners, officers, employees, and affiliates shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including but not limited to loss of profits, data, or investment losses, arising from or related to your use of or inability to use the Service. Our total aggregate liability for any claims arising from these Terms or the Service shall not exceed the amount you have paid us in the twelve (12) months preceding the claim.
+              To the maximum extent permitted by applicable law, NWC-Analytics, LLC, its owners, officers, employees, and affiliates shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including but not limited to loss of profits, data, or investment losses, arising from or related to your use of or inability to use the Service. Our total aggregate liability for any claims arising from these Terms or the Service shall not exceed the amount you have paid us in the twelve (12) months preceding the claim.
             </p>
           </section>
 
@@ -147,7 +147,7 @@ const TermsConditions: React.FC = () => {
           <section>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">Indemnification</h2>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              You agree to indemnify, defend, and hold harmless Northwest Creek, LLC, its owners, officers, employees, and agents from and against any claims, liabilities, damages, losses, and expenses (including reasonable attorneys' fees) arising from or related to your use of the Service, your violation of these Terms, or your violation of any third-party rights.
+              You agree to indemnify, defend, and hold harmless NWC-Analytics, LLC, its owners, officers, employees, and agents from and against any claims, liabilities, damages, losses, and expenses (including reasonable attorneys' fees) arising from or related to your use of the Service, your violation of these Terms, or your violation of any third-party rights.
             </p>
           </section>
 
@@ -182,7 +182,7 @@ const TermsConditions: React.FC = () => {
               If you have questions about these Terms, please contact us at:
             </p>
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border border-gray-200 dark:border-gray-700 mt-4">
-              <p className="text-gray-900 dark:text-white font-semibold">Northwest Creek, LLC</p>
+              <p className="text-gray-900 dark:text-white font-semibold">NWC-Analytics, LLC</p>
               <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">Post Falls, Idaho</p>
               <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">
                 Email: <a href="mailto:support@northwestcreekllc.com" className="text-primary-600 dark:text-primary-400 hover:underline">support@northwestcreekllc.com</a>
@@ -198,14 +198,14 @@ const TermsConditions: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center mb-4 md:mb-0">
-              <img src="/images/logo.png" alt="Northwest Creek LLC" className="h-12 w-12 mr-3" />
+              <img src="/images/logo.png" alt="NWC-Analytics LLC" className="h-12 w-12 mr-3" />
               <div>
-                <p className="text-xl font-bold text-white">Northwest Creek</p>
+                <p className="text-xl font-bold text-white">NWC-Analytics</p>
                 <p className="text-sm">Professional stock analysis for retail investors</p>
               </div>
             </div>
             <div className="text-center md:text-right">
-              <p className="text-sm">© 2026 Northwest Creek LLC. All rights reserved.</p>
+              <p className="text-sm">© 2026 NWC-Analytics LLC. All rights reserved.</p>
               <p className="text-sm mt-1">Post Falls, Idaho</p>
             </div>
           </div>

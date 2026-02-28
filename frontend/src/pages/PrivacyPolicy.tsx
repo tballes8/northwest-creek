@@ -7,8 +7,8 @@ const PrivacyPolicy: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-      <title>Privacy Policy — Northwest Creek</title>
-      <meta name="description" content="Privacy Policy for Northwest Creek LLC. Learn how we collect, use, and protect your personal information." />
+      <title>Privacy Policy — NWC-Analytics</title>
+      <meta name="description" content="Privacy Policy for NWC-Analytics LLC. Learn how we collect, use, and protect your personal information." />
       <link rel="canonical" href="https://northwestcreekllc.com/privacy" />
 
       {/* Nav */}
@@ -16,9 +16,9 @@ const PrivacyPolicy: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <Link to="/" className="flex items-center">
-              <img src="/images/logo.png" alt="Northwest Creek LLC" className="h-12 w-12 mr-3" />
+              <img src="/images/logo.png" alt="NWC-Analytics LLC" className="h-12 w-12 mr-3" />
               <span className="text-xl font-bold text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>
-                Northwest Creek
+                NWC-Analytics
               </span>
             </Link>
             <div className="flex items-center space-x-4">
@@ -52,7 +52,7 @@ const PrivacyPolicy: React.FC = () => {
           {/* Introduction */}
           <section>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              Northwest Creek, LLC ("Northwest Creek," "we," "us," or "our") operates the website located at <strong className="text-gray-900 dark:text-white">northwestcreekllc.com</strong> and related services. This Privacy Policy describes how we collect, use, store, and protect your personal information when you use our website, applications, and services (collectively, the "Service").
+              NWC-Analytics, LLC ("NWC-Analytics," "we," "us," or "our") operates the website located at <strong className="text-gray-900 dark:text-white">northwestcreekllc.com</strong> and related services. This Privacy Policy describes how we collect, use, store, and protect your personal information when you use our website, applications, and services (collectively, the "Service").
             </p>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed mt-4">
               By accessing or using the Service, you agree to the collection and use of information in accordance with this policy. If you do not agree with this policy, please do not use our Service.
@@ -100,7 +100,7 @@ const PrivacyPolicy: React.FC = () => {
               <strong className="text-gray-900 dark:text-white">Hosting & Infrastructure:</strong> Our application is hosted on Railway. Your data may be processed on their infrastructure.
             </p>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed mt-4">
-              We may also disclose your information if required to do so by law, in response to a valid legal process, or to protect the rights, property, or safety of Northwest Creek, our users, or the public.
+              We may also disclose your information if required to do so by law, in response to a valid legal process, or to protect the rights, property, or safety of NWC-Analytics, our users, or the public.
             </p>
           </section>
 
@@ -159,7 +159,7 @@ const PrivacyPolicy: React.FC = () => {
               If you have questions about this Privacy Policy or your personal information, please contact us at:
             </p>
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border border-gray-200 dark:border-gray-700 mt-4">
-              <p className="text-gray-900 dark:text-white font-semibold">Northwest Creek, LLC</p>
+              <p className="text-gray-900 dark:text-white font-semibold">NWC-Analytics, LLC</p>
               <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">Post Falls, Idaho</p>
               <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">
                 Email: <a href="mailto:support@northwestcreekllc.com" className="text-primary-600 dark:text-primary-400 hover:underline">support@northwestcreekllc.com</a>
@@ -175,14 +175,14 @@ const PrivacyPolicy: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center mb-4 md:mb-0">
-              <img src="/images/logo.png" alt="Northwest Creek LLC" className="h-12 w-12 mr-3" />
+              <img src="/images/logo.png" alt="NWC-Analytics LLC" className="h-12 w-12 mr-3" />
               <div>
-                <p className="text-xl font-bold text-white">Northwest Creek</p>
+                <p className="text-xl font-bold text-white">NWC-Analytics</p>
                 <p className="text-sm">Professional stock analysis for retail investors</p>
               </div>
             </div>
             <div className="text-center md:text-right">
-              <p className="text-sm">© 2026 Northwest Creek LLC. All rights reserved.</p>
+              <p className="text-sm">© 2026 NWC-Analytics LLC. All rights reserved.</p>
               <p className="text-sm mt-1">Post Falls, Idaho</p>
             </div>
           </div>

@@ -22,17 +22,17 @@ const Landing: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       {/* SEO — React 19 hoists these to <head> automatically */}
-      <title>Northwest Creek — Professional Stock Analysis for Retail Investors</title>
+      <title>NWC-Analytics — Professional Stock Analysis for Retail Investors</title>
       <meta name="description" content="Real-time market data, 15+ technical indicators, DCF valuation models, live portfolio tracking, and price alerts — institutional-grade stock analysis built for retail investors." />
       <link rel="canonical" href="https://northwestcreekllc.com" />
       <meta property="og:type" content="website" />
-      <meta property="og:title" content="Northwest Creek — Professional Stock Analysis for Retail Investors" />
+      <meta property="og:title" content="NWC-Analytics — Professional Stock Analysis for Retail Investors" />
       <meta property="og:description" content="Real-time market data, technical indicators, DCF valuations, portfolio tracking, and price alerts for retail investors." />
       <meta property="og:url" content="https://northwestcreekllc.com" />
       <meta property="og:image" content="https://northwestcreekllc.com/images/og-default.png" />
-      <meta property="og:site_name" content="Northwest Creek" />
+      <meta property="og:site_name" content="NWC-Analytics" />
       <meta name="twitter:card" content="summary_large_image" />
-      <meta name="twitter:title" content="Northwest Creek — Professional Stock Analysis" />
+      <meta name="twitter:title" content="NWC-Analytics — Professional Stock Analysis" />
       <meta name="twitter:description" content="Institutional-grade stock analysis tools built for retail investors." />
       <meta name="twitter:image" content="https://northwestcreekllc.com/images/og-default.png" />
 
@@ -42,7 +42,7 @@ const Landing: React.FC = () => {
         "@graph": [
           {
             "@type": "Organization",
-            "name": "Northwest Creek LLC",
+            "name": "NWC-Analytics, LLC",
             "url": "https://northwestcreekllc.com",
             "logo": "https://northwestcreekllc.com/images/logo.png",
             "description": "Professional stock analysis platform for retail investors.",
@@ -55,10 +55,10 @@ const Landing: React.FC = () => {
           },
           {
             "@type": "WebSite",
-            "name": "Northwest Creek",
+            "name": "NWC-Analytics",
             "url": "https://northwestcreekllc.com",
             "description": "Real-time market data, technical indicators, DCF valuations, and portfolio tracking for retail investors.",
-            "publisher": { "@type": "Organization", "name": "Northwest Creek LLC" }
+            "publisher": { "@type": "Organization", "name": "NWC-Analytics, LLC" }
           }
         ]
       }) }} />
@@ -69,10 +69,10 @@ const Landing: React.FC = () => {
             <div className="flex items-center">
               <img 
                 src="/images/logo.png" 
-                alt="Northwest Creek LLC" 
+                alt="NWC-Analytics, LLC" 
                 className="h-12 w-12 mr-3"
               />
-              <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>Northwest Creek</span>
+              <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>NWC-Analytics</span>
             </div>
             <div className="flex items-center space-x-4">
               <Link
@@ -563,16 +563,16 @@ const Landing: React.FC = () => {
             <div className="flex items-center mb-4 md:mb-0">
               <img 
                 src="/images/logo.png" 
-                alt="Northwest Creek LLC" 
+                alt="NWC-Analytics, LLC" 
                 className="h-12 w-12 mr-3"
               />
               <div>
-                <p className="text-xl font-bold text-white">Northwest Creek</p>
+                <p className="text-xl font-bold text-white">NWC-Analytics</p>
                 <p className="text-sm">Professional stock analysis for retail investors</p>
               </div>
             </div>
             <div className="text-center md:text-right">
-              <p className="text-sm">© 2026 Northwest Creek LLC. All rights reserved.</p>
+              <p className="text-sm">© 2026 NWC-Analytics, LLC. All rights reserved.</p>
               <p className="text-sm mt-1">Post Falls, Idaho</p>
             </div>
           </div>

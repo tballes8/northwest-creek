@@ -188,11 +188,7 @@ const Alerts: React.FC = () => {
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <img src="/images/logo.png" alt="NWC-Analytics" className="h-10 w-10 mr-3" />
-              <span className="text-xl font-bold tracking-tight" style={{ fontSize: '1.4rem' }}>
-                <span className="text-primary-400">NWC</span>
-                <span className="text-gray-500">-</span>
-                <span className="text-white">Analytics</span>
-              </span>
+              <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>NWC-Analytics</span>
             </div>
             
             <div className="hidden md:flex items-center space-x-8">

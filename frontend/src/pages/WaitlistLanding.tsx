@@ -79,9 +79,9 @@ const WaitlistLanding: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-800">
       {/* SEO */}
-      <title>Northwest Creek — Join the Waitlist</title>
-      <meta name="description" content="Be the first to access Northwest Creek — professional stock analysis for retail investors. Real-time data, 15+ indicators, DCF models, and more." />
-      <meta property="og:title" content="Northwest Creek — Join the Waitlist" />
+      <title>NWC-Analytics — Join the Waitlist</title>
+      <meta name="description" content="Be the first to access NWC-Analytics — professional stock analysis for retail investors. Real-time data, 15+ indicators, DCF models, and more." />
+      <meta property="og:title" content="NWC-Analytics — Join the Waitlist" />
       <meta property="og:description" content="Professional stock analysis for retail investors. Join the waitlist for early access." />
       <meta property="og:url" content="https://northwestcreekllc.com/waitlist" />
       <meta property="og:image" content="https://northwestcreekllc.com/images/og-default.png" />
@@ -91,12 +91,10 @@ const WaitlistLanding: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <img src="/images/logo.png" alt="Northwest Creek LLC" className="h-12 w-12 mr-3" />
-              <span
-                className="text-xl font-bold text-primary-400"
-                style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}
-              >
-                Northwest Creek
+              <img src="/images/logo.png" alt="NWC-Analytics, LLC" className="h-12 w-12 mr-3" />
+              <span className="text-xl font-bold text-primary-400"
+                style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>
+                NWC-Analytics
               </span>
             </div>
             <div className="flex items-center space-x-4">
@@ -183,7 +181,7 @@ const WaitlistLanding: React.FC = () => {
                   </svg>
                 </div>
                 <p className="text-primary-400 font-bold text-lg">You're on the list!</p>
-                <p className="text-gray-400 text-sm mt-1">We'll email you when Northwest Creek goes live.</p>
+                <p className="text-gray-400 text-sm mt-1">We'll email you when NWC-Analytics goes live.</p>
               </div>
             )}
           </div>
@@ -422,14 +420,14 @@ const WaitlistLanding: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center mb-4 md:mb-0">
-              <img src="/images/logo.png" alt="Northwest Creek LLC" className="h-12 w-12 mr-3" />
+              <img src="/images/logo.png" alt="NWC-Analytics, LLC" className="h-12 w-12 mr-3" />
               <div>
-                <p className="text-xl font-bold text-white">Northwest Creek</p>
+                <p className="text-xl font-bold text-white">NWC-Analytics</p>
                 <p className="text-sm">Professional stock analysis for retail investors</p>
               </div>
             </div>
             <div className="text-center md:text-right">
-              <p className="text-sm">© 2026 Northwest Creek LLC. All rights reserved.</p>
+              <p className="text-sm">© 2026 NWC-Analytics, LLC. All rights reserved.</p>
               <p className="text-sm mt-1">Post Falls, Idaho</p>
             </div>
           </div>

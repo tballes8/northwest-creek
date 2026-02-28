@@ -179,8 +179,8 @@ const Pricing: React.FC = () => {
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <Link to="/" className="flex items-center">
-                <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
-                <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>Northwest Creek</span>
+                <img src="/images/logo.png" alt="NWC-Analytics" className="h-10 w-10 mr-3" />
+                <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>NWC-Analytics</span>
               </Link>
             </div>
             
@@ -492,7 +492,7 @@ const Pricing: React.FC = () => {
               Do you offer annual subscriptions?
             </h3>
             <p className="text-gray-600 dark:text-gray-400">
-              Yes! Save 20% when you choose annual billing. Contact us at <a href="mailto:support@northwestcreek.com" className="text-primary-600 dark:text-primary-400 hover:underline">support@northwestcreek.com</a> for details.
+              Yes! Save 20% when you choose annual billing. Contact us at <a href="mailto:sales@northwestcreekllc.com" className="text-primary-600 dark:text-primary-400 hover:underline">support@northwestcreekllc.com</a> for details.
             </p>
           </div>
         </div>
@@ -509,7 +509,7 @@ const Pricing: React.FC = () => {
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <a
-              href="mailto:support@northwestcreek.com"
+              href="mailto:sales@northwestcreekllc.com"
               className="px-8 py-3 bg-white text-primary-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
             >
               Email Us
@@ -528,7 +528,7 @@ const Pricing: React.FC = () => {
       <footer className="bg-gray-800 dark:bg-gray-900 py-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <p className="text-gray-400">
-            © 2026 Northwest Creek. All rights reserved.
+            © 2026 NWC-Analytics, LLC. All rights reserved.
           </p>
           <div className="mt-4 space-x-6">
             <a href="#" className="text-gray-400 hover:text-white text-sm">Terms of Service</a>
