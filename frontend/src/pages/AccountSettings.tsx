@@ -190,13 +190,13 @@ const AccountSettings: React.FC = () => {
               <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>NWC-Analytics</span>
             </div>
             <div className="hidden md:flex items-center space-x-8">
-              <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
-              <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
-              <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
-              <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
-              <Link to="/stocks" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Stocks</Link>
-              <Link to="/technical-analysis" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Technical Analysis</Link>
-              <Link to="/dcf-valuation" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">DCF Valuation</Link>
+              <Link to="/dashboard" className="text-gray-300 hover:text-white">Dashboard</Link>
+              <Link to="/watchlist" className="text-gray-300 hover:text-white">Watchlist</Link>
+              <Link to="/portfolio" className="text-gray-300 hover:text-white">Portfolio</Link>
+              <Link to="/alerts" className="text-gray-300 hover:text-white">Alerts</Link>
+              <Link to="/stocks" className="text-gray-300 hover:text-white">Stocks</Link>
+              <Link to="/technical-analysis" className="text-gray-300 hover:text-white">Technical Analysis</Link>
+              <Link to="/dcf-valuation" className="text-gray-300 hover:text-white">DCF Valuation</Link>
             </div>
             <div className="flex items-center space-x-4">
               <Link to="/account" className="text-sm text-gray-300 hover:text-teal-400 transition-colors">{user?.email}</Link>
