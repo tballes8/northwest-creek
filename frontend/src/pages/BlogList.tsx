@@ -50,28 +50,25 @@ const BlogList: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-800">
       {/* SEO — React 19 hoists to <head> */}
-      <title>Blog — Northwest Creek | Stock Analysis Insights &amp; Guides</title>
+      <title>Blog — NWC-Analytics | Stock Analysis Insights &amp; Guides</title>
       <meta name="description" content="Expert stock analysis articles, technical indicator guides, portfolio strategies, and market insights for retail investors." />
       <link rel="canonical" href="https://northwestcreekllc.com/blogs" />
       <meta property="og:type" content="website" />
-      <meta property="og:title" content="Blog — Northwest Creek" />
+      <meta property="og:title" content="Blog — NWC-Analytics" />
       <meta property="og:description" content="Expert stock analysis articles, technical indicator guides, and market insights." />
       <meta property="og:url" content="https://northwestcreekllc.com/blogs" />
       <meta property="og:image" content="https://northwestcreekllc.com/images/og-default.png" />
       <meta name="twitter:card" content="summary_large_image" />
-      <meta name="twitter:title" content="Blog — Northwest Creek" />
+      <meta name="twitter:title" content="Blog — NWC-Analytics" />
       <meta name="twitter:description" content="Expert stock analysis articles and market insights for retail investors." />
       {/* Nav */}
       <nav className="bg-gray-900 shadow-sm border-b border-gray-700">
         <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <Link to="/" className="flex items-center">
-              <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
-              <span
-                className="text-xl font-bold text-primary-400"
-                style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}
-              >
-                Northwest Creek
+              <img src="/images/logo.png" alt="NWC-Analytics" className="h-10 w-10 mr-3" />
+              <span className="text-xl font-bold text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>
+                NWC-Analytics
               </span>
             </Link>
             <div className="flex items-center">
@@ -203,9 +200,9 @@ const BlogList: React.FC = () => {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <img src="/images/logo.png" alt="Northwest Creek" className="h-6 w-6" />
+              <img src="/images/logo.png" alt="NWC-Analytics," className="h-6 w-6" />
               <span className="text-sm text-gray-500 dark:text-gray-400">
-                © {new Date().getFullYear()} Northwest Creek LLC
+                © {new Date().getFullYear()} NWC-Analytics, LLC
               </span>
             </div>
           </div>
