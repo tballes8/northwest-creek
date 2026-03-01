@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI, dcfAPI, watchlistAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
+import BackToTop from '../components/BackToTop';
 import UpgradeRequired from '../components/UpgradeRequired';
 
 interface DCFSuggestions {
@@ -1200,6 +1201,7 @@ const DCFValuation: React.FC = () => {
           </div>
         )}
       </div>
+      <BackToTop />
     </div>
   );
 };

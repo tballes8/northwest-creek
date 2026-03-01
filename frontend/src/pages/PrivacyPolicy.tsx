@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import ThemeToggle from '../components/ThemeToggle';
+import BackToTop from '../components/BackToTop';
 
 const PrivacyPolicy: React.FC = () => {
   const lastUpdated = 'February 25, 2026';
@@ -188,6 +189,7 @@ const PrivacyPolicy: React.FC = () => {
           </div>
         </div>
       </footer>
+      <BackToTop />
     </div>
   );
 };

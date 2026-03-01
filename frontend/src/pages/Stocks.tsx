@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
+import BackToTop from '../components/BackToTop';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import { authAPI, stocksAPI, watchlistAPI } from '../services/api';
@@ -1446,6 +1447,7 @@ const Stocks: React.FC = () => {
           </div>
         )}
       </div>
+      <BackToTop />
     </div>
   );
 };

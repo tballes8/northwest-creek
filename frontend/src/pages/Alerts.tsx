@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { authAPI, alertsAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
+import BackToTop from '../components/BackToTop';
 
 interface Alert {
   id: string;
@@ -558,8 +559,7 @@ const Alerts: React.FC = () => {
           </div>
         )}
       </div>
-
-
+      <BackToTop />
     </div>
   );
 };

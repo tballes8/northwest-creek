@@ -3,6 +3,7 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { authAPI, portfolioAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
+import BackToTop from '../components/BackToTop';
 import IntradayModal from '../components/Intradaymodal';
 import { useLivePriceContext } from '../contexts/LivePriceContext';
 import MarketStatusBadge from '../components/MarketStatusBadge';
@@ -962,6 +963,7 @@ const Portfolio: React.FC = () => {
         isOpen={showIntradayModal}
         onClose={() => setShowIntradayModal(false)}
       />
+      <BackToTop />
     </div>
   );
 };

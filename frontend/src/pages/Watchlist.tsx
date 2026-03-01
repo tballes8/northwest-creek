@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { authAPI, watchlistAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
+import BackToTop from '../components/BackToTop';
 import { WatchlistItem } from '../types';
 import IntradayModal from '../components/Intradaymodal';
 import { useLivePriceContext } from '../contexts/LivePriceContext';
@@ -743,6 +744,7 @@ const Watchlist: React.FC = () => {
         isOpen={showIntradayModal}
         onClose={() => setShowIntradayModal(false)}
       />
+      <BackToTop />
     </div>
   );
 };

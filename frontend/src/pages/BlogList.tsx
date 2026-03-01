@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import ThemeToggle from '../components/ThemeToggle';
+import BackToTop from '../components/BackToTop';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -208,6 +209,7 @@ const BlogList: React.FC = () => {
           </div>
         </div>
       </footer>
+      <BackToTop />
     </div>
   );
 };

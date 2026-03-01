@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import ThemeToggle from '../components/ThemeToggle';
+import BackToTop from '../components/BackToTop';
 
 const Landing: React.FC = () => {
 
@@ -578,6 +579,7 @@ const Landing: React.FC = () => {
           </div>
         </div>
       </footer>
+      <BackToTop />
     </div>
   );
 };

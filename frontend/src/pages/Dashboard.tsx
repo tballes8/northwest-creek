@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { authAPI, watchlistAPI, portfolioAPI, alertsAPI } from '../services/api';
 import { User, WatchlistItem, PortfolioPosition, Alert } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
+import BackToTop from '../components/BackToTop';
 import { useLivePriceContext } from '../contexts/LivePriceContext';
 import MarketStatusBadge from '../components/MarketStatusBadge';
 import SectorPieChart from '../components/SectorPieChart';
@@ -1330,8 +1331,8 @@ return (
           </div>
         </div>
       )}
-
     </div>
+    <BackToTop />
   </div>
 );
 };

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import ThemeToggle from '../components/ThemeToggle';
+import BackToTop from '../components/BackToTop';
 import { User } from '../types';
 import { authAPI } from '../services/api';
 
@@ -409,6 +410,7 @@ const BlogPost: React.FC = () => {
           </article>
         ) : null}
       </div>
+      <BackToTop />
     </div>
   );
 };

@@ -1,9 +1,9 @@
 import React, { useState, useRef } from 'react';
-import BackToTop from '../components/BackToTop';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI, technicalAPI, watchlistAPI, financialsAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
+import BackToTop from '../components/BackToTop';
 import UpgradeRequired from '../components/UpgradeRequired';
 import {
   Chart as ChartJS,
@@ -815,7 +815,6 @@ const TechnicalAnalysis: React.FC = () => {
           currentUsage={usageCount}
           maxUsage={tierLimit}
         />
-        <BackToTop />
       </div>
     );
   }
