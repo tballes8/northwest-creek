@@ -3,6 +3,7 @@ DCF Valuation API Endpoints - Discounted Cash Flow Analysis
 ⭐ PAID TIERS ONLY 
 Uses yfinance for sector data (simple, free, accurate)
 """
+import re
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
@@ -13,12 +14,21 @@ from app.services.market_data import market_data_service
 from app.services.company_info import get_sector_from_yfinance, get_company_basics
 from app.services.financials import get_company_financials
 
+
+def _safe_error(e: Exception) -> str:
+    """Strip API keys and sensitive params from error messages."""
+    msg = str(e)
+    msg = re.sub(r'apiKey=[^&\s\'"]+', 'apiKey=***', msg)
+    msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
+    msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg)
+    return msg
+
 router = APIRouter()
 
 
 def require_paid_tier(current_user: User = Depends(get_current_user)):
     """Require paid tier (Casual, Active, or Professsional) for Technical Analysis access"""
-    allowed_tiers = ["casual", "active", "professional"]
+    allowed_tiers = ["beginner", "casual", "active", "professional"]
     if current_user.subscription_tier not in allowed_tiers:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -63,7 +73,7 @@ async def get_dcf_suggestions(
             security_type = company.get("type", "")  # CS, WARRANT, ETF, etc.
         except Exception as api_error:
             # Fallback to yfinance for everything if Massive API fails
-            print(f"Massive API failed, using yfinance fallback: {api_error}")
+            print(f"Massive API failed, using yfinance fallback: {_safe_error(api_error)}")
             company_data = get_company_basics(ticker)
             
             company_name = company_data["name"]
@@ -295,16 +305,22 @@ async def get_dcf_suggestions(
                 actuals = None
 
             # Override sector defaults with actual-derived values when available
+            growth_from_actuals = False
+            discount_from_actuals = False
             if dcf_sug:
                 if dcf_sug.get("suggested_growth_rate") is not None:
                     suggested_growth = max(0.01, min(0.30, dcf_sug["suggested_growth_rate"] / 100))
                     growth_reasoning = f"Based on trailing revenue growth of {dcf_sug['revenue_growth_yoy_pct']:.1f}%, conservatively adjusted" if dcf_sug.get("revenue_growth_yoy_pct") is not None else growth_reasoning
+                    growth_from_actuals = True
                 if dcf_sug.get("estimated_wacc") is not None:
                     suggested_discount = max(0.06, min(0.20, dcf_sug["estimated_wacc"] / 100))
                     discount_reasoning = f"Estimated WACC based on D/E ratio of {dcf_sug['debt_to_equity']:.2f}" if dcf_sug.get("debt_to_equity") is not None else discount_reasoning
+                    discount_from_actuals = True
 
         except Exception as fin_err:
-            print(f"⚠️ Could not fetch financials for DCF suggestions ({ticker}): {fin_err}")
+            print(f"⚠️ Could not fetch financials for DCF suggestions ({ticker}): {_safe_error(fin_err)}")
+            growth_from_actuals = False
+            discount_from_actuals = False
             # Non-fatal — continue with sector defaults
         
         return {
@@ -322,6 +338,12 @@ async def get_dcf_suggestions(
                 "discount_rate": round(suggested_discount, 4),
                 "projection_years": suggested_years
             },
+            "sources": {
+                "growth_rate": "sec_filings" if growth_from_actuals else "sector_default",
+                "discount_rate": "sec_filings" if discount_from_actuals else "sector_default",
+                "terminal_growth": "sector_default",
+                "projection_years": "sector_default",
+            },
             "reasoning": {
                 "growth_rate": growth_reasoning,
                 "terminal_growth": profile["terminal_reasoning"],
@@ -334,12 +356,12 @@ async def get_dcf_suggestions(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"DCF suggestions error for {ticker}: {str(e)}")
+        print(f"DCF suggestions error for {ticker}: {_safe_error(e)}")
         import traceback
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Could not generate suggestions for {ticker}: {str(e)}"
+            detail=f"Could not generate suggestions for {ticker}: {_safe_error(e)}"
         )
 
 
@@ -402,11 +424,15 @@ async def calculate_dcf(
         current_fcf = None
         shares_outstanding = None
         fcf_source = None
+        shares_source = None
+        cash_and_equivalents = None
+        total_debt = None
 
         try:
             fin_data = await get_company_financials(ticker)
             cash_flow_data = fin_data.get("cash_flow") or {}
             income_data = fin_data.get("income_statement") or {}
+            balance_sheet = fin_data.get("balance_sheet") or {}
 
             # Priority 1: Actual TTM FCF (Operating CF - CapEx)
             actual_fcf = cash_flow_data.get("free_cash_flow")
@@ -424,9 +450,14 @@ async def calculate_dcf(
             diluted_shares = income_data.get("diluted_shares_outstanding")
             if diluted_shares is not None and diluted_shares > 0:
                 shares_outstanding = diluted_shares
+                shares_source = "sec_filings"
+
+            # Balance sheet items for net debt bridge
+            cash_and_equivalents = balance_sheet.get("cash_and_equivalents") or balance_sheet.get("cash")
+            total_debt = balance_sheet.get("total_debt") or balance_sheet.get("long_term_debt")
 
         except Exception as fin_err:
-            print(f"⚠️ Could not fetch financials for DCF calc ({ticker}): {fin_err}")
+            print(f"⚠️ Could not fetch financials for DCF calc ({ticker}): {_safe_error(fin_err)}")
             # Non-fatal — fall through to market cap estimate
 
         # Priority 3: Market cap estimate (fallback when no filings exist)
@@ -442,8 +473,10 @@ async def calculate_dcf(
         if shares_outstanding is None:
             if market_cap and current_price > 0:
                 shares_outstanding = market_cap / current_price
+                shares_source = "estimated_market_cap"
             else:
                 shares_outstanding = 1000000
+                shares_source = "estimated_default"
 
         # Project future cash flows
         projected_cash_flows = []
@@ -466,8 +499,19 @@ async def calculate_dcf(
         sum_pv_cash_flows = sum(cf["present_value"] for cf in projected_cash_flows)
         enterprise_value = sum_pv_cash_flows + terminal_pv
         
+        # ── Equity bridge: Enterprise Value + Cash - Debt ─────────────
+        # Industry standard: FCF-to-firm discounted at WACC yields
+        # enterprise value. Must adjust for net debt to get equity value.
+        net_debt_adjustment = 0
+        has_equity_bridge = False
+        if cash_and_equivalents is not None and total_debt is not None:
+            net_debt_adjustment = cash_and_equivalents - total_debt
+            has_equity_bridge = True
+        
+        equity_value = enterprise_value + net_debt_adjustment
+        
         # Calculate intrinsic value per share
-        intrinsic_value = enterprise_value / shares_outstanding
+        intrinsic_value = equity_value / shares_outstanding
         
         # Calculate margin of safety
         margin_of_safety = ((intrinsic_value - current_price) / current_price) * 100
@@ -506,7 +550,8 @@ async def calculate_dcf(
                 "projection_years": projection_years,
                 "current_fcf": round(current_fcf, 2),
                 "shares_outstanding": round(shares_outstanding, 0),
-                "fcf_source": fcf_source
+                "fcf_source": fcf_source,
+                "shares_source": shares_source
             },
             "projections": projected_cash_flows,
             "terminal_value": {
@@ -518,6 +563,13 @@ async def calculate_dcf(
                 "sum_pv_cash_flows": round(sum_pv_cash_flows, 2),
                 "terminal_pv": round(terminal_pv, 2),
                 "enterprise_value": round(enterprise_value, 2),
+                "equity_bridge": {
+                    "cash": round(cash_and_equivalents, 2) if cash_and_equivalents is not None else None,
+                    "debt": round(total_debt, 2) if total_debt is not None else None,
+                    "net_debt_adjustment": round(net_debt_adjustment, 2),
+                    "has_equity_bridge": has_equity_bridge,
+                },
+                "equity_value": round(equity_value, 2),
                 "intrinsic_value_per_share": round(intrinsic_value, 2),
                 "current_price": round(current_price, 2),
                 "margin_of_safety": round(margin_of_safety, 2)
@@ -532,10 +584,10 @@ async def calculate_dcf(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"DCF calculation error for {ticker}: {str(e)}")
+        print(f"DCF calculation error for {ticker}: {_safe_error(e)}")
         import traceback
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Could not calculate DCF for {ticker}: {str(e)}"
+            detail=f"Could not calculate DCF for {ticker}: {_safe_error(e)}"
         )

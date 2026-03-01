@@ -26,7 +26,7 @@ router = APIRouter()
 
 def require_paid_tier(current_user: User = Depends(get_current_user)):
     """Require paid tier (Casual, Active, or Professional) for Technical Analysis access"""
-    allowed_tiers = ["casual", "active", "professional"]
+    allowed_tiers = ["beginner", "casual", "active", "professional"]
     if current_user.subscription_tier not in allowed_tiers:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

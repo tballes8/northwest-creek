@@ -26,6 +26,12 @@ interface DCFSuggestions {
     discount_rate: string;
     projection_years: string;
   };
+  sources?: {
+    growth_rate: string;
+    discount_rate: string;
+    terminal_growth: string;
+    projection_years: string;
+  };
   actuals?: {
     revenue_ttm: number | null;
     revenue_ttm_fmt: string | null;
@@ -61,6 +67,7 @@ interface DCFData {
     current_fcf: number;
     shares_outstanding: number;
     fcf_source?: string;
+    shares_source?: string;
   };
   projections: Array<{
     year: number;
@@ -77,6 +84,13 @@ interface DCFData {
     sum_pv_cash_flows: number;
     terminal_pv: number;
     enterprise_value: number;
+    equity_bridge?: {
+      cash: number | null;
+      debt: number | null;
+      net_debt_adjustment: number;
+      has_equity_bridge: boolean;
+    };
+    equity_value?: number;
     intrinsic_value_per_share: number;
     current_price: number;
     margin_of_safety: number;
@@ -1015,11 +1029,19 @@ const DCFValuation: React.FC = () => {
                   <div className="text-lg font-semibold text-gray-900 dark:text-white">
                     {(dcfData.assumptions.growth_rate * 100).toFixed(1)}%
                   </div>
+                  {(prefilledFromTA?.growth != null || suggestions?.sources?.growth_rate === 'sec_filings') && (
+                    <div className="text-[10px] mt-0.5 font-medium text-green-600 dark:text-green-400">
+                      ✓ Derived from SEC filings
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">Terminal Growth</div>
                   <div className="text-lg font-semibold text-gray-900 dark:text-white">
                     {(dcfData.assumptions.terminal_growth * 100).toFixed(1)}%
+                  </div>
+                  <div className="text-[10px] mt-0.5 font-medium text-gray-500 dark:text-gray-400">
+                    Sector default
                   </div>
                 </div>
                 <div>
@@ -1027,6 +1049,11 @@ const DCFValuation: React.FC = () => {
                   <div className="text-lg font-semibold text-gray-900 dark:text-white">
                     {(dcfData.assumptions.discount_rate * 100).toFixed(1)}%
                   </div>
+                  {(prefilledFromTA?.wacc != null || suggestions?.sources?.discount_rate === 'sec_filings') && (
+                    <div className="text-[10px] mt-0.5 font-medium text-green-600 dark:text-green-400">
+                      ✓ Estimated WACC from SEC filings
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">Projection Years</div>
@@ -1060,6 +1087,16 @@ const DCFValuation: React.FC = () => {
                   <div className="text-lg font-semibold text-gray-900 dark:text-white">
                     {(dcfData.assumptions.shares_outstanding / 1e6).toFixed(1)}M
                   </div>
+                  {dcfData.assumptions.shares_source && (
+                    <div className={`text-[10px] mt-0.5 font-medium ${
+                      dcfData.assumptions.shares_source === 'sec_filings'
+                        ? 'text-green-600 dark:text-green-400'
+                        : 'text-orange-600 dark:text-orange-400'
+                    }`}>
+                      {dcfData.assumptions.shares_source === 'sec_filings' && '✓ Diluted shares from SEC filings'}
+                      {dcfData.assumptions.shares_source?.startsWith('estimated') && '⚠ Estimated from market cap'}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
