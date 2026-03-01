@@ -587,8 +587,8 @@ const DCFValuation: React.FC = () => {
                   </div>
                 )}
               </div>
+              <ThemeToggle />
             </div>
-            <ThemeToggle />
           </div>
         </div>
       </nav>
@@ -809,10 +809,13 @@ const DCFValuation: React.FC = () => {
             )}
 
             {/* Parameter Inputs */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Growth Rate (%)
+                  {(prefilledFromTA?.growth != null || suggestions?.sources?.growth_rate === 'sec_filings') && (
+                    <span className="ml-2 text-[10px] font-medium text-green-600 dark:text-green-400">✓ From SEC filings</span>
+                  )}
                 </label>
                 <input
                   type="number"
@@ -831,6 +834,7 @@ const DCFValuation: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Terminal Growth (%)
+                  <span className="ml-2 text-[10px] font-medium text-gray-500 dark:text-gray-400">Sector default</span>
                 </label>
                 <input
                   type="number"
@@ -848,7 +852,28 @@ const DCFValuation: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Current FCF
+                  {suggestions?.actuals?.fcf_ttm != null && (
+                    <span className="ml-2 text-[10px] font-medium text-green-600 dark:text-green-400">✓ Actual TTM</span>
+                  )}
+                  {suggestions && !suggestions.actuals?.fcf_ttm && (
+                    <span className="ml-2 text-[10px] font-medium text-orange-600 dark:text-orange-400">⚠ Estimated</span>
+                  )}
+                </label>
+                <div className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed">
+                  {suggestions?.actuals?.fcf_ttm_fmt || (suggestions ? `~${formatCurrency(suggestions.market_cap * 0.05)}` : '—')}
+                </div>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                  💡 Operating Cash Flow minus CapEx (read-only)
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Discount Rate (%)
+                  {(prefilledFromTA?.wacc != null || suggestions?.sources?.discount_rate === 'sec_filings') && (
+                    <span className="ml-2 text-[10px] font-medium text-green-600 dark:text-green-400">✓ Est. WACC</span>
+                  )}
                 </label>
                 <input
                   type="number"
@@ -881,6 +906,21 @@ const DCFValuation: React.FC = () => {
                     💡 {suggestions.reasoning.projection_years}
                   </p>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Shares Outstanding
+                  {suggestions?.actuals?.diluted_eps != null && (
+                    <span className="ml-2 text-[10px] font-medium text-green-600 dark:text-green-400">✓ Diluted (SEC)</span>
+                  )}
+                </label>
+                <div className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed">
+                  {suggestions ? `${(suggestions.market_cap / suggestions.current_price / 1e6).toFixed(1)}M` : '—'}
+                </div>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                  💡 From SEC filings or market cap estimate (read-only)
+                </p>
               </div>
             </div>
 
@@ -1012,94 +1052,14 @@ const DCFValuation: React.FC = () => {
                     <div className="text-xs text-orange-700 dark:text-orange-400 space-y-1">
                       <p><strong>What this means:</strong> The intrinsic value, margin of safety, and recommendation above may be significantly
                       inaccurate. Use this output as a rough directional indicator only — not as a basis for investment decisions.</p>
-                      <p><strong>For higher-confidence results:</strong> Look for stocks that display the <span className="inline-flex items-center text-green-700 dark:text-green-400 font-semibold">✓ Actual TTM FCF</span> badge
-                      in the Assumptions section below, which indicates the model is using real financial data from quarterly and annual filings.</p>
+                      <p><strong>For higher-confidence results:</strong> Look for stocks that display the <span className="inline-flex items-center text-green-700 dark:text-green-400 font-semibold">✓ Actual TTM</span> badge
+                      next to Current FCF in the input fields above, which indicates the model is using real financial data from quarterly and annual filings.</p>
                     </div>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Assumptions */}
-            <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Assumptions</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Growth Rate</div>
-                  <div className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {(dcfData.assumptions.growth_rate * 100).toFixed(1)}%
-                  </div>
-                  {(prefilledFromTA?.growth != null || suggestions?.sources?.growth_rate === 'sec_filings') && (
-                    <div className="text-[10px] mt-0.5 font-medium text-green-600 dark:text-green-400">
-                      ✓ Derived from SEC filings
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Terminal Growth</div>
-                  <div className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {(dcfData.assumptions.terminal_growth * 100).toFixed(1)}%
-                  </div>
-                  <div className="text-[10px] mt-0.5 font-medium text-gray-500 dark:text-gray-400">
-                    Sector default
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Discount Rate</div>
-                  <div className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {(dcfData.assumptions.discount_rate * 100).toFixed(1)}%
-                  </div>
-                  {(prefilledFromTA?.wacc != null || suggestions?.sources?.discount_rate === 'sec_filings') && (
-                    <div className="text-[10px] mt-0.5 font-medium text-green-600 dark:text-green-400">
-                      ✓ Estimated WACC from SEC filings
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Projection Years</div>
-                  <div className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {dcfData.assumptions.projection_years} years
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Current FCF</div>
-                  <div className={`text-lg font-semibold ${
-                    dcfData.assumptions.current_fcf >= 0 ? 'text-gray-900 dark:text-white' : 'text-red-600 dark:text-red-400'
-                  }`}>
-                    {formatCurrency(dcfData.assumptions.current_fcf)}
-                  </div>
-                  {dcfData.assumptions.fcf_source && (
-                    <div className={`text-[10px] mt-0.5 font-medium ${
-                      dcfData.assumptions.fcf_source === 'actual_ttm' 
-                        ? 'text-green-600 dark:text-green-400' 
-                        : dcfData.assumptions.fcf_source === 'operating_cf'
-                        ? 'text-yellow-600 dark:text-yellow-400'
-                        : 'text-orange-600 dark:text-orange-400'
-                    }`}>
-                      {dcfData.assumptions.fcf_source === 'actual_ttm' && '✓ Actual TTM FCF'}
-                      {dcfData.assumptions.fcf_source === 'operating_cf' && '~ Operating CF (FCF unavailable)'}
-                      {dcfData.assumptions.fcf_source?.startsWith('estimated') && '⚠ Estimated (no filings)'}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Shares Outstanding</div>
-                  <div className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {(dcfData.assumptions.shares_outstanding / 1e6).toFixed(1)}M
-                  </div>
-                  {dcfData.assumptions.shares_source && (
-                    <div className={`text-[10px] mt-0.5 font-medium ${
-                      dcfData.assumptions.shares_source === 'sec_filings'
-                        ? 'text-green-600 dark:text-green-400'
-                        : 'text-orange-600 dark:text-orange-400'
-                    }`}>
-                      {dcfData.assumptions.shares_source === 'sec_filings' && '✓ Diluted shares from SEC filings'}
-                      {dcfData.assumptions.shares_source?.startsWith('estimated') && '⚠ Estimated from market cap'}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
 
             {/* Cash Flow Projections Table */}
             <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
