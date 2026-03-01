@@ -578,8 +578,8 @@ const Landing: React.FC = () => {
             </div>
           </div>
         </div>
+        <BackToTop />
       </footer>
-      <BackToTop />
     </div>
   );
 };
