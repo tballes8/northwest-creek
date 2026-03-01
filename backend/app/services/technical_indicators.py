@@ -220,7 +220,7 @@ class TechnicalIndicators:
             minus_dm.append(down if down > up and down > 0 else 0)
             tr_list.append(max(highs[i]-lows[i], abs(highs[i]-closes[i-1]), abs(lows[i]-closes[i-1])))
         def wilder(data, p):
-            s = [sum(data[:p])]
+            s = [sum(data[:p]) / p]
             for i in range(p, len(data)):
                 s.append(s[-1] - s[-1]/p + data[i])
             return s
