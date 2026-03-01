@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import BackToTop from '../components/BackToTop';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI, technicalAPI, watchlistAPI, financialsAPI } from '../services/api';
 import { User } from '../types';
@@ -814,6 +815,7 @@ const TechnicalAnalysis: React.FC = () => {
           currentUsage={usageCount}
           maxUsage={tierLimit}
         />
+        <BackToTop />
       </div>
     );
   }
@@ -1923,6 +1925,7 @@ const TechnicalAnalysis: React.FC = () => {
           </div>
         )}
       </div>
+      <BackToTop />
     </div>
   );
 };
