@@ -1393,7 +1393,7 @@ const TechnicalAnalysis: React.FC = () => {
                     <strong>Situations to Look For:</strong> When the bands squeeze tight, volatility is contracting — a breakout 
                     (in either direction) often follows. Watch for expanding volume to confirm the direction of the move.
                 </p>
-                <div style={{ height: '500px' }}>
+                <div style={{ height: '300px' }}>
                     {getBBChartData() && (
                     <Chart type="line" data={getBBChartData()!} options={priceChartOptions} />
                     )}
@@ -1421,7 +1421,7 @@ const TechnicalAnalysis: React.FC = () => {
                     ⚠️ <strong>Warrant Note:</strong> MA crossovers on warrants can produce more false signals due to higher volatility. Confirm with volume and broader market context.
                   </p>
                 )}
-                <div style={{ height: '500px' }}>
+                <div style={{ height: '300px' }}>
                     {getMAChartData() && (
                     <Chart type="line" data={getMAChartData()!} options={maChartOptions} />
                     )}
