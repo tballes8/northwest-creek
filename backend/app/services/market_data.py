@@ -1,6 +1,7 @@
 """
 Market data service - Polygon.io integration
 """
+import re
 import httpx, os
 from typing import Dict, Any, List
 from datetime import datetime, timezone, timedelta
@@ -9,6 +10,15 @@ from massive import RESTClient
 from massive.rest.models import TickerSnapshot
 
 settings = get_settings()
+
+
+def _safe_error(e: Exception) -> str:
+    """Strip API keys and sensitive params from error messages."""
+    msg = str(e)
+    msg = re.sub(r'apiKey=[^&\s\'"]+', 'apiKey=***', msg)
+    msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
+    msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg)
+    return msg
 
 
 class MarketDataService:
@@ -169,9 +179,9 @@ class MarketDataService:
         except httpx.TimeoutException:
             raise ValueError(f"Timeout fetching data for {ticker}")
         except httpx.HTTPError as e:
-            raise ValueError(f"HTTP error fetching data for {ticker}: {str(e)}")
+            raise ValueError(f"HTTP error fetching data for {ticker}: {_safe_error(e)}")
         except Exception as e:
-            raise ValueError(f"Error fetching quote for {ticker}: {str(e)}")
+            raise ValueError(f"Error fetching quote for {ticker}: {_safe_error(e)}")
     
     async def get_company_info(self, ticker: str) -> Dict[str, Any]:
         """
@@ -245,9 +255,9 @@ class MarketDataService:
         except httpx.TimeoutException:
             raise ValueError(f"Timeout fetching company info for {ticker}")
         except httpx.HTTPError as e:
-            raise ValueError(f"HTTP error fetching company info for {ticker}: {str(e)}")
+            raise ValueError(f"HTTP error fetching company info for {ticker}: {_safe_error(e)}")
         except Exception as e:
-            raise ValueError(f"Error fetching company info for {ticker}: {str(e)}")
+            raise ValueError(f"Error fetching company info for {ticker}: {_safe_error(e)}")
                 
     async def get_historical_prices(
         self,
@@ -296,9 +306,9 @@ class MarketDataService:
         except httpx.TimeoutException:
             raise ValueError(f"Timeout fetching historical data for {ticker}")
         except httpx.HTTPError as e:
-            raise ValueError(f"HTTP error fetching historical data for {ticker}: {str(e)}")
+            raise ValueError(f"HTTP error fetching historical data for {ticker}: {_safe_error(e)}")
         except Exception as e:
-            raise ValueError(f"Error fetching historical data for {ticker}: {str(e)}")
+            raise ValueError(f"Error fetching historical data for {ticker}: {_safe_error(e)}")
 
 
     async def get_stock_news(self, ticker: str, limit: int = 3) -> List[Dict[str, Any]]:
@@ -389,8 +399,8 @@ class MarketDataService:
             
         except Exception as e:
             # Log the error
-            print(f"Error fetching news for {ticker}: {str(e)}")
-            raise Exception(f"Failed to fetch news: {str(e)}")
+            print(f"Error fetching news for {ticker}: {_safe_error(e)}")
+            raise Exception(f"Failed to fetch news: {_safe_error(e)}")
     
     async def get_stock_news_rest(self, ticker: str, limit: int = 3) -> List[Dict[str, Any]]:
         """
@@ -456,8 +466,8 @@ class MarketDataService:
             return articles
             
         except Exception as e:
-            print(f"Error fetching news: {str(e)}")
-            raise Exception(f"Failed to fetch news: {str(e)}")
+            print(f"Error fetching news: {_safe_error(e)}")
+            raise Exception(f"Failed to fetch news: {_safe_error(e)}")
     
     async def get_dividends(self, ticker: str, limit: int = 10) -> Dict[str, Any]:
         """
@@ -566,7 +576,7 @@ class MarketDataService:
             }
 
         except Exception as e:
-            raise Exception(f"Failed to fetch top gainers: {str(e)}")
+            raise Exception(f"Failed to fetch top gainers: {_safe_error(e)}")
     
     async def get_top_losers(self, limit: int = 10) -> Dict[str, Any]:
         """
@@ -608,7 +618,7 @@ class MarketDataService:
             }
 
         except Exception as e:
-            raise Exception(f"Failed to fetch top losers: {str(e)}")
+            raise Exception(f"Failed to fetch top losers: {_safe_error(e)}")
         
 
 # Singleton instance

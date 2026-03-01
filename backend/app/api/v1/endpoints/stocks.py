@@ -1,6 +1,7 @@
 """
 Stock API Endpoints
 """
+import re
 from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, Date
@@ -19,6 +20,15 @@ from app.schemas.stock import (
     NewsData,
     NewsArticle,
 )
+
+
+def _safe_error(e: Exception) -> str:
+    """Strip API keys and sensitive params from error messages before sending to client."""
+    msg = str(e)
+    msg = re.sub(r'apiKey=[^&\s\'"]+', 'apiKey=***', msg)
+    msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
+    msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg)
+    return msg
 
 
 router = APIRouter()
@@ -84,7 +94,7 @@ async def get_daily_snapshot(
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching daily snapshot: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching daily snapshot: {_safe_error(e)}")
 
 @router.get("/top-gainers")
 async def get_top_gainers(limit: int = 10):
@@ -93,7 +103,7 @@ async def get_top_gainers(limit: int = 10):
         result = await market_data_service.get_top_gainers(limit)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=_safe_error(e))
 
 @router.get("/top-losers")
 async def get_top_losers(limit: int = 10):
@@ -102,7 +112,7 @@ async def get_top_losers(limit: int = 10):
         result = await market_data_service.get_top_losers(limit)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=_safe_error(e))
     
 @router.get("/quote/{ticker}", response_model=StockQuote)
 async def get_stock_quote(ticker: str):
@@ -119,9 +129,9 @@ async def get_stock_quote(ticker: str):
         quote = await market_data_service.get_quote(ticker)
         return quote
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=_safe_error(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching quote: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching quote: {_safe_error(e)}")
 
 
 @router.get("/company/{ticker}", response_model=CompanyInfo)
@@ -139,9 +149,9 @@ async def get_company_info(ticker: str):
         company = await market_data_service.get_company_info(ticker)
         return company
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=_safe_error(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching company info: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching company info: {_safe_error(e)}")
 
 
 @router.get("/historical/{ticker}", response_model=HistoricalData)
@@ -167,9 +177,9 @@ async def get_historical_data(
             "days": len(historical)
         }
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=_safe_error(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching historical data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching historical data: {_safe_error(e)}")
 
 @router.get("/news/{ticker}", response_model=NewsData)
 async def get_stock_news(
@@ -194,9 +204,9 @@ async def get_stock_news(
             "count": len(news)
         }
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=_safe_error(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching news: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching news: {_safe_error(e)}")
     
 @router.get("/ipos")
 async def get_ipos():
@@ -269,7 +279,7 @@ async def get_ipos():
         return results
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching IPO data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching IPO data: {_safe_error(e)}")
 
 
 @router.get("/dividends/{ticker}")
@@ -340,7 +350,7 @@ async def get_dividends(ticker: str):
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching dividends: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching dividends: {_safe_error(e)}")
 
 
 @router.get("/search")
@@ -416,6 +426,6 @@ async def get_stock_overview(ticker: str):
             "company": company
         }
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=_safe_error(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching stock overview: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching stock overview: {_safe_error(e)}")

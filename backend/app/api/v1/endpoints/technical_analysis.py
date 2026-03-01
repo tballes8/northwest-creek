@@ -2,6 +2,7 @@
 Stock Screener API Endpoints - Filter stocks by technical indicators
 ⭐ PAID TIERS ONLY ⭐
 """
+import re
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -11,6 +12,15 @@ from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.services.market_data import market_data_service
 from app.services.technical_indicators import technical_indicators
+
+
+def _safe_error(e: Exception) -> str:
+    """Strip API keys and sensitive params from error messages."""
+    msg = str(e)
+    msg = re.sub(r'apiKey=[^&\s\'"]+', 'apiKey=***', msg)
+    msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
+    msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg)
+    return msg
 
 router = APIRouter()
 
@@ -444,12 +454,12 @@ async def analyze_stock(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Analysis error for {ticker}: {str(e)}")
+        print(f"Analysis error for {ticker}: {_safe_error(e)}")
         import traceback
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Could not analyze {ticker}: {str(e)}"
+            detail=f"Could not analyze {ticker}: {_safe_error(e)}"
         )
     
 def _generate_summary(rsi, macd_data, ma_data, bb_data, current_price):
