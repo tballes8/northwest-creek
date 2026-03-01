@@ -19,15 +19,19 @@ class TechnicalIndicators:
     def calculate_rsi(prices: List[float], period: int = 14) -> Optional[float]:
         if len(prices) < period + 1:
             return None
-        prices_series = pd.Series(prices)
-        delta = prices_series.diff()
-        gains = delta.where(delta > 0, 0)
-        losses = -delta.where(delta < 0, 0)
-        avg_gain = gains.rolling(window=period).mean()
-        avg_loss = losses.rolling(window=period).mean()
+        deltas = [prices[i] - prices[i-1] for i in range(1, len(prices))]
+        gains = [d if d > 0 else 0 for d in deltas]
+        losses = [-d if d < 0 else 0 for d in deltas]
+        # Wilder's smoothing: seed with SMA, then exponential
+        avg_gain = sum(gains[:period]) / period
+        avg_loss = sum(losses[:period]) / period
+        for i in range(period, len(deltas)):
+            avg_gain = (avg_gain * (period - 1) + gains[i]) / period
+            avg_loss = (avg_loss * (period - 1) + losses[i]) / period
+        if avg_loss == 0:
+            return 100.0
         rs = avg_gain / avg_loss
-        rsi = 100 - (100 / (1 + rs))
-        return float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else None
+        return round(100 - (100 / (1 + rs)), 4)
     
     @staticmethod
     def calculate_macd(prices, fast_period=12, slow_period=26, signal_period=9):
@@ -61,7 +65,7 @@ class TechnicalIndicators:
             return None
         prices_series = pd.Series(prices)
         middle = prices_series.rolling(period).mean()
-        std = prices_series.rolling(period).std()
+        std = prices_series.rolling(period).std(ddof=0)
         upper = middle + std_dev * std
         lower = middle - std_dev * std
         cp = prices[-1]
@@ -222,7 +226,7 @@ class TechnicalIndicators:
         def wilder(data, p):
             s = [sum(data[:p]) / p]
             for i in range(p, len(data)):
-                s.append(s[-1] - s[-1]/p + data[i])
+                s.append((s[-1] * (p - 1) + data[i]) / p)
             return s
         atr_s = wilder(tr_list, period)
         pdm_s = wilder(plus_dm, period)
@@ -302,16 +306,21 @@ class TechnicalIndicators:
         tr = [highs[0]-lows[0]]
         for i in range(1, len(closes)):
             tr.append(max(highs[i]-lows[i], abs(highs[i]-closes[i-1]), abs(lows[i]-closes[i-1])))
-        atr_s = pd.Series(tr).rolling(period).mean()
-        vals = atr_s.tolist()
+        # Wilder's smoothing: seed with SMA, then exponential
+        vals = [None] * (period - 1)
+        atr_val = sum(tr[:period]) / period
+        vals.append(atr_val)
+        for i in range(period, len(tr)):
+            atr_val = (atr_val * (period - 1) + tr[i]) / period
+            vals.append(atr_val)
         a = vals[-1]
-        pct = (a/closes[-1]*100) if closes[-1] > 0 and not pd.isna(a) else 0
+        pct = (a/closes[-1]*100) if closes[-1] > 0 and a is not None else 0
         vol = "very_high" if pct > 5 else "high" if pct > 3 else "moderate" if pct > 1.5 else "low"
         return {
-            "value": round(a, 4) if not pd.isna(a) else None,
+            "value": round(a, 4) if a is not None else None,
             "percent": round(pct, 2), "volatility": vol,
-            "description": f"ATR ${a:.2f} ({pct:.1f}%) — {vol.replace('_',' ')} volatility" if not pd.isna(a) else "N/A",
-            "history": [None if pd.isna(v) else round(v, 4) for v in vals]
+            "description": f"ATR ${a:.2f} ({pct:.1f}%) — {vol.replace('_',' ')} volatility" if a is not None else "N/A",
+            "history": [None if v is None else round(v, 4) for v in vals]
         }
 
     @staticmethod
@@ -406,10 +415,17 @@ class TechnicalIndicators:
             return (max(h_arr[idx-period+1:idx+1]) + min(l_arr[idx-period+1:idx+1])) / 2
         tenkan = [midpt(highs, lows, tenkan_p, i) for i in range(n)]
         kijun = [midpt(highs, lows, kijun_p, i) for i in range(n)]
-        senkou_a, senkou_b = [], []
+        # Senkou spans calculated at current bar (pre-shift)
+        senkou_a_raw, senkou_b_raw = [], []
         for i in range(n):
-            senkou_a.append((tenkan[i]+kijun[i])/2 if tenkan[i] and kijun[i] else None)
-            senkou_b.append(midpt(highs, lows, senkou_b_p, i))
+            senkou_a_raw.append((tenkan[i]+kijun[i])/2 if tenkan[i] and kijun[i] else None)
+            senkou_b_raw.append(midpt(highs, lows, senkou_b_p, i))
+        # Forward-shift Senkou spans by kijun_p (26) periods
+        shift = kijun_p
+        senkou_a = [None]*shift + senkou_a_raw[:n-shift]
+        senkou_b = [None]*shift + senkou_b_raw[:n-shift]
+        # Chikou Span — current close plotted 26 periods back
+        chikou = [closes[i+shift] if i+shift < n else None for i in range(n)]
         cp = closes[-1]
         top = max(senkou_a[-1] or 0, senkou_b[-1] or 0)
         bot = min(senkou_a[-1] or 0, senkou_b[-1] or 0)
@@ -418,10 +434,12 @@ class TechnicalIndicators:
         return {
             "tenkan": r(tenkan[-1]), "kijun": r(kijun[-1]),
             "senkou_a": r(senkou_a[-1]), "senkou_b": r(senkou_b[-1]),
+            "chikou": r(chikou[-1]),
             "signal": sig,
             "description": f"Ichimoku: {'Above cloud — bullish' if sig == 'bullish' else 'Below cloud — bearish' if sig == 'bearish' else 'In cloud — neutral'}",
             "tenkan_history": [r(v) for v in tenkan], "kijun_history": [r(v) for v in kijun],
-            "senkou_a_history": [r(v) for v in senkou_a], "senkou_b_history": [r(v) for v in senkou_b]
+            "senkou_a_history": [r(v) for v in senkou_a], "senkou_b_history": [r(v) for v in senkou_b],
+            "chikou_history": [r(v) for v in chikou]
         }
 
     @staticmethod
