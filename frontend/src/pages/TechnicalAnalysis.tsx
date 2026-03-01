@@ -392,14 +392,12 @@ const TechnicalAnalysis: React.FC = () => {
   }, [ticker]);
 
   // Chart configurations
-  const getPriceChartData = () => {
+  const getBBChartData = () => {
     if (!analysisData) return null;
 
     const dates = analysisData.chart_data.map(d => d.date);
     const prices = analysisData.chart_data.map(d => d.close);
     const volumes = analysisData.chart_data.map(d => d.volume);
-    const sma20 = analysisData.chart_data.map(d => d.sma_20);
-    const sma50 = analysisData.chart_data.map(d => d.sma_50);
     const bbUpper = analysisData.chart_data.map(d => d.bb_upper);
     const bbLower = analysisData.chart_data.map(d => d.bb_lower);
 
@@ -415,28 +413,6 @@ const TechnicalAnalysis: React.FC = () => {
             fill: false,
             tension: 0.1,
             pointRadius: 0,
-            yAxisID: 'y',
-        },
-        {
-            label: '20-day SMA',
-            data: sma20,
-            borderColor: 'rgb(234, 179, 8)',
-            borderWidth: 2,
-            fill: false,
-            tension: 0.1,
-            pointRadius: 0,
-            borderDash: [5, 5],
-            yAxisID: 'y',
-        },
-        {
-            label: '50-day SMA',
-            data: sma50,
-            borderColor: 'rgb(168, 85, 247)',
-            borderWidth: 2,
-            fill: false,
-            tension: 0.1,
-            pointRadius: 0,
-            borderDash: [5, 5],
             yAxisID: 'y',
         },
         {
@@ -469,6 +445,49 @@ const TechnicalAnalysis: React.FC = () => {
             borderWidth: 1,
             type: 'bar' as const,
             yAxisID: 'y1',
+        },
+        ],
+    };
+  };
+
+  const getMAChartData = () => {
+    if (!analysisData) return null;
+
+    const dates = analysisData.chart_data.map(d => d.date);
+    const prices = analysisData.chart_data.map(d => d.close);
+    const sma20 = analysisData.chart_data.map(d => d.sma_20);
+    const sma50 = analysisData.chart_data.map(d => d.sma_50);
+
+    return {
+        labels: dates,
+        datasets: [
+        {
+            label: 'Price',
+            data: prices,
+            borderColor: 'rgb(59, 130, 246)',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.1,
+            pointRadius: 0,
+        },
+        {
+            label: '20-day SMA',
+            data: sma20,
+            borderColor: 'rgb(234, 179, 8)',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.1,
+            pointRadius: 0,
+        },
+        {
+            label: '50-day SMA',
+            data: sma50,
+            borderColor: 'rgb(168, 85, 247)',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.1,
+            pointRadius: 0,
         },
         ],
     };
@@ -647,6 +666,48 @@ const TechnicalAnalysis: React.FC = () => {
     },
   };
 
+  const maChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: {
+        mode: 'index' as const,
+        intersect: false,
+    },
+    plugins: {
+        legend: {
+        position: 'top' as const,
+        labels: {
+            color: '#9CA3AF',
+            usePointStyle: true,
+        },
+        },
+        tooltip: {
+        mode: 'index' as const,
+        intersect: false,
+        },
+    },
+    scales: {
+        x: {
+        ticks: {
+            color: '#9CA3AF',
+        },
+        grid: {
+            color: 'rgba(156, 163, 175, 0.1)',
+        },
+        },
+        y: {
+        type: 'linear' as const,
+        position: 'left' as const,
+        ticks: {
+            color: '#9CA3AF',
+        },
+        grid: {
+            color: 'rgba(156, 163, 175, 0.1)',
+        },
+        },
+    },
+  };
+
   // Show upgrade page if user has hit their limit
   if (user && usageCount >= tierLimit) {
     return (
@@ -656,18 +717,18 @@ const TechnicalAnalysis: React.FC = () => {
           <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex justify-between h-16">
               <div className="flex items-center">
-                <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
-                <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>Northwest Creek</span>
+                <img src="/images/logo.png" alt="NWC-Analytics, LLC" className="h-10 w-10 mr-3" />
+                <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>NWC-Analytics</span>
               </div>
               
               <div className="hidden md:flex items-center space-x-8">
-                <Link to="/dashboard" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Dashboard</Link>
-                <Link to="/watchlist" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Watchlist</Link>
-                <Link to="/portfolio" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Portfolio</Link>
-                <Link to="/alerts" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Alerts</Link>
-                <Link to="/stocks" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">Stocks</Link>
+                <Link to="/dashboard" className="text-gray-300 hover:text-white">Dashboard</Link>
+                <Link to="/watchlist" className="text-gray-300 hover:text-white">Watchlist</Link>
+                <Link to="/portfolio" className="text-gray-300 hover:text-white">Portfolio</Link>
+                <Link to="/alerts" className="text-gray-300 hover:text-white">Alerts</Link>
+                <Link to="/stocks" className="text-gray-300 hover:text-white">Stocks</Link>
                 <Link to="/technical-analysis" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">Technical Analysis</Link>
-                <Link to="/dcf-valuation" className="text-gray-400 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white">DCF Valuation</Link>
+                <Link to="/dcf-valuation" className="text-gray-300 hover:text-white">DCF Valuation</Link>
               </div>
 
               <div className="flex items-center space-x-4">
@@ -1314,14 +1375,14 @@ const TechnicalAnalysis: React.FC = () => {
               </div>
             )}
 
-            {/* Price Chart with Bollinger Bands, Moving Averages, and Volume */}
+            {/* Bollinger Bands + Volume Chart */}
             <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Price Chart with Indicators</h3>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Bollinger Bands &amp; Volume</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     📊 <strong>How to read:</strong> Green dashed line = Lower Bollinger Band (potential buy zone), 
-                    Red dashed line = Upper Bollinger Band (potential sell zone), 
-                    Yellow line = 20-day MA (short-term trend), Purple line = 50-day MA (medium-term trend). 
-                    Volume bars on right axis show trading activity.
+                    Red dashed line = Upper Bollinger Band (potential sell zone). 
+                    The middle band (not shown) is the 20-day SMA — price tends to revert toward it. 
+                    Volume bars on the right axis show trading activity.
                 </p>
                 {isWarrant && (
                   <p className="text-sm text-orange-600 dark:text-orange-400 mb-4 font-medium">
@@ -1329,11 +1390,40 @@ const TechnicalAnalysis: React.FC = () => {
                   </p>
                 )}
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    <strong>Situations to Look For:</strong> Breakout likely: BB squeeze + expanding volume
+                    <strong>Situations to Look For:</strong> When the bands squeeze tight, volatility is contracting — a breakout 
+                    (in either direction) often follows. Watch for expanding volume to confirm the direction of the move.
                 </p>
                 <div style={{ height: '500px' }}>
-                    {getPriceChartData() && (
-                    <Chart type="line" data={getPriceChartData()!} options={priceChartOptions} />
+                    {getBBChartData() && (
+                    <Chart type="line" data={getBBChartData()!} options={priceChartOptions} />
+                    )}
+                </div>
+            </div>
+
+            {/* Moving Averages Chart with Golden/Death Cross */}
+            <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Moving Averages — Trend &amp; Crossovers</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    📊 <strong>How to read:</strong> Yellow line = 20-day SMA (short-term trend), 
+                    Purple line = 50-day SMA (medium-term trend). 
+                    When the price stays above both lines, the trend is bullish. Below both = bearish. 
+                    Between them = indecision or transition.
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    <strong>Golden Cross &amp; Death Cross:</strong> When the 20-day SMA crosses <em>above</em> the 50-day SMA, 
+                    it forms a <strong className="text-green-500">Golden Cross</strong> — a bullish signal indicating short-term momentum 
+                    is outpacing the medium-term trend. When the 20-day crosses <em>below</em> the 50-day, 
+                    it forms a <strong className="text-red-500">Death Cross</strong> — a bearish signal. 
+                    Look for the cross, then confirm with volume and RSI before acting.
+                </p>
+                {isWarrant && (
+                  <p className="text-sm text-orange-600 dark:text-orange-400 mb-4 font-medium">
+                    ⚠️ <strong>Warrant Note:</strong> MA crossovers on warrants can produce more false signals due to higher volatility. Confirm with volume and broader market context.
+                  </p>
+                )}
+                <div style={{ height: '500px' }}>
+                    {getMAChartData() && (
+                    <Chart type="line" data={getMAChartData()!} options={maChartOptions} />
                     )}
                 </div>
             </div>        
@@ -1782,7 +1872,7 @@ const TechnicalAnalysis: React.FC = () => {
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">📉 Moving Averages</h3>
                 <p className="text-gray-600 dark:text-gray-400">
-                  Average price over time. Price above MA = uptrend, Price below MA = downtrend. 20-day shows short-term trend, 50-day shows medium-term trend.
+                  Average price over time. Price above MA = uptrend, Price below MA = downtrend. When the 20-day SMA crosses above the 50-day = Golden Cross (bullish). When it crosses below = Death Cross (bearish).
                 </p>
               </div>
 
