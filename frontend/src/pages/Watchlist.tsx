@@ -353,7 +353,7 @@ const Watchlist: React.FC = () => {
             </div>
             <div className="hidden md:flex items-center space-x-8">
               <Link to="/dashboard" className="text-gray-300 hover:text-white">Dashboard</Link>
-              <Link to="/watchlist" className="text-gray-300 hover:text-white:border-primary-400 pb-1">Watchlist</Link>
+              <Link to="/watchlist" className="text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1">Watchlist</Link>
               <Link to="/portfolio" className="text-gray-300 hover:text-white">Portfolio</Link>
               <Link to="/alerts" className="text-gray-300 hover:text-white">Alerts</Link>
               <Link to="/stocks?showTopGainers=true" className="text-gray-300 hover:text-white">Stocks</Link>
