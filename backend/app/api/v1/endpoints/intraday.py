@@ -3,6 +3,7 @@ Intraday market data endpoints using Massive API with Moving Averages
 UPDATED FOR STOCKS ADVANCED PLAN
 Now includes TRUE 15-minute bars!
 """
+import re
 from fastapi import APIRouter, HTTPException, status
 from typing import List, Dict, Any, Optional
 from massive import RESTClient
@@ -21,6 +22,15 @@ ET = pytz.timezone('US/Eastern')
 # Pull from Railway env via settings — no hardcoded keys or URLs
 client = RESTClient(settings.MASSIVE_API_KEY)
 BASE_URL = settings.MASSIVE_BASE_URL if hasattr(settings, 'MASSIVE_BASE_URL') else "https://api.massive.com"
+
+
+def _safe_error(e: Exception) -> str:
+    """Strip API keys and sensitive params from error messages."""
+    msg = str(e)
+    msg = re.sub(r'apiKey=[^&\s\'"]+', 'apiKey=***', msg)
+    msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
+    msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg)
+    return msg
 
 
 def safe_get_attr(obj, attr_path: str, default=None):
@@ -84,6 +94,11 @@ async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
                 print(f"   .last_trade = {safe_get_attr(snapshot, 'last_trade')}")
                 print(f"   .last_trade.price = {safe_get_attr(snapshot, 'last_trade.price')}")
                 print(f"   .value = {safe_get_attr(snapshot, 'value')}")
+                print(f"   .market_status = {safe_get_attr(snapshot, 'market_status')}")
+                print(f"   .session.early_trading_change = {safe_get_attr(snapshot, 'session.early_trading_change')}")
+                print(f"   .session.early_trading_change_percent = {safe_get_attr(snapshot, 'session.early_trading_change_percent')}")
+                print(f"   .session.late_trading_change = {safe_get_attr(snapshot, 'session.late_trading_change')}")
+                print(f"   .session.late_trading_change_percent = {safe_get_attr(snapshot, 'session.late_trading_change_percent')}")
                 print(f"   dir(snapshot) = {[a for a in dir(snapshot) if not a.startswith('_')]}")
                 if hasattr(snapshot, 'session') and snapshot.session:
                     print(f"   dir(session) = {[a for a in dir(snapshot.session) if not a.startswith('_')]}")
@@ -97,6 +112,11 @@ async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
                 "change": safe_get_attr(snapshot, 'session.change') if hasattr(snapshot, 'session') else None,
                 "change_percent": safe_get_attr(snapshot, 'session.change_percent') if hasattr(snapshot, 'session') else None,
                 "market_status": safe_get_attr(snapshot, 'market_status'),
+                # Extended hours — pre-market and after-hours badges
+                "early_trading_change": safe_get_attr(snapshot, 'session.early_trading_change'),
+                "early_trading_change_percent": safe_get_attr(snapshot, 'session.early_trading_change_percent'),
+                "late_trading_change": safe_get_attr(snapshot, 'session.late_trading_change'),
+                "late_trading_change_percent": safe_get_attr(snapshot, 'session.late_trading_change_percent'),
             }
             results.append(data)
         
@@ -111,7 +131,7 @@ async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch batch intraday data: {str(e)}"
+            detail=f"Failed to fetch batch intraday data: {_safe_error(e)}"
         )
 
 
@@ -164,7 +184,7 @@ async def get_intraday_data(ticker: str) -> Dict[str, Any]:
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch intraday data: {str(e)}"
+            detail=f"Failed to fetch intraday data: {_safe_error(e)}"
         )
 
 
@@ -286,7 +306,7 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
     except httpx.HTTPStatusError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch data from Massive API: {str(e)}"
+            detail=f"Failed to fetch data from Massive API: {_safe_error(e)}"
         )
     except httpx.TimeoutException:
         raise HTTPException(
@@ -296,5 +316,5 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch intraday bars with moving averages: {str(e)}"
+            detail=f"Failed to fetch intraday bars with moving averages: {_safe_error(e)}"
         )
