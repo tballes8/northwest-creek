@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { intradayAPI } from '../services/api';
@@ -57,56 +57,49 @@ interface IntradayModalProps {
   onClose: () => void;
 }
 
-// ─── Custom Tooltip — defined OUTSIDE the component to avoid re-render loop ───
+const formatTime = (timestamp: string): string => {
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return timestamp;
+    }
+  };
+
+// ─── OUTSIDE the component ───
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
-    
-    const formatNum = (num: number | null | undefined, decimals: number = 2): string => {
+    const fmt = (num: number | null | undefined, d: number = 2) =>
+      num === null || num === undefined ? 'N/A' : num.toFixed(d);
+    const fmtLarge = (num: number | null | undefined) => {
       if (num === null || num === undefined) return 'N/A';
-      return num.toFixed(decimals);
-    };
-
-    const formatLargeNum = (num: number | null | undefined): string => {
-      if (num === null || num === undefined) return 'N/A';
-      if (num >= 1000000000) return `${(num / 1000000000).toFixed(2)}B`;
-      if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`;
-      if (num >= 1000) return `${(num / 1000).toFixed(2)}K`;
+      if (num >= 1e9) return `${(num / 1e9).toFixed(2)}B`;
+      if (num >= 1e6) return `${(num / 1e6).toFixed(2)}M`;
+      if (num >= 1e3) return `${(num / 1e3).toFixed(2)}K`;
       return num.toString();
     };
-
     return (
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg p-3">
         <p className="text-sm font-semibold text-gray-900 dark:text-white mb-2">{data.time}</p>
         <p className="text-sm text-gray-600 dark:text-gray-400">
-          Price: <span className="font-semibold text-gray-900 dark:text-white">${formatNum(data.price)}</span>
+          Price: <span className="font-semibold text-gray-900 dark:text-white">${fmt(data.price)}</span>
         </p>
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          H: ${formatNum(data.high)} | L: ${formatNum(data.low)}
+          H: ${fmt(data.high)} | L: ${fmt(data.low)}
         </p>
         {data.volume && (
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Vol: {formatLargeNum(data.volume)}
-          </p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Vol: {fmtLarge(data.volume)}</p>
         )}
         <div className="border-t border-gray-200 dark:border-gray-600 mt-2 pt-2">
-          {data.ma_20 && (
-            <p className="text-xs" style={{ color: 'rgb(234, 179, 8)' }}>
-              20-day MA: ${formatNum(data.ma_20)}
-            </p>
-          )}
-          {data.ma_50 && (
-            <p className="text-xs" style={{ color: 'rgb(168, 85, 247)' }}>
-              50-day MA: ${formatNum(data.ma_50)}
-            </p>
-          )}
+          {data.ma_20 && <p className="text-xs" style={{ color: 'rgb(234, 179, 8)' }}>20-day MA: ${fmt(data.ma_20)}</p>}
+          {data.ma_50 && <p className="text-xs" style={{ color: 'rgb(168, 85, 247)' }}>50-day MA: ${fmt(data.ma_50)}</p>}
         </div>
       </div>
     );
   }
   return null;
 };
-
 
 const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }) => {
   const [data, setData] = useState<IntradayData | null>(null);
@@ -158,6 +151,20 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
       setLoading(false);
     }
   };
+    
+  // ─── ALL HOOKS MUST BE ABOVE THE EARLY RETURN ───
+  const chartData = useMemo(() => {
+    return barsData?.bars.map(bar => ({
+      time: formatTime(bar.timestamp),
+      price: bar.close,
+      high: bar.high,
+      low: bar.low,
+      open: bar.open,
+      volume: bar.volume,
+      ma_20: bar.ma_20,
+      ma_50: bar.ma_50
+    })) || [];
+  }, [barsData]);
 
   if (!isOpen) return null;
 
@@ -172,15 +179,6 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
     if (num >= 1000000) return `${(num / 1000000).toFixed(2)}M`;
     if (num >= 1000) return `${(num / 1000).toFixed(2)}K`;
     return num.toString();
-  };
-
-  const formatTime = (timestamp: string): string => {
-    try {
-      const date = new Date(timestamp);
-      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-    } catch {
-      return timestamp;
-    }
   };
 
   const formatDate = (dateString: string): string => {
@@ -201,20 +199,6 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
     if (change === null || change === undefined) return '';
     return change >= 0 ? '+' : '';
   };
-
-  // Prepare chart data — memoized so Recharts doesn't see a new array every render
-  const chartData = useMemo(() => {
-    return barsData?.bars.map(bar => ({
-      time: formatTime(bar.timestamp),
-      price: bar.close,
-      high: bar.high,
-      low: bar.low,
-      open: bar.open,
-      volume: bar.volume,
-      ma_20: bar.ma_20,
-      ma_50: bar.ma_50
-    })) || [];
-  }, [barsData]);
 
   // Determine color based on price movement
   const getPriceColor = () => {

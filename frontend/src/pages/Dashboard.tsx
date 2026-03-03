@@ -170,7 +170,7 @@ const Dashboard: React.FC = () => {
         const prevTotalValue = prevPortfolioValueRef.current;
         if (totalValue !== prevTotalValue) {
           setValueFlash(totalValue > prevTotalValue ? 'green' : 'red');
-          setTimeout(() => setValueFlash(null), 600);
+          //setTimeout(() => setValueFlash(null), 600);
         }
         prevPortfolioValueRef.current = totalValue;
 
