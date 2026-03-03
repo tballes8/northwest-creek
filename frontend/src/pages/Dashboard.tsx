@@ -62,7 +62,7 @@ const Dashboard: React.FC = () => {
   // Live price context
   const { prices, isConnected, subscribe, unsubscribe } = useLivePriceContext();
   const previousPricesRef = useRef<Map<string, number>>(new Map());
-  const [valueFlash, setValueFlash] = useState<'green' | 'red' | null>(null);
+  // const [valueFlash, setValueFlash] = useState<'green' | 'red' | null>(null);
 
   // IPO data
   const [ipoData, setIpoData] = useState<{ upcoming: IPOItem[]; pending: IPOItem[]; rumored: IPOItem[] }>({ upcoming: [], pending: [], rumored: [] });
@@ -166,13 +166,13 @@ const Dashboard: React.FC = () => {
         const totalPL = totalValue - totalCost;
         const totalPLPercent = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
 
-        // Flash animation on the portfolio value card
-        const prevTotalValue = prevPortfolioValueRef.current;
-        if (totalValue !== prevTotalValue) {
-          setValueFlash(totalValue > prevTotalValue ? 'green' : 'red');
-          //setTimeout(() => setValueFlash(null), 600);
-        }
-        prevPortfolioValueRef.current = totalValue;
+        // // Flash animation on the portfolio value card
+        // const prevTotalValue = prevPortfolioValueRef.current;
+        // if (totalValue !== prevTotalValue) {
+        //   setValueFlash(totalValue > prevTotalValue ? 'green' : 'red');
+        //   //setTimeout(() => setValueFlash(null), 600);
+        // }
+        // prevPortfolioValueRef.current = totalValue;
 
         setStats(prev => ({
           ...prev,
@@ -702,6 +702,9 @@ return (
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {/* Portfolio Value Card — flashes on live update */}
+        <div className="bg-white dark:bg-gray-700 rounded-lg shadow dark:shadow-gray-200/20 p-4 border dark:border-gray-500">
+        
+        {/* Flash animation on Portfolio Card 
         <div
           className={`bg-white dark:bg-gray-700 rounded-lg shadow dark:shadow-gray-200/20 p-4 border dark:border-gray-500 price-transition ${
             valueFlash === 'green'
@@ -717,7 +720,7 @@ return (
               ? { animation: 'price-flash-red 0.6s ease-in-out' }
               : undefined
           }
-        >
+        > */}
           <div className="flex items-center justify-between">
             <div className="min-w-0">
               <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">Portfolio Value</p>
