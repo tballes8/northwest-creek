@@ -297,7 +297,15 @@ const Portfolio: React.FC = () => {
     const totalPL = totalValue - totalCost;
     const totalPLPercent = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
 
-    return { totalValue, totalCost, totalPL, totalPLPercent };
+    // Day change: total current value vs total previous close value
+    const totalPrevClose = portfolio.reduce((sum, pos) => {
+      const prevClose = prevCloseMap[pos.ticker];
+      return sum + (prevClose ? prevClose * pos.quantity : 0);
+    }, 0);
+    const dayChange = totalPrevClose > 0 ? totalValue - totalPrevClose : 0;
+    const dayChangePercent = totalPrevClose > 0 ? (dayChange / totalPrevClose) * 100 : 0;
+
+    return { totalValue, totalCost, totalPL, totalPLPercent, dayChange, dayChangePercent };
   };
 
   const handleAddPosition = async (e: React.FormEvent) => {
@@ -562,8 +570,17 @@ const Portfolio: React.FC = () => {
         {/* Portfolio Summary */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Positions</div>
-            <div className="text-2xl font-bold text-gray-900 dark:text-white">{portfolio.length} / {getTierLimit()}</div>
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Day Change</div>
+            <div className={`text-2xl font-bold ${
+              totals.dayChange >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+            }`}>
+              {totals.dayChange >= 0 ? '+' : ''}${totals.dayChange.toFixed(2)}
+            </div>
+            <div className={`text-xs mt-0.5 ${
+              totals.dayChangePercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+            }`}>
+              {totals.dayChangePercent >= 0 ? '+' : ''}{totals.dayChangePercent.toFixed(2)}%
+            </div>
           </div>
           <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Value</div>
@@ -589,7 +606,12 @@ const Portfolio: React.FC = () => {
 
         {/* Actions */}
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Portfolio</h1>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Portfolio</h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Tracking {portfolio.length} of {getTierLimit()} positions
+            </p>
+          </div>
           <div className="flex gap-3">
             <MarketStatusBadge isConnected={isConnected} />
             <button
