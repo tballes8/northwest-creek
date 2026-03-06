@@ -5,6 +5,10 @@ import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import BackToTop from '../components/BackToTop';
 import UpgradeRequired from '../components/UpgradeRequired';
+import {
+  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, ReferenceLine, Cell
+} from 'recharts';
 
 interface DCFSuggestions {
   ticker: string;
@@ -52,6 +56,20 @@ interface DCFSuggestions {
     current_ratio: number | null;
     roe: number | null;
     diluted_eps: number | null;
+  } | null;
+  growth_profile?: {
+    revenue_trend: Array<{ period: string; period_end: string | null; value: number | null }>;
+    gross_margin_trend: Array<{ period: string; period_end: string | null; value: number | null }>;
+    eps_trend: Array<{ period: string; period_end: string | null; value: number | null }>;
+    fcf_trend: Array<{ period: string; period_end: string | null; value: number | null }>;
+    revenue_growth_trend: Array<{ period: string; period_end: string | null; value: number | null }>;
+    rule_of_40: number | null;
+    rule_of_40_components: {
+      revenue_growth_yoy: number | null;
+      fcf_margin: number | null;
+    };
+    quarters_available: number;
+    fcf_quarters_available: number;
   } | null;
 }
 
@@ -387,6 +405,30 @@ const DCFValuation: React.FC = () => {
     if (Math.abs(value) >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
     if (Math.abs(value) >= 1e3) return `$${(value / 1e3).toFixed(2)}K`;
     return `$${value.toFixed(2)}`;
+  };
+
+  // Chart helpers for Growth Profile
+  const formatChartValue = (value: number | null) => {
+    if (value == null) return '—';
+    const abs = Math.abs(value);
+    if (abs >= 1e9) return `$${(value / 1e9).toFixed(1)}B`;
+    if (abs >= 1e6) return `$${(value / 1e6).toFixed(0)}M`;
+    if (abs >= 1e3) return `$${(value / 1e3).toFixed(0)}K`;
+    return `$${value.toFixed(2)}`;
+  };
+
+  const GrowthChartTooltip = ({ active, payload, label, isCurrency, isPercent }: any) => {
+    if (!active || !payload?.length) return null;
+    const val = payload[0].value;
+    let formatted = val?.toFixed(2) ?? '—';
+    if (isCurrency && val != null) formatted = formatChartValue(val);
+    if (isPercent && val != null) formatted = `${val.toFixed(1)}%`;
+    return (
+      <div className="bg-gray-800 text-white text-xs px-3 py-2 rounded shadow-lg border border-gray-600">
+        <p className="font-medium">{label}</p>
+        <p className="text-primary-300">{formatted}</p>
+      </div>
+    );
   };
   if (usageCount >= tierLimit) {
     return (
@@ -806,6 +848,149 @@ const DCFValuation: React.FC = () => {
                 <p className="mt-3 italic text-sm text-blue-700 dark:text-blue-300">
                   {suggestions.actuals ? 'Parameters are based on actual company financials. ' : ''}Click "Calculate DCF" below to use these parameters!
                 </p>
+              </div>
+            )}
+
+            {/* Growth Profile — retrospective trend charts */}
+            {showSuggestions && suggestions?.growth_profile && (
+              <div className="bg-white dark:bg-gray-700 rounded-lg shadow dark:shadow-gray-200/20 p-5 border dark:border-gray-500">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Growth Profile</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                      {suggestions.growth_profile.quarters_available} quarters of historical data — what has this company actually demonstrated?
+                    </p>
+                  </div>
+                  {suggestions.growth_profile.rule_of_40 != null && (
+                    <div className={`text-center px-4 py-2 rounded-lg border ${
+                      suggestions.growth_profile.rule_of_40 >= 40
+                        ? 'bg-green-50 dark:bg-green-900/30 border-green-300 dark:border-green-700'
+                        : suggestions.growth_profile.rule_of_40 >= 20
+                        ? 'bg-yellow-50 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700'
+                        : 'bg-red-50 dark:bg-red-900/30 border-red-300 dark:border-red-700'
+                    }`}>
+                      <div className={`text-xl font-bold ${
+                        suggestions.growth_profile.rule_of_40 >= 40
+                          ? 'text-green-700 dark:text-green-300'
+                          : suggestions.growth_profile.rule_of_40 >= 20
+                          ? 'text-yellow-700 dark:text-yellow-300'
+                          : 'text-red-700 dark:text-red-300'
+                      }`}>
+                        {suggestions.growth_profile.rule_of_40}
+                      </div>
+                      <div className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Rule of 40</div>
+                      <div className="text-[9px] text-gray-500 dark:text-gray-400 mt-0.5">
+                        {suggestions.growth_profile.rule_of_40_components.revenue_growth_yoy != null && (
+                          <span>Growth {suggestions.growth_profile.rule_of_40_components.revenue_growth_yoy > 0 ? '+' : ''}{suggestions.growth_profile.rule_of_40_components.revenue_growth_yoy}%</span>
+                        )}
+                        {suggestions.growth_profile.rule_of_40_components.fcf_margin != null && (
+                          <span> + FCF {suggestions.growth_profile.rule_of_40_components.fcf_margin > 0 ? '+' : ''}{suggestions.growth_profile.rule_of_40_components.fcf_margin}%</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Revenue Trend */}
+                  {suggestions.growth_profile.revenue_trend.some(d => d.value != null) && (
+                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+                      <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">Quarterly Revenue</h4>
+                      <ResponsiveContainer width="100%" height={160}>
+                        <BarChart data={suggestions.growth_profile.revenue_trend.filter(d => d.value != null)} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                          <XAxis dataKey="period" tick={{ fontSize: 9, fill: '#9CA3AF' }} interval="preserveStartEnd" />
+                          <YAxis tick={{ fontSize: 9, fill: '#9CA3AF' }} tickFormatter={(v: number) => { if (Math.abs(v) >= 1e9) return `${(v/1e9).toFixed(0)}B`; if (Math.abs(v) >= 1e6) return `${(v/1e6).toFixed(0)}M`; return `${v}`; }} width={45} />
+                          <Tooltip content={<GrowthChartTooltip isCurrency />} />
+                          <Bar dataKey="value" radius={[2, 2, 0, 0]}>
+                            {suggestions.growth_profile.revenue_trend.filter(d => d.value != null).map((entry, i) => (
+                              <Cell key={i} fill={entry.value != null && entry.value >= 0 ? '#14b8a6' : '#ef4444'} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+
+                  {/* Gross Margin Trend */}
+                  {suggestions.growth_profile.gross_margin_trend.some(d => d.value != null) && (
+                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+                      <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">Gross Margin %</h4>
+                      <ResponsiveContainer width="100%" height={160}>
+                        <LineChart data={suggestions.growth_profile.gross_margin_trend.filter(d => d.value != null)} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                          <XAxis dataKey="period" tick={{ fontSize: 9, fill: '#9CA3AF' }} interval="preserveStartEnd" />
+                          <YAxis tick={{ fontSize: 9, fill: '#9CA3AF' }} tickFormatter={(v: number) => `${v.toFixed(0)}%`} width={40} domain={['auto', 'auto']} />
+                          <Tooltip content={<GrowthChartTooltip isPercent />} />
+                          <Line type="monotone" dataKey="value" stroke="#14b8a6" strokeWidth={2} dot={{ fill: '#14b8a6', r: 3 }} activeDot={{ r: 5 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+
+                  {/* EPS Trend */}
+                  {suggestions.growth_profile.eps_trend.some(d => d.value != null) && (
+                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+                      <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">Diluted EPS</h4>
+                      <ResponsiveContainer width="100%" height={160}>
+                        <BarChart data={suggestions.growth_profile.eps_trend.filter(d => d.value != null)} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                          <XAxis dataKey="period" tick={{ fontSize: 9, fill: '#9CA3AF' }} interval="preserveStartEnd" />
+                          <YAxis tick={{ fontSize: 9, fill: '#9CA3AF' }} tickFormatter={(v: number) => `$${v.toFixed(2)}`} width={45} />
+                          <Tooltip content={<GrowthChartTooltip isCurrency />} />
+                          <ReferenceLine y={0} stroke="#6B7280" strokeDasharray="3 3" />
+                          <Bar dataKey="value" radius={[2, 2, 0, 0]}>
+                            {suggestions.growth_profile.eps_trend.filter(d => d.value != null).map((entry, i) => (
+                              <Cell key={i} fill={entry.value != null && entry.value >= 0 ? '#14b8a6' : '#ef4444'} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+
+                  {/* FCF Trend */}
+                  {suggestions.growth_profile.fcf_trend.some(d => d.value != null) && (
+                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+                      <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">Free Cash Flow</h4>
+                      <ResponsiveContainer width="100%" height={160}>
+                        <BarChart data={suggestions.growth_profile.fcf_trend.filter(d => d.value != null)} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                          <XAxis dataKey="period" tick={{ fontSize: 9, fill: '#9CA3AF' }} interval="preserveStartEnd" />
+                          <YAxis tick={{ fontSize: 9, fill: '#9CA3AF' }} tickFormatter={(v: number) => { if (Math.abs(v) >= 1e9) return `${(v/1e9).toFixed(0)}B`; if (Math.abs(v) >= 1e6) return `${(v/1e6).toFixed(0)}M`; return `${v}`; }} width={45} />
+                          <Tooltip content={<GrowthChartTooltip isCurrency />} />
+                          <ReferenceLine y={0} stroke="#6B7280" strokeDasharray="3 3" />
+                          <Bar dataKey="value" radius={[2, 2, 0, 0]}>
+                            {suggestions.growth_profile.fcf_trend.filter(d => d.value != null).map((entry, i) => (
+                              <Cell key={i} fill={entry.value != null && entry.value >= 0 ? '#14b8a6' : '#ef4444'} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </div>
+
+                {/* Revenue Growth Trend (YoY per quarter) — only if we have enough data */}
+                {suggestions.growth_profile.revenue_growth_trend.filter(d => d.value != null).length >= 2 && (
+                  <div className="mt-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3">
+                    <h4 className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">YoY Revenue Growth % (per quarter)</h4>
+                    <ResponsiveContainer width="100%" height={140}>
+                      <BarChart data={suggestions.growth_profile.revenue_growth_trend.filter(d => d.value != null)} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.3} />
+                        <XAxis dataKey="period" tick={{ fontSize: 9, fill: '#9CA3AF' }} interval="preserveStartEnd" />
+                        <YAxis tick={{ fontSize: 9, fill: '#9CA3AF' }} tickFormatter={(v: number) => `${v.toFixed(0)}%`} width={40} />
+                        <Tooltip content={<GrowthChartTooltip isPercent />} />
+                        <ReferenceLine y={0} stroke="#6B7280" strokeDasharray="3 3" />
+                        <Bar dataKey="value" radius={[2, 2, 0, 0]}>
+                          {suggestions.growth_profile.revenue_growth_trend.filter(d => d.value != null).map((entry, i) => (
+                            <Cell key={i} fill={entry.value != null && entry.value >= 0 ? '#14b8a6' : '#ef4444'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
             )}
 

@@ -16,6 +16,7 @@ const RegisterWithPayment: React.FC = () => {
   
   const [formData, setFormData] = useState({
     email: '',
+    confirmEmail: '',
     password: '',
     confirmPassword: '',
     full_name: '',
@@ -33,6 +34,11 @@ const RegisterWithPayment: React.FC = () => {
   const handleAccountSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (formData.email !== formData.confirmEmail) {
+      setError('Email addresses do not match');
+      return;
+    }
 
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
@@ -100,7 +106,6 @@ const RegisterWithPayment: React.FC = () => {
         '15 stock reviews/week',
         '15 DCF valuations/week',
         'Technical Analysis',
-        'SMS price alerts',
         'Priority support',
       ],
       highlight: true,
@@ -118,7 +123,6 @@ const RegisterWithPayment: React.FC = () => {
         '10 stock reviews/day',
         '10 DCF valuations/day',
         'Advanced Technical Analysis',
-        'SMS price alerts',
         'Priority support',
       ],
       highlight: false,
@@ -136,7 +140,6 @@ const RegisterWithPayment: React.FC = () => {
         '20 stock reviews/day',
         '20 DCF valuations/day',
         'Full Technical Analysis suite',
-        'SMS & indicator alerts',
         'Priority support',
       ],
       highlight: false,
@@ -149,8 +152,8 @@ const RegisterWithPayment: React.FC = () => {
         {/* Logo */}
         <div className="text-center mb-6">
           <Link to="/" className="inline-block">
-            <img src="/images/logo.png" alt="Northwest Creek" className="h-16 w-16 mx-auto" />
-            <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1rem', fontStyle: 'italic' }}>Northwest Creek</span>
+            <img src="/images/logo.png" alt="NWC-Analytics" className="h-16 w-16 mx-auto" />
+            <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1rem', fontStyle: 'italic' }}>NWC-Analytics</span>
           </Link>
         </div>
 
@@ -329,6 +332,20 @@ const RegisterWithPayment: React.FC = () => {
                     required
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Confirm email address
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={formData.confirmEmail}
+                    onChange={(e) => setFormData({ ...formData, confirmEmail: e.target.value })}
+                    onPaste={(e) => e.preventDefault()}
                     className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   />
                 </div>

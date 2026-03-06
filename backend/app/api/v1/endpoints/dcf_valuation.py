@@ -256,12 +256,14 @@ async def get_dcf_suggestions(
         # ── Fetch actual financials from Polygon (non-blocking) ───────
         actuals = None
         dcf_sug = None
+        growth_profile = None
         try:
             fin_data = await get_company_financials(ticker)
             dcf_sug = fin_data.get("dcf_suggestions") or {}
             income = fin_data.get("income_statement") or {}
             cash_flow_data = fin_data.get("cash_flow") or {}
             ratios_data = fin_data.get("ratios") or {}
+            growth_profile = fin_data.get("growth_profile")  # 12Q trend data
 
             def _fmt_big(val):
                 """Format large numbers for display (e.g. 29800000 -> '29.8M')"""
@@ -351,6 +353,7 @@ async def get_dcf_suggestions(
                 "projection_years": profile["years_reasoning"]
             },
             "actuals": actuals,
+            "growth_profile": growth_profile,
         }
     
     except HTTPException:

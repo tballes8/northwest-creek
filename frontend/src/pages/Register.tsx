@@ -6,6 +6,7 @@ const Register: React.FC = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     email: '',
+    confirmEmail: '',
     password: '',
     confirmPassword: '',
     full_name: '',
@@ -17,6 +18,12 @@ const Register: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    // Validate emails match
+    if (formData.email !== formData.confirmEmail) {
+      setError('Email addresses do not match');
+      return;
+    }
 
     // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
@@ -63,7 +70,7 @@ const Register: React.FC = () => {
                 We've sent a verification link to <strong>{formData.email}</strong>
               </p>
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                Click the link in the email to verify your account and start using Northwest Creek.
+                Click the link in the email to verify your account and start using NWC-Analytics.
               </p>
               <div className="mt-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3">
                 <p className="text-sm text-yellow-800 dark:text-yellow-200">
@@ -91,7 +98,7 @@ const Register: React.FC = () => {
         <Link to="/" className="flex justify-center">
           <img 
             src="/images/logo.png" 
-            alt="Northwest Creek" 
+            alt="NWC-Analytics" 
             className="h-50 w-50"
           />
         </Link>
@@ -145,6 +152,25 @@ const Register: React.FC = () => {
                   required
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="confirmEmail" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Confirm email address
+              </label>
+              <div className="mt-1">
+                <input
+                  id="confirmEmail"
+                  name="confirmEmail"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={formData.confirmEmail}
+                  onChange={(e) => setFormData({ ...formData, confirmEmail: e.target.value })}
+                  onPaste={(e) => e.preventDefault()}
                   className="appearance-none block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 dark:placeholder-gray-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                 />
               </div>
