@@ -1,596 +1,444 @@
 """
-DCF Valuation API Endpoints - Discounted Cash Flow Analysis
-⭐ PAID TIERS ONLY 
-Uses yfinance for sector data (simple, free, accurate)
+Company Financials Service — Massive (Polygon) v1 Financials API
+Fetches income statements, balance sheets, cash flow statements, and ratios
+in parallel via httpx.  Returns a unified payload for frontend consumption
+and derived DCF-ready suggestions.
+
+Endpoints used (Stocks Advanced plan required):
+  /stocks/financials/v1/income-statements
+  /stocks/financials/v1/balance-sheets
+  /stocks/financials/v1/cash-flow-statements
+  /stocks/financials/v1/ratios
 """
-import re
-from fastapi import APIRouter, Depends, Query, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
-from app.db.models import User
-from app.api.dependencies import get_current_user
-from app.db.session import get_db
-from app.services.market_data import market_data_service
-from app.services.company_info import get_sector_from_yfinance, get_company_basics
-from app.services.financials import get_company_financials
+import asyncio
+import httpx
+from typing import Dict, Any, Optional, List
+from app.config import get_settings
+
+settings = get_settings()
+
+BASE_URL = "https://api.massive.com"
+API_KEY = settings.MASSIVE_API_KEY
+TIMEOUT = 15.0
 
 
-def _safe_error(e: Exception) -> str:
-    """Strip API keys and sensitive params from error messages."""
-    msg = str(e)
-    msg = re.sub(r'apiKey=[^&\s\'"]+', 'apiKey=***', msg)
-    msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
-    msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg)
-    return msg
-
-router = APIRouter()
-
-
-def require_paid_tier(current_user: User = Depends(get_current_user)):
-    """Require paid tier (Casual, Active, or Professsional) for Technical Analysis access"""
-    allowed_tiers = ["beginner", "casual", "active", "professional"]
-    if current_user.subscription_tier not in allowed_tiers:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"DCF Valuation requires a paid subscription! Current tier: {current_user.subscription_tier.title()}. Upgrade to access this feature!"
-        )
-    return current_user
-
-
-@router.get("/suggestions/{ticker}")
-async def get_dcf_suggestions(
-    ticker: str,
-    current_user: User = Depends(require_paid_tier),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    🔒 PAID TIERS ONLY - Get AI-suggested DCF parameters for a stock
-    
-    Returns intelligent default parameters based on:
-    - Company sector and industry (from yfinance - free and accurate!)
-    - Market capitalization
-    - Growth characteristics
-    
-    **Returns:**
-    - Suggested growth rate, terminal growth, discount rate, and projection years
-    - Reasoning for each parameter
-    - Company information
-    """
+def _fmt(value: Optional[float], decimals: int = 2) -> Optional[float]:
+    """Round a value if present, else return None."""
+    if value is None:
+        return None
     try:
-        # Get sector from yfinance (free, fast, accurate!)
-        sector = get_sector_from_yfinance(ticker)
-        
-        # Get company info and quote
-        try:
-            # Get real-time price and market cap from Massive API
-            quote = await market_data_service.get_quote(ticker)
-            company = await market_data_service.get_company_info(ticker)
-            
-            company_name = company.get("name", ticker)
-            market_cap = company.get("market_cap", 0)
-            current_price = float(quote.get('price', 0))
-            industry = company.get("industry", "Unknown")
-            security_type = company.get("type", "")  # CS, WARRANT, ETF, etc.
-        except Exception as api_error:
-            # Fallback to yfinance for everything if Massive API fails
-            print(f"Massive API failed, using yfinance fallback: {_safe_error(api_error)}")
-            company_data = get_company_basics(ticker)
-            
-            company_name = company_data["name"]
-            market_cap = company_data["market_cap"]
-            current_price = company_data["current_price"]
-            industry = company_data["industry"]
-            sector = company_data["sector"]  # Use yfinance sector
-            security_type = ""  # yfinance fallback doesn't have Polygon type info
-            
-            if current_price == 0:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Could not fetch price data for {ticker}"
-                )
-        
-        # Determine company size category
-        if market_cap >= 200_000_000_000:  # $200B+
-            size_category = "mega_cap"
-        elif market_cap >= 10_000_000_000:  # $10B+
-            size_category = "large_cap"
-        elif market_cap >= 2_000_000_000:   # $2B+
-            size_category = "mid_cap"
-        elif market_cap >= 300_000_000:     # $300M+
-            size_category = "small_cap"
-        else:
-            size_category = "micro_cap"
-        
-        # Sector-based growth and risk profiles
-        # Note: yfinance returns standardized sector names, no mapping needed!
-        sector_profiles = {
-            "Technology": {
-                "growth": 0.15,
-                "terminal": 0.03,
-                "discount": 0.12,
-                "years": 7,
-                "growth_reasoning": "Tech companies typically show high growth potential",
-                "terminal_reasoning": "Mature tech companies stabilize around GDP growth",
-                "discount_reasoning": "Higher risk due to rapid innovation and competition",
-                "years_reasoning": "Longer projection captures growth runway"
-            },
-            "Healthcare": {
-                "growth": 0.08,
-                "terminal": 0.025,
-                "discount": 0.09,
-                "years": 5,
-                "growth_reasoning": "Healthcare shows steady, predictable growth",
-                "terminal_reasoning": "Aging demographics support steady long-term growth",
-                "discount_reasoning": "Moderate risk with regulatory considerations",
-                "years_reasoning": "Standard period for stable industries"
-            },
-            "Financial Services": {
-                "growth": 0.06,
-                "terminal": 0.02,
-                "discount": 0.11,
-                "years": 5,
-                "growth_reasoning": "Financial services grow with economic expansion",
-                "terminal_reasoning": "Long-term growth tied to GDP",
-                "discount_reasoning": "Higher risk due to economic sensitivity",
-                "years_reasoning": "Standard period for cyclical industries"
-            },
-            "Consumer Cyclical": {
-                "growth": 0.07,
-                "terminal": 0.025,
-                "discount": 0.10,
-                "years": 5,
-                "growth_reasoning": "Growth linked to consumer spending trends",
-                "terminal_reasoning": "Mature markets stabilize near GDP growth",
-                "discount_reasoning": "Moderate risk with economic cycles",
-                "years_reasoning": "Captures full economic cycle"
-            },
-            "Consumer Defensive": {
-                "growth": 0.05,
-                "terminal": 0.02,
-                "discount": 0.08,
-                "years": 5,
-                "growth_reasoning": "Defensive sectors show stable, lower growth",
-                "terminal_reasoning": "Stable demand supports steady terminal growth",
-                "discount_reasoning": "Lower risk due to consistent demand",
-                "years_reasoning": "Standard period for stable sectors"
-            },
-            "Energy": {
-                "growth": 0.04,
-                "terminal": 0.015,
-                "discount": 0.12,
-                "years": 5,
-                "growth_reasoning": "Energy sector faces transition challenges",
-                "terminal_reasoning": "Long-term growth uncertainty due to energy transition",
-                "discount_reasoning": "Higher risk from commodity prices and regulation",
-                "years_reasoning": "Captures near-term trends"
-            },
-            "Industrials": {
-                "growth": 0.06,
-                "terminal": 0.025,
-                "discount": 0.09,
-                "years": 5,
-                "growth_reasoning": "Industrial growth follows economic expansion",
-                "terminal_reasoning": "Mature industrials stabilize with GDP",
-                "discount_reasoning": "Moderate risk with economic sensitivity",
-                "years_reasoning": "Standard period for cyclical industries"
-            },
-            "Real Estate": {
-                "growth": 0.04,
-                "terminal": 0.02,
-                "discount": 0.09,
-                "years": 5,
-                "growth_reasoning": "Real estate shows stable, dividend-focused returns",
-                "terminal_reasoning": "Long-term growth tied to population and GDP",
-                "discount_reasoning": "Moderate risk with interest rate sensitivity",
-                "years_reasoning": "Standard period for income-focused assets"
-            },
-            "Utilities": {
-                "growth": 0.03,
-                "terminal": 0.02,
-                "discount": 0.07,
-                "years": 5,
-                "growth_reasoning": "Utilities show very stable, regulated growth",
-                "terminal_reasoning": "Long-term growth matches population and usage",
-                "discount_reasoning": "Low risk due to regulated monopolies",
-                "years_reasoning": "Standard period for stable sectors"
-            },
-            "Communication Services": {
-                "growth": 0.08,
-                "terminal": 0.025,
-                "discount": 0.10,
-                "years": 6,
-                "growth_reasoning": "Communications show steady digital transformation growth",
-                "terminal_reasoning": "Mature markets stabilize near GDP growth",
-                "discount_reasoning": "Moderate risk with technology evolution",
-                "years_reasoning": "Longer period captures digital shift"
-            },
-            "Materials": {
-                "growth": 0.05,
-                "terminal": 0.02,
-                "discount": 0.10,
-                "years": 5,
-                "growth_reasoning": "Materials growth linked to industrial demand",
-                "terminal_reasoning": "Commodity nature limits long-term growth",
-                "discount_reasoning": "Moderate risk from commodity cycles",
-                "years_reasoning": "Captures commodity cycle"
-            }
-        }
+        return round(float(value), decimals)
+    except (TypeError, ValueError):
+        return None
 
-        # Get profile for sector, or use default for unknown sectors
-        profile = sector_profiles.get(sector, {
-            "growth": 0.06,
-            "terminal": 0.025,
-            "discount": 0.10,
-            "years": 5,
-            "growth_reasoning": "Conservative growth estimate for unclassified sector",
-            "terminal_reasoning": "Standard terminal growth near GDP growth",
-            "discount_reasoning": "Moderate risk assessment",
-            "years_reasoning": "Standard projection period"
+
+def _pct(numerator: Optional[float], denominator: Optional[float]) -> Optional[float]:
+    """Safe percentage: (num / denom) * 100, or None."""
+    if numerator is None or denominator is None or denominator == 0:
+        return None
+    try:
+        return round((float(numerator) / float(denominator)) * 100, 2)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
+async def _fetch(client: httpx.AsyncClient, path: str, params: dict) -> dict:
+    """Fetch a single Massive endpoint, return parsed JSON or empty dict on failure."""
+    url = f"{BASE_URL}{path}"
+    full_params = {"apiKey": API_KEY, **params}
+    try:
+        response = await client.get(url, params=full_params, timeout=TIMEOUT)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        print(f"⚠️ Financials fetch failed for {path}: {e}")
+        return {}
+
+
+async def get_company_financials(ticker: str) -> Dict[str, Any]:
+    """
+    Fetch all four financials endpoints in parallel and return unified payload.
+
+    Returns dict with keys:
+      ticker, company_name, income_statement, balance_sheet, cash_flow,
+      ratios, quarterly_trend, dcf_suggestions
+    """
+    ticker = ticker.upper()
+
+    async with httpx.AsyncClient() as client:
+        # Fire all requests in parallel
+        income_quarterly_task = _fetch(client, "/stocks/financials/v1/income-statements", {
+            "tickers": ticker, "timeframe": "quarterly", "limit": 12, "order": "desc",
         })
-        
-        # Adjust for company size
-        size_adjustments = {
-            "mega_cap": {"growth": -0.01, "discount": -0.01, "growth_note": "adjusted down for large cap stability"},
-            "large_cap": {"growth": 0, "discount": 0, "growth_note": ""},
-            "mid_cap": {"growth": 0.01, "discount": 0.01, "growth_note": "adjusted up for mid-cap growth potential"},
-            "small_cap": {"growth": 0.02, "discount": 0.02, "growth_note": "adjusted for small-cap growth and risk"},
-            "micro_cap": {"growth": 0.03, "discount": 0.03, "growth_note": "adjusted for micro-cap high growth and risk"}
-        }
-        
-        adjustment = size_adjustments.get(size_category, size_adjustments["large_cap"])
-        
-        suggested_growth = max(0.01, min(0.30, profile["growth"] + adjustment["growth"]))
-        suggested_discount = max(0.06, min(0.20, profile["discount"] + adjustment["discount"]))
-        suggested_terminal = profile["terminal"]
-        suggested_years = profile["years"]
-        
-        # Build reasoning with size adjustments
-        growth_reasoning = profile["growth_reasoning"]
-        if adjustment["growth_note"]:
-            growth_reasoning += f" ({adjustment['growth_note']})"
-        
-        discount_reasoning = profile["discount_reasoning"]
-        if adjustment["growth_note"]:
-            discount_reasoning += f" ({adjustment['growth_note']})"
-        
-        # ── Fetch actual financials from Polygon (non-blocking) ───────
-        actuals = None
-        dcf_sug = None
-        growth_profile = None
-        try:
-            fin_data = await get_company_financials(ticker)
-            dcf_sug = fin_data.get("dcf_suggestions") or {}
-            income = fin_data.get("income_statement") or {}
-            cash_flow_data = fin_data.get("cash_flow") or {}
-            ratios_data = fin_data.get("ratios") or {}
-            growth_profile = fin_data.get("growth_profile")  # 12Q trend data
-
-            def _fmt_big(val):
-                """Format large numbers for display (e.g. 29800000 -> '29.8M')"""
-                if val is None:
-                    return None
-                aval = abs(val)
-                if aval >= 1e12:
-                    return f"${val / 1e12:.2f}T"
-                if aval >= 1e9:
-                    return f"${val / 1e9:.2f}B"
-                if aval >= 1e6:
-                    return f"${val / 1e6:.1f}M"
-                if aval >= 1e3:
-                    return f"${val / 1e3:.1f}K"
-                return f"${val:.2f}"
-
-            actuals = {
-                "revenue_ttm": income.get("revenue"),
-                "revenue_ttm_fmt": _fmt_big(income.get("revenue")),
-                "net_income_ttm": income.get("net_income"),
-                "net_income_ttm_fmt": _fmt_big(income.get("net_income")),
-                "fcf_ttm": cash_flow_data.get("free_cash_flow"),
-                "fcf_ttm_fmt": _fmt_big(cash_flow_data.get("free_cash_flow")),
-                "operating_cf_ttm": cash_flow_data.get("operating_cash_flow"),
-                "operating_cf_ttm_fmt": _fmt_big(cash_flow_data.get("operating_cash_flow")),
-                "gross_margin_pct": income.get("gross_margin_pct"),
-                "operating_margin_pct": income.get("operating_margin_pct"),
-                "net_margin_pct": income.get("net_margin_pct"),
-                "revenue_growth_yoy_pct": dcf_sug.get("revenue_growth_yoy_pct"),
-                "pe_ratio": ratios_data.get("pe_ratio"),
-                "ev_to_ebitda": ratios_data.get("ev_to_ebitda"),
-                "debt_to_equity": ratios_data.get("debt_to_equity"),
-                "current_ratio": ratios_data.get("current_ratio"),
-                "roe": ratios_data.get("roe"),
-                "diluted_eps": income.get("diluted_eps"),
-            }
-
-            # Check if we got meaningful actuals
-            has_actuals = actuals["revenue_ttm"] is not None or actuals["fcf_ttm"] is not None
-            if not has_actuals:
-                actuals = None
-
-            # Override sector defaults with actual-derived values when available
-            growth_from_actuals = False
-            discount_from_actuals = False
-            if dcf_sug:
-                if dcf_sug.get("suggested_growth_rate") is not None:
-                    suggested_growth = max(0.01, min(0.30, dcf_sug["suggested_growth_rate"] / 100))
-                    growth_reasoning = f"Based on trailing revenue growth of {dcf_sug['revenue_growth_yoy_pct']:.1f}%, conservatively adjusted" if dcf_sug.get("revenue_growth_yoy_pct") is not None else growth_reasoning
-                    growth_from_actuals = True
-                if dcf_sug.get("estimated_wacc") is not None:
-                    suggested_discount = max(0.06, min(0.20, dcf_sug["estimated_wacc"] / 100))
-                    discount_reasoning = f"Estimated WACC based on D/E ratio of {dcf_sug['debt_to_equity']:.2f}" if dcf_sug.get("debt_to_equity") is not None else discount_reasoning
-                    discount_from_actuals = True
-
-        except Exception as fin_err:
-            print(f"⚠️ Could not fetch financials for DCF suggestions ({ticker}): {_safe_error(fin_err)}")
-            growth_from_actuals = False
-            discount_from_actuals = False
-            # Non-fatal — continue with sector defaults
-        
-        return {
-            "ticker": ticker.upper(),
-            "company_name": company_name,
-            "sector": sector,
-            "industry": industry,
-            "current_price": round(current_price, 2),
-            "market_cap": market_cap,
-            "size_category": size_category,
-            "security_type": security_type,
-            "suggestions": {
-                "growth_rate": round(suggested_growth, 4),
-                "terminal_growth": round(suggested_terminal, 4),
-                "discount_rate": round(suggested_discount, 4),
-                "projection_years": suggested_years
-            },
-            "sources": {
-                "growth_rate": "sec_filings" if growth_from_actuals else "sector_default",
-                "discount_rate": "sec_filings" if discount_from_actuals else "sector_default",
-                "terminal_growth": "sector_default",
-                "projection_years": "sector_default",
-            },
-            "reasoning": {
-                "growth_rate": growth_reasoning,
-                "terminal_growth": profile["terminal_reasoning"],
-                "discount_rate": discount_reasoning,
-                "projection_years": profile["years_reasoning"]
-            },
-            "actuals": actuals,
-            "growth_profile": growth_profile,
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"DCF suggestions error for {ticker}: {_safe_error(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Could not generate suggestions for {ticker}: {_safe_error(e)}"
-        )
-
-
-@router.get("/calculate/{ticker}")
-async def calculate_dcf(
-    ticker: str,
-    growth_rate: float = Query(0.05, ge=-0.5, le=1.0, description="Expected growth rate (decimal, e.g., 0.05 = 5%)"),
-    terminal_growth: float = Query(0.025, ge=0, le=0.10, description="Terminal growth rate (decimal)"),
-    discount_rate: float = Query(0.10, ge=0.01, le=0.30, description="Discount rate / WACC (decimal)"),
-    projection_years: int = Query(5, ge=3, le=10, description="Years to project"),
-    current_user: User = Depends(require_paid_tier),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    🔒 PAID TIERS ONLY - Calculate DCF Valuation for a stock
-    
-    **Discounted Cash Flow (DCF) Analysis:**
-    
-    Estimates intrinsic value based on projected future cash flows discounted to present value.
-    
-    **Parameters:**
-    - `ticker` - Stock symbol to analyze
-    - `growth_rate` - Expected annual growth rate (default: 5%)
-    - `terminal_growth` - Perpetual growth rate after projection period (default: 2.5%)
-    - `discount_rate` - WACC / Required rate of return (default: 10%)
-    - `projection_years` - Number of years to project (default: 5)
-    
-    **Returns:**
-    - Projected cash flows
-    - Discounted present values
-    - Terminal value
-    - Intrinsic value per share
-    - Current price vs intrinsic value comparison
-    - Buy/Hold/Sell recommendation
-    
-    ⭐ **Professional Feature:** 20 DCF valuations daily with customizable assumptions!
-    """
-    try:
-        # Get current stock price and company info
-        try:
-            quote = await market_data_service.get_quote(ticker)
-            current_price = float(quote.get('price', 0))
-        except:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Could not fetch current price for {ticker}"
-            )
-        
-        try:
-            company = await market_data_service.get_company_info(ticker)
-            company_name = company.get("name", ticker)
-            market_cap = company.get("market_cap")
-            security_type = company.get("type", "")
-        except:
-            company_name = ticker
-            market_cap = None
-            security_type = ""
-        
-        # ── Fetch actual financials from Polygon ──────────────────────
-        current_fcf = None
-        shares_outstanding = None
-        fcf_source = None
-        shares_source = None
-        cash_and_equivalents = None
-        total_debt = None
-
-        try:
-            fin_data = await get_company_financials(ticker)
-            cash_flow_data = fin_data.get("cash_flow") or {}
-            income_data = fin_data.get("income_statement") or {}
-            balance_sheet = fin_data.get("balance_sheet") or {}
-
-            # Priority 1: Actual TTM FCF (Operating CF - CapEx)
-            actual_fcf = cash_flow_data.get("free_cash_flow")
-            if actual_fcf is not None:
-                current_fcf = actual_fcf
-                fcf_source = "actual_ttm"
-            else:
-                # Priority 2: Operating cash flow alone (no CapEx data)
-                operating_cf = cash_flow_data.get("operating_cash_flow")
-                if operating_cf is not None:
-                    current_fcf = operating_cf
-                    fcf_source = "operating_cf"
-
-            # Shares outstanding from income statement (diluted)
-            diluted_shares = income_data.get("diluted_shares_outstanding")
-            if diluted_shares is not None and diluted_shares > 0:
-                shares_outstanding = diluted_shares
-                shares_source = "sec_filings"
-
-            # Balance sheet items for net debt bridge
-            cash_and_equivalents = balance_sheet.get("cash_and_equivalents") or balance_sheet.get("cash")
-            total_debt = balance_sheet.get("total_debt") or balance_sheet.get("long_term_debt")
-
-        except Exception as fin_err:
-            print(f"⚠️ Could not fetch financials for DCF calc ({ticker}): {_safe_error(fin_err)}")
-            # Non-fatal — fall through to market cap estimate
-
-        # Priority 3: Market cap estimate (fallback when no filings exist)
-        if current_fcf is None:
-            if market_cap:
-                current_fcf = market_cap * 0.05
-                fcf_source = "estimated_market_cap"
-            else:
-                current_fcf = current_price * 1000000
-                fcf_source = "estimated_price"
-
-        # Shares outstanding fallback
-        if shares_outstanding is None:
-            if market_cap and current_price > 0:
-                shares_outstanding = market_cap / current_price
-                shares_source = "estimated_market_cap"
-            else:
-                shares_outstanding = 1000000
-                shares_source = "estimated_default"
-
-        # Project future cash flows
-        projected_cash_flows = []
-        for year in range(1, projection_years + 1):
-            fcf = current_fcf * ((1 + growth_rate) ** year)
-            pv = fcf / ((1 + discount_rate) ** year)
-            projected_cash_flows.append({
-                "year": year,
-                "cash_flow": round(fcf, 2),
-                "present_value": round(pv, 2),
-                "discount_factor": round(1 / ((1 + discount_rate) ** year), 4)
-            })
-        
-        # Calculate terminal value
-        final_year_fcf = projected_cash_flows[-1]["cash_flow"]
-        terminal_value = (final_year_fcf * (1 + terminal_growth)) / (discount_rate - terminal_growth)
-        terminal_pv = terminal_value / ((1 + discount_rate) ** projection_years)
-        
-        # Calculate enterprise value
-        sum_pv_cash_flows = sum(cf["present_value"] for cf in projected_cash_flows)
-        enterprise_value = sum_pv_cash_flows + terminal_pv
-        
-        # ── Equity bridge: Enterprise Value + Cash - Debt ─────────────
-        # Industry standard: FCF-to-firm discounted at WACC yields
-        # enterprise value. Must adjust for net debt to get equity value.
-        net_debt_adjustment = 0
-        has_equity_bridge = False
-        if cash_and_equivalents is not None and total_debt is not None:
-            net_debt_adjustment = cash_and_equivalents - total_debt
-            has_equity_bridge = True
-        
-        equity_value = enterprise_value + net_debt_adjustment
-        
-        # Calculate intrinsic value per share
-        intrinsic_value = equity_value / shares_outstanding
-        
-        # Calculate margin of safety
-        margin_of_safety = ((intrinsic_value - current_price) / current_price) * 100
-        
-        # Determine recommendation
-        if margin_of_safety > 20:
-            recommendation = "Strong Buy"
-            recommendation_color = "green"
-            recommendation_message = f"Stock appears undervalued by {abs(margin_of_safety):.1f}%. Consider buying."
-        elif margin_of_safety > 10:
-            recommendation = "Buy"
-            recommendation_color = "green"
-            recommendation_message = f"Stock appears undervalued by {abs(margin_of_safety):.1f}%."
-        elif margin_of_safety > -10:
-            recommendation = "Hold"
-            recommendation_color = "yellow"
-            recommendation_message = "Stock is fairly valued. Hold current position."
-        elif margin_of_safety > -20:
-            recommendation = "Sell"
-            recommendation_color = "red"
-            recommendation_message = f"Stock appears overvalued by {abs(margin_of_safety):.1f}%."
-        else:
-            recommendation = "Strong Sell"
-            recommendation_color = "red"
-            recommendation_message = f"Stock appears significantly overvalued by {abs(margin_of_safety):.1f}%."
-        
-        return {
+        income_ttm_task = _fetch(client, "/stocks/financials/v1/income-statements", {
+            "tickers": ticker, "timeframe": "trailing_twelve_months", "limit": 1,
+        })
+        balance_task = _fetch(client, "/stocks/financials/v1/balance-sheets", {
+            "tickers": ticker, "timeframe": "quarterly", "limit": 1, "order": "desc",
+        })
+        cashflow_ttm_task = _fetch(client, "/stocks/financials/v1/cash-flow-statements", {
+            "tickers": ticker, "timeframe": "trailing_twelve_months", "limit": 1,
+        })
+        cashflow_quarterly_task = _fetch(client, "/stocks/financials/v1/cash-flow-statements", {
+            "tickers": ticker, "timeframe": "quarterly", "limit": 8, "order": "desc",
+        })
+        ratios_task = _fetch(client, "/stocks/financials/v1/ratios", {
             "ticker": ticker,
-            "company_name": company_name,
-            "security_type": security_type,  # CS, WARRANT, ETF, etc.
-            "current_price": round(current_price, 2),
-            "assumptions": {
-                "growth_rate": growth_rate,
-                "terminal_growth": terminal_growth,
-                "discount_rate": discount_rate,
-                "projection_years": projection_years,
-                "current_fcf": round(current_fcf, 2),
-                "shares_outstanding": round(shares_outstanding, 0),
-                "fcf_source": fcf_source,
-                "shares_source": shares_source
-            },
-            "projections": projected_cash_flows,
-            "terminal_value": {
-                "value": round(terminal_value, 2),
-                "present_value": round(terminal_pv, 2),
-                "growth_rate": terminal_growth
-            },
-            "valuation": {
-                "sum_pv_cash_flows": round(sum_pv_cash_flows, 2),
-                "terminal_pv": round(terminal_pv, 2),
-                "enterprise_value": round(enterprise_value, 2),
-                "equity_bridge": {
-                    "cash": round(cash_and_equivalents, 2) if cash_and_equivalents is not None else None,
-                    "debt": round(total_debt, 2) if total_debt is not None else None,
-                    "net_debt_adjustment": round(net_debt_adjustment, 2),
-                    "has_equity_bridge": has_equity_bridge,
-                },
-                "equity_value": round(equity_value, 2),
-                "intrinsic_value_per_share": round(intrinsic_value, 2),
-                "current_price": round(current_price, 2),
-                "margin_of_safety": round(margin_of_safety, 2)
-            },
-            "recommendation": {
-                "rating": recommendation,
-                "color": recommendation_color,
-                "message": recommendation_message
-            }
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"DCF calculation error for {ticker}: {_safe_error(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Could not calculate DCF for {ticker}: {_safe_error(e)}"
+        })
+
+        (
+            income_quarterly_raw,
+            income_ttm_raw,
+            balance_raw,
+            cashflow_ttm_raw,
+            cashflow_quarterly_raw,
+            ratios_raw,
+        ) = await asyncio.gather(
+            income_quarterly_task,
+            income_ttm_task,
+            balance_task,
+            cashflow_ttm_task,
+            cashflow_quarterly_task,
+            ratios_task,
         )
+
+    # ── Extract results arrays ────────────────────────────────────────
+    income_quarters: List[dict] = income_quarterly_raw.get("results", [])
+    income_ttm_list: List[dict] = income_ttm_raw.get("results", [])
+    balance_list: List[dict] = balance_raw.get("results", [])
+    cashflow_ttm_list: List[dict] = cashflow_ttm_raw.get("results", [])
+    cashflow_quarters: List[dict] = cashflow_quarterly_raw.get("results", [])
+    ratios_list: List[dict] = ratios_raw.get("results", [])
+
+    income_ttm = income_ttm_list[0] if income_ttm_list else {}
+    balance = balance_list[0] if balance_list else {}
+    cashflow_ttm = cashflow_ttm_list[0] if cashflow_ttm_list else {}
+    ratios = ratios_list[0] if ratios_list else {}
+
+    # Most recent quarter
+    latest_q = income_quarters[0] if income_quarters else {}
+
+    # ── Income Statement summary (TTM) ────────────────────────────────
+    revenue_ttm = income_ttm.get("revenue")
+    gross_profit_ttm = income_ttm.get("gross_profit")
+    operating_income_ttm = income_ttm.get("operating_income")
+    net_income_ttm = income_ttm.get("net_income_loss_attributable_common_shareholders") or income_ttm.get("consolidated_net_income_loss")
+    ebitda_ttm = income_ttm.get("ebitda")
+    eps_diluted_ttm = income_ttm.get("diluted_earnings_per_share")
+    rd_ttm = income_ttm.get("research_development")
+    sga_ttm = income_ttm.get("selling_general_administrative")
+
+    income_statement = {
+        "period": "TTM",
+        "period_end": income_ttm.get("period_end"),
+        "revenue": revenue_ttm,
+        "cost_of_revenue": income_ttm.get("cost_of_revenue"),
+        "gross_profit": gross_profit_ttm,
+        "gross_margin_pct": _pct(gross_profit_ttm, revenue_ttm),
+        "operating_income": operating_income_ttm,
+        "operating_margin_pct": _pct(operating_income_ttm, revenue_ttm),
+        "net_income": net_income_ttm,
+        "net_margin_pct": _pct(net_income_ttm, revenue_ttm),
+        "ebitda": ebitda_ttm,
+        "diluted_eps": _fmt(eps_diluted_ttm),
+        "diluted_shares_outstanding": income_ttm.get("diluted_average_shares"),
+        "research_development": rd_ttm,
+        "selling_general_administrative": sga_ttm,
+    }
+
+    # ── Balance Sheet summary (latest quarter) ────────────────────────
+    balance_sheet = {
+        "period_end": balance.get("period_end"),
+        "fiscal_year": balance.get("fiscal_year"),
+        "fiscal_quarter": balance.get("fiscal_quarter"),
+        "cash_and_equivalents": balance.get("cash_and_equivalents"),
+        "short_term_investments": balance.get("short_term_investments"),
+        "total_current_assets": balance.get("total_current_assets"),
+        "total_assets": balance.get("total_assets"),
+        "total_current_liabilities": balance.get("total_current_liabilities"),
+        "long_term_debt": balance.get("long_term_debt_and_capital_lease_obligations"),
+        "total_liabilities": balance.get("total_liabilities"),
+        "total_equity": balance.get("total_equity"),
+        "retained_earnings": balance.get("retained_earnings_deficit"),
+    }
+
+    # ── Cash Flow summary (TTM) ───────────────────────────────────────
+    operating_cf = cashflow_ttm.get("net_cash_from_operating_activities")
+    capex = cashflow_ttm.get("purchase_of_property_plant_and_equipment")
+    fcf = None
+    if operating_cf is not None and capex is not None:
+        fcf = operating_cf + capex  # capex is negative
+
+    cash_flow = {
+        "period": "TTM",
+        "period_end": cashflow_ttm.get("period_end"),
+        "operating_cash_flow": operating_cf,
+        "capex": capex,
+        "free_cash_flow": fcf,
+        "dividends": cashflow_ttm.get("dividends"),
+        "net_cash_from_investing": cashflow_ttm.get("net_cash_from_investing_activities"),
+        "net_cash_from_financing": cashflow_ttm.get("net_cash_from_financing_activities"),
+        "depreciation_amortization": cashflow_ttm.get("depreciation_depletion_and_amortization"),
+    }
+
+    # ── Ratios (daily-refreshed) ──────────────────────────────────────
+    ratios_summary = {
+        "date": ratios.get("date"),
+        "price": ratios.get("price"),
+        "market_cap": ratios.get("market_cap"),
+        "enterprise_value": ratios.get("enterprise_value"),
+        "pe_ratio": _fmt(ratios.get("price_to_earnings")),
+        "ps_ratio": _fmt(ratios.get("price_to_sales")),
+        "pb_ratio": _fmt(ratios.get("price_to_book")),
+        "price_to_fcf": _fmt(ratios.get("price_to_free_cash_flow")),
+        "ev_to_ebitda": _fmt(ratios.get("ev_to_ebitda")),
+        "ev_to_sales": _fmt(ratios.get("ev_to_sales")),
+        "roe": _fmt(ratios.get("return_on_equity")),
+        "roa": _fmt(ratios.get("return_on_assets")),
+        "debt_to_equity": _fmt(ratios.get("debt_to_equity")),
+        "current_ratio": _fmt(ratios.get("current")),
+        "quick_ratio": _fmt(ratios.get("quick")),
+        "dividend_yield": _fmt(ratios.get("dividend_yield"), 4),
+        "eps": _fmt(ratios.get("earnings_per_share")),
+        "fcf": ratios.get("free_cash_flow"),
+    }
+
+    # ── Quarterly revenue trend (for YoY growth) ──────────────────────
+    quarterly_trend = []
+    for q in income_quarters:
+        quarterly_trend.append({
+            "period_end": q.get("period_end"),
+            "fiscal_year": q.get("fiscal_year"),
+            "fiscal_quarter": q.get("fiscal_quarter"),
+            "revenue": q.get("revenue"),
+            "net_income": q.get("net_income_loss_attributable_common_shareholders") or q.get("consolidated_net_income_loss"),
+            "gross_margin_pct": _pct(q.get("gross_profit"), q.get("revenue")),
+            "operating_margin_pct": _pct(q.get("operating_income"), q.get("revenue")),
+            "eps_diluted": _fmt(q.get("diluted_earnings_per_share")),
+            "diluted_shares_outstanding": q.get("diluted_average_shares"),
+        })
+
+    # ── DCF Suggestions (derived from actuals) ────────────────────────
+    dcf_suggestions = _derive_dcf_suggestions(
+        income_quarters, income_ttm, balance, cashflow_ttm, ratios
+    )
+
+    # ── Growth Profile (3-year trend data for charts) ─────────────────
+    growth_profile = _build_growth_profile(
+        income_quarters, cashflow_quarters, revenue_ttm, fcf
+    )
+
+    # ── Company name from tickers field or fallback ───────────────────
+    company_name = None
+    for src in [income_ttm, balance, cashflow_ttm]:
+        if src.get("company_name"):
+            company_name = src["company_name"]
+            break
+
+    return {
+        "ticker": ticker,
+        "company_name": company_name,
+        "income_statement": income_statement,
+        "balance_sheet": balance_sheet,
+        "cash_flow": cash_flow,
+        "ratios": ratios_summary,
+        "quarterly_trend": quarterly_trend,
+        "dcf_suggestions": dcf_suggestions,
+        "growth_profile": growth_profile,
+    }
+
+
+def _derive_dcf_suggestions(
+    income_quarters: List[dict],
+    income_ttm: dict,
+    balance: dict,
+    cashflow_ttm: dict,
+    ratios: dict,
+) -> Dict[str, Any]:
+    """
+    Derive DCF model input suggestions from actual financials.
+    These replace generic sector defaults with company-specific values.
+    """
+    revenue_ttm = income_ttm.get("revenue")
+    operating_income_ttm = income_ttm.get("operating_income")
+    net_income_ttm = income_ttm.get("net_income_loss_attributable_common_shareholders") or income_ttm.get("consolidated_net_income_loss")
+    ebitda_ttm = income_ttm.get("ebitda")
+
+    operating_cf = cashflow_ttm.get("net_cash_from_operating_activities")
+    capex = cashflow_ttm.get("purchase_of_property_plant_and_equipment")
+    fcf_ttm = None
+    if operating_cf is not None and capex is not None:
+        fcf_ttm = operating_cf + capex
+
+    # ── YoY revenue growth from quarterly data ────────────────────────
+    # Compare most recent quarter to same quarter one year ago
+    revenue_growth_yoy = None
+    if len(income_quarters) >= 4:
+        recent_rev = income_quarters[0].get("revenue")
+        yoy_rev = income_quarters[3].get("revenue")  # 4 quarters back = same Q last year
+        if recent_rev and yoy_rev and yoy_rev > 0:
+            revenue_growth_yoy = round(((recent_rev - yoy_rev) / yoy_rev) * 100, 2)
+
+    # ── Suggested growth rate: haircut trailing growth ────────────────
+    # Discount actual growth by ~20% as a conservative forward projection
+    suggested_growth = None
+    if revenue_growth_yoy is not None:
+        if revenue_growth_yoy > 0:
+            suggested_growth = round(revenue_growth_yoy * 0.8, 1)  # 20% discount
+        else:
+            suggested_growth = round(revenue_growth_yoy * 1.2, 1)  # amplify negative slightly
+        # Clamp to reasonable range
+        suggested_growth = max(-10, min(suggested_growth, 40))
+
+    # ── Operating margin ──────────────────────────────────────────────
+    operating_margin = _pct(operating_income_ttm, revenue_ttm)
+
+    # ── Estimated WACC (simplified) ───────────────────────────────────
+    # Uses D/E ratio + assumed cost of debt & equity risk premium
+    de_ratio = ratios.get("debt_to_equity")
+    estimated_wacc = None
+    if de_ratio is not None:
+        try:
+            de = float(de_ratio)
+            risk_free = 4.3  # ~10yr treasury yield as of 2025/2026
+            equity_premium = 5.5  # historical equity risk premium
+            cost_of_equity = risk_free + equity_premium
+            cost_of_debt = risk_free + 1.5  # assume ~150bp credit spread
+            tax_rate = 0.21  # US corporate rate
+
+            weight_equity = 1 / (1 + de)
+            weight_debt = de / (1 + de)
+            estimated_wacc = round(
+                (weight_equity * cost_of_equity) + (weight_debt * cost_of_debt * (1 - tax_rate)),
+                1
+            )
+            # Clamp
+            estimated_wacc = max(6.0, min(estimated_wacc, 20.0))
+        except (TypeError, ValueError, ZeroDivisionError):
+            pass
+
+    return {
+        "revenue_ttm": revenue_ttm,
+        "net_income_ttm": net_income_ttm,
+        "ebitda_ttm": ebitda_ttm,
+        "fcf_ttm": fcf_ttm,
+        "revenue_growth_yoy_pct": revenue_growth_yoy,
+        "suggested_growth_rate": suggested_growth,
+        "operating_margin_pct": operating_margin,
+        "net_margin_pct": _pct(net_income_ttm, revenue_ttm),
+        "estimated_wacc": estimated_wacc,
+        "debt_to_equity": _fmt(de_ratio),
+    }
+
+
+def _build_growth_profile(
+    income_quarters: List[dict],
+    cashflow_quarters: List[dict],
+    revenue_ttm: Optional[float],
+    fcf_ttm: Optional[float],
+) -> Dict[str, Any]:
+    """
+    Build growth profile from extended quarterly data (12Q income, 8Q cash flow).
+    Returns trend arrays ordered oldest-first for charting, plus Rule of 40.
+    """
+    # Reverse to oldest-first for charting
+    inc_oldest_first = list(reversed(income_quarters))
+    cf_oldest_first = list(reversed(cashflow_quarters))
+
+    def _q_label(q: dict) -> str:
+        return f"Q{q.get('fiscal_quarter', '?')} {q.get('fiscal_year', '?')}"
+
+    # ── Revenue trend (up to 12Q) ─────────────────────────────────────
+    revenue_trend = []
+    for q in inc_oldest_first:
+        revenue_trend.append({
+            "period": _q_label(q),
+            "period_end": q.get("period_end"),
+            "value": q.get("revenue"),
+        })
+
+    # ── Gross margin trend (up to 12Q) ────────────────────────────────
+    gross_margin_trend = []
+    for q in inc_oldest_first:
+        gross_margin_trend.append({
+            "period": _q_label(q),
+            "period_end": q.get("period_end"),
+            "value": _pct(q.get("gross_profit"), q.get("revenue")),
+        })
+
+    # ── EPS trend (up to 12Q) ─────────────────────────────────────────
+    eps_trend = []
+    for q in inc_oldest_first:
+        eps_trend.append({
+            "period": _q_label(q),
+            "period_end": q.get("period_end"),
+            "value": _fmt(q.get("diluted_earnings_per_share")),
+        })
+
+    # ── FCF trend (up to 8Q, from quarterly cash flow) ────────────────
+    fcf_trend = []
+    for q in cf_oldest_first:
+        op_cf = q.get("net_cash_from_operating_activities")
+        capex = q.get("purchase_of_property_plant_and_equipment")
+        qfcf = None
+        if op_cf is not None and capex is not None:
+            qfcf = round(op_cf + capex, 2)  # capex is negative
+        elif op_cf is not None:
+            qfcf = round(op_cf, 2)  # fallback: operating CF only
+        fcf_trend.append({
+            "period": _q_label(q),
+            "period_end": q.get("period_end"),
+            "value": qfcf,
+        })
+
+    # ── YoY revenue growth per quarter (needs 4Q lookback) ────────────
+    revenue_growth_trend = []
+    for i, q in enumerate(inc_oldest_first):
+        yoy_growth = None
+        if i >= 4:
+            current_rev = q.get("revenue")
+            prior_rev = inc_oldest_first[i - 4].get("revenue")
+            if current_rev and prior_rev and prior_rev > 0:
+                yoy_growth = round(((current_rev - prior_rev) / prior_rev) * 100, 2)
+        revenue_growth_trend.append({
+            "period": _q_label(q),
+            "period_end": q.get("period_end"),
+            "value": yoy_growth,
+        })
+
+    # ── Rule of 40: YoY revenue growth % + FCF margin % ──────────────
+    rule_of_40 = None
+    latest_yoy_growth = None
+    fcf_margin = None
+
+    if len(income_quarters) >= 4:
+        recent_rev = income_quarters[0].get("revenue")
+        prior_rev = income_quarters[3].get("revenue")
+        if recent_rev and prior_rev and prior_rev > 0:
+            latest_yoy_growth = round(((recent_rev - prior_rev) / prior_rev) * 100, 1)
+
+    if fcf_ttm is not None and revenue_ttm is not None and revenue_ttm > 0:
+        fcf_margin = round((fcf_ttm / revenue_ttm) * 100, 1)
+
+    if latest_yoy_growth is not None and fcf_margin is not None:
+        rule_of_40 = round(latest_yoy_growth + fcf_margin, 1)
+
+    # Only return profile if we have meaningful data
+    has_data = any(p.get("value") is not None for p in revenue_trend)
+    if not has_data:
+        return None
+
+    return {
+        "revenue_trend": revenue_trend,
+        "gross_margin_trend": gross_margin_trend,
+        "eps_trend": eps_trend,
+        "fcf_trend": fcf_trend,
+        "revenue_growth_trend": revenue_growth_trend,
+        "rule_of_40": rule_of_40,
+        "rule_of_40_components": {
+            "revenue_growth_yoy": latest_yoy_growth,
+            "fcf_margin": fcf_margin,
+        },
+        "quarters_available": len(income_quarters),
+        "fcf_quarters_available": len(cashflow_quarters),
+    }
