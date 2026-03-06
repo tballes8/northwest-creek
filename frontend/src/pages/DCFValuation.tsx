@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI, dcfAPI, watchlistAPI } from '../services/api';
 import { User } from '../types';
@@ -175,10 +175,68 @@ const DCFValuation: React.FC = () => {
     }
     return null;
   };
+
+  const loadUser = useCallback(async () => {
+    try {
+      const response = await authAPI.getCurrentUser();
+      setUser(response.data);
+    } catch (error) {
+      console.error('Failed to load user:', error);
+      if ((error as any).response?.status === 401) {
+        localStorage.removeItem('access_token');
+        navigate('/login');
+      }
+    }
+  }, [navigate]);
   
+  const loadSuggestions = useCallback(async (symbol: string, skipParamOverride: boolean = false) => {
+    if (!symbol.trim()) return;
+
+    setLoadingSuggestions(true);
+    setError('');
+    
+    try {
+      const response = await dcfAPI.getSuggestions(symbol.toUpperCase());
+      setSuggestions(response.data);
+      
+      // API-driven warrant detection — overrides any pre-fetch hint
+      const apiType = response.data.security_type || '';
+      if (apiType === 'WARRANT') {
+        setIsWarrant(true);
+        const related = getRelatedCommonStock(symbol);
+        if (related) {
+          setRelatedCommonStock(related);
+        } else {
+          const stripped = symbol.toUpperCase().replace(/W+$/, '');
+          setRelatedCommonStock(stripped.length >= 2 && stripped !== symbol.toUpperCase() ? stripped : null);
+        }
+      } else if (apiType === 'CS' || apiType === 'ADRC' || apiType === 'PFD') {
+        // Confirmed common stock / ADR / preferred — clear any false positive
+        setIsWarrant(false);
+        setRelatedCommonStock(null);
+      }
+      // If apiType is empty/unknown, keep the hint-based detection as-is
+      
+      // Only set parameters if NOT pre-filled from Technical Analysis
+      if (!skipParamOverride) {
+        setGrowthRate(response.data.suggestions.growth_rate * 100);
+        setTerminalGrowth(response.data.suggestions.terminal_growth * 100);
+        setDiscountRate(response.data.suggestions.discount_rate * 100);
+        setProjectionYears(response.data.suggestions.projection_years);
+      }
+      setShowSuggestions(true);
+    } catch (err: any) {
+      console.error('Failed to load suggestions:', err);
+      // Don't show error to user, just use default values
+      setShowSuggestions(false);
+    } finally {
+      setLoadingSuggestions(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadUser();
-  }, []);
+  }, [loadUser]);
 
   // Separate useEffect for handling URL ticker parameter
   useEffect(() => {
@@ -224,65 +282,7 @@ const DCFValuation: React.FC = () => {
         loadSuggestions(urlTicker);
       }
     }
-  }, [urlTicker, hasLoadedInitialSuggestions]);
-
-  const loadUser = async () => {
-    try {
-      const response = await authAPI.getCurrentUser();
-      setUser(response.data);
-    } catch (error) {
-      console.error('Failed to load user:', error);
-      if ((error as any).response?.status === 401) {
-        localStorage.removeItem('access_token');
-        navigate('/login');
-      }
-    }
-  };
-  
-  const loadSuggestions = async (symbol: string, skipParamOverride: boolean = false) => {
-    if (!symbol.trim()) return;
-
-    setLoadingSuggestions(true);
-    setError('');
-    
-    try {
-      const response = await dcfAPI.getSuggestions(symbol.toUpperCase());
-      setSuggestions(response.data);
-      
-      // API-driven warrant detection — overrides any pre-fetch hint
-      const apiType = response.data.security_type || '';
-      if (apiType === 'WARRANT') {
-        setIsWarrant(true);
-        const related = getRelatedCommonStock(symbol);
-        if (related) {
-          setRelatedCommonStock(related);
-        } else {
-          const stripped = symbol.toUpperCase().replace(/W+$/, '');
-          setRelatedCommonStock(stripped.length >= 2 && stripped !== symbol.toUpperCase() ? stripped : null);
-        }
-      } else if (apiType === 'CS' || apiType === 'ADRC' || apiType === 'PFD') {
-        // Confirmed common stock / ADR / preferred — clear any false positive
-        setIsWarrant(false);
-        setRelatedCommonStock(null);
-      }
-      // If apiType is empty/unknown, keep the hint-based detection as-is
-      
-      // Only set parameters if NOT pre-filled from Technical Analysis
-      if (!skipParamOverride) {
-        setGrowthRate(response.data.suggestions.growth_rate * 100);
-        setTerminalGrowth(response.data.suggestions.terminal_growth * 100);
-        setDiscountRate(response.data.suggestions.discount_rate * 100);
-        setProjectionYears(response.data.suggestions.projection_years);
-      }
-      setShowSuggestions(true);
-    } catch (err: any) {
-      console.error('Failed to load suggestions:', err);
-      // Don't show error to user, just use default values
-      setShowSuggestions(false);
-    } finally {
-      setLoadingSuggestions(false);
-    }
-  };
+  }, [urlTicker, hasLoadedInitialSuggestions, searchParams, loadSuggestions]);
 
   // User dropdown menu
   const [userMenuOpen, setUserMenuOpen] = useState(false);
