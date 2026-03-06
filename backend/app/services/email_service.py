@@ -73,29 +73,29 @@ class EmailService:
             print(f"❌ Failed to send email to {to_email}: {str(e)}")
             return False
     
-    def send_verification_email(self, to_email: str, verification_token: str, user_name: str, selected_tier: str = "free") -> bool:
+    def send_verification_email(self, to_email: str, verification_token: str, user_name: str, selected_tier: str = "beginner") -> bool:
         """Send account verification email with tier-specific features"""
         self._ensure_initialized()
         settings = _get_settings()
         
         # Embed selected tier in the verification URL so frontend can redirect to Stripe after verification
-        tier_param = f"&tier={selected_tier}" if selected_tier and selected_tier != "free" else ""
+        tier_param = f"&tier={selected_tier}" if selected_tier and selected_tier != "beginner" else ""
         verification_url = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}{tier_param}"
         
         print(f"📧 Sending verification email to {to_email} (tier={selected_tier})")
         print(f"   Verification URL: {verification_url}")
         
         # Build dynamic features list from TIER_LIMITS
-        limits = TIER_LIMITS.get(selected_tier, TIER_LIMITS["free"])
+        limits = TIER_LIMITS.get(selected_tier, TIER_LIMITS.get("beginner", {}))
         tier_display = {
-            "free": "Free",
+            "beginner": "Beginner",
             "casual": "Casual Investor",
             "active": "Active Investor",
             "professional": "Professional"
-        }.get(selected_tier, "Free")
+        }.get(selected_tier, "Beginner")
         
         review_period = {
-            "free": "total",
+            "beginner": "total",
             "casual": "per week",
             "active": "per day",
             "professional": "per day"
@@ -224,12 +224,12 @@ class EmailService:
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>🎉 Welcome to Northwest Creek!</h1>
+                    <h1>🎉 Welcome to NWC-Analytics!</h1>
                 </div>
                 <div class="content">
                     <p><strong>Hi {user_name},</strong></p>
                     
-                    <p>Thank you for registering with Northwest Creek - your intelligent stock analysis platform!</p>
+                    <p>Thank you for registering with NWC-Analytics — your intelligent stock analysis platform!</p>
                     
                     <p>To complete your registration and activate your account, please verify your email address by clicking the button below:</p>
                     
@@ -255,13 +255,13 @@ class EmailService:
                     </div>
                     
                     <p style="margin-top: 24px; font-size: 14px; color: #6b7280;">
-                        If you didn't create an account with Northwest Creek, you can safely ignore this email.
+                        If you didn't create an account with NWC-Analytics, you can safely ignore this email.
                     </p>
                     
-                    <p style="margin-top: 32px;"><strong>Best regards,</strong><br>The Northwest Creek Team</p>
+                    <p style="margin-top: 32px;"><strong>Best regards,</strong><br>The NWC-Analytics Team</p>
                 </div>
                 <div class="footer">
-                    <p><strong>Northwest Creek</strong></p>
+                    <p><strong>NWC-Analytics</strong></p>
                     <p>Intelligent Stock Analysis & Portfolio Management</p>
                     <p style="margin-top: 12px;">This is an automated email, please do not reply.</p>
                 </div>
@@ -272,7 +272,7 @@ class EmailService:
         
         return self.send_email(
             to_email=to_email,
-            subject="🎉 Verify Your Northwest Creek Account",
+            subject="🎉 Verify Your NWC-Analytics Account",
             html_content=html_content,
             from_email_override=self.support_email
         )
@@ -369,7 +369,7 @@ class EmailService:
                         <p style="margin-top: 8px;">You've been upgraded to the <span class="plan-badge">{plan_name}</span> plan.</p>
                     </div>
                     
-                    <p>Thank you for subscribing to Northwest Creek! Your {plan_name} subscription ({price}/month) is now active and all premium features have been unlocked.</p>
+                    <p>Thank you for subscribing to NWC-Analytics! Your {plan_name} subscription ({price}/month) is now active and all premium features have been unlocked.</p>
                     
                     <div class="features">
                         <p><strong>Your {plan_name} plan includes:</strong></p>
@@ -394,13 +394,13 @@ class EmailService:
                     
                     <p style="margin-top: 24px; font-size: 14px; color: #6b7280;">
                         Questions about your subscription? Contact us at 
-                        <a href="mailto:support@northwestcreek.com" style="color: #0d9488;">support@northwestcreek.com</a>
+                        <a href="mailto:support@northwestcreekllc.com" style="color: #0d9488;">support@northwestcreekllc.com</a>
                     </p>
                     
-                    <p style="margin-top: 32px;"><strong>Happy investing!</strong><br>The Northwest Creek Team</p>
+                    <p style="margin-top: 32px;"><strong>Happy investing!</strong><br>The NWC-Analytics Team</p>
                 </div>
                 <div class="footer">
-                    <p><strong>Northwest Creek</strong></p>
+                    <p><strong>NWC-Analytics</strong></p>
                     <p>Intelligent Stock Analysis & Portfolio Management</p>
                     <p style="margin-top: 12px;">This is an automated email, please do not reply.</p>
                 </div>
@@ -479,7 +479,7 @@ class EmailService:
                 <div class="content">
                     <p><strong>Hi {user_name},</strong></p>
                     
-                    <p>We received a request to reset the password for your Northwest Creek account.</p>
+                    <p>We received a request to reset the password for your NWC-Analytics account.</p>
                     
                     <p>Click the button below to choose a new password:</p>
                     
@@ -497,10 +497,10 @@ class EmailService:
                         <p style="margin-top: 8px;">If you didn't request a password reset, you can safely ignore this email — your password will not be changed.</p>
                     </div>
                     
-                    <p style="margin-top: 32px;"><strong>Best regards,</strong><br>The Northwest Creek Team</p>
+                    <p style="margin-top: 32px;"><strong>Best regards,</strong><br>The NWC-Analytics Team</p>
                 </div>
                 <div class="footer">
-                    <p><strong>Northwest Creek</strong></p>
+                    <p><strong>NWC-Analytics</strong></p>
                     <p>Intelligent Stock Analysis & Portfolio Management</p>
                     <p style="margin-top: 12px;">This is an automated email, please do not reply.</p>
                 </div>
@@ -511,7 +511,7 @@ class EmailService:
 
         return self.send_email(
             to_email=to_email,
-            subject="🔒 Reset Your Northwest Creek Password",
+            subject="🔒 Reset Your NWC-Analytics Password",
             html_content=html_content,
             from_email_override=self.support_email
         )
