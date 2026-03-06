@@ -113,7 +113,11 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/resend-verification")
-async def resend_verification(email: str, db: AsyncSession = Depends(get_db)):
+async def resend_verification(
+    email: str,
+    db: AsyncSession = Depends(get_db),
+    selected_tier: str = Query(default="beginner", description="Selected subscription tier")
+):
     """Resend verification email"""
     # Find user
     result = await db.execute(select(User).where(User.email == email))
@@ -142,7 +146,8 @@ async def resend_verification(email: str, db: AsyncSession = Depends(get_db)):
     email_service.send_verification_email(
         to_email=user.email,
         verification_token=verification_token,
-        user_name=user.full_name or user.email
+        user_name=user.full_name or user.email,
+        selected_tier=selected_tier
     )
     
     return {"message": "Verification email sent! Please check your inbox (and spam/junk folder)."}
