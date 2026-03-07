@@ -41,32 +41,15 @@ app = FastAPI(
     redoc_url=f"/api/{settings.API_VERSION}/redoc"
 )
 
-# Get frontend URL from environment (Railway will provide this)
-frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-
-# Configure CORS - Allow frontend to make requests
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        frontend_url,  # Production frontend from environment
-        frontend_url.replace("://", "://www.") if "://www." not in frontend_url else frontend_url.replace("://www.", "://"),
-        "http://localhost:3000",  # Local React dev
-        "http://localhost:5173",  # Local Vite dev
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+        "https://nwc-analytics.com",
+        "https://www.nwc-analytics.com",
         "https://northwestcreekllc.com",
         "https://www.northwestcreekllc.com",
-        "https://nwc-analytics.com",        # ready for Phase 2 domain swap
-        "https://www.nwc-analytics.com",    # ready for Phase 2 domain swap
-        "http://localhost:3000",            # local React dev
-        "http://localhost:5173",            # local Vite dev
+        "http://localhost:3000",
+        "http://localhost:5173",
     ],
     allow_credentials=True,
     allow_methods=["*"],
