@@ -25,6 +25,7 @@ import WaitlistLanding from './pages/WaitlistLanding';
 import MICDecoder from './pages/MICDecoder';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsConditions from './pages/TermsConditions';
+import FAQ from './pages/FAQ';
 
 
 const Payment = React.lazy(() => import('./pages/Payment'));
@@ -70,6 +71,7 @@ function App() {
             <Route path="/payment" element={<Payment />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsConditions />} />
+            <Route path="/faq" element={<FAQ />} />
           </Routes>
         </Suspense>
       </LivePriceProvider>
