@@ -478,17 +478,17 @@ const AccountSettings: React.FC = () => {
         <div className="bg-white dark:bg-gray-700 rounded-xl shadow-lg border dark:border-gray-500 p-6">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Quick Links</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <Link to="/dashboard" className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-750 hover:bg-gray-100 dark:hover:bg-gray-600 border dark:border-gray-600 transition-colors">
-              <span className="block text-2xl mb-1">📊</span>
-              <span className="text-sm text-gray-700 dark:text-gray-300">Dashboard</span>
+            <Link to="/privacy" className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-750 hover:bg-gray-100 dark:hover:bg-gray-600 border dark:border-gray-600 transition-colors">
+              <span className="block text-2xl mb-1">🔒</span>
+              <span className="text-sm text-gray-700 dark:text-gray-300">Privacy Policy</span>
             </Link>
-            <Link to="/portfolio" className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-750 hover:bg-gray-100 dark:hover:bg-gray-600 border dark:border-gray-600 transition-colors">
-              <span className="block text-2xl mb-1">💼</span>
-              <span className="text-sm text-gray-700 dark:text-gray-300">Portfolio</span>
+            <Link to="/terms" className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-750 hover:bg-gray-100 dark:hover:bg-gray-600 border dark:border-gray-600 transition-colors">
+              <span className="block text-2xl mb-1">📋</span>
+              <span className="text-sm text-gray-700 dark:text-gray-300">Terms & Conditions</span>
             </Link>
-            <Link to="/pricing" className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-750 hover:bg-gray-100 dark:hover:bg-gray-600 border dark:border-gray-600 transition-colors">
-              <span className="block text-2xl mb-1">💎</span>
-              <span className="text-sm text-gray-700 dark:text-gray-300">Plans</span>
+            <Link to="/faq" className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-750 hover:bg-gray-100 dark:hover:bg-gray-600 border dark:border-gray-600 transition-colors">
+              <span className="block text-2xl mb-1">❓</span>
+              <span className="text-sm text-gray-700 dark:text-gray-300">FAQs</span>
             </Link>
             <a href="mailto:support@northwestcreekllc.com" className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-750 hover:bg-gray-100 dark:hover:bg-gray-600 border dark:border-gray-600 transition-colors">
               <span className="block text-2xl mb-1">📧</span>
