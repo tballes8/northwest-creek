@@ -399,7 +399,7 @@ const Dashboard: React.FC = () => {
   const loadTrialStatus = async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const res = await axios.get(`${API_URL}/api/v1/payments/subscription-status`, {
+      const res = await axios.get(`${API_URL}/api/v1/stripe/subscription-status`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.data.trial_end) {
@@ -782,61 +782,6 @@ return (
               </svg>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="bg-white dark:bg-gray-700 rounded-lg shadow p-4 border dark:border-gray-500">
-        <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Quick Actions</h2>
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-          <Link to="/watchlist" className="flex items-center p-2.5 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-primary-500 dark:hover:border-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">
-            <div className="bg-primary-100 dark:bg-primary-900/30 rounded p-1.5 mr-2">
-              <svg className="w-3.5 h-3.5 text-primary-600 dark:text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </div>
-            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Watchlist</span>
-          </Link>
-          <Link to="/portfolio" className="flex items-center p-2.5 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-green-500 dark:hover:border-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors">
-            <div className="bg-green-100 dark:bg-green-900/30 rounded p-1.5 mr-2">
-              <svg className="w-3.5 h-3.5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-            </div>
-            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Portfolio</span>
-          </Link>
-          <Link to="/alerts" className="flex items-center p-2.5 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-purple-500 dark:hover:border-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors">
-            <div className="bg-purple-100 dark:bg-purple-900/30 rounded p-1.5 mr-2">
-              <svg className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-            </div>
-            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Alerts</span>
-          </Link>
-          <Link to="/stocks" className="flex items-center p-2.5 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-blue-500 dark:hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors">
-            <div className="bg-blue-100 dark:bg-blue-900/30 rounded p-1.5 mr-2">
-              <svg className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Stocks</span>
-          </Link>
-          <Link to="/stocks?showTopGainers=true" className="flex items-center p-2.5 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-orange-500 dark:hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors">
-            <div className="bg-orange-100 dark:bg-orange-900/30 rounded p-1.5 mr-2">
-              <svg className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-            </div>
-            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Gainers</span>
-          </Link>
-          <Link to="/technical-analysis" className="flex items-center p-2.5 border border-gray-200 dark:border-gray-600 rounded-lg hover:border-teal-500 dark:hover:border-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors">
-            <div className="bg-teal-100 dark:bg-teal-900/30 rounded p-1.5 mr-2">
-              <svg className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            </div>
-            <span className="text-xs font-medium text-gray-700 dark:text-gray-300">Analysis</span>
-          </Link>
         </div>
       </div>
 

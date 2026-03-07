@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { authAPI } from '../services/api';
+import axios from 'axios';
+
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 type Step = 'plan' | 'account' | 'success';
 type Tier = 'beginner' | 'casual' | 'active' | 'professional';
@@ -54,11 +56,14 @@ const RegisterWithPayment: React.FC = () => {
 
     try {
       // Create account — pass selected tier so backend embeds it in verification email URL
-      await authAPI.register({
-        email: formData.email,
-        password: formData.password,
-        full_name: formData.full_name,
-      });
+      await axios.post(
+        `${API_URL}/api/v1/auth/register?selected_tier=${selectedTier}`,
+        {
+          email: formData.email,
+          password: formData.password,
+          full_name: formData.full_name,
+        }
+      );
 
       // Show success — user must verify email first, then they'll be redirected to Stripe for paid tiers
       setStep('success');
