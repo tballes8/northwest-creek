@@ -286,7 +286,7 @@ async def create_subscription(
         print(f"Stripe error in create-subscription: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Payment setup failed: {str(e)}"
+            detail="Payment setup failed. Please try again or contact support."
         )
     except Exception as e:
         print(f"Error creating subscription: {str(e)}")
@@ -351,7 +351,7 @@ async def create_checkout_session(
     except stripe.error.StripeError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Stripe error: {str(e)}"
+            detail="Payment setup failed. Please try again or contact support."
         )
     except Exception as e:
         print(f"Error creating checkout session: {str(e)}")
