@@ -639,32 +639,18 @@ return (
         </div>
       </nav>
 
-      {/* Trial Countdown Banner */}
+      {/* Trial Countdown Notice */}
       {trialDaysRemaining !== null && trialDaysRemaining > 0 && (
-        <div className={`border-b ${
-          trialDaysRemaining <= 1
-            ? 'bg-red-600 dark:bg-red-700 border-red-700'
-            : trialDaysRemaining <= 3
-            ? 'bg-amber-500 dark:bg-amber-600 border-amber-600'
-            : 'bg-gradient-to-r from-primary-600 to-teal-500 border-primary-700'
-        }`}>
-          <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-2.5 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-white text-sm font-medium">
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>
-                {trialDaysRemaining === 1
-                  ? 'Last day of your free trial — add a payment method to keep your access'
-                  : `${trialDaysRemaining} days remaining in your free trial`}
-              </span>
-            </div>
-            <Link
-              to="/pricing"
-              className="flex-shrink-0 px-4 py-1.5 bg-white/20 hover:bg-white/30 text-white text-sm font-semibold rounded-lg transition-colors backdrop-blur-sm"
-            >
-              View Plans
-            </Link>
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 pt-3">
+          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>
+              {trialDaysRemaining === 1
+                ? 'Trial period ends tomorrow'
+                : `Trial period ends in ${trialDaysRemaining} days`}
+            </span>
           </div>
         </div>
       )}

@@ -79,7 +79,7 @@ class EmailService:
         settings = _get_settings()
         
         # Embed selected tier in the verification URL so frontend can redirect to Stripe after verification
-        tier_param = f"&tier={selected_tier}" if selected_tier and selected_tier != "beginner" else ""
+        tier_param = f"&tier={selected_tier}" if selected_tier else "&tier=beginner"
         verification_url = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}{tier_param}"
         
         print(f"📧 Sending verification email to {to_email} (tier={selected_tier})")
@@ -244,7 +244,7 @@ class EmailService:
                     
                     <div class="warning">
                         <p><strong>⏰ This link will expire in 24 hours.</strong></p>
-                        <p style="margin-top: 8px;">Can't find this email? <strong>Check your spam or junk folder</strong> — sometimes verification emails end up there.</p>
+                        <p style="margin-top: 8px;">After verifying your email, you'll be asked to enter a payment method to activate your account. <strong>You will not be charged if you cancel before your 14-day free trial ends.</strong></p>
                     </div>
                     
                     <div class="features">
