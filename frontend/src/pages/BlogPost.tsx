@@ -191,13 +191,13 @@ const BlogPost: React.FC = () => {
             {/* Logo — links to landing when public, static when signed in */}
             {hasToken ? (
               <div className="flex items-center">
-                <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
-                <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>Northwest Creek</span>
+                <img src="/images/logo.png" alt="NWC-Analytics" className="h-10 w-10 mr-3" />
+                <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>NWC-Analytics</span>
               </div>
             ) : (
               <Link to="/" className="flex items-center">
-                <img src="/images/logo.png" alt="Northwest Creek" className="h-10 w-10 mr-3" />
-                <span className="text-xl font-bold text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>Northwest Creek</span>
+                <img src="/images/logo.png" alt="NWC-Analytics" className="h-10 w-10 mr-3" />
+                <span className="text-xl font-bold text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>NWC-Analytics</span>
               </Link>
             )}
 
@@ -319,15 +319,15 @@ const BlogPost: React.FC = () => {
         ) : post ? (
           <article className="max-w-4xl">
             {/* SEO — React 19 hoists to <head> automatically */}
-            <title>{post.title} — Northwest Creek Blog</title>
-            <meta name="description" content={post.excerpt || `${post.title} — stock analysis insights from Northwest Creek.`} />
-            <link rel="canonical" href={`https://northwestcreekllc.com/blogs/${post.slug}`} />
+            <title>{post.title} — NWC-Analytics Blog</title>
+            <meta name="description" content={post.excerpt || `${post.title} — stock analysis insights from NWC-Analytics.`} />
+            <link rel="canonical" href={`https://nwc-analytics.com/blogs/${post.slug}`} />
             <meta property="og:type" content="article" />
             <meta property="og:title" content={post.title} />
-            <meta property="og:description" content={post.excerpt || `${post.title} — stock analysis insights from Northwest Creek.`} />
-            <meta property="og:url" content={`https://northwestcreekllc.com/blogs/${post.slug}`} />
+            <meta property="og:description" content={post.excerpt || `${post.title} — stock analysis insights from NWC-Analytics.`} />
+            <meta property="og:url" content={`https://nwc-analytics.com/blogs/${post.slug}`} />
             {post.cover_image_url && <meta property="og:image" content={post.cover_image_url} />}
-            <meta property="og:site_name" content="Northwest Creek" />
+            <meta property="og:site_name" content="NWC-Analytics" />
             {post.created_at && <meta property="article:published_time" content={new Date(post.created_at).toISOString()} />}
             {post.updated_at && <meta property="article:modified_time" content={new Date(post.updated_at).toISOString()} />}
             <meta property="article:section" content={post.category} />
@@ -342,7 +342,7 @@ const BlogPost: React.FC = () => {
               "@type": "BlogPosting",
               "headline": post.title,
               "description": post.excerpt || post.title,
-              "url": `https://northwestcreekllc.com/blogs/${post.slug}`,
+              "url": `https://nwc-analytics.com/blogs/${post.slug}`,
               ...(post.cover_image_url && { "image": post.cover_image_url }),
               ...(post.created_at && { "datePublished": new Date(post.created_at).toISOString() }),
               ...(post.updated_at && { "dateModified": new Date(post.updated_at).toISOString() }),
@@ -350,15 +350,15 @@ const BlogPost: React.FC = () => {
               ...(post.tags && { "keywords": post.tags }),
               "publisher": {
                 "@type": "Organization",
-                "name": "Northwest Creek LLC",
+                "name": "NWC-Analytics, LLC",
                 "logo": {
                   "@type": "ImageObject",
-                  "url": "https://northwestcreekllc.com/images/logo.png"
+                  "url": "https://nwc-analytics.com/images/logo.png"
                 }
               },
               "mainEntityOfPage": {
                 "@type": "WebPage",
-                "@id": `https://northwestcreekllc.com/blogs/${post.slug}`
+                "@id": `https://nwc-analytics.com/blogs/${post.slug}`
               }
             }) }} />
             {/* Cover Image */}

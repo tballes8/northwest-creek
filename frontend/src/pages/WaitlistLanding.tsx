@@ -83,8 +83,8 @@ const WaitlistLanding: React.FC = () => {
       <meta name="description" content="Be the first to access NWC-Analytics — professional stock analysis for retail investors. Real-time data, 15+ indicators, DCF models, and more." />
       <meta property="og:title" content="NWC-Analytics — Join the Waitlist" />
       <meta property="og:description" content="Professional stock analysis for retail investors. Join the waitlist for early access." />
-      <meta property="og:url" content="https://northwestcreekllc.com/waitlist" />
-      <meta property="og:image" content="https://northwestcreekllc.com/images/og-default.png" />
+      <meta property="og:url" content="https://nwc-analytics.com/waitlist" />
+      <meta property="og:image" content="https://nwc-analytics.com/images/og-default.png" />
 
       {/* ═══════════ NAV ═══════════ */}
       <nav className="bg-gray-900 shadow-sm border-b border-gray-700 sticky top-0 z-50">

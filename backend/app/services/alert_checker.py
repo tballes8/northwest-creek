@@ -287,7 +287,7 @@ class AlertChecker:
                 <div style="text-align: center; margin: 24px 0;">
                     <a href="{settings.FRONTEND_URL}/stocks?ticker={ticker}" 
                        style="display: inline-block; background: linear-gradient(135deg, #0d9488, #0f766e); color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; font-size: 14px;">
-                        View {ticker} on Northwest Creek
+                        View {ticker} on NWC-Analytics
                     </a>
                 </div>
                 

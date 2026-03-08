@@ -72,7 +72,7 @@ const Login: React.FC = () => {
         <Link to="/" className="flex justify-center">
           <img 
             src="/images/logo.png" 
-            alt="Northwest Creek" 
+            alt="NWC-Analytics" 
             className="h-16 w-16"
           />
         </Link>
@@ -237,7 +237,7 @@ const Login: React.FC = () => {
                 <div className="w-full border-t border-gray-300 dark:border-gray-600" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white dark:bg-gray-700 text-gray-500 dark:text-gray-400">New to Northwest Creek?</span>
+                <span className="px-2 bg-white dark:bg-gray-700 text-gray-500 dark:text-gray-400">New to NWC-Analytics?</span>
               </div>
             </div>
 

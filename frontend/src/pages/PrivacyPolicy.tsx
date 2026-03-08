@@ -53,7 +53,7 @@ const PrivacyPolicy: React.FC = () => {
           {/* Introduction */}
           <section>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              NWC-Analytics, LLC ("NWC-Analytics," "we," "us," or "our") operates the website located at <strong className="text-gray-900 dark:text-white">northwestcreekllc.com</strong> and related services. This Privacy Policy describes how we collect, use, store, and protect your personal information when you use our website, applications, and services (collectively, the "Service").
+              NWC-Analytics, LLC ("NWC-Analytics," "we," "us," or "our") operates the website located at <strong className="text-gray-900 dark:text-white">nwc-analytics.com</strong> and related services. This Privacy Policy describes how we collect, use, store, and protect your personal information when you use our website, applications, and services (collectively, the "Service").
             </p>
             <p className="text-gray-700 dark:text-gray-300 leading-relaxed mt-4">
               By accessing or using the Service, you agree to the collection and use of information in accordance with this policy. If you do not agree with this policy, please do not use our Service.

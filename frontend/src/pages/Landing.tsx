@@ -25,17 +25,17 @@ const Landing: React.FC = () => {
       {/* SEO — React 19 hoists these to <head> automatically */}
       <title>NWC-Analytics — Professional Stock Analysis for Retail Investors</title>
       <meta name="description" content="Real-time market data, 15+ technical indicators, DCF valuation models, live portfolio tracking, and price alerts — institutional-grade stock analysis built for retail investors." />
-      <link rel="canonical" href="https://northwestcreekllc.com" />
+      <link rel="canonical" href="https://nwc-analytics.com" />
       <meta property="og:type" content="website" />
       <meta property="og:title" content="NWC-Analytics — Professional Stock Analysis for Retail Investors" />
       <meta property="og:description" content="Real-time market data, technical indicators, DCF valuations, portfolio tracking, and price alerts for retail investors." />
-      <meta property="og:url" content="https://northwestcreekllc.com" />
-      <meta property="og:image" content="https://northwestcreekllc.com/images/og-default.png" />
+      <meta property="og:url" content="https://nwc-analytics.com" />
+      <meta property="og:image" content="https://nwc-analytics.com/images/og-default.png" />
       <meta property="og:site_name" content="NWC-Analytics" />
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:title" content="NWC-Analytics — Professional Stock Analysis" />
       <meta name="twitter:description" content="Institutional-grade stock analysis tools built for retail investors." />
-      <meta name="twitter:image" content="https://northwestcreekllc.com/images/og-default.png" />
+      <meta name="twitter:image" content="https://nwc-analytics.com/images/og-default.png" />
 
       {/* JSON-LD: Organization + WebSite (valid anywhere in DOM for Google) */}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
@@ -44,8 +44,8 @@ const Landing: React.FC = () => {
           {
             "@type": "Organization",
             "name": "NWC-Analytics, LLC",
-            "url": "https://northwestcreekllc.com",
-            "logo": "https://northwestcreekllc.com/images/logo.png",
+            "url": "https://nwc-analytics.com",
+            "logo": "https://nwc-analytics.com/images/logo.png",
             "description": "Professional stock analysis platform for retail investors.",
             "address": {
               "@type": "PostalAddress",
@@ -57,7 +57,7 @@ const Landing: React.FC = () => {
           {
             "@type": "WebSite",
             "name": "NWC-Analytics",
-            "url": "https://northwestcreekllc.com",
+            "url": "https://nwc-analytics.com",
             "description": "Real-time market data, technical indicators, DCF valuations, and portfolio tracking for retail investors.",
             "publisher": { "@type": "Organization", "name": "NWC-Analytics, LLC" }
           }

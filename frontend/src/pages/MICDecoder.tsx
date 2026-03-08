@@ -104,7 +104,7 @@ Include major exchanges from: US, Canada, UK, Germany, France, Netherlands, Swit
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       {/* SEO */}
-      <title>MIC Code Lookup — Northwest Creek</title>
+      <title>MIC Code Lookup — NWC-Analytics</title>
       <meta name="description" content="Search and explore ISO 10383 Market Identifier Codes (MICs) for stock exchanges and trading venues worldwide." />
       <meta property="og:title" content="MIC Code Lookup — Northwest Creek" />
       <link rel="canonical" href="https://northwestcreekllc.com/mic-decoder" />
@@ -114,9 +114,9 @@ Include major exchanges from: US, Canada, UK, Germany, France, Netherlands, Swit
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <Link to="/" className="flex items-center">
-              <img src="/images/logo.png" alt="Northwest Creek LLC" className="h-12 w-12 mr-3" />
+              <img src="/images/logo.png" alt="NWC-Analytics LLC" className="h-12 w-12 mr-3" />
               <span className="text-xl font-bold text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>
-                Northwest Creek
+                NWC-Analytics
               </span>
             </Link>
             <div className="flex items-center space-x-4">
@@ -305,14 +305,14 @@ Include major exchanges from: US, Canada, UK, Germany, France, Netherlands, Swit
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center mb-4 md:mb-0">
-              <img src="/images/logo.png" alt="Northwest Creek LLC" className="h-12 w-12 mr-3" />
+              <img src="/images/logo.png" alt="NWC-Analytics LLC" className="h-12 w-12 mr-3" />
               <div>
-                <p className="text-xl font-bold text-white">Northwest Creek</p>
+                <p className="text-xl font-bold text-white">NWC-Analytics</p>
                 <p className="text-sm">Professional stock analysis for retail investors</p>
               </div>
             </div>
             <div className="text-center md:text-right">
-              <p className="text-sm">© 2026 Northwest Creek LLC. All rights reserved.</p>
+              <p className="text-sm">© 2026 NWC-Analytics LLC. All rights reserved.</p>
               <p className="text-sm mt-1">Post Falls, Idaho</p>
             </div>
           </div>

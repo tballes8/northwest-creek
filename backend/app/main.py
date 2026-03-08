@@ -19,7 +19,7 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("🚀 Northwest Creek API starting...")
+    print("🚀 NWC-Analytics API starting...")
 
     # Sprint 9: Wire alert checker into price stream
     alert_checker.set_broadcast_fn(live_price_service.broadcast_to_clients)
@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
     yield
 
     await live_price_service.stop()
-    print("👋 Northwest Creek API shutting down...")
+    print("👋 NWC-Analytics API shutting down...")
 
 
 app = FastAPI(
@@ -60,7 +60,7 @@ app.add_middleware(
 @app.get("/")
 async def root():
     return {
-        "message": "Welcome to Northwest Creek Stock Analyzer API",
+        "message": "Welcome to NWC-Analytics Stock Analyzer API",
         "version": settings.API_VERSION,
         "status": "operational"
     }
@@ -71,7 +71,7 @@ async def health_check():
     """Simple health check endpoint"""
     return {
         "status": "healthy",
-        "service": "Northwest Creek API",
+        "service": "NWC-Analytics API",
         "version": "1.0.0"
     }
 

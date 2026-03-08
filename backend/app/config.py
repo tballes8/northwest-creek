@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables"""
     
     # App Settings
-    APP_NAME: str = Field(default="Northwest Creek API", env="APP_NAME")
+    APP_NAME: str = Field(default="NWC-Analytics API", env="APP_NAME")
     DEBUG: bool = Field(default=False, env="DEBUG")
     VERSION: str = Field(default="1.0.0", env="VERSION")
     API_VERSION: str = Field(default="v1", env="API_VERSION")
@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     FROM_EMAIL: str = Field(default="", env="FROM_EMAIL")
     SUPPORT_EMAIL: str = Field(default="", env="SUPPORT_EMAIL")
     SALES_EMAIL: str = Field(default="", env="SALES_EMAIL")
-    FROM_NAME: str = Field(default="Northwest Creek", env="FROM_NAME")
+    FROM_NAME: str = Field(default="NWC-Analytics", env="FROM_NAME")
     FRONTEND_URL: str = Field(default="http://localhost:3000", env="FRONTEND_URL")
     
     # Twilio SMS Settings

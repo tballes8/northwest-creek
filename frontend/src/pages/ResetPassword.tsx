@@ -50,7 +50,7 @@ const ResetPassword: React.FC = () => {
         <Link to="/" className="flex justify-center">
           <img 
             src="/images/logo.png" 
-            alt="Northwest Creek" 
+            alt="NWC-Analytics" 
             className="h-16 w-16"
           />
         </Link>

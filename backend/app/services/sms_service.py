@@ -84,7 +84,7 @@ def send_otp_sms(phone_e164: str, code: str) -> bool:
         client = _get_twilio_client()
         client.messages.create(
             body=(
-                f"Your Northwest Creek verification code is: {code}\n"
+                f"Your NWC-Analytics verification code is: {code}\n"
                 f"This code expires in {OTP_TTL_MINUTES} minutes.\n"
                 f"If you didn't request this, ignore this message."
             ),
