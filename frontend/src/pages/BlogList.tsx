@@ -53,12 +53,12 @@ const BlogList: React.FC = () => {
       {/* SEO — React 19 hoists to <head> */}
       <title>Blog — NWC-Analytics | Stock Analysis Insights &amp; Guides</title>
       <meta name="description" content="Expert stock analysis articles, technical indicator guides, portfolio strategies, and market insights for retail investors." />
-      <link rel="canonical" href="https://northwestcreekllc.com/blogs" />
+      <link rel="canonical" href="https://nwc-analytics.com/blogs" />
       <meta property="og:type" content="website" />
       <meta property="og:title" content="Blog — NWC-Analytics" />
       <meta property="og:description" content="Expert stock analysis articles, technical indicator guides, and market insights." />
-      <meta property="og:url" content="https://northwestcreekllc.com/blogs" />
-      <meta property="og:image" content="https://northwestcreekllc.com/images/og-default.png" />
+      <meta property="og:url" content="https://nwc-analytics.com/blogs" />
+      <meta property="og:image" content="https://nwc-analytics.com/images/og-default.png" />
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:title" content="Blog — NWC-Analytics" />
       <meta name="twitter:description" content="Expert stock analysis articles and market insights for retail investors." />

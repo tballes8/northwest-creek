@@ -214,7 +214,7 @@ const UpgradeRequired: React.FC<UpgradeRequiredProps> = ({
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 Need even more? Contact us at{' '}
                 <a href="mailto:support@nwc-analytics.com" className="text-teal-600 dark:text-teal-400 underline">
-                  support@northwestcreekllc.com
+                  support@nwc-analytics.com
                 </a>
               </p>
             </div>
