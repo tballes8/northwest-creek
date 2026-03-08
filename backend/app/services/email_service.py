@@ -30,9 +30,9 @@ class EmailService:
         
         settings = _get_settings()
         self.api_key = settings.SENDGRID_API_KEY
-        self.from_email = settings.FROM_EMAIL              # tyrone.ballesteros@outlook.com (default)
-        self.support_email = settings.SUPPORT_EMAIL        # support@northwestcreekllc.com (transactional)
-        self.sales_email = settings.SALES_EMAIL            # sales@northwestcreekllc.com (payment/marketing)
+        self.from_email = settings.FROM_EMAIL
+        self.support_email = settings.SUPPORT_EMAIL
+        self.sales_email = settings.SALES_EMAIL
         self.from_name = settings.FROM_NAME
         
         if self.api_key:
@@ -394,7 +394,7 @@ class EmailService:
                     
                     <p style="margin-top: 24px; font-size: 14px; color: #6b7280;">
                         Questions about your subscription? Contact us at 
-                        <a href="mailto:support@northwestcreekllc.com" style="color: #0d9488;">support@northwestcreekllc.com</a>
+                        <a href="mailto:support@nwc-analytics.com" style="color: #0d9488;">support@nwc-analytics.com</a>
                     </p>
                     
                     <p style="margin-top: 32px;"><strong>Happy investing!</strong><br>The NWC-Analytics Team</p>

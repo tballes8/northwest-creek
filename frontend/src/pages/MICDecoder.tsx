@@ -106,8 +106,8 @@ Include major exchanges from: US, Canada, UK, Germany, France, Netherlands, Swit
       {/* SEO */}
       <title>MIC Code Lookup — NWC-Analytics</title>
       <meta name="description" content="Search and explore ISO 10383 Market Identifier Codes (MICs) for stock exchanges and trading venues worldwide." />
-      <meta property="og:title" content="MIC Code Lookup — Northwest Creek" />
-      <link rel="canonical" href="https://northwestcreekllc.com/mic-decoder" />
+      <meta property="og:title" content="MIC Code Lookup — NWC-Analytics" />
+      <link rel="canonical" href="https://nwc-analytics.com/mic-decoder" />
 
       {/* Nav */}
       <nav className="bg-gray-800 dark:bg-gray-900 shadow-sm border-b border-gray-700 sticky top-0 z-50">

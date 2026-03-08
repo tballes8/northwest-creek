@@ -10,7 +10,7 @@ const TermsConditions: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <title>Terms &amp; Conditions — NWC-Analytics</title>
       <meta name="description" content="Terms and Conditions for NWC-AnalyticsLLC. Read the terms governing your use of our stock analysis platform and services." />
-      <link rel="canonical" href="https://northwestcreekllc.com/terms" />
+      <link rel="canonical" href="https://nwc-analytics.com/terms" />
 
       {/* Nav */}
       <nav className="bg-gray-800 dark:bg-gray-900 shadow-sm border-b border-gray-700 sticky top-0 z-50">
@@ -186,7 +186,7 @@ const TermsConditions: React.FC = () => {
               <p className="text-gray-900 dark:text-white font-semibold">NWC-Analytics, LLC</p>
               <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">Post Falls, Idaho</p>
               <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">
-                Email: <a href="mailto:support@nwc-analytics.com" className="text-primary-600 dark:text-primary-400 hover:underline">support@northwestcreekllc.com</a>
+                Email: <a href="mailto:support@nwc-analytics.com" className="text-primary-600 dark:text-primary-400 hover:underline">support@nwc-analytics.com</a>
               </p>
             </div>
           </section>

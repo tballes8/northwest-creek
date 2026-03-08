@@ -534,7 +534,7 @@ const Pricing: React.FC = () => {
           <div className="mt-4 space-x-6">
             <a href="#" className="text-gray-400 hover:text-white text-sm">Terms of Service</a>
             <a href="#" className="text-gray-400 hover:text-white text-sm">Privacy Policy</a>
-            <a href="mailto:support@northwestcreek.com" className="text-gray-400 hover:text-white text-sm">Support</a>
+            <a href="mailto:support@nwc-analytics.com" className="text-gray-400 hover:text-white text-sm">Support</a>
           </div>
         </div>
       </footer>
