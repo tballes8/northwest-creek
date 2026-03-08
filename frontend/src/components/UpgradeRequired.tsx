@@ -74,7 +74,7 @@ const TIER_INFO: Record<string, {
   },
   professional: {
     name: 'Professional Investor',
-    price: '$100/mo',
+    price: '$50/mo',
     color: 'text-purple-400',
     bgColor: 'bg-purple-500',
     features: [
@@ -213,7 +213,7 @@ const UpgradeRequired: React.FC<UpgradeRequiredProps> = ({
               </p>
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 Need even more? Contact us at{' '}
-                <a href="mailto:support@northwestcreekllc.com" className="text-teal-600 dark:text-teal-400 underline">
+                <a href="mailto:support@nwc-analytics.com" className="text-teal-600 dark:text-teal-400 underline">
                   support@northwestcreekllc.com
                 </a>
               </p>

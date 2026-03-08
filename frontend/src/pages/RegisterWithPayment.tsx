@@ -77,7 +77,7 @@ const RegisterWithPayment: React.FC = () => {
     beginner: 'Beginner — $10/mo',
     casual: 'Casual Investor — $20/mo',
     active: 'Active Investor — $40/mo',
-    professional: 'Professional — $100/mo',
+    professional: 'Professional — $50/mo',
   };
 
   const pricingTiers = [
@@ -135,7 +135,7 @@ const RegisterWithPayment: React.FC = () => {
     {
       name: 'Professional Investor',
       tier: 'professional' as Tier,
-      price: '$100',
+      price: '$50',
       period: '/month',
       trialBadge: null,
       features: [

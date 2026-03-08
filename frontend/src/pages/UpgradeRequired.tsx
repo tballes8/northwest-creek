@@ -90,7 +90,7 @@ const TIERS: Record<TierKey, TierMeta> = {
   },
   professional: {
     label: 'Professional Investor',
-    price: '$100/mo',
+    price: '$50/mo',
     color: 'text-purple-400',
     badgeBg: 'bg-purple-100 dark:bg-purple-900/50',
     badgeText: 'text-purple-800 dark:text-purple-200',

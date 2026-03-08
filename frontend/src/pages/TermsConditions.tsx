@@ -186,7 +186,7 @@ const TermsConditions: React.FC = () => {
               <p className="text-gray-900 dark:text-white font-semibold">NWC-Analytics, LLC</p>
               <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">Post Falls, Idaho</p>
               <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">
-                Email: <a href="mailto:support@northwestcreekllc.com" className="text-primary-600 dark:text-primary-400 hover:underline">support@northwestcreekllc.com</a>
+                Email: <a href="mailto:support@nwc-analytics.com" className="text-primary-600 dark:text-primary-400 hover:underline">support@northwestcreekllc.com</a>
               </p>
             </div>
           </section>

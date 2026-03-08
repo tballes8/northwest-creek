@@ -351,7 +351,7 @@ const WaitlistLanding: React.FC = () => {
           <div className="bg-gray-700 border border-gray-600 p-8 rounded-xl hover:border-primary-600 hover:shadow-xl hover:-translate-y-0.5 transition-all">
             <h3 className="text-2xl font-bold text-white mb-2">Professional</h3>
             <div className="mb-6">
-              <span className="text-4xl font-bold text-white">$100</span>
+              <span className="text-4xl font-bold text-white">$50</span>
               <span className="text-gray-400">/month</span>
             </div>
             <ul className="space-y-3 mb-8">

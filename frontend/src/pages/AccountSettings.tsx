@@ -41,7 +41,7 @@ const TIER_DETAILS: Record<string, {
   },
   professional: {
     name: 'Professional Investor',
-    price: '$100/mo',
+    price: '$50/mo',
     color: 'text-purple-400',
     bgClass: 'bg-purple-500',
     features: ['75 watchlist stocks', '75 portfolio entries', '20 reviews/day', '20 TA/day', '20 DCF/day', '50 alerts', 'Email & indicator alerts'],
@@ -490,7 +490,7 @@ const AccountSettings: React.FC = () => {
               <span className="block text-2xl mb-1">❓</span>
               <span className="text-sm text-gray-700 dark:text-gray-300">FAQs</span>
             </Link>
-            <a href="mailto:support@northwestcreekllc.com" className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-750 hover:bg-gray-100 dark:hover:bg-gray-600 border dark:border-gray-600 transition-colors">
+            <a href="mailto:support@nwc-analytics.com" className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-750 hover:bg-gray-100 dark:hover:bg-gray-600 border dark:border-gray-600 transition-colors">
               <span className="block text-2xl mb-1">📧</span>
               <span className="text-sm text-gray-700 dark:text-gray-300">Support</span>
             </a>

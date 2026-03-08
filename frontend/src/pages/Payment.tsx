@@ -73,8 +73,8 @@ const TIER_INFO: Record<Tier, TierInfo> = {
   },
   professional: {
     name: 'Professional',
-    price: '$100',
-    priceNum: 100,
+    price: '$50',
+    priceNum: 50,
     period: '/month',
     features: [
       '75 watchlist stocks',

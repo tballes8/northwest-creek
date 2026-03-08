@@ -517,7 +517,7 @@ const Landing: React.FC = () => {
             <div className="bg-white dark:bg-gray-600 p-8 rounded-xl shadow-lg dark:shadow-gray-200/50 hover:shadow-xl transition-shadow border dark:border-gray-300">
               <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Professional</h3>
               <div className="mb-6">
-                <span className="text-4xl font-bold text-gray-900 dark:text-white">$100</span>
+                <span className="text-4xl font-bold text-gray-900 dark:text-white">$50</span>
                 <span className="text-gray-600 dark:text-gray-400">/month</span>
               </div>
               <ul className="space-y-3 mb-8">

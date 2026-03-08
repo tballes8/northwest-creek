@@ -147,7 +147,7 @@ const Pricing: React.FC = () => {
     {
       name: 'Professional Investor',
       tierSlug: 'professional',
-      price: '$100',
+      price: '$50',
       period: 'per month',
       description: 'Ultimate tools for professional traders',
       features: [
@@ -493,7 +493,7 @@ const Pricing: React.FC = () => {
               Do you offer annual subscriptions?
             </h3>
             <p className="text-gray-600 dark:text-gray-400">
-              Yes! Save 20% when you choose annual billing. Contact us at <a href="mailto:sales@northwestcreekllc.com" className="text-primary-600 dark:text-primary-400 hover:underline">support@northwestcreekllc.com</a> for details.
+              Yes! Save 20% when you choose annual billing. Contact us at <a href="mailto:sales@nwc-analytics.com" className="text-primary-600 dark:text-primary-400 hover:underline">sales@nwc-analytics.com</a> for details.
             </p>
           </div>
         </div>
@@ -510,7 +510,7 @@ const Pricing: React.FC = () => {
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <a
-              href="mailto:sales@northwestcreekllc.com"
+              href="mailto:sales@nwc-analytics.com"
               className="px-8 py-3 bg-white text-primary-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
             >
               Email Us
