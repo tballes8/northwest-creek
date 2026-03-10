@@ -70,6 +70,11 @@ interface DCFSuggestions {
     };
     quarters_available: number;
     fcf_quarters_available: number;
+    is_stale: boolean;
+    stale_reason: string | null;
+    newest_period_end: string | null;
+    financials_cik: string | null;
+    current_cik: string | null;
   } | null;
 }
 
@@ -861,6 +866,31 @@ const DCFValuation: React.FC = () => {
                       {suggestions.growth_profile.quarters_available} quarters of historical data — what has this company actually demonstrated?
                     </p>
                   </div>
+
+                  {/* Stale data warning */}
+                  {suggestions.growth_profile.is_stale && (
+                    <div className="col-span-full mb-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-300 dark:border-orange-700 rounded-lg p-3">
+                      <div className="flex items-start gap-2">
+                        <span className="text-orange-500 text-lg leading-none">⚠️</span>
+                        <div>
+                          <p className="text-sm font-semibold text-orange-800 dark:text-orange-200">
+                            {suggestions.growth_profile.stale_reason === 'cik_mismatch'
+                              ? 'Wrong Entity — Ticker Reuse Detected'
+                              : 'Stale Financial Data'}
+                          </p>
+                          <p className="text-xs text-orange-700 dark:text-orange-300 mt-0.5">
+                            {suggestions.growth_profile.stale_reason === 'cik_mismatch'
+                              ? `This financial data belongs to a different company (CIK: ${suggestions.growth_profile.financials_cik}) that previously used this ticker. The current entity (CIK: ${suggestions.growth_profile.current_cik}) has different or no SEC filings available.`
+                              : `The most recent quarterly filing is from ${suggestions.growth_profile.newest_period_end || 'unknown date'}. This data may belong to a previous company that used this ticker symbol.`
+                            }
+                          </p>
+                          <p className="text-xs text-orange-600 dark:text-orange-400 mt-1 font-medium">
+                            Charts are shown for reference but should not be used for investment decisions.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {suggestions.growth_profile.rule_of_40 != null && (
                     <div className={`text-center px-4 py-2 rounded-lg border ${
                       suggestions.growth_profile.rule_of_40 >= 40

@@ -391,6 +391,28 @@ const Stocks: React.FC = () => {
       setQuote(quoteRes.data);
       setCompany(companyRes.data);
       setHistorical(historicalRes.data.data);
+
+      // Overlay live intraday price on top of previous-day quote
+      try {
+        const token = localStorage.getItem('access_token');
+        const intradayRes = await axios.get(
+          `${API_URL}/api/v1/intraday/batch?tickers=${symbol.toUpperCase()}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (Array.isArray(intradayRes.data) && intradayRes.data.length > 0) {
+          const live = intradayRes.data[0];
+          if (live.price) {
+            setQuote(prev => prev ? {
+              ...prev,
+              price: live.price,
+              change: live.change ?? prev.change,
+              change_percent: live.change_percent ?? prev.change_percent,
+            } : prev);
+          }
+        }
+      } catch {
+        // Non-fatal — keep previous-day quote as fallback
+      }
       
       // API-driven warrant detection — overrides any pre-fetch hint
       const apiType = companyRes.data?.type || '';

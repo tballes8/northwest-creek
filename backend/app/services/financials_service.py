@@ -13,6 +13,7 @@ FMP Stable endpoints used:
 """
 import asyncio
 import httpx
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional, List
 from app.config import get_settings
 
@@ -91,19 +92,35 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
         key_metrics_task = _fetch(client, "key-metrics", {
             "symbol": ticker, "period": "quarter", "limit": 1,
         })
+        # Reference ticker lookup — get the current entity's CIK for staleness detection
+        reference_task = _fetch(client, f"/v3/reference/tickers/{ticker}", {})
 
         (
+<<<<<<< HEAD:backend/app/services/financials_service.py
             income_quarters,
             balance_list,
             cashflow_quarters,
             ratios_list,
             key_metrics_list,
+=======
+            income_quarterly_raw,
+            income_ttm_raw,
+            balance_raw,
+            cashflow_ttm_raw,
+            cashflow_quarterly_raw,
+            ratios_raw,
+            reference_raw,
+>>>>>>> 156865d660aaf3606465210fea96d5db783b60fb:backend/app/services/financials.py
         ) = await asyncio.gather(
             income_quarterly_task,
             balance_task,
             cashflow_quarterly_task,
             ratios_task,
+<<<<<<< HEAD:backend/app/services/financials_service.py
             key_metrics_task,
+=======
+            reference_task,
+>>>>>>> 156865d660aaf3606465210fea96d5db783b60fb:backend/app/services/financials.py
         )
 
     # ── Normalise to lists (FMP returns arrays directly) ──────────────
@@ -118,7 +135,15 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
     if not isinstance(key_metrics_list, list):
         key_metrics_list = []
 
+<<<<<<< HEAD:backend/app/services/financials_service.py
     # FMP returns newest-first by default — that's what we want
+=======
+    # Current entity CIK from reference endpoint (for staleness detection)
+    reference_results = reference_raw.get("results", {})
+    current_cik = reference_results.get("cik") if isinstance(reference_results, dict) else None
+
+    income_ttm = income_ttm_list[0] if income_ttm_list else {}
+>>>>>>> 156865d660aaf3606465210fea96d5db783b60fb:backend/app/services/financials.py
     balance = balance_list[0] if balance_list else {}
     ratios = ratios_list[0] if ratios_list else {}
     key_metrics = key_metrics_list[0] if key_metrics_list else {}
@@ -243,7 +268,11 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
 
     # ── Growth Profile (3-year trend data for charts) ─────────────────
     growth_profile = _build_growth_profile(
+<<<<<<< HEAD:backend/app/services/financials_service.py
         income_quarters, cashflow_quarters, revenue_ttm, fcf_ttm
+=======
+        income_quarters, cashflow_quarters, revenue_ttm, fcf, current_cik
+>>>>>>> 156865d660aaf3606465210fea96d5db783b60fb:backend/app/services/financials.py
     )
 
     # ── Company name from FMP data ────────────────────────────────────
@@ -347,10 +376,15 @@ def _build_growth_profile(
     cashflow_quarters: List[dict],
     revenue_ttm: Optional[float],
     fcf_ttm: Optional[float],
+    current_cik: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Build growth profile from extended quarterly data (12Q income, 8Q cash flow).
     Returns trend arrays ordered oldest-first for charting, plus Rule of 40.
+
+    Staleness detection (two layers):
+      1. CIK mismatch — financials belong to a different entity than the current ticker
+      2. Date check — most recent quarter is older than 9 months (fallback)
     """
     # Reverse to oldest-first for charting
     inc_oldest_first = list(reversed(income_quarters))
@@ -443,6 +477,43 @@ def _build_growth_profile(
     if not has_data:
         return None
 
+    # ── Staleness detection ───────────────────────────────────────────
+    # Layer 1: CIK mismatch — financials are from a different entity
+    # Layer 2: Date check — most recent quarter older than 9 months (fallback)
+    is_stale = False
+    stale_reason = None
+    newest_period_end = None
+    financials_cik = None
+
+    if income_quarters:
+        newest_period_end = income_quarters[0].get("period_end")  # desc order, [0] = most recent
+
+        # Extract CIK from financial results (Massive includes it in each result)
+        financials_cik = income_quarters[0].get("cik")
+
+        # Layer 1: CIK mismatch
+        if current_cik and financials_cik and current_cik != financials_cik:
+            is_stale = True
+            stale_reason = "cik_mismatch"
+            print(f"⚠️ Growth Profile CIK mismatch for ticker: current={current_cik}, financials={financials_cik}")
+
+        # Layer 2: Date check (fallback when CIK comparison isn't possible)
+        if not is_stale and newest_period_end:
+            try:
+                newest_date = datetime.strptime(newest_period_end, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                staleness_threshold = datetime.now(timezone.utc) - timedelta(days=270)  # ~9 months
+                if newest_date < staleness_threshold:
+                    is_stale = True
+                    stale_reason = "date_stale"
+            except (ValueError, TypeError):
+                pass  # unparseable date — don't flag
+
+    # Suppress Rule of 40 when data is stale — it's meaningless
+    if is_stale:
+        rule_of_40 = None
+        latest_yoy_growth = None
+        fcf_margin = None
+
     return {
         "revenue_trend": revenue_trend,
         "gross_margin_trend": gross_margin_trend,
@@ -456,4 +527,13 @@ def _build_growth_profile(
         },
         "quarters_available": len(income_quarters),
         "fcf_quarters_available": len(cashflow_quarters),
+<<<<<<< HEAD:backend/app/services/financials_service.py
     }
+=======
+        "is_stale": is_stale,
+        "stale_reason": stale_reason,
+        "newest_period_end": newest_period_end,
+        "financials_cik": financials_cik,
+        "current_cik": current_cik,
+    }
+>>>>>>> 156865d660aaf3606465210fea96d5db783b60fb:backend/app/services/financials.py
