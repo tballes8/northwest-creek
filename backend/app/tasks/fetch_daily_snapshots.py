@@ -14,8 +14,8 @@ from app.db.models import DailyStockSnapshot
 from app.db.models import WaitlistSignup
 
 FMP_BASE = "https://financialmodelingprep.com/stable"
-# Batch size for quote requests (FMP accepts comma-separated symbols)
-QUOTE_BATCH_SIZE = 50
+# Batch size for quote requests — /stable/batch-quote supports larger batches
+QUOTE_BATCH_SIZE = 500
 
 
 async def fetch_and_store_snapshots():
@@ -87,8 +87,8 @@ async def fetch_and_store_snapshots():
 
                 try:
                     resp = await client.get(
-                        f"{FMP_BASE}/quote",
-                        params={"symbol": symbols, "apikey": api_key},
+                        f"{FMP_BASE}/batch-quote",
+                        params={"symbols": symbols, "apikey": api_key},
                     )
                     resp.raise_for_status()
                     quotes = resp.json()
