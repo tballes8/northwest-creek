@@ -12,7 +12,7 @@ Uses Massive v1 Financials endpoints (Stocks Advanced plan):
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.db.models import User
 from app.api.dependencies import get_current_user
-from app.services.financials import get_company_financials
+from app.services.financials_service import get_company_financials
 
 router = APIRouter()
 

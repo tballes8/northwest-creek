@@ -12,7 +12,7 @@ from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.services.market_data import market_data_service
 from app.services.company_info import get_sector_from_yfinance, get_company_basics
-from app.services.financials import get_company_financials
+from app.services.financials_service import get_company_financials
 
 
 def _safe_error(e: Exception) -> str:
