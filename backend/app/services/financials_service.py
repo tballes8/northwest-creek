@@ -96,31 +96,17 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
         reference_task = _fetch(client, f"/v3/reference/tickers/{ticker}", {})
 
         (
-<<<<<<< HEAD:backend/app/services/financials_service.py
             income_quarters,
             balance_list,
             cashflow_quarters,
             ratios_list,
             key_metrics_list,
-=======
-            income_quarterly_raw,
-            income_ttm_raw,
-            balance_raw,
-            cashflow_ttm_raw,
-            cashflow_quarterly_raw,
-            ratios_raw,
-            reference_raw,
->>>>>>> 156865d660aaf3606465210fea96d5db783b60fb:backend/app/services/financials.py
         ) = await asyncio.gather(
             income_quarterly_task,
             balance_task,
             cashflow_quarterly_task,
             ratios_task,
-<<<<<<< HEAD:backend/app/services/financials_service.py
             key_metrics_task,
-=======
-            reference_task,
->>>>>>> 156865d660aaf3606465210fea96d5db783b60fb:backend/app/services/financials.py
         )
 
     # ── Normalise to lists (FMP returns arrays directly) ──────────────
@@ -135,15 +121,7 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
     if not isinstance(key_metrics_list, list):
         key_metrics_list = []
 
-<<<<<<< HEAD:backend/app/services/financials_service.py
     # FMP returns newest-first by default — that's what we want
-=======
-    # Current entity CIK from reference endpoint (for staleness detection)
-    reference_results = reference_raw.get("results", {})
-    current_cik = reference_results.get("cik") if isinstance(reference_results, dict) else None
-
-    income_ttm = income_ttm_list[0] if income_ttm_list else {}
->>>>>>> 156865d660aaf3606465210fea96d5db783b60fb:backend/app/services/financials.py
     balance = balance_list[0] if balance_list else {}
     ratios = ratios_list[0] if ratios_list else {}
     key_metrics = key_metrics_list[0] if key_metrics_list else {}
@@ -268,11 +246,7 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
 
     # ── Growth Profile (3-year trend data for charts) ─────────────────
     growth_profile = _build_growth_profile(
-<<<<<<< HEAD:backend/app/services/financials_service.py
         income_quarters, cashflow_quarters, revenue_ttm, fcf_ttm
-=======
-        income_quarters, cashflow_quarters, revenue_ttm, fcf, current_cik
->>>>>>> 156865d660aaf3606465210fea96d5db783b60fb:backend/app/services/financials.py
     )
 
     # ── Company name from FMP data ────────────────────────────────────
@@ -527,13 +501,4 @@ def _build_growth_profile(
         },
         "quarters_available": len(income_quarters),
         "fcf_quarters_available": len(cashflow_quarters),
-<<<<<<< HEAD:backend/app/services/financials_service.py
     }
-=======
-        "is_stale": is_stale,
-        "stale_reason": stale_reason,
-        "newest_period_end": newest_period_end,
-        "financials_cik": financials_cik,
-        "current_cik": current_cik,
-    }
->>>>>>> 156865d660aaf3606465210fea96d5db783b60fb:backend/app/services/financials.py
