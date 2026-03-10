@@ -1,13 +1,7 @@
 """
 Company Financials API Endpoints
-Provides SEC-sourced financial statements and derived DCF inputs.
+Provides financial statements and derived DCF inputs via FMP.
 ⭐ PAID TIERS ONLY (Casual, Active, Professional)
-
-Uses Massive v1 Financials endpoints (Stocks Advanced plan):
-  - Income Statements
-  - Balance Sheets
-  - Cash Flow Statements
-  - Ratios
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.db.models import User
@@ -41,7 +35,7 @@ async def get_financials(
     - Ratios (daily-refreshed: P/E, EV/EBITDA, ROE, D/E, etc.)
     - Derived DCF suggestions (growth rate, WACC, FCF, margins)
 
-    Data sourced from SEC XBRL filings via Massive API.
+    Data sourced from Financial Modeling Prep (FMP).
     """
     ticker = ticker.strip().upper()
     if not ticker or len(ticker) > 10:

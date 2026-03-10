@@ -100,5 +100,5 @@ async def get_service_status(current_user: User = Depends(get_current_user)):
         "subscribed_tickers": list(live_price_service.subscribed_tickers),
         "cached_tickers": list(live_price_service.price_cache.keys()),
         "market_hours": live_price_service.is_market_hours(),
-        "polygon_connected": live_price_service.polygon_ws is not None and not live_price_service.polygon_ws.closed
+        "polling_active": live_price_service.running
     }

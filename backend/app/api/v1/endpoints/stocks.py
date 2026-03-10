@@ -211,73 +211,102 @@ async def get_stock_news(
 @router.get("/ipos")
 async def get_ipos():
     """
-    Get upcoming, pending, and rumored IPOs from Polygon API.
-    "Upcoming" (status=new) is filtered to the last 30 days to avoid
-    showing stale historical listings.
+    Get upcoming IPOs from FMP IPO calendar.
+    Returns upcoming, confirmed, and recent IPOs.
     """
     import httpx
     from app.config import settings
     from datetime import datetime, timedelta
-    
+
     api_key = settings.MASSIVE_API_KEY
-    base_url = "https://api.polygon.io/vX/reference/ipos"
-    
-    # Only show "new" IPOs from the last 30 days
+    base_url = "https://financialmodelingprep.com/stable"
+
+    today = datetime.now().strftime("%Y-%m-%d")
     thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-    
+    ninety_days_ahead = (datetime.now() + timedelta(days=90)).strftime("%Y-%m-%d")
+
     results = {
         "upcoming": [],
         "pending": [],
         "rumored": [],
     }
-    
+
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            for status_key, ipo_status in [("upcoming", "new"), ("pending", "pending"), ("rumored", "rumor")]:
-                try:
-                    params = {
-                        "ipo_status": ipo_status,
-                        "order": "desc",
-                        "sort": "listing_date",
-                        "limit": 25,
-                        "apiKey": api_key,
-                    }
-                    # Date filter: only "upcoming" gets the 30-day cutoff
-                    if ipo_status == "new":
-                        params["listing_date.gte"] = thirty_days_ago
-                    
-                    resp = await client.get(base_url, params=params)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        items = []
-                        for ipo in data.get("results", []):
-                            items.append({
-                                "ticker": ipo.get("ticker", "N/A"),
-                                "issuer_name": ipo.get("issuer_name", "Unknown"),
-                                "listing_date": ipo.get("listing_date"),
-                                "announced_date": ipo.get("announced_date"),
-                                "final_issue_price": ipo.get("final_issue_price"),
-                                "lowest_offer_price": ipo.get("lowest_offer_price"),
-                                "highest_offer_price": ipo.get("highest_offer_price"),
-                                "total_offer_size": ipo.get("total_offer_size"),
-                                "shares_outstanding": ipo.get("shares_outstanding"),
-                                "primary_exchange": ipo.get("primary_exchange"),
-                                "security_type": ipo.get("security_type"),
-                                "security_description": ipo.get("security_description"),
-                                "ipo_status": ipo.get("ipo_status"),
-                                "last_updated": ipo.get("last_updated"),
-                                "currency_code": ipo.get("currency_code"),
-                                "min_shares_offered": ipo.get("min_shares_offered"),
-                                "max_shares_offered": ipo.get("max_shares_offered"),
+            # Fetch upcoming IPOs (today through 90 days out)
+            try:
+                resp = await client.get(
+                    f"{base_url}/ipo-calendar",
+                    params={
+                        "from": today,
+                        "to": ninety_days_ahead,
+                        "apikey": api_key,
+                    },
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if isinstance(data, list):
+                        for ipo in data[:25]:
+                            results["upcoming"].append({
+                                "ticker": ipo.get("symbol", "N/A"),
+                                "issuer_name": ipo.get("company", "Unknown"),
+                                "listing_date": ipo.get("date"),
+                                "announced_date": None,
+                                "final_issue_price": ipo.get("price"),
+                                "lowest_offer_price": ipo.get("priceRange", "").split("-")[0].strip() if ipo.get("priceRange") else None,
+                                "highest_offer_price": ipo.get("priceRange", "").split("-")[-1].strip() if ipo.get("priceRange") else None,
+                                "total_offer_size": ipo.get("numberOfShares"),
+                                "shares_outstanding": None,
+                                "primary_exchange": ipo.get("exchange"),
+                                "security_type": None,
+                                "security_description": ipo.get("actions"),
+                                "ipo_status": "upcoming",
+                                "last_updated": None,
+                                "currency_code": "USD",
+                                "min_shares_offered": None,
+                                "max_shares_offered": None,
                             })
-                        results[status_key] = items
-                    else:
-                        print(f"IPO fetch for {ipo_status} returned {resp.status_code}")
-                except Exception as inner_err:
-                    print(f"IPO fetch error for {ipo_status}: {inner_err}")
-        
+            except Exception as inner_err:
+                print(f"IPO fetch error for upcoming: {inner_err}")
+
+            # Fetch recent IPOs (last 30 days) as "pending/confirmed"
+            try:
+                resp = await client.get(
+                    f"{base_url}/ipo-calendar",
+                    params={
+                        "from": thirty_days_ago,
+                        "to": today,
+                        "apikey": api_key,
+                    },
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if isinstance(data, list):
+                        for ipo in data[:25]:
+                            results["pending"].append({
+                                "ticker": ipo.get("symbol", "N/A"),
+                                "issuer_name": ipo.get("company", "Unknown"),
+                                "listing_date": ipo.get("date"),
+                                "announced_date": None,
+                                "final_issue_price": ipo.get("price"),
+                                "lowest_offer_price": None,
+                                "highest_offer_price": None,
+                                "total_offer_size": ipo.get("numberOfShares"),
+                                "shares_outstanding": None,
+                                "primary_exchange": ipo.get("exchange"),
+                                "security_type": None,
+                                "security_description": ipo.get("actions"),
+                                "ipo_status": "recent",
+                                "last_updated": None,
+                                "currency_code": "USD",
+                                "min_shares_offered": None,
+                                "max_shares_offered": None,
+                            })
+            except Exception as inner_err:
+                print(f"IPO fetch error for recent: {inner_err}")
+
         return results
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching IPO data: {_safe_error(e)}")
 
@@ -356,46 +385,45 @@ async def get_dividends(ticker: str):
 @router.get("/search")
 async def search_tickers(q: str = Query(..., min_length=1, description="Search query - ticker symbol or company name")):
     """
-    Search for stocks by ticker symbol or company name using Massive API.
+    Search for stocks by ticker symbol or company name using FMP.
     Returns matching tickers with company names.
     """
     import httpx
     from app.config import settings
-    
+
     api_key = settings.MASSIVE_API_KEY
-    
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
-                "https://api.polygon.io/v3/reference/tickers",
+                "https://financialmodelingprep.com/stable/search",
                 params={
-                    "search": q.strip(),
-                    "active": "true",
-                    "market": "stocks",
+                    "query": q.strip(),
                     "limit": 10,
-                    "sort": "ticker",
-                    "order": "asc",
-                    "apiKey": api_key,
+                    "apikey": api_key,
                 },
             )
-            
+
             if resp.status_code != 200:
                 return {"results": []}
-            
+
             data = resp.json()
+            if not isinstance(data, list):
+                return {"results": []}
+
             results = []
-            for item in data.get("results", []):
+            for item in data:
                 results.append({
-                    "ticker": item.get("ticker"),
+                    "ticker": item.get("symbol"),
                     "name": item.get("name"),
-                    "market": item.get("market"),
-                    "type": item.get("type"),
-                    "primary_exchange": item.get("primary_exchange"),
-                    "active": item.get("active"),
+                    "market": "stocks",
+                    "type": item.get("stockExchange"),
+                    "primary_exchange": item.get("stockExchange"),
+                    "active": True,
                 })
-            
+
             return {"results": results}
-            
+
     except Exception as e:
         print(f"Ticker search error: {e}")
         return {"results": []}

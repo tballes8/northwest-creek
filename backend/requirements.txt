@@ -39,6 +39,4 @@ pytz==2024.2
 email-validator==2.3.0
 sendgrid
 greenlet
-massive
-yfinance
 twilio

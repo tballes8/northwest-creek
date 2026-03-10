@@ -1,14 +1,15 @@
 """
-Company Financials Service — Massive (Polygon) v1 Financials API
-Fetches income statements, balance sheets, cash flow statements, and ratios
-in parallel via httpx.  Returns a unified payload for frontend consumption
-and derived DCF-ready suggestions.
+Company Financials Service — Financial Modeling Prep (FMP) integration
+Fetches income statements, balance sheets, cash flow statements, ratios,
+and key metrics in parallel via httpx.  Returns a unified payload for
+frontend consumption and derived DCF-ready suggestions.
 
-Endpoints used (Stocks Advanced plan required):
-  /stocks/financials/v1/income-statements
-  /stocks/financials/v1/balance-sheets
-  /stocks/financials/v1/cash-flow-statements
-  /stocks/financials/v1/ratios
+FMP Stable endpoints used:
+  /stable/income-statement?symbol=X&period=quarter
+  /stable/balance-sheet-statement?symbol=X&period=quarter
+  /stable/cash-flow-statement?symbol=X&period=quarter
+  /stable/ratios?symbol=X&period=quarter
+  /stable/key-metrics?symbol=X&period=quarter
 """
 import asyncio
 import httpx
@@ -17,7 +18,7 @@ from app.config import get_settings
 
 settings = get_settings()
 
-BASE_URL = "https://api.massive.com"
+BASE_URL = "https://financialmodelingprep.com/stable"
 API_KEY = settings.MASSIVE_API_KEY
 TIMEOUT = 15.0
 
@@ -42,97 +43,114 @@ def _pct(numerator: Optional[float], denominator: Optional[float]) -> Optional[f
         return None
 
 
-async def _fetch(client: httpx.AsyncClient, path: str, params: dict) -> dict:
-    """Fetch a single Massive endpoint, return parsed JSON or empty dict on failure."""
-    url = f"{BASE_URL}{path}"
-    full_params = {"apiKey": API_KEY, **params}
+def _sum_quarters(quarters: List[dict], field: str) -> Optional[float]:
+    """Sum a field across up to 4 quarters for TTM computation. Returns None if no values."""
+    vals = [q.get(field) for q in quarters[:4] if q.get(field) is not None]
+    if not vals:
+        return None
+    return sum(vals)
+
+
+async def _fetch(client: httpx.AsyncClient, path: str, params: dict) -> Any:
+    """Fetch a single FMP endpoint, return parsed JSON or empty list on failure."""
+    url = f"{BASE_URL}/{path}"
+    full_params = {"apikey": API_KEY, **params}
     try:
         response = await client.get(url, params=full_params, timeout=TIMEOUT)
         response.raise_for_status()
         return response.json()
     except Exception as e:
         print(f"⚠️ Financials fetch failed for {path}: {e}")
-        return {}
+        return []
 
 
 async def get_company_financials(ticker: str) -> Dict[str, Any]:
     """
-    Fetch all four financials endpoints in parallel and return unified payload.
+    Fetch all financials endpoints in parallel and return unified payload.
 
     Returns dict with keys:
       ticker, company_name, income_statement, balance_sheet, cash_flow,
-      ratios, quarterly_trend, dcf_suggestions
+      ratios, quarterly_trend, dcf_suggestions, growth_profile
     """
     ticker = ticker.upper()
 
     async with httpx.AsyncClient() as client:
         # Fire all requests in parallel
-        income_quarterly_task = _fetch(client, "/stocks/financials/v1/income-statements", {
-            "tickers": ticker, "timeframe": "quarterly", "limit": 12, "order": "desc",
+        income_quarterly_task = _fetch(client, "income-statement", {
+            "symbol": ticker, "period": "quarter", "limit": 12,
         })
-        income_ttm_task = _fetch(client, "/stocks/financials/v1/income-statements", {
-            "tickers": ticker, "timeframe": "trailing_twelve_months", "limit": 1,
+        balance_task = _fetch(client, "balance-sheet-statement", {
+            "symbol": ticker, "period": "quarter", "limit": 1,
         })
-        balance_task = _fetch(client, "/stocks/financials/v1/balance-sheets", {
-            "tickers": ticker, "timeframe": "quarterly", "limit": 1, "order": "desc",
+        cashflow_quarterly_task = _fetch(client, "cash-flow-statement", {
+            "symbol": ticker, "period": "quarter", "limit": 8,
         })
-        cashflow_ttm_task = _fetch(client, "/stocks/financials/v1/cash-flow-statements", {
-            "tickers": ticker, "timeframe": "trailing_twelve_months", "limit": 1,
+        ratios_task = _fetch(client, "ratios", {
+            "symbol": ticker, "period": "quarter", "limit": 1,
         })
-        cashflow_quarterly_task = _fetch(client, "/stocks/financials/v1/cash-flow-statements", {
-            "tickers": ticker, "timeframe": "quarterly", "limit": 8, "order": "desc",
-        })
-        ratios_task = _fetch(client, "/stocks/financials/v1/ratios", {
-            "ticker": ticker,
+        key_metrics_task = _fetch(client, "key-metrics", {
+            "symbol": ticker, "period": "quarter", "limit": 1,
         })
 
         (
-            income_quarterly_raw,
-            income_ttm_raw,
-            balance_raw,
-            cashflow_ttm_raw,
-            cashflow_quarterly_raw,
-            ratios_raw,
+            income_quarters,
+            balance_list,
+            cashflow_quarters,
+            ratios_list,
+            key_metrics_list,
         ) = await asyncio.gather(
             income_quarterly_task,
-            income_ttm_task,
             balance_task,
-            cashflow_ttm_task,
             cashflow_quarterly_task,
             ratios_task,
+            key_metrics_task,
         )
 
-    # ── Extract results arrays ────────────────────────────────────────
-    income_quarters: List[dict] = income_quarterly_raw.get("results", [])
-    income_ttm_list: List[dict] = income_ttm_raw.get("results", [])
-    balance_list: List[dict] = balance_raw.get("results", [])
-    cashflow_ttm_list: List[dict] = cashflow_ttm_raw.get("results", [])
-    cashflow_quarters: List[dict] = cashflow_quarterly_raw.get("results", [])
-    ratios_list: List[dict] = ratios_raw.get("results", [])
+    # ── Normalise to lists (FMP returns arrays directly) ──────────────
+    if not isinstance(income_quarters, list):
+        income_quarters = []
+    if not isinstance(balance_list, list):
+        balance_list = []
+    if not isinstance(cashflow_quarters, list):
+        cashflow_quarters = []
+    if not isinstance(ratios_list, list):
+        ratios_list = []
+    if not isinstance(key_metrics_list, list):
+        key_metrics_list = []
 
-    income_ttm = income_ttm_list[0] if income_ttm_list else {}
+    # FMP returns newest-first by default — that's what we want
     balance = balance_list[0] if balance_list else {}
-    cashflow_ttm = cashflow_ttm_list[0] if cashflow_ttm_list else {}
     ratios = ratios_list[0] if ratios_list else {}
-
-    # Most recent quarter
+    key_metrics = key_metrics_list[0] if key_metrics_list else {}
     latest_q = income_quarters[0] if income_quarters else {}
 
-    # ── Income Statement summary (TTM) ────────────────────────────────
-    revenue_ttm = income_ttm.get("revenue")
-    gross_profit_ttm = income_ttm.get("gross_profit")
-    operating_income_ttm = income_ttm.get("operating_income")
-    net_income_ttm = income_ttm.get("net_income_loss_attributable_common_shareholders") or income_ttm.get("consolidated_net_income_loss")
-    ebitda_ttm = income_ttm.get("ebitda")
-    eps_diluted_ttm = income_ttm.get("diluted_earnings_per_share")
-    rd_ttm = income_ttm.get("research_development")
-    sga_ttm = income_ttm.get("selling_general_administrative")
+    # ── Compute TTM from 4 most recent quarters ──────────────────────
+    ttm_inc = income_quarters[:4]   # newest-first, up to 4
+    ttm_cf = cashflow_quarters[:4]
 
+    revenue_ttm = _sum_quarters(ttm_inc, "revenue")
+    gross_profit_ttm = _sum_quarters(ttm_inc, "grossProfit")
+    operating_income_ttm = _sum_quarters(ttm_inc, "operatingIncome")
+    net_income_ttm = _sum_quarters(ttm_inc, "netIncome")
+    ebitda_ttm = _sum_quarters(ttm_inc, "ebitda")
+    eps_diluted_ttm = _sum_quarters(ttm_inc, "epsDiluted")
+    rd_ttm = _sum_quarters(ttm_inc, "researchAndDevelopmentExpenses")
+    sga_ttm = _sum_quarters(ttm_inc, "sellingGeneralAndAdministrativeExpenses")
+    cost_of_revenue_ttm = _sum_quarters(ttm_inc, "costOfRevenue")
+
+    operating_cf_ttm = _sum_quarters(ttm_cf, "operatingCashFlow")
+    capex_ttm = _sum_quarters(ttm_cf, "capitalExpenditure")
+    fcf_ttm = _sum_quarters(ttm_cf, "freeCashFlow")
+    # Fallback: compute FCF if FMP didn't provide it directly
+    if fcf_ttm is None and operating_cf_ttm is not None and capex_ttm is not None:
+        fcf_ttm = operating_cf_ttm + capex_ttm  # capex is negative
+
+    # ── Income Statement summary (TTM) ────────────────────────────────
     income_statement = {
         "period": "TTM",
-        "period_end": income_ttm.get("period_end"),
+        "period_end": latest_q.get("date"),
         "revenue": revenue_ttm,
-        "cost_of_revenue": income_ttm.get("cost_of_revenue"),
+        "cost_of_revenue": cost_of_revenue_ttm,
         "gross_profit": gross_profit_ttm,
         "gross_margin_pct": _pct(gross_profit_ttm, revenue_ttm),
         "operating_income": operating_income_ttm,
@@ -141,98 +159,98 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
         "net_margin_pct": _pct(net_income_ttm, revenue_ttm),
         "ebitda": ebitda_ttm,
         "diluted_eps": _fmt(eps_diluted_ttm),
-        "diluted_shares_outstanding": income_ttm.get("diluted_average_shares"),
+        "diluted_shares_outstanding": latest_q.get("weightedAverageShsOutDil"),
         "research_development": rd_ttm,
         "selling_general_administrative": sga_ttm,
     }
 
     # ── Balance Sheet summary (latest quarter) ────────────────────────
     balance_sheet = {
-        "period_end": balance.get("period_end"),
-        "fiscal_year": balance.get("fiscal_year"),
-        "fiscal_quarter": balance.get("fiscal_quarter"),
-        "cash_and_equivalents": balance.get("cash_and_equivalents"),
-        "short_term_investments": balance.get("short_term_investments"),
-        "total_current_assets": balance.get("total_current_assets"),
-        "total_assets": balance.get("total_assets"),
-        "total_current_liabilities": balance.get("total_current_liabilities"),
-        "long_term_debt": balance.get("long_term_debt_and_capital_lease_obligations"),
-        "total_liabilities": balance.get("total_liabilities"),
-        "total_equity": balance.get("total_equity"),
-        "retained_earnings": balance.get("retained_earnings_deficit"),
+        "period_end": balance.get("date"),
+        "fiscal_year": balance.get("calendarYear"),
+        "fiscal_quarter": balance.get("period"),
+        "cash_and_equivalents": balance.get("cashAndCashEquivalents"),
+        "short_term_investments": balance.get("shortTermInvestments"),
+        "total_current_assets": balance.get("totalCurrentAssets"),
+        "total_assets": balance.get("totalAssets"),
+        "total_current_liabilities": balance.get("totalCurrentLiabilities"),
+        "long_term_debt": balance.get("longTermDebt"),
+        "total_liabilities": balance.get("totalLiabilities"),
+        "total_equity": balance.get("totalStockholdersEquity"),
+        "retained_earnings": balance.get("retainedEarnings"),
     }
 
     # ── Cash Flow summary (TTM) ───────────────────────────────────────
-    operating_cf = cashflow_ttm.get("net_cash_from_operating_activities")
-    capex = cashflow_ttm.get("purchase_of_property_plant_and_equipment")
-    fcf = None
-    if operating_cf is not None and capex is not None:
-        fcf = operating_cf + capex  # capex is negative
+    dividends_ttm = _sum_quarters(ttm_cf, "dividendsPaid")
+    investing_ttm = _sum_quarters(ttm_cf, "netCashUsedForInvestingActivites")
+    financing_ttm = _sum_quarters(ttm_cf, "netCashUsedProvidedByFinancingActivities")
+    da_ttm = _sum_quarters(ttm_cf, "depreciationAndAmortization")
 
     cash_flow = {
         "period": "TTM",
-        "period_end": cashflow_ttm.get("period_end"),
-        "operating_cash_flow": operating_cf,
-        "capex": capex,
-        "free_cash_flow": fcf,
-        "dividends": cashflow_ttm.get("dividends"),
-        "net_cash_from_investing": cashflow_ttm.get("net_cash_from_investing_activities"),
-        "net_cash_from_financing": cashflow_ttm.get("net_cash_from_financing_activities"),
-        "depreciation_amortization": cashflow_ttm.get("depreciation_depletion_and_amortization"),
+        "period_end": cashflow_quarters[0].get("date") if cashflow_quarters else None,
+        "operating_cash_flow": operating_cf_ttm,
+        "capex": capex_ttm,
+        "free_cash_flow": fcf_ttm,
+        "dividends": dividends_ttm,
+        "net_cash_from_investing": investing_ttm,
+        "net_cash_from_financing": financing_ttm,
+        "depreciation_amortization": da_ttm,
     }
 
-    # ── Ratios (daily-refreshed) ──────────────────────────────────────
+    # ── Ratios (from FMP ratios + key-metrics endpoints) ──────────────
     ratios_summary = {
         "date": ratios.get("date"),
-        "price": ratios.get("price"),
-        "market_cap": ratios.get("market_cap"),
-        "enterprise_value": ratios.get("enterprise_value"),
-        "pe_ratio": _fmt(ratios.get("price_to_earnings")),
-        "ps_ratio": _fmt(ratios.get("price_to_sales")),
-        "pb_ratio": _fmt(ratios.get("price_to_book")),
-        "price_to_fcf": _fmt(ratios.get("price_to_free_cash_flow")),
-        "ev_to_ebitda": _fmt(ratios.get("ev_to_ebitda")),
-        "ev_to_sales": _fmt(ratios.get("ev_to_sales")),
-        "roe": _fmt(ratios.get("return_on_equity")),
-        "roa": _fmt(ratios.get("return_on_assets")),
-        "debt_to_equity": _fmt(ratios.get("debt_to_equity")),
-        "current_ratio": _fmt(ratios.get("current")),
-        "quick_ratio": _fmt(ratios.get("quick")),
-        "dividend_yield": _fmt(ratios.get("dividend_yield"), 4),
-        "eps": _fmt(ratios.get("earnings_per_share")),
-        "fcf": ratios.get("free_cash_flow"),
+        "price": key_metrics.get("marketCap") and latest_q.get("epsDiluted") and None,  # not directly available
+        "market_cap": key_metrics.get("marketCap"),
+        "enterprise_value": key_metrics.get("enterpriseValue"),
+        "pe_ratio": _fmt(ratios.get("priceEarningsRatio")),
+        "ps_ratio": _fmt(ratios.get("priceToSalesRatio")),
+        "pb_ratio": _fmt(ratios.get("priceToBookRatio")),
+        "price_to_fcf": _fmt(ratios.get("priceToFreeCashFlowsRatio")),
+        "ev_to_ebitda": _fmt(ratios.get("enterpriseValueMultiple") or key_metrics.get("enterpriseValueOverEBITDA")),
+        "ev_to_sales": _fmt(key_metrics.get("evToSales")),
+        "roe": _fmt(ratios.get("returnOnEquity")),
+        "roa": _fmt(ratios.get("returnOnAssets")),
+        "debt_to_equity": _fmt(ratios.get("debtEquityRatio")),
+        "current_ratio": _fmt(ratios.get("currentRatio")),
+        "quick_ratio": _fmt(ratios.get("quickRatio")),
+        "dividend_yield": _fmt(ratios.get("dividendYield"), 4),
+        "eps": _fmt(eps_diluted_ttm),
+        "fcf": fcf_ttm,
     }
 
     # ── Quarterly revenue trend (for YoY growth) ──────────────────────
     quarterly_trend = []
     for q in income_quarters:
         quarterly_trend.append({
-            "period_end": q.get("period_end"),
-            "fiscal_year": q.get("fiscal_year"),
-            "fiscal_quarter": q.get("fiscal_quarter"),
+            "period_end": q.get("date"),
+            "fiscal_year": q.get("calendarYear"),
+            "fiscal_quarter": q.get("period"),
             "revenue": q.get("revenue"),
-            "net_income": q.get("net_income_loss_attributable_common_shareholders") or q.get("consolidated_net_income_loss"),
-            "gross_margin_pct": _pct(q.get("gross_profit"), q.get("revenue")),
-            "operating_margin_pct": _pct(q.get("operating_income"), q.get("revenue")),
-            "eps_diluted": _fmt(q.get("diluted_earnings_per_share")),
-            "diluted_shares_outstanding": q.get("diluted_average_shares"),
+            "net_income": q.get("netIncome"),
+            "gross_margin_pct": _pct(q.get("grossProfit"), q.get("revenue")),
+            "operating_margin_pct": _pct(q.get("operatingIncome"), q.get("revenue")),
+            "eps_diluted": _fmt(q.get("epsDiluted")),
+            "diluted_shares_outstanding": q.get("weightedAverageShsOutDil"),
         })
 
     # ── DCF Suggestions (derived from actuals) ────────────────────────
     dcf_suggestions = _derive_dcf_suggestions(
-        income_quarters, income_ttm, balance, cashflow_ttm, ratios
+        income_quarters, revenue_ttm, operating_income_ttm, net_income_ttm,
+        ebitda_ttm, operating_cf_ttm, capex_ttm, fcf_ttm, ratios
     )
 
     # ── Growth Profile (3-year trend data for charts) ─────────────────
     growth_profile = _build_growth_profile(
-        income_quarters, cashflow_quarters, revenue_ttm, fcf
+        income_quarters, cashflow_quarters, revenue_ttm, fcf_ttm
     )
 
-    # ── Company name from tickers field or fallback ───────────────────
+    # ── Company name from FMP data ────────────────────────────────────
     company_name = None
-    for src in [income_ttm, balance, cashflow_ttm]:
-        if src.get("company_name"):
-            company_name = src["company_name"]
+    for src in income_quarters[:1] + balance_list[:1] + cashflow_quarters[:1]:
+        if src.get("symbol"):
+            company_name = src.get("symbol")
             break
 
     return {
@@ -250,26 +268,19 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
 
 def _derive_dcf_suggestions(
     income_quarters: List[dict],
-    income_ttm: dict,
-    balance: dict,
-    cashflow_ttm: dict,
+    revenue_ttm: Optional[float],
+    operating_income_ttm: Optional[float],
+    net_income_ttm: Optional[float],
+    ebitda_ttm: Optional[float],
+    operating_cf_ttm: Optional[float],
+    capex_ttm: Optional[float],
+    fcf_ttm: Optional[float],
     ratios: dict,
 ) -> Dict[str, Any]:
     """
     Derive DCF model input suggestions from actual financials.
     These replace generic sector defaults with company-specific values.
     """
-    revenue_ttm = income_ttm.get("revenue")
-    operating_income_ttm = income_ttm.get("operating_income")
-    net_income_ttm = income_ttm.get("net_income_loss_attributable_common_shareholders") or income_ttm.get("consolidated_net_income_loss")
-    ebitda_ttm = income_ttm.get("ebitda")
-
-    operating_cf = cashflow_ttm.get("net_cash_from_operating_activities")
-    capex = cashflow_ttm.get("purchase_of_property_plant_and_equipment")
-    fcf_ttm = None
-    if operating_cf is not None and capex is not None:
-        fcf_ttm = operating_cf + capex
-
     # ── YoY revenue growth from quarterly data ────────────────────────
     # Compare most recent quarter to same quarter one year ago
     revenue_growth_yoy = None
@@ -295,7 +306,7 @@ def _derive_dcf_suggestions(
 
     # ── Estimated WACC (simplified) ───────────────────────────────────
     # Uses D/E ratio + assumed cost of debt & equity risk premium
-    de_ratio = ratios.get("debt_to_equity")
+    de_ratio = ratios.get("debtEquityRatio")
     estimated_wacc = None
     if de_ratio is not None:
         try:
@@ -346,14 +357,16 @@ def _build_growth_profile(
     cf_oldest_first = list(reversed(cashflow_quarters))
 
     def _q_label(q: dict) -> str:
-        return f"Q{q.get('fiscal_quarter', '?')} {q.get('fiscal_year', '?')}"
+        period = q.get("period", "?")  # FMP uses "Q1", "Q2", etc.
+        year = q.get("calendarYear", "?")
+        return f"{period} {year}"
 
     # ── Revenue trend (up to 12Q) ─────────────────────────────────────
     revenue_trend = []
     for q in inc_oldest_first:
         revenue_trend.append({
             "period": _q_label(q),
-            "period_end": q.get("period_end"),
+            "period_end": q.get("date"),
             "value": q.get("revenue"),
         })
 
@@ -362,8 +375,8 @@ def _build_growth_profile(
     for q in inc_oldest_first:
         gross_margin_trend.append({
             "period": _q_label(q),
-            "period_end": q.get("period_end"),
-            "value": _pct(q.get("gross_profit"), q.get("revenue")),
+            "period_end": q.get("date"),
+            "value": _pct(q.get("grossProfit"), q.get("revenue")),
         })
 
     # ── EPS trend (up to 12Q) ─────────────────────────────────────────
@@ -371,23 +384,25 @@ def _build_growth_profile(
     for q in inc_oldest_first:
         eps_trend.append({
             "period": _q_label(q),
-            "period_end": q.get("period_end"),
-            "value": _fmt(q.get("diluted_earnings_per_share")),
+            "period_end": q.get("date"),
+            "value": _fmt(q.get("epsDiluted")),
         })
 
     # ── FCF trend (up to 8Q, from quarterly cash flow) ────────────────
     fcf_trend = []
     for q in cf_oldest_first:
-        op_cf = q.get("net_cash_from_operating_activities")
-        capex = q.get("purchase_of_property_plant_and_equipment")
-        qfcf = None
-        if op_cf is not None and capex is not None:
-            qfcf = round(op_cf + capex, 2)  # capex is negative
-        elif op_cf is not None:
-            qfcf = round(op_cf, 2)  # fallback: operating CF only
+        qfcf = q.get("freeCashFlow")
+        # Fallback: compute from operating CF + capex
+        if qfcf is None:
+            op_cf = q.get("operatingCashFlow")
+            capex = q.get("capitalExpenditure")
+            if op_cf is not None and capex is not None:
+                qfcf = round(op_cf + capex, 2)
+            elif op_cf is not None:
+                qfcf = round(op_cf, 2)
         fcf_trend.append({
             "period": _q_label(q),
-            "period_end": q.get("period_end"),
+            "period_end": q.get("date"),
             "value": qfcf,
         })
 
@@ -402,7 +417,7 @@ def _build_growth_profile(
                 yoy_growth = round(((current_rev - prior_rev) / prior_rev) * 100, 2)
         revenue_growth_trend.append({
             "period": _q_label(q),
-            "period_end": q.get("period_end"),
+            "period_end": q.get("date"),
             "value": yoy_growth,
         })
 

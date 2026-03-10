@@ -1,7 +1,6 @@
 """
 DCF Valuation API Endpoints - Discounted Cash Flow Analysis
-⭐ PAID TIERS ONLY 
-Uses yfinance for sector data (simple, free, accurate)
+⭐ PAID TIERS ONLY
 """
 import re
 from fastapi import APIRouter, Depends, Query, HTTPException, status
@@ -11,7 +10,6 @@ from app.db.models import User
 from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.services.market_data import market_data_service
-from app.services.company_info import get_sector_from_yfinance, get_company_basics
 from app.services.financials_service import get_company_financials
 
 
@@ -47,7 +45,7 @@ async def get_dcf_suggestions(
     🔒 PAID TIERS ONLY - Get AI-suggested DCF parameters for a stock
     
     Returns intelligent default parameters based on:
-    - Company sector and industry (from yfinance - free and accurate!)
+    - Company sector and industry
     - Market capitalization
     - Growth characteristics
     
@@ -57,37 +55,22 @@ async def get_dcf_suggestions(
     - Company information
     """
     try:
-        # Get sector from yfinance (free, fast, accurate!)
-        sector = get_sector_from_yfinance(ticker)
-        
-        # Get company info and quote
-        try:
-            # Get real-time price and market cap from Massive API
-            quote = await market_data_service.get_quote(ticker)
-            company = await market_data_service.get_company_info(ticker)
-            
-            company_name = company.get("name", ticker)
-            market_cap = company.get("market_cap", 0)
-            current_price = float(quote.get('price', 0))
-            industry = company.get("industry", "Unknown")
-            security_type = company.get("type", "")  # CS, WARRANT, ETF, etc.
-        except Exception as api_error:
-            # Fallback to yfinance for everything if Massive API fails
-            print(f"Massive API failed, using yfinance fallback: {_safe_error(api_error)}")
-            company_data = get_company_basics(ticker)
-            
-            company_name = company_data["name"]
-            market_cap = company_data["market_cap"]
-            current_price = company_data["current_price"]
-            industry = company_data["industry"]
-            sector = company_data["sector"]  # Use yfinance sector
-            security_type = ""  # yfinance fallback doesn't have Polygon type info
-            
-            if current_price == 0:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Could not fetch price data for {ticker}"
-                )
+        # Get company info and quote from FMP
+        quote = await market_data_service.get_quote(ticker)
+        company = await market_data_service.get_company_info(ticker)
+
+        company_name = company.get("name", ticker)
+        market_cap = company.get("market_cap", 0)
+        current_price = float(quote.get('price', 0))
+        industry = company.get("industry", "Unknown")
+        sector = company.get("sector", "Other")
+        security_type = company.get("type", "")  # CS, ETF, etc.
+
+        if current_price == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Could not fetch price data for {ticker}"
+            )
         
         # Determine company size category
         if market_cap >= 200_000_000_000:  # $200B+
@@ -102,7 +85,7 @@ async def get_dcf_suggestions(
             size_category = "micro_cap"
         
         # Sector-based growth and risk profiles
-        # Note: yfinance returns standardized sector names, no mapping needed!
+        # FMP returns standardized sector names directly
         sector_profiles = {
             "Technology": {
                 "growth": 0.15,
@@ -253,7 +236,7 @@ async def get_dcf_suggestions(
         if adjustment["growth_note"]:
             discount_reasoning += f" ({adjustment['growth_note']})"
         
-        # ── Fetch actual financials from Polygon (non-blocking) ───────
+        # ── Fetch actual financials from FMP (non-blocking) ───────
         actuals = None
         dcf_sug = None
         growth_profile = None
@@ -423,7 +406,7 @@ async def calculate_dcf(
             market_cap = None
             security_type = ""
         
-        # ── Fetch actual financials from Polygon ──────────────────────
+        # ── Fetch actual financials from FMP ──────────────────────
         current_fcf = None
         shares_outstanding = None
         fcf_source = None

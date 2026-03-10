@@ -1,13 +1,11 @@
 """
-Market data service - Polygon.io integration
+Market data service - Financial Modeling Prep (FMP) integration
 """
 import re
-import httpx, os
+import httpx
 from typing import Dict, Any, List
 from datetime import datetime, timezone, timedelta
 from app.config import get_settings
-from massive import RESTClient
-from massive.rest.models import TickerSnapshot
 
 settings = get_settings()
 
@@ -16,6 +14,7 @@ def _safe_error(e: Exception) -> str:
     """Strip API keys and sensitive params from error messages."""
     msg = str(e)
     msg = re.sub(r'apiKey=[^&\s\'"]+', 'apiKey=***', msg)
+    msg = re.sub(r'apikey=[^&\s\'"]+', 'apikey=***', msg)
     msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
     msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg)
     return msg
@@ -24,11 +23,9 @@ def _safe_error(e: Exception) -> str:
 class MarketDataService:
 
     def __init__(self):
-        self.base_url = "https://api.massive.com"
+        self.base_url = "https://financialmodelingprep.com/stable"
         self.api_key = settings.MASSIVE_API_KEY
         self.timeout = 10.0
-        # Initialize Massive REST client for snapshot data
-        self.rest_client = RESTClient(self.api_key)
 
     @staticmethod
     def _is_warrant_ticker(ticker: str) -> bool:
@@ -43,214 +40,93 @@ class MarketDataService:
             return True
         return False
 
-    def _map_sic_to_sector(self, sic_description: str) -> str:
-        """
-        Map Polygon SIC description to standard sector categories
-        
-        Args:
-            sic_description: SIC description from Polygon API
-            
-        Returns:
-            Standardized sector name
-        """
-        sic_lower = sic_description.lower()
-        
-        # Technology sector keywords
-        if any(keyword in sic_lower for keyword in [
-            'computer', 'software', 'technology', 'semiconductor', 
-            'internet', 'electronic', 'data processing', 'telecommunications',
-            'information', 'tech'
-        ]):
-            return "Technology"
-        
-        # Healthcare sector keywords
-        elif any(keyword in sic_lower for keyword in [
-            'pharmaceutical', 'medical', 'health', 'biotechnology',
-            'drug', 'hospital', 'surgical', 'dental', 'biotech'
-        ]):
-            return "Healthcare"
-        
-        # Financial Services sector keywords
-        elif any(keyword in sic_lower for keyword in [
-            'bank', 'finance', 'insurance', 'investment', 'securities',
-            'credit', 'mortgage', 'financial', 'trust', 'asset management'
-        ]):
-            return "Financial Services"
-        
-        # Consumer Cyclical sector keywords
-        elif any(keyword in sic_lower for keyword in [
-            'retail', 'automobile', 'apparel', 'restaurant', 'hotel',
-            'leisure', 'entertainment', 'travel', 'consumer durables',
-            'home building', 'automotive'
-        ]):
-            return "Consumer Cyclical"
-        
-        # Consumer Defensive sector keywords
-        elif any(keyword in sic_lower for keyword in [
-            'food', 'beverage', 'tobacco', 'household', 'personal care',
-            'consumer staples', 'grocery', 'packaged foods'
-        ]):
-            return "Consumer Defensive"
-        
-        # Energy sector keywords
-        elif any(keyword in sic_lower for keyword in [
-            'oil', 'gas', 'petroleum', 'energy', 'coal', 'fuel',
-            'pipeline', 'exploration', 'drilling'
-        ]):
-            return "Energy"
-        
-        # Industrials sector keywords
-        elif any(keyword in sic_lower for keyword in [
-            'manufacturing', 'industrial', 'machinery', 'aerospace',
-            'defense', 'construction', 'engineering', 'transportation',
-            'logistics', 'shipping', 'freight'
-        ]):
-            return "Industrials"
-        
-        # Real Estate sector keywords
-        elif any(keyword in sic_lower for keyword in [
-            'real estate', 'reit', 'property', 'housing'
-        ]):
-            return "Real Estate"
-        
-        # Utilities sector keywords
-        elif any(keyword in sic_lower for keyword in [
-            'utility', 'utilities', 'electric', 'water', 'gas distribution',
-            'power'
-        ]):
-            return "Utilities"
-        
-        # Communication Services sector keywords
-        elif any(keyword in sic_lower for keyword in [
-            'communication', 'broadcasting', 'media', 'publishing',
-            'advertising', 'cable', 'wireless', 'telecom'
-        ]):
-            return "Communication Services"
-        
-        # Materials sector keywords
-        elif any(keyword in sic_lower for keyword in [
-            'chemical', 'metals', 'mining', 'paper', 'forest products',
-            'steel', 'aluminum', 'copper', 'materials'
-        ]):
-            return "Materials"
-        
-        # Default to "Other" if no match
-        else:
-            return "Other"        
-    
+    async def _fmp_get(self, path: str, params: dict = None) -> Any:
+        """Central FMP request helper. Appends apikey and handles errors."""
+        if params is None:
+            params = {}
+        params["apikey"] = self.api_key
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.base_url}/{path}",
+                params=params,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            return response.json()
+
     async def get_quote(self, ticker: str) -> Dict[str, Any]:
         """
-        Get real-time quote for a stock using Polygon.io
+        Get real-time quote for a stock using FMP.
+        FMP /stable/quote returns a list; we take the first element.
         """
         try:
-            async with httpx.AsyncClient() as client:
-                # Get previous day's data
-                url = f"{self.base_url}/v2/aggs/ticker/{ticker}/prev"
-                params = {"apiKey": self.api_key}
-                
-                response = await client.get(url, params=params, timeout=self.timeout)
-                response.raise_for_status()
-                data = response.json()
-                
-                if "results" not in data or not data["results"]:
-                    raise ValueError(f"No data available for ticker '{ticker}'")
-                
-                result = data["results"][0]
-                
-                # Calculate change
-                open_price = result.get("o", 0)
-                close_price = result.get("c", 0)
-                change = close_price - open_price
-                change_percent = (change / open_price * 100) if open_price > 0 else 0
-                
-                return {
-                    "ticker": ticker,
-                    "price": close_price,
-                    "change": change,
-                    "change_percent": change_percent,
-                    "volume": int(result.get("v", 0)),
-                    "high": result.get("h", 0),
-                    "low": result.get("l", 0),
-                    "open": open_price,
-                    "previous_close": open_price,
-                    "timestamp": datetime.fromtimestamp(result.get("t", 0) / 1000, tz=timezone.utc).isoformat()
-                }
-                
+            data = await self._fmp_get("quote", {"symbol": ticker})
+
+            if not data or not isinstance(data, list) or len(data) == 0:
+                raise ValueError(f"No data available for ticker '{ticker}'")
+
+            result = data[0]
+
+            return {
+                "ticker": ticker,
+                "price": result.get("price", 0),
+                "change": result.get("change", 0),
+                "change_percent": result.get("changesPercentage", 0),
+                "volume": int(result.get("volume", 0)),
+                "high": result.get("dayHigh", 0),
+                "low": result.get("dayLow", 0),
+                "open": result.get("open", 0),
+                "previous_close": result.get("previousClose", 0),
+                "timestamp": result.get("timestamp",
+                    datetime.now(timezone.utc).isoformat()),
+            }
+
         except httpx.TimeoutException:
             raise ValueError(f"Timeout fetching data for {ticker}")
         except httpx.HTTPError as e:
             raise ValueError(f"HTTP error fetching data for {ticker}: {_safe_error(e)}")
         except Exception as e:
             raise ValueError(f"Error fetching quote for {ticker}: {_safe_error(e)}")
-    
+
     async def get_company_info(self, ticker: str) -> Dict[str, Any]:
         """
-        Get company information using Polygon.io
-        For fund-type tickers (ETF, ETS, ETN, etc.), enriches with yfinance fund data.
+        Get company information using FMP /stable/profile.
+        FMP profiles include sector directly — no SIC mapping needed.
+        For fund-type tickers (ETF, etc.), FMP profile includes fund fields.
         """
         try:
-            async with httpx.AsyncClient() as client:
-                url = f"{self.base_url}/v3/reference/tickers/{ticker}"
-                params = {"apiKey": self.api_key}
-                
-                response = await client.get(url, params=params, timeout=self.timeout)
-                response.raise_for_status()
-                data = response.json()
-                
-                if "results" not in data:
-                    raise ValueError(f"No company info available for '{ticker}'")
-                
-                result = data["results"]
-                
-                sic_description = result.get("sic_description", "").lower()
-                sector = self._map_sic_to_sector(sic_description)
+            data = await self._fmp_get("profile", {"symbol": ticker})
 
-                company = {
-                    "ticker": result.get("ticker", ticker),
-                    "name": result.get("name", ""),
-                    "description": result.get("description", ""),
-                    "sector": sector,
-                    "industry": result.get("sic_description", ""),
-                    "website": result.get("homepage_url", ""),
-                    "exchange": result.get("primary_exchange", ""),
-                    "market_cap": result.get("market_cap"),
-                    "phone": result.get("phone_number", ""),
-                    "employees": result.get("total_employees"),
-                    "country": result.get("locale", "US"),
-                    "type": result.get("type", ""),
-                    # Fund-specific fields default to None
-                    "fund_description": None,
-                    "fund_category": None,
-                    "fund_family": None,
-                    "fund_expense_ratio": None,
-                    "fund_inception_date": None,
-                    "fund_total_assets": None,
-                }
+            if not data or not isinstance(data, list) or len(data) == 0:
+                raise ValueError(f"No company info available for '{ticker}'")
 
-                # If this is a fund-type ticker, enrich with yfinance fund data
-                fund_types = {"ETF", "ETS", "ETN", "ETV", "ETD"}
-                if company["type"] in fund_types:
-                    try:
-                        import asyncio
-                        from app.services.company_info import get_company_basics
+            result = data[0]
 
-                        yf_data = await asyncio.to_thread(get_company_basics, ticker)
+            is_etf = result.get("isEtf", False)
 
-                        # Merge fund-specific fields from yfinance
-                        company["fund_description"] = yf_data.get("fund_description")
-                        company["fund_category"] = yf_data.get("fund_category")
-                        company["fund_family"] = yf_data.get("fund_family")
-                        company["fund_expense_ratio"] = yf_data.get("fund_expense_ratio")
-                        company["fund_inception_date"] = yf_data.get("fund_inception_date")
-                        company["fund_total_assets"] = yf_data.get("fund_total_assets")
+            company = {
+                "ticker": result.get("symbol", ticker),
+                "name": result.get("companyName", ""),
+                "description": result.get("description", ""),
+                "sector": result.get("sector", "Other"),
+                "industry": result.get("industry", ""),
+                "website": result.get("website", ""),
+                "exchange": result.get("exchangeShortName", ""),
+                "market_cap": result.get("mktCap"),
+                "phone": result.get("phone", ""),
+                "employees": result.get("fullTimeEmployees"),
+                "country": result.get("country", "US"),
+                "type": "ETF" if is_etf else (result.get("type", "") or "CS"),
+                # Fund-specific fields
+                "fund_description": result.get("description") if is_etf else None,
+                "fund_category": result.get("industry") if is_etf else None,
+                "fund_family": None,
+                "fund_expense_ratio": None,
+                "fund_inception_date": result.get("ipoDate") if is_etf else None,
+                "fund_total_assets": result.get("mktCap") if is_etf else None,
+            }
 
-                        # If Polygon description is empty, use yfinance description
-                        if not company["description"]:
-                            company["description"] = yf_data.get("fund_description") or yf_data.get("description") or ""
-                    except Exception as e:
-                        print(f"Warning: Could not enrich ETF data from yfinance for {ticker}: {e}")
-
-                return company
+            return company
 
         except httpx.TimeoutException:
             raise ValueError(f"Timeout fetching company info for {ticker}")
@@ -258,51 +134,54 @@ class MarketDataService:
             raise ValueError(f"HTTP error fetching company info for {ticker}: {_safe_error(e)}")
         except Exception as e:
             raise ValueError(f"Error fetching company info for {ticker}: {_safe_error(e)}")
-                
+
     async def get_historical_prices(
         self,
         ticker: str,
         days: int = 30
     ) -> list[Dict[str, Any]]:
         """
-        Get historical price data using Polygon.io
+        Get historical price data using FMP /stable/historical-price-eod/full.
         """
         try:
-            # Calculate date range
             end_date = datetime.now(timezone.utc)
             start_date = end_date - timedelta(days=days)
-            
+
             from_date = start_date.strftime("%Y-%m-%d")
             to_date = end_date.strftime("%Y-%m-%d")
-            
-            async with httpx.AsyncClient() as client:
-                url = f"{self.base_url}/v2/aggs/ticker/{ticker}/range/1/day/{from_date}/{to_date}"
-                params = {"apiKey": self.api_key}
-                
-                response = await client.get(url, params=params, timeout=self.timeout)
-                response.raise_for_status()
-                data = response.json()
-                
-                if "results" not in data or not data["results"]:
-                    raise ValueError(f"No historical data available for '{ticker}'")
-                
-                results = []
-                for item in data["results"]:
-                    date = datetime.fromtimestamp(item["t"] / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
-                    results.append({
-                        "date": date,
-                        "open": item.get("o", 0),
-                        "high": item.get("h", 0),
-                        "low": item.get("l", 0),
-                        "close": item.get("c", 0),
-                        "volume": int(item.get("v", 0))
-                    })
-                
-                # Sort by date ascending
-                results.sort(key=lambda x: x["date"])
-                
-                return results
-                
+
+            data = await self._fmp_get("historical-price-eod/full", {
+                "symbol": ticker,
+                "from": from_date,
+                "to": to_date,
+            })
+
+            # FMP returns {"symbol": "X", "historical": [...]}
+            historical = []
+            if isinstance(data, dict):
+                historical = data.get("historical", [])
+            elif isinstance(data, list):
+                historical = data
+
+            if not historical:
+                raise ValueError(f"No historical data available for '{ticker}'")
+
+            results = []
+            for item in historical:
+                results.append({
+                    "date": item.get("date", ""),
+                    "open": item.get("open", 0),
+                    "high": item.get("high", 0),
+                    "low": item.get("low", 0),
+                    "close": item.get("close", 0),
+                    "volume": int(item.get("volume", 0)),
+                })
+
+            # FMP returns newest-first; sort ascending for consistency
+            results.sort(key=lambda x: x["date"])
+
+            return results
+
         except httpx.TimeoutException:
             raise ValueError(f"Timeout fetching historical data for {ticker}")
         except httpx.HTTPError as e:
@@ -310,222 +189,93 @@ class MarketDataService:
         except Exception as e:
             raise ValueError(f"Error fetching historical data for {ticker}: {_safe_error(e)}")
 
-
     async def get_stock_news(self, ticker: str, limit: int = 3) -> List[Dict[str, Any]]:
         """
-        Fetch latest news articles for a stock ticker from Polygon.io
-        
-        Args:
-            ticker: Stock symbol
-            limit: Number of articles to return (default 3)
-            
-        Returns:
-            List of news article dictionaries
-            
-        Raises:
-            ValueError: If ticker is invalid
-            Exception: If API request fails
+        Fetch latest news articles for a stock ticker from FMP.
         """
         try:
             ticker = ticker.upper().strip()
             if not ticker:
                 raise ValueError("Ticker symbol is required")
-            
-            # Calculate date range (last 6 months)
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=180)
-            start_date_str = start_date.strftime("%Y-%m-%d")
-            
-            # Fetch news from Polygon.io
-            # Note: Replace 'self.polygon_client' with your actual Polygon client instance
-            news_results = self.polygon_client.list_ticker_news(
-                ticker,
-                published_utc_gte=start_date_str,
-                order="desc",
-                limit=limit * 3  # Fetch more than needed to filter
-            )
-            
-            articles = []
-            count = 0
-            
-            for article in news_results:
-                if count >= limit:
-                    break
-                    
-                # Parse publication date
-                pub_str = article.published_utc or ""
-                if pub_str:
-                    try:
-                        # Handle ISO format with Z suffix
-                        dt = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
-                        published_utc = dt.isoformat()
-                    except Exception:
-                        # Fallback to original string
-                        published_utc = pub_str
-                else:
-                    published_utc = datetime.now().isoformat()
-                
-                # Build article data
-                article_data = {
-                    "title": article.title or "No title available",
-                    "publisher": article.publisher.name if hasattr(article, 'publisher') and article.publisher else "Unknown",
-                    "published_utc": published_utc,
-                    "article_url": article.article_url or "",
-                    "summary": getattr(article, 'description', None) or getattr(article, 'summary', None),
-                }
-                
-                # Add sentiment insights if available
-                if hasattr(article, "insights") and article.insights:
-                    insights = []
-                    for insight in article.insights[:4]:  # Top 4 insights
-                        insight_data = {
-                            "ticker": insight.ticker if hasattr(insight, 'ticker') else ticker,
-                            "sentiment": insight.sentiment if hasattr(insight, 'sentiment') else "neutral",
-                            "sentiment_reasoning": insight.sentiment_reasoning if hasattr(insight, 'sentiment_reasoning') else ""
-                        }
-                        insights.append(insight_data)
-                    article_data["insights"] = insights
-                else:
-                    article_data["insights"] = None
-                
-                articles.append(article_data)
-                count += 1
-            
-            if not articles:
-                # Return empty list if no news found (not an error)
+
+            data = await self._fmp_get("news", {
+                "symbol": ticker,
+                "limit": limit,
+            })
+
+            if not data or not isinstance(data, list):
                 return []
-            
+
+            articles = []
+            for article in data[:limit]:
+                published_utc = article.get("publishedDate", datetime.now().isoformat())
+
+                article_data = {
+                    "title": article.get("title", "No title available"),
+                    "publisher": article.get("site", "Unknown"),
+                    "published_utc": published_utc,
+                    "article_url": article.get("url", ""),
+                    "summary": article.get("text"),
+                    "insights": None,
+                }
+
+                # FMP includes sentiment on some plans
+                sentiment = article.get("sentiment")
+                if sentiment:
+                    article_data["insights"] = [{
+                        "ticker": ticker,
+                        "sentiment": sentiment,
+                        "sentiment_reasoning": article.get("sentimentReasoning", ""),
+                    }]
+
+                articles.append(article_data)
+
             return articles
-            
+
         except Exception as e:
-            # Log the error
             print(f"Error fetching news for {ticker}: {_safe_error(e)}")
             raise Exception(f"Failed to fetch news: {_safe_error(e)}")
-    
+
     async def get_stock_news_rest(self, ticker: str, limit: int = 3) -> List[Dict[str, Any]]:
-        """
-        Alternative implementation using Polygon REST API directly
-        Use this if you're using RESTClient instead of the SDK
-        """
-        try:
-            ticker = ticker.upper().strip()
-            if not ticker:
-                raise ValueError("Ticker symbol is required")
-            
-            # Use the initialized REST client
-            client = self.rest_client
-            
-            # Calculate date range
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=180)
-            start_date_str = start_date.strftime("%Y-%m-%d")
-            
-            # Fetch news
-            news_results = client.list_ticker_news(
-                ticker=ticker,
-                published_utc_gte=start_date_str,
-                order="desc",
-                limit=limit * 2
-            )
-            
-            articles = []
-            for i, article in enumerate(news_results):
-                if i >= limit:
-                    break
-                
-                # Parse date
-                pub_str = article.published_utc or ""
-                try:
-                    dt = datetime.fromisoformat(pub_str.replace("Z", "+00:00"))
-                    published_utc = dt.isoformat()
-                except:
-                    published_utc = pub_str or datetime.now().isoformat()
-                
-                # Build article
-                article_data = {
-                    "title": article.title or "No title",
-                    "publisher": article.publisher.name if article.publisher else "Unknown",
-                    "published_utc": published_utc,
-                    "article_url": article.article_url or "",
-                    "summary": None,
-                }
-                
-                # Add insights
-                if hasattr(article, "insights") and article.insights:
-                    article_data["insights"] = [
-                        {
-                            "ticker": ins.ticker,
-                            "sentiment": ins.sentiment,
-                            "sentiment_reasoning": ins.sentiment_reasoning or ""
-                        }
-                        for ins in article.insights[:4]
-                    ]
-                
-                articles.append(article_data)
-            
-            return articles
-            
-        except Exception as e:
-            print(f"Error fetching news: {_safe_error(e)}")
-            raise Exception(f"Failed to fetch news: {_safe_error(e)}")
-    
+        """Alias for get_stock_news — kept for backward compatibility."""
+        return await self.get_stock_news(ticker, limit)
+
     async def get_dividends(self, ticker: str, limit: int = 10) -> Dict[str, Any]:
         """
-        Fetch dividend history for a stock/ETF from Massive API.
-
-        Args:
-            ticker: Stock or ETF symbol
-            limit: Max number of dividend records to return (default 10)
-
-        Returns:
-            dict with 'ticker', 'dividends' list, and 'has_dividends' bool
+        Fetch dividend history for a stock/ETF from FMP.
         """
         try:
             ticker = ticker.upper().strip()
             if not ticker:
                 raise ValueError("Ticker symbol is required")
 
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(
-                    f"{self.base_url}/v3/reference/dividends",
-                    params={
-                        "ticker": ticker,
-                        "order": "desc",
-                        "sort": "ex_dividend_date",
-                        "limit": limit,
-                        "apiKey": self.api_key,
-                    },
-                    timeout=self.timeout,
-                )
+            data = await self._fmp_get("dividends", {"symbol": ticker})
 
-                if resp.status_code != 200:
-                    return {
-                        "ticker": ticker,
-                        "dividends": [],
-                        "has_dividends": False,
-                    }
-
-                data = resp.json()
-                results = data.get("results", [])
-
-                dividends = []
-                for d in results:
-                    dividends.append({
-                        "cash_amount": d.get("cash_amount"),
-                        "currency": d.get("currency", "USD"),
-                        "declaration_date": d.get("declaration_date"),
-                        "ex_dividend_date": d.get("ex_dividend_date"),
-                        "pay_date": d.get("pay_date"),
-                        "record_date": d.get("record_date"),
-                        "frequency": d.get("frequency"),
-                        "distribution_type": d.get("dividend_type") or d.get("distribution_type", "unknown"),
-                    })
-
+            if not data or not isinstance(data, list):
                 return {
                     "ticker": ticker,
-                    "dividends": dividends,
-                    "has_dividends": len(dividends) > 0,
+                    "dividends": [],
+                    "has_dividends": False,
                 }
+
+            dividends = []
+            for d in data[:limit]:
+                dividends.append({
+                    "cash_amount": d.get("dividend"),
+                    "currency": "USD",
+                    "declaration_date": d.get("declarationDate"),
+                    "ex_dividend_date": d.get("date"),
+                    "pay_date": d.get("paymentDate"),
+                    "record_date": d.get("recordDate"),
+                    "frequency": None,
+                    "distribution_type": d.get("label", "unknown"),
+                })
+
+            return {
+                "ticker": ticker,
+                "dividends": dividends,
+                "has_dividends": len(dividends) > 0,
+            }
 
         except Exception as e:
             print(f"Error fetching dividends for {ticker}: {e}")
@@ -537,33 +287,33 @@ class MarketDataService:
 
     async def get_top_gainers(self, limit: int = 10) -> Dict[str, Any]:
         """
-        Get top stock gainers using Massive REST client's native
-        get_snapshot_direction() — pre-ranked server-side.
+        Get top stock gainers from FMP /stable/gainers.
         Heuristic filter removes obvious warrants.
         """
         try:
             if limit < 1 or limit > 50:
                 raise ValueError("Limit must be between 1 and 50")
 
-            # Over-fetch to leave room after warrant filtering
-            snapshots = self.rest_client.get_snapshot_direction(
-                "stocks", direction="gainers"
-            )
+            data = await self._fmp_get("gainers")
+
+            if not data or not isinstance(data, list):
+                return {
+                    'timestamp': datetime.now().isoformat(),
+                    'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    'top_gainers': [],
+                }
 
             filtered = []
-            for item in snapshots:
-                if not isinstance(item, TickerSnapshot):
-                    continue
-                if not isinstance(item.todays_change_percent, (int, float)):
-                    continue
-                if self._is_warrant_ticker(item.ticker):
+            for item in data:
+                ticker = item.get("symbol", "")
+                if self._is_warrant_ticker(ticker):
                     continue
 
                 filtered.append({
-                    'ticker': item.ticker,
-                    'open': round(item.prev_day.open, 2) if hasattr(item.prev_day, 'open') and item.prev_day and item.prev_day.open else None,
-                    'close': round(item.prev_day.close, 2) if hasattr(item.prev_day, 'close') and item.prev_day and item.prev_day.close else None,
-                    'change_percent': round(item.todays_change_percent, 2),
+                    'ticker': ticker,
+                    'open': item.get("open"),
+                    'close': item.get("price"),
+                    'change_percent': round(item.get("changesPercentage", 0), 2),
                 })
 
                 if len(filtered) >= limit:
@@ -572,40 +322,41 @@ class MarketDataService:
             return {
                 'timestamp': datetime.now().isoformat(),
                 'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'top_gainers': filtered
+                'top_gainers': filtered,
             }
 
         except Exception as e:
             raise Exception(f"Failed to fetch top gainers: {_safe_error(e)}")
-    
+
     async def get_top_losers(self, limit: int = 10) -> Dict[str, Any]:
         """
-        Get top stock losers using Massive REST client's native
-        get_snapshot_direction() — pre-ranked server-side.
+        Get top stock losers from FMP /stable/losers.
         Heuristic filter removes obvious warrants.
         """
         try:
             if limit < 1 or limit > 50:
                 raise ValueError("Limit must be between 1 and 50")
 
-            snapshots = self.rest_client.get_snapshot_direction(
-                "stocks", direction="losers"
-            )
+            data = await self._fmp_get("losers")
+
+            if not data or not isinstance(data, list):
+                return {
+                    'timestamp': datetime.now().isoformat(),
+                    'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    'top_losers': [],
+                }
 
             filtered = []
-            for item in snapshots:
-                if not isinstance(item, TickerSnapshot):
-                    continue
-                if not isinstance(item.todays_change_percent, (int, float)):
-                    continue
-                if self._is_warrant_ticker(item.ticker):
+            for item in data:
+                ticker = item.get("symbol", "")
+                if self._is_warrant_ticker(ticker):
                     continue
 
                 filtered.append({
-                    'ticker': item.ticker,
-                    'open': round(item.prev_day.open, 2) if hasattr(item.prev_day, 'open') and item.prev_day and item.prev_day.open else None,
-                    'close': round(item.prev_day.close, 2) if hasattr(item.prev_day, 'close') and item.prev_day and item.prev_day.close else None,
-                    'change_percent': round(item.todays_change_percent, 2),
+                    'ticker': ticker,
+                    'open': item.get("open"),
+                    'close': item.get("price"),
+                    'change_percent': round(item.get("changesPercentage", 0), 2),
                 })
 
                 if len(filtered) >= limit:
@@ -614,12 +365,12 @@ class MarketDataService:
             return {
                 'timestamp': datetime.now().isoformat(),
                 'generated_at': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'top_losers': filtered
+                'top_losers': filtered,
             }
 
         except Exception as e:
             raise Exception(f"Failed to fetch top losers: {_safe_error(e)}")
-        
+
 
 # Singleton instance
 market_data_service = MarketDataService()
