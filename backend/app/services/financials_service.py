@@ -92,8 +92,10 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
         key_metrics_task = _fetch(client, "key-metrics", {
             "symbol": ticker, "period": "quarter", "limit": 1,
         })
-        # Reference ticker lookup — get the current entity's CIK for staleness detection
-        reference_task = _fetch(client, f"/v3/reference/tickers/{ticker}", {})
+        # Profile lookup — get the current entity's CIK for staleness detection
+        profile_task = _fetch(client, "profile", {
+            "symbol": ticker,
+        })
 
         (
             income_quarters,
@@ -101,12 +103,14 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
             cashflow_quarters,
             ratios_list,
             key_metrics_list,
+            profile_list,
         ) = await asyncio.gather(
             income_quarterly_task,
             balance_task,
             cashflow_quarterly_task,
             ratios_task,
             key_metrics_task,
+            profile_task,
         )
 
     # ── Normalise to lists (FMP returns arrays directly) ──────────────
@@ -120,6 +124,12 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
         ratios_list = []
     if not isinstance(key_metrics_list, list):
         key_metrics_list = []
+    if not isinstance(profile_list, list):
+        profile_list = []
+
+    # Extract current CIK from profile for staleness detection
+    profile = profile_list[0] if profile_list else {}
+    current_cik = profile.get("cik")
 
     # FMP returns newest-first by default — that's what we want
     balance = balance_list[0] if balance_list else {}
@@ -246,15 +256,11 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
 
     # ── Growth Profile (3-year trend data for charts) ─────────────────
     growth_profile = _build_growth_profile(
-        income_quarters, cashflow_quarters, revenue_ttm, fcf_ttm
+        income_quarters, cashflow_quarters, revenue_ttm, fcf_ttm, current_cik
     )
 
-    # ── Company name from FMP data ────────────────────────────────────
-    company_name = None
-    for src in income_quarters[:1] + balance_list[:1] + cashflow_quarters[:1]:
-        if src.get("symbol"):
-            company_name = src.get("symbol")
-            break
+    # ── Company name from FMP profile ─────────────────────────────────
+    company_name = profile.get("companyName") or ticker
 
     return {
         "ticker": ticker,
@@ -460,9 +466,9 @@ def _build_growth_profile(
     financials_cik = None
 
     if income_quarters:
-        newest_period_end = income_quarters[0].get("period_end")  # desc order, [0] = most recent
+        newest_period_end = income_quarters[0].get("date")  # desc order, [0] = most recent
 
-        # Extract CIK from financial results (Massive includes it in each result)
+        # Extract CIK from financial results (FMP includes it in each result)
         financials_cik = income_quarters[0].get("cik")
 
         # Layer 1: CIK mismatch
