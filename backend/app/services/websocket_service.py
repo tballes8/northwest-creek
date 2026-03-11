@@ -1,6 +1,6 @@
 """
 Live Price WebSocket Service
-Polls FMP /stable/quote for subscribed tickers and streams updates
+Polls FMP /stable/batch-quote for subscribed tickers and streams updates
 to connected frontend clients via WebSocket.
 
 Sprint 9 addition: on_price_update callback for alert_checker integration.
@@ -75,7 +75,7 @@ class LivePriceService:
         print(f"📊 Unsubscribed from: {', '.join(tickers_to_remove)}")
 
     async def _poll_prices(self):
-        """Poll FMP quote endpoint for all subscribed tickers and broadcast changes."""
+        """Poll FMP batch-quote endpoint for all subscribed tickers and broadcast changes."""
         while self.running:
             try:
                 if not self.subscribed_tickers:
@@ -91,8 +91,8 @@ class LivePriceService:
 
                 async with httpx.AsyncClient() as client:
                     response = await client.get(
-                        f"{FMP_BASE}/quote",
-                        params={"symbol": symbols, "apikey": API_KEY},
+                        f"{FMP_BASE}/batch-quote",
+                        params={"symbols": symbols, "apikey": API_KEY},
                         timeout=10.0,
                     )
                     response.raise_for_status()

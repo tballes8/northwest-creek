@@ -76,7 +76,7 @@ async def _get_extended_hours_quotes(
             if not sym:
                 continue
 
-            price = item.get("price")
+            price = item.get("price") or item.get("askPrice")
             ts_ms = item.get("timestamp")
 
             # Determine which session this trade belongs to
@@ -178,11 +178,11 @@ async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
                 detail="No valid tickers provided"
             )
 
-        # FMP /stable/quote accepts comma-separated symbols
+        # FMP /stable/batch-quote accepts comma-separated symbols
         symbols = ",".join(ticker_list)
 
         async with httpx.AsyncClient() as client:
-            data = await _fmp_get(client, "quote", {"symbol": symbols})
+            data = await _fmp_get(client, "batch-quote", {"symbols": symbols})
             market_status = await _get_market_status(client)
 
             # Build lookup of regular-session previousClose for change calc
