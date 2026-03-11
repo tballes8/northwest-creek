@@ -124,6 +124,15 @@ interface DCFData {
     color: string;
     message: string;
   };
+  fmp_benchmark?: {
+    dcf_value: number | null;
+    levered_dcf_value: number | null;
+    equity_value_per_share: number | null;
+    wacc: number | null;
+    terminal_value: number | null;
+    enterprise_value: number | null;
+    source: string;
+  };
 }
 
 const DCFValuation: React.FC = () => {
@@ -1250,6 +1259,78 @@ const DCFValuation: React.FC = () => {
                 <p className="text-gray-700 dark:text-gray-300">{dcfData.recommendation.message}</p>
               </div>
             </div>
+
+            {/* FMP Benchmark Comparison */}
+            {dcfData.fmp_benchmark && (dcfData.fmp_benchmark.dcf_value || dcfData.fmp_benchmark.levered_dcf_value) && (
+              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">FMP Benchmark Comparison</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                  Independent DCF estimates from Financial Modeling Prep using their standardized 5-year model.
+                  Differences reflect varying growth, WACC, and methodology assumptions.
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead>
+                      <tr className="border-b border-gray-200 dark:border-gray-600">
+                        <th className="py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Model</th>
+                        <th className="py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Intrinsic Value</th>
+                        <th className="py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">vs Price (${dcfData.current_price.toFixed(2)})</th>
+                        <th className="py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Signal</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-600">
+                      <tr>
+                        <td className="py-3 text-sm font-semibold text-primary-600 dark:text-primary-400">Your Model</td>
+                        <td className={`py-3 text-sm text-right font-bold ${dcfData.valuation.intrinsic_value_per_share >= dcfData.current_price ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                          ${dcfData.valuation.intrinsic_value_per_share.toFixed(2)}
+                        </td>
+                        <td className={`py-3 text-sm text-right font-semibold ${dcfData.valuation.margin_of_safety >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                          {dcfData.valuation.margin_of_safety >= 0 ? '+' : ''}{dcfData.valuation.margin_of_safety.toFixed(1)}%
+                        </td>
+                        <td className="py-3 text-sm text-right">
+                          {dcfData.valuation.margin_of_safety > 10 ? '🟢 Undervalued' : dcfData.valuation.margin_of_safety > -10 ? '🟡 Fair Value' : '🔴 Overvalued'}
+                        </td>
+                      </tr>
+                      {dcfData.fmp_benchmark.dcf_value && (
+                        <tr>
+                          <td className="py-3 text-sm font-medium text-gray-700 dark:text-gray-300">FMP Simple DCF</td>
+                          <td className={`py-3 text-sm text-right font-bold ${dcfData.fmp_benchmark.dcf_value >= dcfData.current_price ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                            ${dcfData.fmp_benchmark.dcf_value.toFixed(2)}
+                          </td>
+                          <td className={`py-3 text-sm text-right font-semibold ${((dcfData.fmp_benchmark.dcf_value - dcfData.current_price) / dcfData.current_price * 100) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {((dcfData.fmp_benchmark.dcf_value - dcfData.current_price) / dcfData.current_price * 100) >= 0 ? '+' : ''}
+                            {((dcfData.fmp_benchmark.dcf_value - dcfData.current_price) / dcfData.current_price * 100).toFixed(1)}%
+                          </td>
+                          <td className="py-3 text-sm text-right">
+                            {((dcfData.fmp_benchmark.dcf_value - dcfData.current_price) / dcfData.current_price * 100) > 10 ? '🟢 Undervalued' : ((dcfData.fmp_benchmark.dcf_value - dcfData.current_price) / dcfData.current_price * 100) > -10 ? '🟡 Fair Value' : '🔴 Overvalued'}
+                          </td>
+                        </tr>
+                      )}
+                      {dcfData.fmp_benchmark.levered_dcf_value && (
+                        <tr>
+                          <td className="py-3 text-sm font-medium text-gray-700 dark:text-gray-300">FMP Levered DCF</td>
+                          <td className={`py-3 text-sm text-right font-bold ${dcfData.fmp_benchmark.levered_dcf_value >= dcfData.current_price ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                            ${dcfData.fmp_benchmark.levered_dcf_value.toFixed(2)}
+                          </td>
+                          <td className={`py-3 text-sm text-right font-semibold ${((dcfData.fmp_benchmark.levered_dcf_value - dcfData.current_price) / dcfData.current_price * 100) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {((dcfData.fmp_benchmark.levered_dcf_value - dcfData.current_price) / dcfData.current_price * 100) >= 0 ? '+' : ''}
+                            {((dcfData.fmp_benchmark.levered_dcf_value - dcfData.current_price) / dcfData.current_price * 100).toFixed(1)}%
+                          </td>
+                          <td className="py-3 text-sm text-right">
+                            {((dcfData.fmp_benchmark.levered_dcf_value - dcfData.current_price) / dcfData.current_price * 100) > 10 ? '🟢 Undervalued' : ((dcfData.fmp_benchmark.levered_dcf_value - dcfData.current_price) / dcfData.current_price * 100) > -10 ? '🟡 Fair Value' : '🔴 Overvalued'}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {dcfData.fmp_benchmark.wacc && (
+                  <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                    FMP WACC: {(dcfData.fmp_benchmark.wacc > 1 ? dcfData.fmp_benchmark.wacc : dcfData.fmp_benchmark.wacc * 100).toFixed(2)}% · Your Discount Rate: {(dcfData.assumptions.discount_rate * 100).toFixed(2)}%
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Estimated Data Confidence Disclaimer — only shown when NOT using actual financials */}
             {dcfData.assumptions.fcf_source?.startsWith('estimated') && (
