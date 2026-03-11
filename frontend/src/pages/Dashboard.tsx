@@ -925,13 +925,16 @@ return (
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Ticker</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Company</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Expected Date</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Est. Price</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Price Range</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Offer Size</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
-                {ipoData[ipoTab].map((ipo, idx) => (
+                {[...ipoData[ipoTab]].sort((a, b) => {
+                  if (!a.listing_date) return 1;
+                  if (!b.listing_date) return -1;
+                  return a.listing_date.localeCompare(b.listing_date);
+                }).map((ipo, idx) => (
                   <tr key={`${ipo.ticker}-${idx}`} className="hover:bg-gray-50 dark:hover:bg-gray-600/50 transition-colors">
                     <td className="px-4 py-3 whitespace-nowrap">
                       {ipo.ticker && ipo.ticker !== 'N/A' ? (
@@ -965,13 +968,6 @@ return (
                         </span>
                       ) : (
                         <span className="text-sm text-gray-400 dark:text-gray-500">TBD</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right">
-                      {ipo.final_issue_price ? (
-                        <span className="text-sm font-semibold text-gray-900 dark:text-white">${ipo.final_issue_price.toFixed(2)}</span>
-                      ) : (
-                        <span className="text-sm text-gray-400 dark:text-gray-500">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-right">
