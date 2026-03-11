@@ -65,9 +65,9 @@ const Dashboard: React.FC = () => {
   // const [valueFlash, setValueFlash] = useState<'green' | 'red' | null>(null);
 
   // IPO data
-  const [ipoData, setIpoData] = useState<{ upcoming: IPOItem[]; pending: IPOItem[]; rumored: IPOItem[] }>({ upcoming: [], pending: [], rumored: [] });
+  const [ipoData, setIpoData] = useState<{ upcoming: IPOItem[]; pending: IPOItem[] }>({ upcoming: [], pending: [] });
   const [ipoLoading, setIpoLoading] = useState(false);
-  const [ipoTab, setIpoTab] = useState<'upcoming' | 'pending' | 'rumored'>('upcoming');
+  const [ipoTab, setIpoTab] = useState<'upcoming' | 'pending'>('upcoming');
 
   // IPO detail modal
   const [ipoModalOpen, setIpoModalOpen] = useState(false);
@@ -882,7 +882,7 @@ return (
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">IPO Tracker</h2>
           </div>
           <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
-            {(['upcoming', 'pending', 'rumored'] as const).map((tab) => (
+            {(['upcoming', 'pending'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setIpoTab(tab)}
@@ -924,18 +924,10 @@ return (
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Ticker</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Company</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    {ipoTab === 'rumored' ? 'Status' : 'Expected Date'}
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    {ipoTab === 'rumored' ? 'Exchange' : 'Est. Price'}
-                  </th>
-                  {ipoTab !== 'rumored' && (
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Price Range</th>
-                  )}
-                  {ipoTab !== 'rumored' && (
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Offer Size</th>
-                  )}
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Expected Date</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Est. Price</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Price Range</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Offer Size</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
@@ -967,11 +959,7 @@ return (
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {ipoTab === 'rumored' ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300">
-                          Rumored
-                        </span>
-                      ) : ipo.listing_date ? (
+                      {ipo.listing_date ? (
                         <span className="text-sm text-gray-900 dark:text-white">
                           {new Date(ipo.listing_date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </span>
@@ -980,36 +968,30 @@ return (
                       )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-right">
-                      {ipoTab === 'rumored' ? (
-                        <span className="text-sm text-gray-600 dark:text-gray-400">{ipo.primary_exchange || '—'}</span>
-                      ) : ipo.final_issue_price ? (
+                      {ipo.final_issue_price ? (
                         <span className="text-sm font-semibold text-gray-900 dark:text-white">${ipo.final_issue_price.toFixed(2)}</span>
                       ) : (
                         <span className="text-sm text-gray-400 dark:text-gray-500">—</span>
                       )}
                     </td>
-                    {ipoTab !== 'rumored' && (
-                      <td className="px-4 py-3 whitespace-nowrap text-right">
-                        {ipo.lowest_offer_price && ipo.highest_offer_price ? (
-                          <span className="text-sm text-gray-600 dark:text-gray-400">
-                            ${ipo.lowest_offer_price.toFixed(2)} – ${ipo.highest_offer_price.toFixed(2)}
-                          </span>
-                        ) : (
-                          <span className="text-sm text-gray-400 dark:text-gray-500">—</span>
-                        )}
-                      </td>
-                    )}
-                    {ipoTab !== 'rumored' && (
-                      <td className="px-4 py-3 whitespace-nowrap text-right">
-                        {ipo.total_offer_size ? (
-                          <span className="text-sm text-gray-600 dark:text-gray-400">
-                            ${(ipo.total_offer_size / 1e6).toFixed(1)}M
-                          </span>
-                        ) : (
-                          <span className="text-sm text-gray-400 dark:text-gray-500">—</span>
-                        )}
-                      </td>
-                    )}
+                    <td className="px-4 py-3 whitespace-nowrap text-right">
+                      {ipo.lowest_offer_price && ipo.highest_offer_price ? (
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          ${ipo.lowest_offer_price.toFixed(2)} – ${ipo.highest_offer_price.toFixed(2)}
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-400 dark:text-gray-500">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-right">
+                      {ipo.total_offer_size ? (
+                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                          ${(ipo.total_offer_size / 1e6).toFixed(1)}M
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-400 dark:text-gray-500">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

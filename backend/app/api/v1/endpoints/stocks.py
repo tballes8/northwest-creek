@@ -212,7 +212,8 @@ async def get_stock_news(
 async def get_ipos():
     """
     Get upcoming IPOs from FMP IPO calendar.
-    Returns upcoming, confirmed, and recent IPOs.
+    Returns upcoming (next 21 days) and recent (last 7 days) IPOs.
+    Filters out warrants, rights, units, foreign listings, and SPAC shells.
     """
     import httpx
     from app.config import settings
@@ -222,59 +223,117 @@ async def get_ipos():
     base_url = "https://financialmodelingprep.com/stable"
 
     today = datetime.now().strftime("%Y-%m-%d")
-    thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-    ninety_days_ahead = (datetime.now() + timedelta(days=90)).strftime("%Y-%m-%d")
+    seven_days_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    twenty_one_days_ahead = (datetime.now() + timedelta(days=21)).strftime("%Y-%m-%d")
+
+    # US exchanges we care about
+    US_EXCHANGES = {"NYSE", "NASDAQ", "AMEX", "NYSEAMERICAN", "NYSEARCA", "BATS"}
+
+    def _is_junk_symbol(symbol: str) -> bool:
+        """Filter out warrants, rights, units, and foreign tickers."""
+        if not symbol or symbol == "N/A":
+            return True
+        s = symbol.upper().strip()
+        # Foreign listings contain dots (NA.KQ, MTEK.TO, 509A.JP)
+        if "." in s:
+            return True
+        # Warrants typically end in W or WS (FGIIW, SVIVW, ADACW)
+        if len(s) > 4 and s.endswith("W"):
+            return True
+        if s.endswith("WS") or s.endswith("WT"):
+            return True
+        # Rights end in R (IEAGR, CRANR, HCACR)
+        if len(s) > 4 and s.endswith("R"):
+            return True
+        # Units end in U (SUMAU, GLEDU, CTAAU)
+        if len(s) > 4 and s.endswith("U"):
+            return True
+        return False
+
+    def _safe_float(val) -> Optional[float]:
+        """Safely convert a value to float, return None on failure."""
+        if val is None:
+            return None
+        try:
+            return float(val)
+        except (TypeError, ValueError):
+            return None
+
+    def _parse_price_range(range_str: str):
+        """Parse '10.00 - 12.00' into (low, high) floats."""
+        if not range_str or not isinstance(range_str, str):
+            return None, None
+        parts = range_str.split("-")
+        if len(parts) < 2:
+            return None, None
+        low = _safe_float(parts[0].strip())
+        high = _safe_float(parts[-1].strip())
+        return low, high
+
+    def _build_ipo_item(ipo: dict, status: str) -> dict:
+        """Map FMP IPO response to our frontend schema."""
+        low, high = _parse_price_range(ipo.get("priceRange"))
+        return {
+            "ticker": ipo.get("symbol", "N/A"),
+            "issuer_name": ipo.get("company", "Unknown"),
+            "listing_date": ipo.get("date"),
+            "announced_date": None,
+            "final_issue_price": _safe_float(ipo.get("price")),
+            "lowest_offer_price": low,
+            "highest_offer_price": high,
+            "total_offer_size": ipo.get("numberOfShares"),
+            "shares_outstanding": None,
+            "primary_exchange": ipo.get("exchange"),
+            "security_type": None,
+            "security_description": ipo.get("actions"),
+            "ipo_status": status,
+            "last_updated": None,
+            "currency_code": "USD",
+            "min_shares_offered": None,
+            "max_shares_offered": None,
+        }
 
     results = {
         "upcoming": [],
         "pending": [],
-        "rumored": [],
     }
+
+    MAX_PER_TAB = 25
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            # Fetch upcoming IPOs (today through 90 days out)
+            # Fetch upcoming IPOs (today through 21 days out)
             try:
                 resp = await client.get(
-                    f"{base_url}/ipo-calendar",
+                    f"{base_url}/ipos-calendar",
                     params={
                         "from": today,
-                        "to": ninety_days_ahead,
+                        "to": twenty_one_days_ahead,
                         "apikey": api_key,
                     },
                 )
                 if resp.status_code == 200:
                     data = resp.json()
                     if isinstance(data, list):
-                        for ipo in data[:25]:
-                            results["upcoming"].append({
-                                "ticker": ipo.get("symbol", "N/A"),
-                                "issuer_name": ipo.get("company", "Unknown"),
-                                "listing_date": ipo.get("date"),
-                                "announced_date": None,
-                                "final_issue_price": ipo.get("price"),
-                                "lowest_offer_price": ipo.get("priceRange", "").split("-")[0].strip() if ipo.get("priceRange") else None,
-                                "highest_offer_price": ipo.get("priceRange", "").split("-")[-1].strip() if ipo.get("priceRange") else None,
-                                "total_offer_size": ipo.get("numberOfShares"),
-                                "shares_outstanding": None,
-                                "primary_exchange": ipo.get("exchange"),
-                                "security_type": None,
-                                "security_description": ipo.get("actions"),
-                                "ipo_status": "upcoming",
-                                "last_updated": None,
-                                "currency_code": "USD",
-                                "min_shares_offered": None,
-                                "max_shares_offered": None,
-                            })
+                        for ipo in data:
+                            sym = ipo.get("symbol", "")
+                            exchange = (ipo.get("exchange") or "").upper()
+                            if _is_junk_symbol(sym):
+                                continue
+                            if exchange and exchange not in US_EXCHANGES:
+                                continue
+                            results["upcoming"].append(_build_ipo_item(ipo, "upcoming"))
+                            if len(results["upcoming"]) >= MAX_PER_TAB:
+                                break
             except Exception as inner_err:
                 print(f"IPO fetch error for upcoming: {inner_err}")
 
-            # Fetch recent IPOs (last 30 days) as "pending/confirmed"
+            # Fetch recent IPOs (last 7 days) as "pending/confirmed"
             try:
                 resp = await client.get(
-                    f"{base_url}/ipo-calendar",
+                    f"{base_url}/ipos-calendar",
                     params={
-                        "from": thirty_days_ago,
+                        "from": seven_days_ago,
                         "to": today,
                         "apikey": api_key,
                     },
@@ -282,26 +341,16 @@ async def get_ipos():
                 if resp.status_code == 200:
                     data = resp.json()
                     if isinstance(data, list):
-                        for ipo in data[:25]:
-                            results["pending"].append({
-                                "ticker": ipo.get("symbol", "N/A"),
-                                "issuer_name": ipo.get("company", "Unknown"),
-                                "listing_date": ipo.get("date"),
-                                "announced_date": None,
-                                "final_issue_price": ipo.get("price"),
-                                "lowest_offer_price": None,
-                                "highest_offer_price": None,
-                                "total_offer_size": ipo.get("numberOfShares"),
-                                "shares_outstanding": None,
-                                "primary_exchange": ipo.get("exchange"),
-                                "security_type": None,
-                                "security_description": ipo.get("actions"),
-                                "ipo_status": "recent",
-                                "last_updated": None,
-                                "currency_code": "USD",
-                                "min_shares_offered": None,
-                                "max_shares_offered": None,
-                            })
+                        for ipo in data:
+                            sym = ipo.get("symbol", "")
+                            exchange = (ipo.get("exchange") or "").upper()
+                            if _is_junk_symbol(sym):
+                                continue
+                            if exchange and exchange not in US_EXCHANGES:
+                                continue
+                            results["pending"].append(_build_ipo_item(ipo, "recent"))
+                            if len(results["pending"]) >= MAX_PER_TAB:
+                                break
             except Exception as inner_err:
                 print(f"IPO fetch error for recent: {inner_err}")
 
