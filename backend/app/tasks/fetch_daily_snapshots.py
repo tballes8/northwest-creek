@@ -64,14 +64,14 @@ async def fetch_and_store_snapshots():
             print("⚠️ No stock list returned from FMP")
             return
 
-        # Filter to common stocks only (exclude ETFs, warrants, etc.)
-        tickers = [
-            s.get("symbol") for s in stock_list
-            if s.get("symbol") and s.get("type") in ("stock", "Stock", "cs", "CS", None)
-        ]
-        # Fallback: if type filtering removed everything, just take all symbols
-        if not tickers:
-            tickers = [s.get("symbol") for s in stock_list if s.get("symbol")]
+        # Filter to US-only tickers: skip foreign symbols (contain dots like .T, .PA)
+        # and tickers longer than 10 chars (DB column is VARCHAR(10))
+        tickers = []
+        for s in stock_list:
+            sym = s.get("symbol")
+            if not sym or "." in sym or len(sym) > 10:
+                continue
+            tickers.append(sym)
 
         print(f"✅ Got {len(tickers)} tickers from stock list")
 
@@ -102,6 +102,8 @@ async def fetch_and_store_snapshots():
                         ticker = item.get("symbol")
 
                         if not ticker or open_price is None or close_price is None:
+                            continue
+                        if "." in ticker or len(ticker) > 10:
                             continue
 
                         open_price = float(open_price)
