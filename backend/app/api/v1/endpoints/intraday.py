@@ -203,7 +203,7 @@ async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
             price = item.get("price")
             previous_close = item.get("previousClose")
             change = item.get("change")
-            change_percent = item.get("changesPercentage")
+            change_percent = item.get("changePercentage")
             sym = item.get("symbol")
             ext = ext_quotes.get(sym, {})
             early = ext.get("early") or {}
@@ -291,7 +291,7 @@ async def get_intraday_data(ticker: str) -> Dict[str, Any]:
                 "volume": item.get("volume"),
                 "previous_close": item.get("previousClose"),
                 "change": item.get("change"),
-                "change_percent": item.get("changesPercentage"),
+                "change_percent": item.get("changePercentage"),
             },
         }
 
@@ -387,8 +387,8 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
                 timestamp_et = None
                 if bar_date_str:
                     try:
-                        dt_utc = datetime.strptime(bar_date_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-                        timestamp_et = dt_utc.astimezone(ET).isoformat()
+                        dt_et = ET.localize(datetime.strptime(bar_date_str, "%Y-%m-%d %H:%M:%S"))
+                        timestamp_et = dt_et.isoformat()
                     except ValueError:
                         timestamp_et = bar_date_str
 

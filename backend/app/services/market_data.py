@@ -80,7 +80,7 @@ class MarketDataService:
                 "ticker": ticker,
                 "price": result.get("price", 0),
                 "change": result.get("change", 0),
-                "change_percent": result.get("changesPercentage", 0),
+                "change_percent": result.get("changePercentage", 0),
                 "volume": int(result.get("volume", 0)),
                 "high": result.get("dayHigh", 0),
                 "low": result.get("dayLow", 0),
@@ -321,7 +321,7 @@ class MarketDataService:
                     'ticker': ticker,
                     'open': item.get("open"),
                     'close': item.get("price"),
-                    'change_percent': round(item.get("changesPercentage", 0), 2),
+                    'change_percent': round(item.get("changePercentage", 0), 2),
                 })
 
                 if len(filtered) >= limit:
@@ -364,7 +364,7 @@ class MarketDataService:
                     'ticker': ticker,
                     'open': item.get("open"),
                     'close': item.get("price"),
-                    'change_percent': round(item.get("changesPercentage", 0), 2),
+                    'change_percent': round(item.get("changePercentage", 0), 2),
                 })
 
                 if len(filtered) >= limit:
