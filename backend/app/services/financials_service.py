@@ -131,6 +131,9 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
     profile = profile_list[0] if profile_list else {}
     current_cik = profile.get("cik")
 
+    # Debug: log what came back from FMP
+    print(f"📊 Financials for {ticker}: income={len(income_quarters)}Q, balance={len(balance_list)}, cashflow={len(cashflow_quarters)}Q, ratios={len(ratios_list)}, metrics={len(key_metrics_list)}, profile={len(profile_list)}")
+
     # FMP returns newest-first by default — that's what we want
     balance = balance_list[0] if balance_list else {}
     ratios = ratios_list[0] if ratios_list else {}
@@ -507,4 +510,9 @@ def _build_growth_profile(
         },
         "quarters_available": len(income_quarters),
         "fcf_quarters_available": len(cashflow_quarters),
+        "is_stale": is_stale,
+        "stale_reason": stale_reason,
+        "newest_period_end": newest_period_end,
+        "financials_cik": financials_cik,
+        "current_cik": current_cik,
     }
