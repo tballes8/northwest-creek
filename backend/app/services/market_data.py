@@ -54,6 +54,15 @@ class MarketDataService:
             response.raise_for_status()
             return response.json()
 
+    @staticmethod
+    def _format_timestamp(ts) -> str:
+        """Convert an FMP timestamp (int epoch or string) to ISO string."""
+        if ts is None:
+            return datetime.now(timezone.utc).isoformat()
+        if isinstance(ts, (int, float)):
+            return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+        return str(ts)
+
     async def get_quote(self, ticker: str) -> Dict[str, Any]:
         """
         Get real-time quote for a stock using FMP.
@@ -77,8 +86,7 @@ class MarketDataService:
                 "low": result.get("dayLow", 0),
                 "open": result.get("open", 0),
                 "previous_close": result.get("previousClose", 0),
-                "timestamp": result.get("timestamp",
-                    datetime.now(timezone.utc).isoformat()),
+                "timestamp": self._format_timestamp(result.get("timestamp")),
             }
 
         except httpx.TimeoutException:
@@ -198,8 +206,8 @@ class MarketDataService:
             if not ticker:
                 raise ValueError("Ticker symbol is required")
 
-            data = await self._fmp_get("news", {
-                "symbol": ticker,
+            data = await self._fmp_get("news/stock-latest", {
+                "tickers": ticker,
                 "limit": limit,
             })
 
@@ -294,7 +302,7 @@ class MarketDataService:
             if limit < 1 or limit > 50:
                 raise ValueError("Limit must be between 1 and 50")
 
-            data = await self._fmp_get("gainers")
+            data = await self._fmp_get("biggest-gainers")
 
             if not data or not isinstance(data, list):
                 return {
@@ -337,7 +345,7 @@ class MarketDataService:
             if limit < 1 or limit > 50:
                 raise ValueError("Limit must be between 1 and 50")
 
-            data = await self._fmp_get("losers")
+            data = await self._fmp_get("biggest-losers")
 
             if not data or not isinstance(data, list):
                 return {
