@@ -2,10 +2,11 @@
 Intraday market data endpoints using Financial Modeling Prep (FMP)
 Includes batch quotes, single-ticker snapshots, and 15-minute bars with MAs.
 """
+import asyncio
 import re
 from fastapi import APIRouter, HTTPException, status
-from typing import List, Dict, Any, Optional
-from datetime import datetime, date, timedelta, timezone
+from typing import List, Dict, Any, Optional, Set
+from datetime import datetime, date, time as dt_time, timedelta, timezone
 import pytz
 import httpx
 from app.config import get_settings
@@ -31,12 +32,6 @@ def _safe_error(e: Exception) -> str:
     return msg
 
 
-def calculate_moving_average(prices: List[float], period: int) -> Optional[float]:
-    """Calculate simple moving average for a given period"""
-    if len(prices) < period:
-        return None
-    return sum(prices[-period:]) / period
-
 
 async def _get_market_status(client: httpx.AsyncClient) -> Optional[str]:
     """Fetch NASDAQ market status from FMP. Returns 'open', 'closed', or None."""
@@ -53,37 +48,108 @@ async def _get_market_status(client: httpx.AsyncClient) -> Optional[str]:
         return None
 
 
-async def _get_aftermarket_quotes(client: httpx.AsyncClient, symbols: str) -> Dict[str, Dict[str, Any]]:
+async def _get_extended_hours_quotes(
+    client: httpx.AsyncClient,
+    symbols: str,
+    regular_quotes: Dict[str, Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
     """
-    Fetch aftermarket (pre/post market) quotes from FMP.
-    Returns dict keyed by symbol with extended hours fields.
+    Fetch extended-hours trade data from FMP and split into pre-market vs
+    after-hours using timestamp logic:
+      - Before 9:30 AM ET  → pre-market  (early_trading)
+      - After  4:00 PM ET  → after-hours (late_trading)
+
+    `regular_quotes` supplies previousClose per symbol so we can compute
+    change / change_percent.
+
+    Returns dict keyed by symbol:
+        { "early": {price, change, change_percent}, "late": {…} }
     """
     try:
-        data = await _fmp_get(client, "batch-aftermarket-quote", {"symbols": symbols})
+        data = await _fmp_get(client, "batch-aftermarket-trade", {"symbols": symbols})
         if not data or not isinstance(data, list):
             return {}
-        result = {}
+
+        result: Dict[str, Dict[str, Any]] = {}
         for item in data:
             sym = item.get("symbol")
             if not sym:
                 continue
+
             price = item.get("price")
-            prev_close = item.get("previousClose")
-            # Compute change from previous close if both available
-            ah_change = None
-            ah_change_pct = None
+            ts_ms = item.get("timestamp")
+
+            # Determine which session this trade belongs to
+            session = None
+            if ts_ms is not None:
+                try:
+                    dt_utc = datetime.fromtimestamp(ts_ms / 1000, tz=timezone.utc)
+                    dt_et = dt_utc.astimezone(ET)
+                    trade_time = dt_et.time()
+
+                    if trade_time < dt_time(9, 30):
+                        session = "early"
+                    elif trade_time >= dt_time(16, 0):
+                        session = "late"
+                except (ValueError, OSError):
+                    pass
+
+            # Compute change from previous close
+            prev_close = regular_quotes.get(sym, {}).get("previousClose")
+            ext_change = None
+            ext_change_pct = None
             if price is not None and prev_close is not None and prev_close != 0:
-                ah_change = round(price - prev_close, 4)
-                ah_change_pct = round((ah_change / prev_close) * 100, 4)
-            result[sym] = {
+                ext_change = round(price - prev_close, 4)
+                ext_change_pct = round((ext_change / prev_close) * 100, 4)
+
+            entry = {
                 "price": price,
-                "change": ah_change,
-                "change_percent": ah_change_pct,
-                "timestamp": item.get("timestamp"),
+                "change": ext_change,
+                "change_percent": ext_change_pct,
             }
+
+            if sym not in result:
+                result[sym] = {"early": None, "late": None}
+
+            if session == "early":
+                result[sym]["early"] = entry
+            elif session == "late":
+                result[sym]["late"] = entry
+            else:
+                # Timestamp missing or during regular hours — fall back to
+                # current time of day to decide which badge to show
+                now_et = datetime.now(ET).time()
+                if now_et < dt_time(9, 30):
+                    result[sym]["early"] = entry
+                else:
+                    result[sym]["late"] = entry
+
         return result
     except Exception:
         return {}
+
+
+async def _get_holiday_dates(client: httpx.AsyncClient) -> Set[date]:
+    """Fetch NASDAQ holidays from FMP. Returns a set of fully-closed dates."""
+    try:
+        data = await _fmp_get(client, "holidays-by-exchange", {"exchange": "NASDAQ"})
+        if not data or not isinstance(data, list):
+            return set()
+        closed = set()
+        for item in data:
+            if item.get("isClosed") is True:
+                try:
+                    closed.add(date.fromisoformat(item["date"]))
+                except (KeyError, ValueError):
+                    pass
+        return closed
+    except Exception:
+        return set()
+
+
+def _is_trading_day(d: date, holidays: Set[date]) -> bool:
+    """Return True if d is a weekday and not a market holiday."""
+    return d.weekday() < 5 and d not in holidays
 
 
 async def _fmp_get(client: httpx.AsyncClient, path: str, params: dict = None) -> Any:
@@ -118,7 +184,16 @@ async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
         async with httpx.AsyncClient() as client:
             data = await _fmp_get(client, "quote", {"symbol": symbols})
             market_status = await _get_market_status(client)
-            ah_quotes = await _get_aftermarket_quotes(client, symbols)
+
+            # Build lookup of regular-session previousClose for change calc
+            regular_lookup: Dict[str, Dict[str, Any]] = {}
+            if data and isinstance(data, list):
+                for q in data:
+                    s = q.get("symbol")
+                    if s:
+                        regular_lookup[s] = {"previousClose": q.get("previousClose")}
+
+            ext_quotes = await _get_extended_hours_quotes(client, symbols, regular_lookup)
 
         if not data or not isinstance(data, list):
             data = []
@@ -130,7 +205,9 @@ async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
             change = item.get("change")
             change_percent = item.get("changesPercentage")
             sym = item.get("symbol")
-            ah = ah_quotes.get(sym, {})
+            ext = ext_quotes.get(sym, {})
+            early = ext.get("early") or {}
+            late = ext.get("late") or {}
 
             results.append({
                 "ticker": sym,
@@ -141,11 +218,11 @@ async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
                 "change": change,
                 "change_percent": change_percent,
                 "market_status": market_status,
-                # Extended hours from FMP batch-aftermarket-quote
-                "early_trading_change": ah.get("change"),
-                "early_trading_change_percent": ah.get("change_percent"),
-                "late_trading_change": ah.get("change"),
-                "late_trading_change_percent": ah.get("change_percent"),
+                # Extended hours — split by timestamp
+                "early_trading_change": early.get("change"),
+                "early_trading_change_percent": early.get("change_percent"),
+                "late_trading_change": late.get("change"),
+                "late_trading_change_percent": late.get("change_percent"),
             })
 
         # Debug summary
@@ -175,7 +252,12 @@ async def get_intraday_data(ticker: str) -> Dict[str, Any]:
         async with httpx.AsyncClient() as client:
             data = await _fmp_get(client, "quote", {"symbol": ticker_upper})
             market_status = await _get_market_status(client)
-            ah_quotes = await _get_aftermarket_quotes(client, ticker_upper)
+
+            regular_lookup = {ticker_upper: {"previousClose": None}}
+            if data and isinstance(data, list) and len(data) > 0:
+                regular_lookup[ticker_upper]["previousClose"] = data[0].get("previousClose")
+
+            ext_quotes = await _get_extended_hours_quotes(client, ticker_upper, regular_lookup)
 
         if not data or not isinstance(data, list) or len(data) == 0:
             raise HTTPException(
@@ -184,7 +266,9 @@ async def get_intraday_data(ticker: str) -> Dict[str, Any]:
             )
 
         item = data[0]
-        ah = ah_quotes.get(ticker_upper, {})
+        ext = ext_quotes.get(ticker_upper, {})
+        early = ext.get("early") or {}
+        late = ext.get("late") or {}
 
         return {
             "ticker": item.get("symbol"),
@@ -193,11 +277,11 @@ async def get_intraday_data(ticker: str) -> Dict[str, Any]:
             "market_status": market_status,
             "price": item.get("price"),
             "updated": item.get("timestamp"),
-            # Extended hours from FMP batch-aftermarket-quote
-            "early_trading_change": ah.get("change"),
-            "early_trading_change_percent": ah.get("change_percent"),
-            "late_trading_change": ah.get("change"),
-            "late_trading_change_percent": ah.get("change_percent"),
+            # Extended hours — split by timestamp
+            "early_trading_change": early.get("change"),
+            "early_trading_change_percent": early.get("change_percent"),
+            "late_trading_change": late.get("change"),
+            "late_trading_change_percent": late.get("change_percent"),
             # Session data mapped from FMP quote fields
             "session": {
                 "open": item.get("open"),
@@ -231,13 +315,19 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
         ticker_upper = ticker.upper()
 
         async with httpx.AsyncClient(timeout=30.0) as http_client:
-            # Try today first, then go back up to 7 days to find most recent trading day
+            # Fetch holidays so we can skip non-trading days
+            holidays = await _get_holiday_dates(http_client)
+
+            # Walk backwards skipping weekends and holidays
             bars_found = False
             bars_data_raw = []
             data_date = today
 
-            for days_back in range(8):
+            for days_back in range(15):
                 check_date = today - timedelta(days=days_back)
+
+                if not _is_trading_day(check_date, holidays):
+                    continue
 
                 try:
                     intraday_data = await _fmp_get(
@@ -269,36 +359,23 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
                     detail=f"No recent trading data found for {ticker_upper}"
                 )
 
-            # Fetch daily bars for moving average calculation (last 250 days)
-            start_date = today - timedelta(days=365)
-            daily_data = await _fmp_get(
-                http_client, "historical-price-eod/full",
-                {
-                    "symbol": ticker_upper,
-                    "from": start_date.isoformat(),
-                    "to": today.isoformat(),
-                }
+            # Fetch pre-computed SMAs from FMP technical indicators (parallel)
+            sma_params = {"symbol": ticker_upper, "timeframe": "1day"}
+            sma_20_data, sma_50_data, sma_200_data = await asyncio.gather(
+                _fmp_get(http_client, "technical-indicators/sma", {**sma_params, "periodLength": 20}),
+                _fmp_get(http_client, "technical-indicators/sma", {**sma_params, "periodLength": 50}),
+                _fmp_get(http_client, "technical-indicators/sma", {**sma_params, "periodLength": 200}),
             )
 
-            # Extract daily closes for MA calculation
-            daily_closes = []
-            historical = []
-            if isinstance(daily_data, dict):
-                historical = daily_data.get("historical", [])
-            elif isinstance(daily_data, list):
-                historical = daily_data
+            # Extract latest SMA value from each response (newest-first array)
+            def _extract_sma(data) -> Optional[float]:
+                if data and isinstance(data, list) and len(data) > 0:
+                    return data[0].get("sma")
+                return None
 
-            # FMP returns newest-first; reverse for MA calculation (oldest-first)
-            historical.sort(key=lambda x: x.get("date", ""))
-            daily_closes = [bar["close"] for bar in historical if "close" in bar]
-
-            print(f"DEBUG: Got {len(daily_closes)} daily closes for {ticker_upper}")
-
-            ma_20 = calculate_moving_average(daily_closes, 20)
-            ma_50 = calculate_moving_average(daily_closes, 50)
-            ma_200 = calculate_moving_average(daily_closes, 200)
-
-            print(f"DEBUG: MA calculations - 20-day: {ma_20}, 50-day: {ma_50}, 200-day: {ma_200}")
+            ma_20 = _extract_sma(sma_20_data)
+            ma_50 = _extract_sma(sma_50_data)
+            ma_200 = _extract_sma(sma_200_data)
 
             # Process intraday bars — FMP returns newest-first, sort ascending
             bars_data_raw.sort(key=lambda x: x.get("date", ""))

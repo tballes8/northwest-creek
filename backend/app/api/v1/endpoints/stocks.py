@@ -429,6 +429,284 @@ async def search_tickers(q: str = Query(..., min_length=1, description="Search q
         return {"results": []}
 
 
+@router.get("/earnings-calendar")
+async def get_earnings_calendar(
+    days: int = Query(default=7, ge=1, le=30, description="Number of days ahead to look"),
+    symbol: Optional[str] = Query(default=None, description="Filter by ticker symbol"),
+):
+    """
+    Get upcoming earnings reports from FMP earnings calendar.
+
+    **Parameters:**
+    - **days**: Number of days ahead (1-30, default 7)
+    - **symbol**: Optional ticker to filter (e.g. AAPL)
+
+    **Returns:**
+    - Array of earnings reports with EPS and revenue estimates
+    """
+    import httpx
+    from app.config import settings
+    from datetime import datetime, timedelta
+
+    api_key = settings.MASSIVE_API_KEY
+    base_url = "https://financialmodelingprep.com/stable"
+
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    end_str = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            params = {
+                "from": today_str,
+                "to": end_str,
+                "apikey": api_key,
+            }
+
+            resp = await client.get(f"{base_url}/earnings-calendar", params=params)
+            resp.raise_for_status()
+            data = resp.json()
+
+            if not isinstance(data, list):
+                data = []
+
+            # Filter by symbol if provided
+            if symbol:
+                symbol_upper = symbol.strip().upper()
+                data = [e for e in data if e.get("symbol", "").upper() == symbol_upper]
+
+            # Filter to US exchanges only (no .SS, .T, .TWO suffixes)
+            earnings = []
+            for item in data:
+                sym = item.get("symbol", "")
+                if "." in sym:
+                    continue  # skip non-US symbols
+                earnings.append({
+                    "symbol": sym,
+                    "date": item.get("date"),
+                    "eps_estimated": item.get("epsEstimated"),
+                    "eps_actual": item.get("epsActual"),
+                    "revenue_estimated": item.get("revenueEstimated"),
+                    "revenue_actual": item.get("revenueActual"),
+                })
+
+            return {
+                "earnings": earnings[:50],
+                "count": len(earnings),
+                "from": today_str,
+                "to": end_str,
+            }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching earnings calendar: {_safe_error(e)}")
+
+
+@router.get("/etf/{symbol}/info")
+async def get_etf_info(symbol: str):
+    """
+    Get ETF information including sector weightings, expense ratio, and AUM.
+
+    **Parameters:**
+    - **symbol**: ETF symbol (e.g. SPY, QQQ, VTI)
+
+    **Returns:**
+    - ETF metadata, sector breakdown, and fund details
+    """
+    import httpx
+    from app.config import settings
+
+    api_key = settings.MASSIVE_API_KEY
+    base_url = "https://financialmodelingprep.com/stable"
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                f"{base_url}/etf/info",
+                params={"symbol": symbol.upper(), "apikey": api_key},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            if not data or not isinstance(data, list) or len(data) == 0:
+                raise HTTPException(status_code=404, detail=f"No ETF info found for {symbol}")
+
+            info = data[0]
+            sectors = info.get("sectorsList", [])
+
+            return {
+                "symbol": info.get("symbol"),
+                "name": info.get("name"),
+                "description": info.get("description"),
+                "etf_company": info.get("etfCompany"),
+                "expense_ratio": info.get("expenseRatio"),
+                "aum": info.get("assetsUnderManagement"),
+                "nav": info.get("nav"),
+                "holdings_count": info.get("holdingsCount"),
+                "inception_date": info.get("inceptionDate"),
+                "avg_volume": info.get("avgVolume"),
+                "asset_class": info.get("assetClass"),
+                "is_actively_trading": info.get("isActivelyTrading"),
+                "sectors": [
+                    {"sector": s.get("industry"), "weight": s.get("exposure")}
+                    for s in sectors
+                ],
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching ETF info: {_safe_error(e)}")
+
+
+@router.get("/etf/{symbol}/holdings")
+async def get_etf_holdings(
+    symbol: str,
+    limit: int = Query(default=25, ge=1, le=100, description="Number of holdings to return"),
+):
+    """
+    Get top holdings for an ETF.
+
+    **Parameters:**
+    - **symbol**: ETF symbol (e.g. SPY, QQQ)
+    - **limit**: Number of top holdings (1-100, default 25)
+
+    **Returns:**
+    - Array of holdings with ticker, name, weight, shares, and market value
+    """
+    import httpx
+    from app.config import settings
+
+    api_key = settings.MASSIVE_API_KEY
+    base_url = "https://financialmodelingprep.com/stable"
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
+                f"{base_url}/etf/holdings",
+                params={"symbol": symbol.upper(), "apikey": api_key},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            if not data or not isinstance(data, list):
+                return {"symbol": symbol.upper(), "holdings": [], "count": 0}
+
+            holdings = []
+            for item in data[:limit]:
+                holdings.append({
+                    "ticker": item.get("asset"),
+                    "name": item.get("name"),
+                    "weight": item.get("weightPercentage"),
+                    "shares": item.get("sharesNumber"),
+                    "market_value": item.get("marketValue"),
+                })
+
+            return {
+                "symbol": symbol.upper(),
+                "holdings": holdings,
+                "count": len(holdings),
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching ETF holdings: {_safe_error(e)}")
+
+
+@router.get("/screener")
+async def stock_screener(
+    market_cap_more_than: Optional[float] = Query(default=None, description="Minimum market cap"),
+    market_cap_lower_than: Optional[float] = Query(default=None, description="Maximum market cap"),
+    sector: Optional[str] = Query(default=None, description="Sector filter (e.g. Technology, Healthcare)"),
+    industry: Optional[str] = Query(default=None, description="Industry filter (e.g. Semiconductors)"),
+    beta_more_than: Optional[float] = Query(default=None, description="Minimum beta"),
+    beta_lower_than: Optional[float] = Query(default=None, description="Maximum beta"),
+    price_more_than: Optional[float] = Query(default=None, description="Minimum price"),
+    price_lower_than: Optional[float] = Query(default=None, description="Maximum price"),
+    dividend_more_than: Optional[float] = Query(default=None, description="Minimum annual dividend"),
+    dividend_lower_than: Optional[float] = Query(default=None, description="Maximum annual dividend"),
+    volume_more_than: Optional[float] = Query(default=None, description="Minimum volume"),
+    volume_lower_than: Optional[float] = Query(default=None, description="Maximum volume"),
+    exchange: Optional[str] = Query(default=None, description="Exchange (e.g. NASDAQ, NYSE)"),
+    is_etf: Optional[bool] = Query(default=None, description="Filter ETFs"),
+    is_fund: Optional[bool] = Query(default=None, description="Filter mutual funds"),
+    is_actively_trading: Optional[bool] = Query(default=True, description="Only actively trading"),
+    limit: int = Query(default=50, ge=1, le=200, description="Number of results"),
+):
+    """
+    Screen stocks using FMP company screener.
+    Filter by market cap, sector, price, beta, volume, dividends, and more.
+    """
+    import httpx
+    from app.config import settings
+
+    api_key = settings.MASSIVE_API_KEY
+    base_url = "https://financialmodelingprep.com/stable"
+
+    # Build params — only include non-None values
+    params: dict = {"apikey": api_key, "limit": limit}
+    param_map = {
+        "marketCapMoreThan": market_cap_more_than,
+        "marketCapLowerThan": market_cap_lower_than,
+        "sector": sector,
+        "industry": industry,
+        "betaMoreThan": beta_more_than,
+        "betaLowerThan": beta_lower_than,
+        "priceMoreThan": price_more_than,
+        "priceLowerThan": price_lower_than,
+        "dividendMoreThan": dividend_more_than,
+        "dividendLowerThan": dividend_lower_than,
+        "volumeMoreThan": volume_more_than,
+        "volumeLowerThan": volume_lower_than,
+        "exchange": exchange,
+        "isEtf": is_etf,
+        "isFund": is_fund,
+        "isActivelyTrading": is_actively_trading,
+    }
+    for key, val in param_map.items():
+        if val is not None:
+            params[key] = val
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(f"{base_url}/company-screener", params=params)
+            resp.raise_for_status()
+            data = resp.json()
+
+            if not isinstance(data, list):
+                data = []
+
+            # Filter out non-US exchanges client-side for cleaner results
+            results = []
+            for item in data:
+                short_name = (item.get("exchangeShortName") or "").upper()
+                sym = item.get("symbol", "")
+                # Skip foreign-listed symbols (contain dots like .BA, .T)
+                if "." in sym:
+                    continue
+                results.append({
+                    "symbol": sym,
+                    "name": item.get("companyName"),
+                    "market_cap": item.get("marketCap"),
+                    "sector": item.get("sector"),
+                    "industry": item.get("industry"),
+                    "beta": item.get("beta"),
+                    "price": item.get("price"),
+                    "last_annual_dividend": item.get("lastAnnualDividend"),
+                    "volume": item.get("volume"),
+                    "exchange": item.get("exchangeShortName"),
+                    "is_etf": item.get("isEtf"),
+                    "is_actively_trading": item.get("isActivelyTrading"),
+                })
+
+            return {
+                "results": results,
+                "count": len(results),
+            }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error running stock screener: {_safe_error(e)}")
+
+
 @router.get("/{ticker}", response_model=dict)
 async def get_stock_overview(ticker: str):
     """

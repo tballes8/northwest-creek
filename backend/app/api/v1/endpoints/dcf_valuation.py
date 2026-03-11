@@ -3,14 +3,21 @@ DCF Valuation API Endpoints - Discounted Cash Flow Analysis
 ⭐ PAID TIERS ONLY
 """
 import re
+import httpx
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
+from typing import Optional, Dict, Any
 from app.db.models import User
 from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.services.market_data import market_data_service
 from app.services.financials_service import get_company_financials
+from app.config import get_settings
+
+settings = get_settings()
+
+FMP_BASE = "https://financialmodelingprep.com/stable"
+API_KEY = settings.MASSIVE_API_KEY
 
 
 def _safe_error(e: Exception) -> str:
@@ -22,6 +29,55 @@ def _safe_error(e: Exception) -> str:
     return msg
 
 router = APIRouter()
+
+
+async def _fetch_fmp_dcf(ticker: str) -> Dict[str, Any]:
+    """
+    Fetch FMP's pre-calculated DCF benchmarks (simple, levered, and advanced).
+    Returns a dict with all three, or empty values on failure.
+    """
+    result: Dict[str, Any] = {
+        "dcf": None,
+        "levered_dcf": None,
+        "stock_price": None,
+        "wacc": None,
+        "equity_value_per_share": None,
+        "terminal_value": None,
+        "enterprise_value": None,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            params = {"symbol": ticker, "apikey": API_KEY}
+
+            # Simple + levered DCF (lightweight)
+            simple_resp = await client.get(f"{FMP_BASE}/discounted-cash-flow", params=params)
+            simple_resp.raise_for_status()
+            simple_data = simple_resp.json()
+            if simple_data and isinstance(simple_data, list) and len(simple_data) > 0:
+                result["dcf"] = simple_data[0].get("dcf")
+                result["stock_price"] = simple_data[0].get("Stock Price")
+
+            levered_resp = await client.get(f"{FMP_BASE}/levered-discounted-cash-flow", params=params)
+            levered_resp.raise_for_status()
+            levered_data = levered_resp.json()
+            if levered_data and isinstance(levered_data, list) and len(levered_data) > 0:
+                result["levered_dcf"] = levered_data[0].get("dcf")
+
+            # Advanced DCF — grab WACC and equity value from most recent projected year
+            adv_resp = await client.get(f"{FMP_BASE}/custom-discounted-cash-flow", params=params)
+            adv_resp.raise_for_status()
+            adv_data = adv_resp.json()
+            if adv_data and isinstance(adv_data, list) and len(adv_data) > 0:
+                latest = adv_data[0]  # newest projected year
+                result["wacc"] = latest.get("wacc")
+                result["equity_value_per_share"] = latest.get("equityValuePerShare")
+                result["terminal_value"] = latest.get("terminalValue")
+                result["enterprise_value"] = latest.get("enterpriseValue")
+
+    except Exception as e:
+        print(f"⚠️ FMP DCF fetch failed for {ticker}: {e}")
+
+    return result
 
 
 def require_paid_tier(current_user: User = Depends(get_current_user)):
@@ -307,7 +363,10 @@ async def get_dcf_suggestions(
             growth_from_actuals = False
             discount_from_actuals = False
             # Non-fatal — continue with sector defaults
-        
+
+        # ── Fetch FMP pre-calculated DCF as benchmark ───────────────
+        fmp_dcf = await _fetch_fmp_dcf(ticker.upper())
+
         return {
             "ticker": ticker.upper(),
             "company_name": company_name,
@@ -337,6 +396,13 @@ async def get_dcf_suggestions(
             },
             "actuals": actuals,
             "growth_profile": growth_profile,
+            "fmp_benchmark": {
+                "dcf_value": fmp_dcf.get("dcf"),
+                "levered_dcf_value": fmp_dcf.get("levered_dcf"),
+                "equity_value_per_share": fmp_dcf.get("equity_value_per_share"),
+                "wacc": fmp_dcf.get("wacc"),
+                "source": "FMP Discounted Cash Flow model",
+            },
         }
     
     except HTTPException:
@@ -502,6 +568,9 @@ async def calculate_dcf(
         # Calculate margin of safety
         margin_of_safety = ((intrinsic_value - current_price) / current_price) * 100
         
+        # ── Fetch FMP pre-calculated DCF as benchmark ───────────────
+        fmp_dcf = await _fetch_fmp_dcf(ticker.upper())
+
         # Determine recommendation
         if margin_of_safety > 20:
             recommendation = "Strong Buy"
@@ -564,7 +633,16 @@ async def calculate_dcf(
                 "rating": recommendation,
                 "color": recommendation_color,
                 "message": recommendation_message
-            }
+            },
+            "fmp_benchmark": {
+                "dcf_value": fmp_dcf.get("dcf"),
+                "levered_dcf_value": fmp_dcf.get("levered_dcf"),
+                "equity_value_per_share": fmp_dcf.get("equity_value_per_share"),
+                "wacc": fmp_dcf.get("wacc"),
+                "terminal_value": fmp_dcf.get("terminal_value"),
+                "enterprise_value": fmp_dcf.get("enterprise_value"),
+                "source": "FMP Discounted Cash Flow model",
+            },
         }
     
     except HTTPException:

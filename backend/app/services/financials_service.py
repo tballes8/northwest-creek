@@ -8,8 +8,8 @@ FMP Stable endpoints used:
   /stable/income-statement?symbol=X&period=quarter
   /stable/balance-sheet-statement?symbol=X&period=quarter
   /stable/cash-flow-statement?symbol=X&period=quarter
-  /stable/ratios?symbol=X&period=quarter
-  /stable/key-metrics?symbol=X&period=quarter
+  /stable/ratios-ttm?symbol=X          (pre-computed trailing-twelve-month ratios)
+  /stable/key-metrics-ttm?symbol=X     (pre-computed trailing-twelve-month metrics)
 """
 import asyncio
 import httpx
@@ -86,11 +86,11 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
         cashflow_quarterly_task = _fetch(client, "cash-flow-statement", {
             "symbol": ticker, "period": "quarter", "limit": 8,
         })
-        ratios_task = _fetch(client, "ratios", {
-            "symbol": ticker, "period": "quarter", "limit": 1,
+        ratios_task = _fetch(client, "ratios-ttm", {
+            "symbol": ticker,
         })
-        key_metrics_task = _fetch(client, "key-metrics", {
-            "symbol": ticker, "period": "quarter", "limit": 1,
+        key_metrics_task = _fetch(client, "key-metrics-ttm", {
+            "symbol": ticker,
         })
         # Profile lookup — get the current entity's CIK for staleness detection
         profile_task = _fetch(client, "profile", {
@@ -211,24 +211,24 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
         "depreciation_amortization": da_ttm,
     }
 
-    # ── Ratios (from FMP ratios + key-metrics endpoints) ──────────────
+    # ── Ratios (from FMP ratios-ttm + key-metrics-ttm endpoints) ──────
     ratios_summary = {
-        "date": ratios.get("date"),
-        "price": key_metrics.get("marketCap") and latest_q.get("epsDiluted") and None,  # not directly available
+        "date": latest_q.get("date"),
+        "price": None,  # not directly available from these endpoints
         "market_cap": key_metrics.get("marketCap"),
-        "enterprise_value": key_metrics.get("enterpriseValue"),
-        "pe_ratio": _fmt(ratios.get("priceEarningsRatio")),
-        "ps_ratio": _fmt(ratios.get("priceToSalesRatio")),
-        "pb_ratio": _fmt(ratios.get("priceToBookRatio")),
-        "price_to_fcf": _fmt(ratios.get("priceToFreeCashFlowsRatio")),
-        "ev_to_ebitda": _fmt(ratios.get("enterpriseValueMultiple") or key_metrics.get("enterpriseValueOverEBITDA")),
-        "ev_to_sales": _fmt(key_metrics.get("evToSales")),
-        "roe": _fmt(ratios.get("returnOnEquity")),
-        "roa": _fmt(ratios.get("returnOnAssets")),
-        "debt_to_equity": _fmt(ratios.get("debtEquityRatio")),
-        "current_ratio": _fmt(ratios.get("currentRatio")),
-        "quick_ratio": _fmt(ratios.get("quickRatio")),
-        "dividend_yield": _fmt(ratios.get("dividendYield"), 4),
+        "enterprise_value": key_metrics.get("enterpriseValueTTM"),
+        "pe_ratio": _fmt(ratios.get("priceToEarningsRatioTTM")),
+        "ps_ratio": _fmt(ratios.get("priceToSalesRatioTTM")),
+        "pb_ratio": _fmt(ratios.get("priceToBookRatioTTM")),
+        "price_to_fcf": _fmt(ratios.get("priceToFreeCashFlowRatioTTM")),
+        "ev_to_ebitda": _fmt(ratios.get("enterpriseValueMultipleTTM") or key_metrics.get("evToEBITDATTM")),
+        "ev_to_sales": _fmt(key_metrics.get("evToSalesTTM")),
+        "roe": _fmt(key_metrics.get("returnOnEquityTTM")),
+        "roa": _fmt(key_metrics.get("returnOnAssetsTTM")),
+        "debt_to_equity": _fmt(ratios.get("debtToEquityRatioTTM")),
+        "current_ratio": _fmt(ratios.get("currentRatioTTM")),
+        "quick_ratio": _fmt(ratios.get("quickRatioTTM")),
+        "dividend_yield": _fmt(ratios.get("dividendYieldTTM"), 4),
         "eps": _fmt(eps_diluted_ttm),
         "fcf": fcf_ttm,
     }
@@ -315,7 +315,7 @@ def _derive_dcf_suggestions(
 
     # ── Estimated WACC (simplified) ───────────────────────────────────
     # Uses D/E ratio + assumed cost of debt & equity risk premium
-    de_ratio = ratios.get("debtEquityRatio")
+    de_ratio = ratios.get("debtToEquityRatioTTM")
     estimated_wacc = None
     if de_ratio is not None:
         try:
