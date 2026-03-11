@@ -116,7 +116,7 @@ async def get_dcf_suggestions(
         company = await market_data_service.get_company_info(ticker)
 
         company_name = company.get("name", ticker)
-        market_cap = company.get("market_cap", 0)
+        market_cap = company.get("market_cap") or 0
         current_price = float(quote.get('price', 0))
         industry = company.get("industry", "Unknown")
         sector = company.get("sector", "Other")
