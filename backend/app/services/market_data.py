@@ -275,7 +275,7 @@ class MarketDataService:
                     "ex_dividend_date": d.get("date"),
                     "pay_date": d.get("paymentDate"),
                     "record_date": d.get("recordDate"),
-                    "frequency": None,
+                    "frequency": d.get("frequency"),
                     "distribution_type": d.get("label", "unknown"),
                 })
 
