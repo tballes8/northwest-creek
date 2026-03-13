@@ -862,15 +862,12 @@ const Portfolio: React.FC = () => {
                         
                         // Extended hours badge
                         const ext = extendedHoursMap[position.ticker];
-                        const isEarlyTrading = ext?.marketStatus === 'early_trading';
-                        const isLateTrading = ext?.marketStatus === 'late_trading';
                         
                         const earlyPct = ext?.earlyChangePercent;
                         const latePct = ext?.lateChangePercent;
-                        
-                        // Show pre-market badge during early trading, after-hours badge during late trading
-                        const showEarlyBadge = isEarlyTrading && earlyPct != null && earlyPct !== 0;
-                        const showLateBadge = isLateTrading && latePct != null && latePct !== 0;
+
+                        const showEarlyBadge = ext?.marketStatus === 'closed' && earlyPct != null && earlyPct !== 0;
+                        const showLateBadge = ext?.marketStatus === 'closed' && latePct != null && latePct !== 0;
                         
                         return (
                           <div>
