@@ -38,8 +38,7 @@ interface CompanyInfo {
   phone?: string;
   employees?: number;
   country?: string;
-  type?: string;  // CS = Common Stock, ETF = ETF, ADRC = ADR
-  // Fund-specific fields (populated by yfinance for ETFs)
+  type?: string;
   fund_description?: string | null;
   fund_category?: string | null;
   fund_family?: string | null;
@@ -97,7 +96,6 @@ interface DividendInfo {
   frequency_label: string | null;
 }
 
-// Add interface for daily snapshot
 interface DailySnapshot {
   ticker: string;
   open_price: number;
@@ -142,7 +140,6 @@ const Stocks: React.FC = () => {
   });
   const [sectorSnapshots, setSectorSnapshots] = useState<DailySnapshot[]>([]);
   const [sectorLoading, setSectorLoading] = useState(false);
-  // Sector context — persists across search/clear cycles until explicit dismissal
   const [activeSector, setActiveSector] = useState(sectorParam);
   const [isWarrant, setIsWarrant] = useState(false);
   const [relatedCommonStock, setRelatedCommonStock] = useState<string | null>(null);
@@ -156,13 +153,9 @@ const Stocks: React.FC = () => {
   const [dividendInfo, setDividendInfo] = useState<DividendInfo | null>(null);
   const [dividendLoading, setDividendLoading] = useState(false);
 
-  // User dropdown menu
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // Helper function to detect if a ticker is a warrant
-  // Warrant detection is now API-driven using Polygon's `type` field (CS, WARRANT, ETF, etc.)
-  // These helpers are only used as a pre-fetch hint for explicit separator patterns
   const detectWarrantHint = (tickerSymbol: string): boolean => {
     const upper = tickerSymbol.toUpperCase();
     return (
@@ -173,7 +166,6 @@ const Stocks: React.FC = () => {
     );
   };
 
-  // Helper function to get related common stock ticker
   const getRelatedCommonStock = (warrantTicker: string): string | null => {
     const upper = warrantTicker.toUpperCase();
     const patterns = ['.WS', '.WT', '.W', '+WS', '+WT', '+W', '/WS', '/WT', '/W'];
@@ -187,7 +179,6 @@ const Stocks: React.FC = () => {
 
   useEffect(() => {
     loadUser();
-    // Only fetch daily snapshots if we don't have cached data
     if (dailySnapshots.length === 0) {
       loadDailySnapshots();
     }
@@ -195,22 +186,18 @@ const Stocks: React.FC = () => {
       loadStockData(initialTicker);
       loadNews(initialTicker);
     }
-    // Load top gainers when component mounts or when showTopGainers is true
     if (showTopGainers || initialTicker || !initialTicker) {
       loadTopGainers();
       loadTopLosers();
     }
-    // Load sector-specific stocks when sector param is present
     if (sectorParam) {
       setActiveSector(sectorParam);
-      // Only fetch if we don't already have cached snapshots for this sector
       if (sectorSnapshots.length === 0) {
         loadSectorSnapshots(sectorParam);
       }
     }
   }, [initialTicker, showTopGainers, sectorParam]);
 
-  // Close suggestions dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
@@ -221,7 +208,6 @@ const Stocks: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Debounced ticker/company search
   const searchTickers = useCallback(async (query: string) => {
     if (query.length < 2) {
       setSuggestions([]);
@@ -250,18 +236,15 @@ const Stocks: React.FC = () => {
   const handleSearchInputChange = (value: string) => {
     setSearchInput(value);
     
-    // If cleared, reset to empty state
     if (!value.trim()) {
       resetToEmptyState();
       return;
     }
 
-    // Clear previous debounce
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
     
-    // Debounce API call by 300ms
     debounceRef.current = setTimeout(() => {
       searchTickers(value);
     }, 300);
@@ -281,7 +264,6 @@ const Stocks: React.FC = () => {
     setSuggestions([]);
     setShowSuggestions(false);
     setWatchlistMsg(null);
-    // Preserve sector context in URL if we have an active sector
     if (activeSector) {
       navigate(`/stocks?sector=${encodeURIComponent(activeSector)}`, { replace: true });
     } else {
@@ -302,7 +284,6 @@ const Stocks: React.FC = () => {
     handleTickerClick(suggestion.ticker);
   };
 
-  // Function to load stocks for a specific sector
   const loadSectorSnapshots = async (sector: string) => {
     setSectorLoading(true);
     try {
@@ -311,7 +292,6 @@ const Stocks: React.FC = () => {
         setSectorSnapshots([]);
         return;
       }
-      // Randomly pick up to 100 tickers to send to backend (avoids giant query strings)
       const shuffled = [...sectorTickers].sort(() => Math.random() - 0.5);
       const subset = shuffled.slice(0, 100);
       const response = await stocksAPI.getDailySnapshot(10, subset);
@@ -324,7 +304,6 @@ const Stocks: React.FC = () => {
     }
   };
 
-  // Function to load daily snapshots
   const loadDailySnapshots = async () => {
     try {
       const response = await stocksAPI.getDailySnapshot(10);
@@ -371,7 +350,6 @@ const Stocks: React.FC = () => {
     setError('');
     setTicker(symbol.toUpperCase());
     
-    // Pre-fetch hint only — real warrant detection happens after API response
     const isWarrantHint = detectWarrantHint(symbol);
     setIsWarrant(isWarrantHint);
     if (isWarrantHint) {
@@ -381,16 +359,52 @@ const Stocks: React.FC = () => {
     }
 
     try {
-      // Fetch quote and company info concurrently
-      const [quoteRes, companyRes, historicalRes] = await Promise.all([
+      // Fetch quote, company, and historical independently so one failure
+      // doesn't block the others.  Quote + company are required; historical
+      // is optional (FMP may not have data for every ticker).
+      const [quoteResult, companyResult, historicalResult] = await Promise.allSettled([
         stocksAPI.getQuote(symbol),
         stocksAPI.getCompany(symbol),
         stocksAPI.getHistorical(symbol, historyDays),
       ]);
 
-      setQuote(quoteRes.data);
-      setCompany(companyRes.data);
-      setHistorical(historicalRes.data.data);
+      // Quote is essential — if it failed, show error
+      if (quoteResult.status === 'rejected') {
+        const errMsg = (quoteResult.reason as any)?.response?.data?.detail
+          || 'Failed to load stock data. Please check the ticker symbol and try again.';
+        setError(errMsg);
+        setQuote(null);
+        setCompany(null);
+        setHistorical([]);
+        setDividendInfo(null);
+        setLoading(false);
+        return;
+      }
+
+      // Company is essential — if it failed, show error
+      if (companyResult.status === 'rejected') {
+        const errMsg = (companyResult.reason as any)?.response?.data?.detail
+          || 'Failed to load company information. Please check the ticker symbol and try again.';
+        setError(errMsg);
+        setQuote(null);
+        setCompany(null);
+        setHistorical([]);
+        setDividendInfo(null);
+        setLoading(false);
+        return;
+      }
+
+      // Set quote and company from successful results
+      setQuote(quoteResult.value.data);
+      setCompany(companyResult.value.data);
+
+      // Historical is optional — use data if available, otherwise empty array
+      if (historicalResult.status === 'fulfilled') {
+        setHistorical(historicalResult.value.data.data);
+      } else {
+        console.warn(`Historical data not available for ${symbol} — chart will be hidden`);
+        setHistorical([]);
+      }
 
       // Overlay live intraday price on top of previous-day quote
       try {
@@ -414,23 +428,18 @@ const Stocks: React.FC = () => {
         // Non-fatal — keep previous-day quote as fallback
       }
       
-      // API-driven warrant detection — overrides any pre-fetch hint
-      const apiType = companyRes.data?.type || '';
+      // API-driven warrant detection
+      const apiType = companyResult.value.data?.type || '';
       if (apiType === 'WARRANT') {
         setIsWarrant(true);
-        // Use separator-based extraction first; only fall back to W-stripping
-        // for API-confirmed warrants where the pattern is unambiguous
         const related = getRelatedCommonStock(symbol);
         if (related) {
           setRelatedCommonStock(related);
         } else {
-          // API confirmed warrant but no separator — try stripping trailing W(s)
-          // e.g. SOUNW → SOUN.  Guard: result must be >= 2 chars and differ from input
           const stripped = symbol.toUpperCase().replace(/W+$/, '');
           setRelatedCommonStock(stripped.length >= 2 && stripped !== symbol.toUpperCase() ? stripped : null);
         }
       } else if (apiType === 'CS' || apiType === 'ADRC' || apiType === 'PFD' || apiType === 'ETF') {
-        // Confirmed non-warrant — clear any false positive from hint
         setIsWarrant(false);
         setRelatedCommonStock(null);
       }
@@ -512,8 +521,6 @@ const Stocks: React.FC = () => {
     setShowSuggestions(false);
     setSuggestions([]);
     if (searchInput.trim()) {
-      // If input looks like a ticker (all caps, short), search directly
-      // Otherwise if we have suggestions, use the first match's ticker
       const input = searchInput.trim();
       const looksLikeTicker = /^[A-Z]{1,5}(\.[A-Z])?$/.test(input.toUpperCase()) && input.length <= 6;
       
@@ -522,14 +529,12 @@ const Stocks: React.FC = () => {
         loadNews(input);
         navigate(`/stocks?ticker=${input.toUpperCase()}`);
       } else if (suggestions.length > 0) {
-        // Use first suggestion's ticker
         const firstTicker = suggestions[0].ticker;
         setSearchInput(firstTicker);
         loadStockData(firstTicker);
         loadNews(firstTicker);
         navigate(`/stocks?ticker=${firstTicker}`);
       } else {
-        // Try it as a ticker anyway
         loadStockData(input);
         loadNews(input);
         navigate(`/stocks?ticker=${input.toUpperCase()}`);
@@ -573,11 +578,9 @@ const Stocks: React.FC = () => {
     setWatchlistMsg(null);
     try {
       const payload: any = { ticker: ticker.toUpperCase().trim() };
-      // Auto-fill Started At price with current price
       if (quote?.price) {
         payload.target_price = quote.price;
       }
-      // Auto-fill Notes with company name + sector
       const parts = [];
       if (company?.name) parts.push(company.name);
       if (company?.sector) parts.push(company.sector);
@@ -596,15 +599,13 @@ const Stocks: React.FC = () => {
     }
   };
 
-  // Dividend helpers
-  // Fund-type codes from Polygon/Massive: ETF, ETS (Exchange Traded Share), ETN (Exchange Traded Note)
   const FUND_TYPES = new Set(['ETF', 'ETS', 'ETN', 'ETV', 'ETD']);
   const isFundType = (type?: string): boolean => !!type && FUND_TYPES.has(type);
 
   const formatFrequency = (freq: number | null, label: string | null): string => {
     if (label && label !== 'Unknown') return label;
     if (freq === null) return '—';
-    const map: Record<number, string> = { 0: 'One-time', 1: 'Annual', 2: 'Semi-Annual', 4: 'Quarterly', 12: 'Monthly' };
+    const map: Record<number, string> = { 0: 'One-time', 1: 'Annual', 2: 'Semi-Annual', 4: 'Quarterly', 12: 'Monthly', 52: 'Weekly' };
     return map[freq] ?? `${freq}x/yr`;
   };
 
@@ -617,7 +618,6 @@ const Stocks: React.FC = () => {
     }
   };
 
-  // Chart configuration
   const chartData = {
     labels: historical.map((h) => new Date(h.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
     datasets: [
@@ -780,7 +780,6 @@ const Stocks: React.FC = () => {
                 autoComplete="off"
               />
 
-              {/* Clear button */}
               {searchInput && (
                 <button
                   type="button"
@@ -794,7 +793,6 @@ const Stocks: React.FC = () => {
                 </button>
               )}
               
-              {/* Suggestions Dropdown */}
               {showSuggestions && (
                 <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-500 rounded-lg shadow-xl max-h-80 overflow-y-auto">
                   {suggestionsLoading ? (
@@ -949,30 +947,43 @@ const Stocks: React.FC = () => {
               </div>
             </div>
 
-            {/* Price Chart */}
-            <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Price History</h3>
-                <div className="flex gap-2">
-                  {[30, 90, 180, 365].map((days) => (
-                    <button
-                      key={days}
-                      onClick={() => handleHistoryDaysChange(days)}
-                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-                        historyDays === days
-                          ? 'bg-primary-600 dark:bg-primary-500 text-white'
-                          : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
-                      }`}
-                    >
-                      {days}D
-                    </button>
-                  ))}
+            {/* Price Chart — only shown when historical data is available */}
+            {historical.length > 0 ? (
+              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Price History</h3>
+                  <div className="flex gap-2">
+                    {[30, 90, 180, 365].map((days) => (
+                      <button
+                        key={days}
+                        onClick={() => handleHistoryDaysChange(days)}
+                        className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                          historyDays === days
+                            ? 'bg-primary-600 dark:bg-primary-500 text-white'
+                            : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                        }`}
+                      >
+                        {days}D
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ height: '400px' }}>
+                  <Line data={chartData} options={chartOptions} />
                 </div>
               </div>
-              <div style={{ height: '400px' }}>
-                <Line data={chartData} options={chartOptions} />
+            ) : (
+              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Price History</h3>
+                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                  <svg className="w-12 h-12 mx-auto mb-3 text-gray-300 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+                  </svg>
+                  <p className="text-sm">Historical price data is not available for {ticker}.</p>
+                  <p className="text-xs mt-1 text-gray-400 dark:text-gray-500">This can happen with newly listed or less-traded securities.</p>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Company Info + Dividends */}
             <div className="grid md:grid-cols-3 gap-6">
@@ -998,7 +1009,6 @@ const Stocks: React.FC = () => {
                     </div>
                   )}
 
-                  {/* === ETF-specific fields from yfinance === */}
                   {isFundType(company.type) && company.fund_category && (
                     <div>
                       <div className="text-sm text-gray-600 dark:text-gray-400">Category</div>
@@ -1026,7 +1036,6 @@ const Stocks: React.FC = () => {
                     </div>
                   )}
 
-                  {/* === Stock-specific fields === */}
                   {!isFundType(company.type) && company.sector && (
                     <div>
                       <div className="text-sm text-gray-600 dark:text-gray-400">Sector</div>
@@ -1040,7 +1049,6 @@ const Stocks: React.FC = () => {
                     </div>
                   )}
 
-                  {/* === Shared fields === */}
                   {(company.market_cap || (isFundType(company.type) && company.fund_total_assets)) && (
                     <div>
                       <div className="text-sm text-gray-600 dark:text-gray-400">
@@ -1092,7 +1100,6 @@ const Stocks: React.FC = () => {
                   </div>
                 ) : dividendInfo && dividendInfo.has_dividends && dividendInfo.dividends.length > 0 ? (
                   <div className="space-y-3">
-                    {/* Annual Yield — hero stat */}
                     {dividendInfo.annual_yield !== null && (
                       <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 text-center">
                         <div className="text-2xl font-bold text-green-700 dark:text-green-300">
@@ -1102,7 +1109,6 @@ const Stocks: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Key metrics grid */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <div className="text-sm text-gray-600 dark:text-gray-400">Per Share</div>
@@ -1132,7 +1138,6 @@ const Stocks: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Dates */}
                     <div className="border-t border-gray-200 dark:border-gray-600 pt-3 space-y-2">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600 dark:text-gray-400">Ex-Dividend</span>
@@ -1154,7 +1159,6 @@ const Stocks: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Recent history (last 4 dividends) */}
                     {dividendInfo.dividends.length > 1 && (
                       <div className="border-t border-gray-200 dark:border-gray-600 pt-3">
                         <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Recent History</div>
@@ -1283,7 +1287,6 @@ const Stocks: React.FC = () => {
         {!quote && !loading && !error && (
           <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-12 border dark:border-gray-500 text-center">
             
-            {/* Sector Explorer Banner — shown when navigating from Dashboard pie chart */}
             {activeSector && (
               <div className="mb-8 pb-8 border-b border-gray-200 dark:border-gray-600">
                 <div className="flex items-center justify-center gap-3 mb-3">
@@ -1360,7 +1363,6 @@ const Stocks: React.FC = () => {
               </div>
             )}
 
-            {/* Default empty state content */}
             {!activeSector && (
               <>
                 <div className="text-6xl mb-4">📊</div>
@@ -1371,7 +1373,6 @@ const Stocks: React.FC = () => {
               </>
             )}
             
-            {/* Daily Random Stocks */}
             {dailySnapshots.length > 0 && (
               <div className="mt-8 border-t border-gray-200 dark:border-gray-600 pt-8">
                 <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Randomly selected stocks from today's market</h3>
