@@ -80,6 +80,28 @@ async def _fetch_fmp_dcf(ticker: str) -> Dict[str, Any]:
     return result
 
 
+async def _fetch_shares_outstanding(ticker: str) -> Optional[int]:
+    """
+    Fetch outstanding shares from FMP /stable/shares-float endpoint.
+    Returns the outstandingShares count or None on failure.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{FMP_BASE}/shares-float",
+                params={"symbol": ticker.upper(), "apikey": API_KEY},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if data and isinstance(data, list) and len(data) > 0:
+                outstanding = data[0].get("outstandingShares")
+                if outstanding and outstanding > 0:
+                    return int(outstanding)
+    except Exception as e:
+        print(f"⚠️ Shares float fetch failed for {ticker}: {e}")
+    return None
+
+
 def require_paid_tier(current_user: User = Depends(get_current_user)):
     """Require paid tier (Casual, Active, or Professsional) for Technical Analysis access"""
     allowed_tiers = ["beginner", "casual", "active", "professional"]
@@ -120,7 +142,7 @@ async def get_dcf_suggestions(
         current_price = float(quote.get('price', 0))
         industry = company.get("industry", "Unknown")
         sector = company.get("sector", "Other")
-        security_type = company.get("type", "")  # CS, ETF, etc.
+        security_type = company.get("type", "")
 
         if current_price == 0:
             raise HTTPException(
@@ -129,125 +151,91 @@ async def get_dcf_suggestions(
             )
         
         # Determine company size category
-        if market_cap >= 200_000_000_000:  # $200B+
+        if market_cap >= 200_000_000_000:
             size_category = "mega_cap"
-        elif market_cap >= 10_000_000_000:  # $10B+
+        elif market_cap >= 10_000_000_000:
             size_category = "large_cap"
-        elif market_cap >= 2_000_000_000:   # $2B+
+        elif market_cap >= 2_000_000_000:
             size_category = "mid_cap"
-        elif market_cap >= 300_000_000:     # $300M+
+        elif market_cap >= 300_000_000:
             size_category = "small_cap"
         else:
             size_category = "micro_cap"
         
         # Sector-based growth and risk profiles
-        # FMP returns standardized sector names directly
         sector_profiles = {
             "Technology": {
-                "growth": 0.15,
-                "terminal": 0.03,
-                "discount": 0.12,
-                "years": 7,
+                "growth": 0.15, "terminal": 0.03, "discount": 0.12, "years": 7,
                 "growth_reasoning": "Tech companies typically show high growth potential",
                 "terminal_reasoning": "Mature tech companies stabilize around GDP growth",
                 "discount_reasoning": "Higher risk due to rapid innovation and competition",
                 "years_reasoning": "Longer projection captures growth runway"
             },
             "Healthcare": {
-                "growth": 0.08,
-                "terminal": 0.025,
-                "discount": 0.09,
-                "years": 5,
+                "growth": 0.08, "terminal": 0.025, "discount": 0.09, "years": 5,
                 "growth_reasoning": "Healthcare shows steady, predictable growth",
                 "terminal_reasoning": "Aging demographics support steady long-term growth",
                 "discount_reasoning": "Moderate risk with regulatory considerations",
                 "years_reasoning": "Standard period for stable industries"
             },
             "Financial Services": {
-                "growth": 0.06,
-                "terminal": 0.02,
-                "discount": 0.11,
-                "years": 5,
+                "growth": 0.06, "terminal": 0.02, "discount": 0.11, "years": 5,
                 "growth_reasoning": "Financial services grow with economic expansion",
                 "terminal_reasoning": "Long-term growth tied to GDP",
                 "discount_reasoning": "Higher risk due to economic sensitivity",
                 "years_reasoning": "Standard period for cyclical industries"
             },
             "Consumer Cyclical": {
-                "growth": 0.07,
-                "terminal": 0.025,
-                "discount": 0.10,
-                "years": 5,
+                "growth": 0.07, "terminal": 0.025, "discount": 0.10, "years": 5,
                 "growth_reasoning": "Growth linked to consumer spending trends",
                 "terminal_reasoning": "Mature markets stabilize near GDP growth",
                 "discount_reasoning": "Moderate risk with economic cycles",
                 "years_reasoning": "Captures full economic cycle"
             },
             "Consumer Defensive": {
-                "growth": 0.05,
-                "terminal": 0.02,
-                "discount": 0.08,
-                "years": 5,
+                "growth": 0.05, "terminal": 0.02, "discount": 0.08, "years": 5,
                 "growth_reasoning": "Defensive sectors show stable, lower growth",
                 "terminal_reasoning": "Stable demand supports steady terminal growth",
                 "discount_reasoning": "Lower risk due to consistent demand",
                 "years_reasoning": "Standard period for stable sectors"
             },
             "Energy": {
-                "growth": 0.04,
-                "terminal": 0.015,
-                "discount": 0.12,
-                "years": 5,
+                "growth": 0.04, "terminal": 0.015, "discount": 0.12, "years": 5,
                 "growth_reasoning": "Energy sector faces transition challenges",
                 "terminal_reasoning": "Long-term growth uncertainty due to energy transition",
                 "discount_reasoning": "Higher risk from commodity prices and regulation",
                 "years_reasoning": "Captures near-term trends"
             },
             "Industrials": {
-                "growth": 0.06,
-                "terminal": 0.025,
-                "discount": 0.09,
-                "years": 5,
+                "growth": 0.06, "terminal": 0.025, "discount": 0.09, "years": 5,
                 "growth_reasoning": "Industrial growth follows economic expansion",
                 "terminal_reasoning": "Mature industrials stabilize with GDP",
                 "discount_reasoning": "Moderate risk with economic sensitivity",
                 "years_reasoning": "Standard period for cyclical industries"
             },
             "Real Estate": {
-                "growth": 0.04,
-                "terminal": 0.02,
-                "discount": 0.09,
-                "years": 5,
+                "growth": 0.04, "terminal": 0.02, "discount": 0.09, "years": 5,
                 "growth_reasoning": "Real estate shows stable, dividend-focused returns",
                 "terminal_reasoning": "Long-term growth tied to population and GDP",
                 "discount_reasoning": "Moderate risk with interest rate sensitivity",
                 "years_reasoning": "Standard period for income-focused assets"
             },
             "Utilities": {
-                "growth": 0.03,
-                "terminal": 0.02,
-                "discount": 0.07,
-                "years": 5,
+                "growth": 0.03, "terminal": 0.02, "discount": 0.07, "years": 5,
                 "growth_reasoning": "Utilities show very stable, regulated growth",
                 "terminal_reasoning": "Long-term growth matches population and usage",
                 "discount_reasoning": "Low risk due to regulated monopolies",
                 "years_reasoning": "Standard period for stable sectors"
             },
             "Communication Services": {
-                "growth": 0.08,
-                "terminal": 0.025,
-                "discount": 0.10,
-                "years": 6,
+                "growth": 0.08, "terminal": 0.025, "discount": 0.10, "years": 6,
                 "growth_reasoning": "Communications show steady digital transformation growth",
                 "terminal_reasoning": "Mature markets stabilize near GDP growth",
                 "discount_reasoning": "Moderate risk with technology evolution",
                 "years_reasoning": "Longer period captures digital shift"
             },
             "Materials": {
-                "growth": 0.05,
-                "terminal": 0.02,
-                "discount": 0.10,
-                "years": 5,
+                "growth": 0.05, "terminal": 0.02, "discount": 0.10, "years": 5,
                 "growth_reasoning": "Materials growth linked to industrial demand",
                 "terminal_reasoning": "Commodity nature limits long-term growth",
                 "discount_reasoning": "Moderate risk from commodity cycles",
@@ -255,12 +243,8 @@ async def get_dcf_suggestions(
             }
         }
 
-        # Get profile for sector, or use default for unknown sectors
         profile = sector_profiles.get(sector, {
-            "growth": 0.06,
-            "terminal": 0.025,
-            "discount": 0.10,
-            "years": 5,
+            "growth": 0.06, "terminal": 0.025, "discount": 0.10, "years": 5,
             "growth_reasoning": "Conservative growth estimate for unclassified sector",
             "terminal_reasoning": "Standard terminal growth near GDP growth",
             "discount_reasoning": "Moderate risk assessment",
@@ -283,7 +267,6 @@ async def get_dcf_suggestions(
         suggested_terminal = profile["terminal"]
         suggested_years = profile["years"]
         
-        # Build reasoning with size adjustments
         growth_reasoning = profile["growth_reasoning"]
         if adjustment["growth_note"]:
             growth_reasoning += f" ({adjustment['growth_note']})"
@@ -302,10 +285,9 @@ async def get_dcf_suggestions(
             income = fin_data.get("income_statement") or {}
             cash_flow_data = fin_data.get("cash_flow") or {}
             ratios_data = fin_data.get("ratios") or {}
-            growth_profile = fin_data.get("growth_profile")  # 12Q trend data
+            growth_profile = fin_data.get("growth_profile")
 
             def _fmt_big(val):
-                """Format large numbers for display (e.g. 29800000 -> '29.8M')"""
                 if val is None:
                     return None
                 aval = abs(val)
@@ -340,7 +322,6 @@ async def get_dcf_suggestions(
                 "diluted_eps": income.get("diluted_eps"),
             }
 
-            # Check if we got meaningful actuals
             has_actuals = actuals["revenue_ttm"] is not None or actuals["fcf_ttm"] is not None
             if not has_actuals:
                 actuals = None
@@ -362,10 +343,12 @@ async def get_dcf_suggestions(
             print(f"⚠️ Could not fetch financials for DCF suggestions ({ticker}): {_safe_error(fin_err)}")
             growth_from_actuals = False
             discount_from_actuals = False
-            # Non-fatal — continue with sector defaults
 
         # ── Fetch FMP pre-calculated DCF as benchmark ───────────────
         fmp_dcf = await _fetch_fmp_dcf(ticker.upper())
+
+        # ── Fetch shares outstanding from FMP ───────────────────────
+        shares_outstanding = await _fetch_shares_outstanding(ticker)
 
         return {
             "ticker": ticker.upper(),
@@ -376,6 +359,7 @@ async def get_dcf_suggestions(
             "market_cap": market_cap,
             "size_category": size_category,
             "security_type": security_type,
+            "shares_outstanding": shares_outstanding,
             "suggestions": {
                 "growth_rate": round(suggested_growth, 4),
                 "terminal_growth": round(suggested_terminal, 4),
@@ -486,31 +470,33 @@ async def calculate_dcf(
             income_data = fin_data.get("income_statement") or {}
             balance_sheet = fin_data.get("balance_sheet") or {}
 
-            # Priority 1: Actual TTM FCF (Operating CF - CapEx)
             actual_fcf = cash_flow_data.get("free_cash_flow")
             if actual_fcf is not None:
                 current_fcf = actual_fcf
                 fcf_source = "actual_ttm"
             else:
-                # Priority 2: Operating cash flow alone (no CapEx data)
                 operating_cf = cash_flow_data.get("operating_cash_flow")
                 if operating_cf is not None:
                     current_fcf = operating_cf
                     fcf_source = "operating_cf"
 
-            # Shares outstanding from income statement (diluted)
             diluted_shares = income_data.get("diluted_shares_outstanding")
             if diluted_shares is not None and diluted_shares > 0:
                 shares_outstanding = diluted_shares
                 shares_source = "sec_filings"
 
-            # Balance sheet items for net debt bridge
             cash_and_equivalents = balance_sheet.get("cash_and_equivalents") or balance_sheet.get("cash")
             total_debt = balance_sheet.get("total_debt") or balance_sheet.get("long_term_debt")
 
         except Exception as fin_err:
             print(f"⚠️ Could not fetch financials for DCF calc ({ticker}): {_safe_error(fin_err)}")
-            # Non-fatal — fall through to market cap estimate
+
+        # Fallback: try shares-float endpoint if SEC filings didn't have shares
+        if shares_outstanding is None:
+            fmp_shares = await _fetch_shares_outstanding(ticker)
+            if fmp_shares:
+                shares_outstanding = fmp_shares
+                shares_source = "fmp_shares_float"
 
         # Priority 3: Market cap estimate (fallback when no filings exist)
         if current_fcf is None:
@@ -521,7 +507,7 @@ async def calculate_dcf(
                 current_fcf = current_price * 1000000
                 fcf_source = "estimated_price"
 
-        # Shares outstanding fallback
+        # Shares outstanding final fallback
         if shares_outstanding is None:
             if market_cap and current_price > 0:
                 shares_outstanding = market_cap / current_price
@@ -552,8 +538,6 @@ async def calculate_dcf(
         enterprise_value = sum_pv_cash_flows + terminal_pv
         
         # ── Equity bridge: Enterprise Value + Cash - Debt ─────────────
-        # Industry standard: FCF-to-firm discounted at WACC yields
-        # enterprise value. Must adjust for net debt to get equity value.
         net_debt_adjustment = 0
         has_equity_bridge = False
         if cash_and_equivalents is not None and total_debt is not None:
@@ -596,7 +580,7 @@ async def calculate_dcf(
         return {
             "ticker": ticker,
             "company_name": company_name,
-            "security_type": security_type,  # CS, WARRANT, ETF, etc.
+            "security_type": security_type,
             "current_price": round(current_price, 2),
             "assumptions": {
                 "growth_rate": growth_rate,
