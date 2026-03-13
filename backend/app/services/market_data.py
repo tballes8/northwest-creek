@@ -346,7 +346,7 @@ class MarketDataService:
                     'ticker': ticker,
                     'open': item.get("open"),
                     'close': item.get("price"),
-                    'change_percent': round(item.get("changePercentage", 0), 2),
+                    'change_percent': round(item.get("changesPercentage", 0), 2),
                 })
 
                 if len(filtered) >= limit:
@@ -389,7 +389,7 @@ class MarketDataService:
                     'ticker': ticker,
                     'open': item.get("open"),
                     'close': item.get("price"),
-                    'change_percent': round(item.get("changePercentage", 0), 2),
+                    'change_percent': round(item.get("changesPercentage", 0), 2),
                 })
 
                 if len(filtered) >= limit:
