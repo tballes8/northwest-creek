@@ -1412,7 +1412,7 @@ const Stocks: React.FC = () => {
             ) : topGainers.length > 0 && (
               <div className="mt-8 border-t border-gray-200 dark:border-gray-600 pt-8">
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
-                  {topGainers[0].change_percent > 0 ? "📈 Today's Top Gainers:" : "Quick Start:"}
+                  📈 Today's Top Gainers:
                 </p>
                 <div className="flex flex-wrap justify-center gap-3">
                   {topGainers.map((gainer, index) => (
@@ -1420,15 +1420,13 @@ const Stocks: React.FC = () => {
                       key={index}
                       onClick={() => handleTickerClick(gainer.ticker)}
                       className="group px-4 py-2.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-primary-600 hover:text-white dark:hover:bg-primary-500 transition-all duration-200 transform hover:scale-105"
-                      title={gainer.change_percent > 0 ? `${gainer.change_percent.toFixed(2)}% gain` : gainer.ticker}
+                      title={`${gainer.change_percent.toFixed(2)}% gain`}
                     >
                       <div className="flex items-center gap-2">
                         <span className="font-semibold">{gainer.ticker}</span>
-                        {gainer.change_percent > 0 && (
-                          <span className="text-xs font-medium text-green-600 dark:text-green-400 group-hover:text-green-200">
-                            +{gainer.change_percent.toFixed(2)}%
-                          </span>
-                        )}
+                        <span className="text-xs font-medium text-green-600 dark:text-green-400 group-hover:text-green-200">
+                          +{gainer.change_percent.toFixed(2)}%
+                        </span>
                       </div>
                     </button>
                   ))}

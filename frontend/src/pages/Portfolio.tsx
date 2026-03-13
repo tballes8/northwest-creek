@@ -63,15 +63,11 @@ const Portfolio: React.FC = () => {
     loadData();
   }, [location.pathname]);
   
-  // Derive a stable ticker string that only changes when the actual tickers change,
-  // NOT when prices/quantities/etc update within the portfolio array.
   const tickerList = useMemo(
     () => portfolio.map(pos => pos.ticker).sort().join(','),
     [portfolio]
   );
 
-  // Subscribe to portfolio tickers for live prices.
-  // Depends on tickerList (stable string) instead of portfolio (changes on every price update).
   useEffect(() => {
     if (tickerList && isConnected) {
       const tickers = tickerList.split(',');
@@ -83,7 +79,6 @@ const Portfolio: React.FC = () => {
     }
   }, [tickerList, isConnected, subscribe, unsubscribe]);
 
-  // Update portfolio with live prices and trigger flash animations
   useEffect(() => {
     if (prices.size === 0) return;
     
@@ -122,7 +117,6 @@ const Portfolio: React.FC = () => {
     });
   }, [prices]);
 
-  // Auto-refresh prices every 30 seconds via REST (catches updates WebSocket misses on low-volume stocks)
   useEffect(() => {
     if (!tickerList) return;
 
@@ -157,12 +151,10 @@ const Portfolio: React.FC = () => {
           });
         }
 
-        // Update previous close map if we got fresh data
         if (Object.keys(freshPrevClose).length > 0) {
           setPrevCloseMap(prev => ({ ...prev, ...freshPrevClose }));
         }
 
-        // Update extended hours data
         if (Object.keys(freshExtended).length > 0) {
           setExtendedHoursMap(prev => ({ ...prev, ...freshExtended }));
         }
@@ -170,7 +162,6 @@ const Portfolio: React.FC = () => {
         setPortfolio(prev => prev.map(pos => {
           const freshPrice = freshPrices[pos.ticker];
           if (freshPrice && freshPrice !== pos.current_price) {
-            // Flash animation
             const isUp = freshPrice > (pos.current_price || 0);
             setPriceFlash(pf => ({ ...pf, [pos.ticker]: isUp ? 'green' : 'red' }));
             setTimeout(() => setPriceFlash(pf => ({ ...pf, [pos.ticker]: null })), 600);
@@ -183,7 +174,7 @@ const Portfolio: React.FC = () => {
           return pos;
         }));
       } catch (err) {
-        // Silent fail — WebSocket and initial load are primary, this is supplemental
+        // Silent fail
       }
     };
 
@@ -199,7 +190,6 @@ const Portfolio: React.FC = () => {
       const portfolioResponse = await portfolioAPI.getAll();
       const positions = portfolioResponse.data.positions || [];
       
-      // Fetch fresh prices from Massive API for all portfolio tickers
       if (positions.length > 0) {
         try {
           const tickers = positions.map((p: PortfolioPosition) => p.ticker).join(',');
@@ -209,7 +199,6 @@ const Portfolio: React.FC = () => {
             { headers: { Authorization: `Bearer ${token}` } }
           );
           
-          // Build a price map from the fresh data
           const freshPrices: Record<string, number> = {};
           const freshPrevClose: Record<string, number> = {};
           const freshExtended: Record<string, any> = {};
@@ -233,17 +222,14 @@ const Portfolio: React.FC = () => {
             });
           }
           
-          // Store previous close prices for daily change coloring
           if (Object.keys(freshPrevClose).length > 0) {
             setPrevCloseMap(prev => ({ ...prev, ...freshPrevClose }));
           }
           
-          // Store extended hours data for pre-market/after-hours badges
           if (Object.keys(freshExtended).length > 0) {
             setExtendedHoursMap(prev => ({ ...prev, ...freshExtended }));
           }
           
-          // Update positions with fresh prices
           const updatedPositions = positions.map((pos: PortfolioPosition) => {
             const freshPrice = freshPrices[pos.ticker];
             if (freshPrice) {
@@ -287,7 +273,6 @@ const Portfolio: React.FC = () => {
     await loadData();
   };
 
-  // User dropdown menu
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);  
 
@@ -297,7 +282,6 @@ const Portfolio: React.FC = () => {
     const totalPL = totalValue - totalCost;
     const totalPLPercent = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
 
-    // Day change: total current value vs total previous close value
     const totalPrevClose = portfolio.reduce((sum, pos) => {
       const prevClose = prevCloseMap[pos.ticker];
       return sum + (prevClose ? prevClose * pos.quantity : 0);
@@ -444,10 +428,8 @@ const Portfolio: React.FC = () => {
 
   const totals = calculateTotals();
 
-  // Read sector filter from URL query param (e.g. /portfolio?sector=Technology)
   const sectorFilter = new URLSearchParams(location.search).get('sector') || '';
 
-  // Sort portfolio so the selected sector's positions appear first
   const sortedPortfolio = useMemo(() => {
     if (!sectorFilter) return portfolio;
     return [...portfolio].sort((a, b) => {
@@ -618,7 +600,6 @@ const Portfolio: React.FC = () => {
               onClick={handleRefresh}
               disabled={refreshing}
               className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2">
-              {/* refresh button content */}
               {refreshing ? 'Refreshing...' : 'Refresh Prices'}
             </button>
             {!addingPosition && (
@@ -846,11 +827,9 @@ const Portfolio: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       {(() => {
-                        // Use live price if available, otherwise use static price
                         const displayPrice = prices.get(position.ticker)?.price ?? position.current_price;
                         const flashClass = priceFlash[position.ticker] ? `flash-${priceFlash[position.ticker]}` : '';
                         
-                        // Color based on current price vs previous close (daily change)
                         const prevClose = prevCloseMap[position.ticker];
                         const priceColor = displayPrice && prevClose
                           ? displayPrice > prevClose
@@ -860,13 +839,14 @@ const Portfolio: React.FC = () => {
                               : 'text-gray-900 dark:text-white'
                           : 'text-gray-900 dark:text-white';
                         
-                        // Extended hours badge
+                        // Extended hours data
                         const ext = extendedHoursMap[position.ticker];
-                        
                         const earlyPct = ext?.earlyChangePercent;
                         const latePct = ext?.lateChangePercent;
-
+                        
+                        // Show PM badge when market is closed and early trading data exists
                         const showEarlyBadge = ext?.marketStatus === 'closed' && earlyPct != null && earlyPct !== 0;
+                        // Show AH badge when market is closed and late trading data exists
                         const showLateBadge = ext?.marketStatus === 'closed' && latePct != null && latePct !== 0;
                         
                         return (
