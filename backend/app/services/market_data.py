@@ -248,9 +248,25 @@ class MarketDataService:
         """Alias for get_stock_news — kept for backward compatibility."""
         return await self.get_stock_news(ticker, limit)
 
+# Mapping from FMP frequency strings to annual payment counts
+    FREQ_STR_TO_INT = {
+        "annual": 1,
+        "annually": 1,
+        "semi-annual": 2,
+        "semi-annually": 2,
+        "trimester": 3,
+        "quarterly": 4,
+        "bi-monthly": 6,
+        "monthly": 12,
+        "bi-weekly": 26,
+        "weekly": 52,
+    }
+
     async def get_dividends(self, ticker: str, limit: int = 10) -> Dict[str, Any]:
         """
         Fetch dividend history for a stock/ETF from FMP.
+        FMP returns frequency as a string (e.g. "Quarterly", "Weekly").
+        We convert it to an integer (payments per year) for yield calculation.
         """
         try:
             ticker = ticker.upper().strip()
@@ -268,15 +284,24 @@ class MarketDataService:
 
             dividends = []
             for d in data[:limit]:
+                # Convert FMP string frequency to integer
+                raw_freq = d.get("frequency")
+                if isinstance(raw_freq, str):
+                    freq_int = self.FREQ_STR_TO_INT.get(raw_freq.strip().lower())
+                elif isinstance(raw_freq, (int, float)):
+                    freq_int = int(raw_freq) if raw_freq > 0 else None
+                else:
+                    freq_int = None
+
                 dividends.append({
-                    "cash_amount": d.get("dividend"),
+                    "cash_amount": d.get("dividend") or d.get("adjDividend"),
                     "currency": "USD",
                     "declaration_date": d.get("declarationDate"),
                     "ex_dividend_date": d.get("date"),
                     "pay_date": d.get("paymentDate"),
                     "record_date": d.get("recordDate"),
-                    "frequency": d.get("frequency"),
-                    "distribution_type": d.get("label", "unknown"),
+                    "frequency": freq_int,
+                    "distribution_type": d.get("label") or raw_freq or "dividend",
                 })
 
             return {
@@ -292,7 +317,7 @@ class MarketDataService:
                 "dividends": [],
                 "has_dividends": False,
             }
-
+        
     async def get_top_gainers(self, limit: int = 10) -> Dict[str, Any]:
         """
         Get top stock gainers from FMP /stable/gainers.
