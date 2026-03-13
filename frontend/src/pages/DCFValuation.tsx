@@ -1141,7 +1141,13 @@ const DCFValuation: React.FC = () => {
                   )}
                 </label>
                 <div className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed">
-                  {suggestions ? `${(suggestions.market_cap / suggestions.current_price / 1e6).toFixed(1)}M` : '—'}
+                  {suggestions ? (() => {
+                    const shares = suggestions.market_cap / suggestions.current_price;
+                    if (shares >= 1e9) return `${(shares / 1e9).toFixed(1)}B`;
+                    if (shares >= 1e6) return `${(shares / 1e6).toFixed(1)}M`;
+                    if (shares >= 1e3) return `${(shares / 1e3).toFixed(0)}K`;
+                    return shares.toFixed(0);
+                  })() : '—'}
                 </div>
                 <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                   💡 From SEC filings or market cap estimate (read-only)
