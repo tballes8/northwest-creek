@@ -275,6 +275,102 @@ async def get_treasury_rates():
         raise HTTPException(status_code=500, detail=f"Error fetching treasury rates: {_safe_error(e)}")
 
 
+@router.get("/commodity-quotes")
+async def get_commodity_quotes():
+    """
+    Get quotes for 10 key commodities.
+
+    Calls FMP batch-commodity-quotes, filters to our curated list,
+    and returns name/price/change data for the dashboard card + modal.
+    """
+    import httpx
+    from app.config import settings
+
+    api_key = settings.MASSIVE_API_KEY
+    base_url = "https://financialmodelingprep.com/stable"
+
+    # Symbol → display name mapping (order matters for the card preview)
+    COMMODITY_MAP = {
+        "GCUSD": "Gold",
+        "CLUSD": "Crude Oil",
+        "SIUSD": "Silver",
+        "NGUSD": "Natural Gas",
+        "HGUSD": "Copper",
+        "BZUSD": "Brent Crude",
+        "PLUSD": "Platinum",
+        "KCUSX": "Coffee",
+        "CCUSD": "Cocoa",
+        "LBUSD": "Lumber",
+    }
+
+    try:
+        import asyncio
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{base_url}/batch-commodity-quotes",
+                params={"apikey": api_key},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            if not data or not isinstance(data, list):
+                data = []
+
+            # Build a lookup from the full batch response
+            lookup = {item.get("symbol", "").upper(): item for item in data}
+
+            # Identify symbols missing from the batch response
+            missing = [sym for sym in COMMODITY_MAP if sym not in lookup]
+
+            # Fallback: fetch individual quotes for any missing symbols
+            if missing:
+                async def _fetch_quote(sym: str):
+                    try:
+                        r = await client.get(
+                            f"{base_url}/quote",
+                            params={"symbol": sym, "apikey": api_key},
+                        )
+                        r.raise_for_status()
+                        items = r.json()
+                        if isinstance(items, list) and items:
+                            return items[0]
+                    except Exception:
+                        pass
+                    return None
+
+                fallback_results = await asyncio.gather(
+                    *[_fetch_quote(sym) for sym in missing]
+                )
+                for sym, result in zip(missing, fallback_results):
+                    if result:
+                        lookup[sym] = result
+
+            commodities = []
+            for symbol, display_name in COMMODITY_MAP.items():
+                item = lookup.get(symbol)
+                if not item:
+                    continue
+                price = item.get("price")
+                change = item.get("change")
+                change_pct = item.get("changesPercentage") or item.get("changePercentage")
+                commodities.append({
+                    "name": display_name,
+                    "symbol": symbol,
+                    "value": price,
+                    "change": change,
+                    "changePercent": change_pct,
+                })
+
+            return {"commodities": commodities, "count": len(commodities)}
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching commodity quotes: {_safe_error(e)}",
+        )
+
+
 @router.get("/ipos")
 async def get_ipos():
     """

@@ -434,7 +434,20 @@ const Dashboard: React.FC = () => {
         console.warn('Could not fetch treasury rates:', err);
       }
 
-      // TODO: Commodities
+      // Commodities
+      try {
+        const commodityResp = await axios.get(`${API_URL}/api/v1/stocks/commodity-quotes`, { headers });
+        const items = commodityResp.data?.commodities || [];
+        setCommodities(items.map((c: any) => ({
+          name: c.name,
+          value: c.value,
+          change: c.change,
+          changePercent: c.changePercent,
+        })));
+      } catch (err) {
+        console.warn('Could not fetch commodity quotes:', err);
+      }
+
       // TODO: Indexes
       // TODO: Crypto
     } catch (err) {
