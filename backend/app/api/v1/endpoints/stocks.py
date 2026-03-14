@@ -208,6 +208,73 @@ async def get_stock_news(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching news: {_safe_error(e)}")
     
+@router.get("/treasury-rates")
+async def get_treasury_rates():
+    """
+    Get current Treasury rates with day-over-day change.
+    Fetches 2 most recent days from FMP and computes the diff.
+    """
+    import httpx
+    from app.config import settings
+    from datetime import datetime, timedelta
+
+    api_key = settings.MASSIVE_API_KEY
+    base_url = "https://financialmodelingprep.com/stable"
+
+    # Fetch last 7 calendar days to ensure we get at least 2 trading days
+    today = datetime.now().strftime("%Y-%m-%d")
+    week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+    MATURITIES = [
+        ("month1", "1 Month"),
+        ("month2", "2 Month"),
+        ("month3", "3 Month"),
+        ("month6", "6 Month"),
+        ("year1", "1 Year"),
+        ("year2", "2 Year"),
+        ("year3", "3 Year"),
+        ("year5", "5 Year"),
+        ("year7", "7 Year"),
+        ("year10", "10 Year"),
+        ("year20", "20 Year"),
+        ("year30", "30 Year"),
+    ]
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{base_url}/treasury-rates",
+                params={"from": week_ago, "to": today, "apikey": api_key},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            if not data or not isinstance(data, list) or len(data) < 1:
+                return {"rates": [], "date": None}
+
+            # FMP returns newest-first
+            current = data[0]
+            previous = data[1] if len(data) >= 2 else {}
+
+            rates = []
+            for key, name in MATURITIES:
+                val = current.get(key)
+                prev_val = previous.get(key)
+                change = round(val - prev_val, 3) if val is not None and prev_val is not None else None
+                change_pct = round((change / prev_val) * 100, 2) if change is not None and prev_val and prev_val != 0 else None
+                rates.append({
+                    "name": name,
+                    "value": val,
+                    "change": change,
+                    "changePercent": change_pct,
+                })
+
+            return {"rates": rates, "date": current.get("date")}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching treasury rates: {_safe_error(e)}")
+
+
 @router.get("/ipos")
 async def get_ipos():
     """

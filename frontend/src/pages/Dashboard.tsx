@@ -42,6 +42,13 @@ interface DashboardPosition {
   profit_loss_percent?: number;
 }
 
+interface MarketDataItem {
+  name: string;
+  value: number | null;
+  change?: number | null;
+  changePercent?: number | null;
+}
+
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -84,6 +91,14 @@ const Dashboard: React.FC = () => {
 
   // Trial countdown
   const [trialEnd, setTrialEnd] = useState<number | null>(null); // Unix timestamp
+
+  // Market overview cards
+  const [treasuryRates, setTreasuryRates] = useState<MarketDataItem[]>([]);
+  const [commodities, setCommodities] = useState<MarketDataItem[]>([]);
+  const [indexes, setIndexes] = useState<MarketDataItem[]>([]);
+  const [crypto, setCrypto] = useState<MarketDataItem[]>([]);
+  const [marketDataLoading, setMarketDataLoading] = useState(false);
+  const [marketModal, setMarketModal] = useState<'treasury' | 'commodities' | 'indexes' | 'crypto' | null>(null);
 
   // Sector breakdowns for pie charts
   const portfolioSectors = useMemo(
@@ -364,6 +379,9 @@ const Dashboard: React.FC = () => {
       // IPO is non-critical — load without blocking render
       loadIPOData();
 
+      // Market overview cards — non-blocking
+      loadMarketOverview();
+
       // Trial status — non-blocking
       loadTrialStatus();
     } catch (error) {
@@ -392,6 +410,37 @@ const Dashboard: React.FC = () => {
       console.warn('Could not fetch IPO data:', ipoErr);
     } finally {
       setIpoLoading(false);
+    }
+  };
+
+  // Non-blocking market overview loader (Treasury, Commodities, Indexes, Crypto)
+  const loadMarketOverview = async () => {
+    setMarketDataLoading(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      const headers = { Authorization: `Bearer ${token}` };
+
+      // Treasury Rates
+      try {
+        const treasuryResp = await axios.get(`${API_URL}/api/v1/stocks/treasury-rates`, { headers });
+        const rates = treasuryResp.data?.rates || [];
+        setTreasuryRates(rates.map((r: any) => ({
+          name: r.name,
+          value: r.value,
+          change: r.change,
+          changePercent: r.changePercent,
+        })));
+      } catch (err) {
+        console.warn('Could not fetch treasury rates:', err);
+      }
+
+      // TODO: Commodities
+      // TODO: Indexes
+      // TODO: Crypto
+    } catch (err) {
+      console.warn('Could not fetch market overview:', err);
+    } finally {
+      setMarketDataLoading(false);
     }
   };
 
@@ -771,6 +820,152 @@ return (
         </div>
       </div>
 
+      {/* Market Overview Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {/* Treasury Rates Card */}
+        <button
+          onClick={() => setMarketModal('treasury')}
+          className="bg-white dark:bg-gray-700 rounded-lg shadow dark:shadow-gray-200/20 p-4 border dark:border-gray-500 hover:border-blue-400 dark:hover:border-blue-500 transition-colors text-left group"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="bg-blue-100 dark:bg-blue-900/30 rounded-lg p-1.5">
+                <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+              </div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Treasury</h3>
+            </div>
+            <svg className="w-4 h-4 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+          {marketDataLoading ? (
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mx-auto mt-2"></div>
+          ) : treasuryRates.length > 0 ? (
+            <div className="space-y-1">
+              {treasuryRates.filter(r => ['2 Year', '10 Year', '30 Year'].includes(r.name)).map((item) => (
+                <div key={item.name} className="flex items-center justify-between">
+                  <span className="text-[0.65rem] text-gray-500 dark:text-gray-400">{item.name}</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-semibold text-gray-900 dark:text-white">{item.value != null ? `${item.value.toFixed(2)}%` : '—'}</span>
+                    {item.change != null && (
+                      <span className={`text-[0.6rem] font-medium ${item.change >= 0 ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                        {item.change >= 0 ? '▲' : '▼'}{Math.abs(item.change).toFixed(3)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Click to view</p>
+          )}
+        </button>
+
+        {/* Commodities Card */}
+        <button
+          onClick={() => setMarketModal('commodities')}
+          className="bg-white dark:bg-gray-700 rounded-lg shadow dark:shadow-gray-200/20 p-4 border dark:border-gray-500 hover:border-yellow-400 dark:hover:border-yellow-500 transition-colors text-left group"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="bg-yellow-100 dark:bg-yellow-900/30 rounded-lg p-1.5">
+                <svg className="w-4 h-4 text-yellow-600 dark:text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+              </div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Commodities</h3>
+            </div>
+            <svg className="w-4 h-4 text-gray-400 group-hover:text-yellow-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+          {marketDataLoading ? (
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-600 mx-auto mt-2"></div>
+          ) : commodities.length > 0 ? (
+            <div className="space-y-1">
+              {commodities.slice(0, 3).map((item) => (
+                <div key={item.name} className="flex items-center justify-between">
+                  <span className="text-[0.65rem] text-gray-500 dark:text-gray-400">{item.name}</span>
+                  <span className="text-xs font-semibold text-gray-900 dark:text-white">{item.value != null ? `$${item.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Click to view</p>
+          )}
+        </button>
+
+        {/* Indexes Card */}
+        <button
+          onClick={() => setMarketModal('indexes')}
+          className="bg-white dark:bg-gray-700 rounded-lg shadow dark:shadow-gray-200/20 p-4 border dark:border-gray-500 hover:border-green-400 dark:hover:border-green-500 transition-colors text-left group"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="bg-green-100 dark:bg-green-900/30 rounded-lg p-1.5">
+                <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
+              </div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Indexes</h3>
+            </div>
+            <svg className="w-4 h-4 text-gray-400 group-hover:text-green-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+          {marketDataLoading ? (
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600 mx-auto mt-2"></div>
+          ) : indexes.length > 0 ? (
+            <div className="space-y-1">
+              {indexes.slice(0, 3).map((item) => (
+                <div key={item.name} className="flex items-center justify-between">
+                  <span className="text-[0.65rem] text-gray-500 dark:text-gray-400">{item.name}</span>
+                  <span className="text-xs font-semibold text-gray-900 dark:text-white">{item.value != null ? item.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Click to view</p>
+          )}
+        </button>
+
+        {/* Cryptocurrency Card */}
+        <button
+          onClick={() => setMarketModal('crypto')}
+          className="bg-white dark:bg-gray-700 rounded-lg shadow dark:shadow-gray-200/20 p-4 border dark:border-gray-500 hover:border-orange-400 dark:hover:border-orange-500 transition-colors text-left group"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="bg-orange-100 dark:bg-orange-900/30 rounded-lg p-1.5">
+                <svg className="w-4 h-4 text-orange-600 dark:text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Crypto</h3>
+            </div>
+            <svg className="w-4 h-4 text-gray-400 group-hover:text-orange-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </div>
+          {marketDataLoading ? (
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600 mx-auto mt-2"></div>
+          ) : crypto.length > 0 ? (
+            <div className="space-y-1">
+              {crypto.slice(0, 3).map((item) => (
+                <div key={item.name} className="flex items-center justify-between">
+                  <span className="text-[0.65rem] text-gray-500 dark:text-gray-400">{item.name}</span>
+                  <span className="text-xs font-semibold text-gray-900 dark:text-white">{item.value != null ? `$${item.value.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '—'}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Click to view</p>
+          )}
+        </button>
+      </div>
+
       {/* Recent Activity / Empty State */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-8">
         {/* Portfolio Summary */}
@@ -1008,6 +1203,131 @@ return (
           <button className="bg-white text-primary-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors">
             Upgrade to Casual Investor
           </button>
+        </div>
+      )}
+
+      {/* ── Market Overview Modal ─────────────────────────────────── */}
+      {marketModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMarketModal(null)} />
+          <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-hidden border dark:border-gray-600">
+            {/* Modal Header */}
+            <div className={`px-6 py-4 border-b dark:border-gray-700 flex items-center justify-between ${
+              marketModal === 'treasury' ? 'bg-blue-50 dark:bg-blue-900/20' :
+              marketModal === 'commodities' ? 'bg-yellow-50 dark:bg-yellow-900/20' :
+              marketModal === 'indexes' ? 'bg-green-50 dark:bg-green-900/20' :
+              'bg-orange-50 dark:bg-orange-900/20'
+            }`}>
+              <div className="flex items-center gap-2">
+                {marketModal === 'treasury' && (
+                  <div className="bg-blue-100 dark:bg-blue-900/30 rounded-lg p-1.5">
+                    <svg className="w-5 h-5 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                  </div>
+                )}
+                {marketModal === 'commodities' && (
+                  <div className="bg-yellow-100 dark:bg-yellow-900/30 rounded-lg p-1.5">
+                    <svg className="w-5 h-5 text-yellow-600 dark:text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                  </div>
+                )}
+                {marketModal === 'indexes' && (
+                  <div className="bg-green-100 dark:bg-green-900/30 rounded-lg p-1.5">
+                    <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    </svg>
+                  </div>
+                )}
+                {marketModal === 'crypto' && (
+                  <div className="bg-orange-100 dark:bg-orange-900/30 rounded-lg p-1.5">
+                    <svg className="w-5 h-5 text-orange-600 dark:text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                )}
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                  {marketModal === 'treasury' ? 'Treasury Rates' :
+                   marketModal === 'commodities' ? 'Commodities' :
+                   marketModal === 'indexes' ? 'Market Indexes' :
+                   'Cryptocurrency'}
+                </h2>
+              </div>
+              <button onClick={() => setMarketModal(null)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="overflow-y-auto max-h-[calc(80vh-4rem)]">
+              {(() => {
+                const data = marketModal === 'treasury' ? treasuryRates :
+                             marketModal === 'commodities' ? commodities :
+                             marketModal === 'indexes' ? indexes :
+                             crypto;
+                const isTreasury = marketModal === 'treasury';
+
+                if (marketDataLoading) {
+                  return (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+                      <span className="ml-3 text-gray-500 dark:text-gray-400">Loading...</span>
+                    </div>
+                  );
+                }
+
+                if (data.length === 0) {
+                  return (
+                    <div className="text-center py-12">
+                      <p className="text-gray-500 dark:text-gray-400">No data available</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <table className="min-w-full">
+                    <thead className="bg-gray-50 dark:bg-gray-900 sticky top-0">
+                      <tr>
+                        <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Name</th>
+                        <th className="px-5 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                          {isTreasury ? 'Yield' : 'Price'}
+                        </th>
+                        <th className="px-5 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Change</th>
+                        <th className="px-5 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">% Change</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                      {data.map((item) => (
+                        <tr key={item.name} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                          <td className="px-5 py-3 text-sm font-medium text-gray-900 dark:text-white">{item.name}</td>
+                          <td className="px-5 py-3 text-sm text-right font-semibold text-gray-900 dark:text-white">
+                            {item.value != null
+                              ? isTreasury
+                                ? `${item.value.toFixed(2)}%`
+                                : `$${item.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                              : '—'}
+                          </td>
+                          <td className={`px-5 py-3 text-sm text-right font-medium ${
+                            (item.change ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                          }`}>
+                            {item.change != null ? `${item.change >= 0 ? '+' : ''}${isTreasury ? item.change.toFixed(3) : item.change.toFixed(2)}` : '—'}
+                          </td>
+                          <td className={`px-5 py-3 text-sm text-right font-medium ${
+                            (item.changePercent ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                          }`}>
+                            {item.changePercent != null ? `${item.changePercent >= 0 ? '+' : ''}${item.changePercent.toFixed(2)}%` : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
+            </div>
+          </div>
         </div>
       )}
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { authAPI, portfolioAPI } from '../services/api';
 import { User } from '../types';
@@ -58,6 +58,20 @@ const Portfolio: React.FC = () => {
     lateChangePercent?: number | null;
     marketStatus?: string | null;
   }>>({});
+
+  // Column sorting
+  type SortColumn = 'ticker' | 'sector' | 'quantity' | 'buy_price' | 'current_price' | 'total_value' | 'profit_loss';
+  const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = useCallback((column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection(column === 'ticker' || column === 'sector' ? 'asc' : 'desc');
+    }
+  }, [sortColumn]);
 
   useEffect(() => {
     loadData();
@@ -431,13 +445,66 @@ const Portfolio: React.FC = () => {
   const sectorFilter = new URLSearchParams(location.search).get('sector') || '';
 
   const sortedPortfolio = useMemo(() => {
-    if (!sectorFilter) return portfolio;
-    return [...portfolio].sort((a, b) => {
-      const aMatch = getSector(a.ticker) === sectorFilter ? 0 : 1;
-      const bMatch = getSector(b.ticker) === sectorFilter ? 0 : 1;
-      return aMatch - bMatch;
-    });
-  }, [portfolio, sectorFilter]);
+    let result = [...portfolio];
+
+    // Apply sector filter first
+    if (sectorFilter) {
+      result.sort((a, b) => {
+        const aMatch = getSector(a.ticker) === sectorFilter ? 0 : 1;
+        const bMatch = getSector(b.ticker) === sectorFilter ? 0 : 1;
+        return aMatch - bMatch;
+      });
+    }
+
+    // Then apply column sort
+    if (sortColumn) {
+      result.sort((a, b) => {
+        let aVal: any;
+        let bVal: any;
+
+        switch (sortColumn) {
+          case 'ticker':
+            aVal = a.ticker;
+            bVal = b.ticker;
+            break;
+          case 'sector':
+            aVal = getSector(a.ticker);
+            bVal = getSector(b.ticker);
+            break;
+          case 'quantity':
+            aVal = a.quantity ?? 0;
+            bVal = b.quantity ?? 0;
+            break;
+          case 'buy_price':
+            aVal = a.buy_price ?? 0;
+            bVal = b.buy_price ?? 0;
+            break;
+          case 'current_price':
+            aVal = prices.get(a.ticker)?.price ?? a.current_price ?? 0;
+            bVal = prices.get(b.ticker)?.price ?? b.current_price ?? 0;
+            break;
+          case 'total_value':
+            aVal = a.total_value ?? 0;
+            bVal = b.total_value ?? 0;
+            break;
+          case 'profit_loss':
+            aVal = a.profit_loss ?? 0;
+            bVal = b.profit_loss ?? 0;
+            break;
+          default:
+            return 0;
+        }
+
+        if (typeof aVal === 'string') {
+          const cmp = aVal.localeCompare(bVal);
+          return sortDirection === 'asc' ? cmp : -cmp;
+        }
+        return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+      });
+    }
+
+    return result;
+  }, [portfolio, sectorFilter, sortColumn, sortDirection, prices]);
 
   if (loading) {
     return (
@@ -754,13 +821,30 @@ const Portfolio: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ticker</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sector</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Quantity</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Cost Basis</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Current Price</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total Value</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">P&L</th>
+                  {([
+                    { key: 'ticker', label: 'Ticker', align: 'text-left' },
+                    { key: 'sector', label: 'Sector', align: 'text-left' },
+                    { key: 'quantity', label: 'Quantity', align: 'text-right' },
+                    { key: 'buy_price', label: 'Cost Basis', align: 'text-right' },
+                    { key: 'current_price', label: 'Current Price', align: 'text-right' },
+                    { key: 'total_value', label: 'Total Value', align: 'text-right' },
+                    { key: 'profit_loss', label: 'P&L', align: 'text-right' },
+                  ] as { key: SortColumn; label: string; align: string }[]).map(col => (
+                    <th
+                      key={col.key}
+                      onClick={() => handleSort(col.key)}
+                      className={`px-6 py-3 ${col.align} text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-900 dark:hover:text-white select-none transition-colors`}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        {col.label}
+                        {sortColumn === col.key ? (
+                          <span className="text-primary-500">{sortDirection === 'asc' ? '▲' : '▼'}</span>
+                        ) : (
+                          <span className="text-gray-300 dark:text-gray-600">⇅</span>
+                        )}
+                      </span>
+                    </th>
+                  ))}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Notes</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                 </tr>
