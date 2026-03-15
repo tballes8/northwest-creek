@@ -1264,7 +1264,7 @@ const TechnicalAnalysis: React.FC = () => {
                               </tr>
                             </thead>
                             <tbody>
-                              {[...financialsData.quarterly_trend].reverse().map((q: any, i: number) => (
+                              {[...financialsData.quarterly_trend].map((q: any, i: number) => (
                                 <tr key={i} className="border-b border-gray-100 dark:border-gray-700 text-gray-900 dark:text-gray-200">
                                   <td className="py-2 pr-4 font-medium">
                                     {q.fiscal_year ? `FY${q.fiscal_year} Q${q.fiscal_quarter}` : q.period_end}
