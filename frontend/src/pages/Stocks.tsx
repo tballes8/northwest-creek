@@ -104,6 +104,13 @@ interface DailySnapshot {
   snapshot_date: string;
 }
 
+interface EtfHolding {
+  ticker: string;
+  name: string;
+  weight: number;
+  market_value?: number;
+}
+
 interface SearchSuggestion {
   ticker: string;
   name: string;
@@ -152,6 +159,8 @@ const Stocks: React.FC = () => {
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const [dividendInfo, setDividendInfo] = useState<DividendInfo | null>(null);
   const [dividendLoading, setDividendLoading] = useState(false);
+  const [etfHoldings, setEtfHoldings] = useState<EtfHolding[]>([]);
+  const [holdingsLoading, setHoldingsLoading] = useState(false);
 
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -258,6 +267,7 @@ const Stocks: React.FC = () => {
     setHistorical([]);
     setNews([]);
     setDividendInfo(null);
+    setEtfHoldings([]);
     setError('');
     setIsWarrant(false);
     setRelatedCommonStock(null);
@@ -444,6 +454,14 @@ const Stocks: React.FC = () => {
         setRelatedCommonStock(null);
       }
       loadDividends(symbol);
+
+      // ETF holdings — non-blocking, only for fund types
+      const companyType = companyResult.value.data?.type || '';
+      if (FUND_TYPES.has(companyType)) {
+        loadEtfHoldings(symbol);
+      } else {
+        setEtfHoldings([]);
+      }
     } catch (err: any) {
       console.error('Stock API Error:', err);
       setError(err.response?.data?.detail || 'Failed to load stock data. Please check the ticker symbol and try again.');
@@ -451,6 +469,7 @@ const Stocks: React.FC = () => {
       setCompany(null);
       setHistorical([]);
       setDividendInfo(null);
+      setEtfHoldings([]);
     } finally {
       setLoading(false);
     }
@@ -483,6 +502,23 @@ const Stocks: React.FC = () => {
       setDividendInfo(null);
     } finally {
       setDividendLoading(false);
+    }
+  };
+
+  const loadEtfHoldings = async (symbol: string) => {
+    setHoldingsLoading(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await axios.get(
+        `${API_URL}/api/v1/stocks/etf/${encodeURIComponent(symbol.toUpperCase())}/holdings?limit=5`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setEtfHoldings(response.data.holdings || []);
+    } catch (err) {
+      console.error('Failed to load ETF holdings:', err);
+      setEtfHoldings([]);
+    } finally {
+      setHoldingsLoading(false);
     }
   };
 
@@ -1087,6 +1123,104 @@ const Stocks: React.FC = () => {
                     </div>
                   )}
                 </div>
+
+                {/* ETF Top Holdings — only for fund types */}
+                {isFundType(company.type) && (
+                  <div className="border-t border-gray-200 dark:border-gray-600 pt-4 mt-4">
+                    <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-3">Top Holdings</h4>
+                    {holdingsLoading ? (
+                      <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm py-4">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
+                        Loading holdings...
+                      </div>
+                    ) : etfHoldings.length > 0 ? (
+                      (() => {
+                        const CHART_COLORS = [
+                          '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
+                        ];
+                        const OTHER_COLOR = '#6B7280';
+
+                        const top5 = etfHoldings.slice(0, 5);
+                        const top5Total = top5.reduce((sum, h) => sum + (h.weight || 0), 0);
+                        const otherWeight = Math.max(0, 100 - top5Total);
+
+                        const slices = [
+                          ...top5.map((h, i) => ({
+                            label: h.ticker || h.name,
+                            weight: h.weight || 0,
+                            color: CHART_COLORS[i],
+                          })),
+                          ...(otherWeight > 0.5 ? [{ label: 'Other', weight: otherWeight, color: OTHER_COLOR }] : []),
+                        ];
+
+                        const total = slices.reduce((s, sl) => s + sl.weight, 0);
+
+                        // Build SVG donut
+                        let cumulativePercent = 0;
+                        const paths = slices.map((slice) => {
+                          const pct = slice.weight / total;
+                          const startAngle = cumulativePercent * 2 * Math.PI;
+                          cumulativePercent += pct;
+                          const endAngle = cumulativePercent * 2 * Math.PI;
+
+                          const x1 = Math.cos(startAngle - Math.PI / 2);
+                          const y1 = Math.sin(startAngle - Math.PI / 2);
+                          const x2 = Math.cos(endAngle - Math.PI / 2);
+                          const y2 = Math.sin(endAngle - Math.PI / 2);
+                          const largeArc = pct > 0.5 ? 1 : 0;
+
+                          const outerR = 1;
+                          const innerR = 0.6;
+
+                          const d = [
+                            `M ${x1 * outerR} ${y1 * outerR}`,
+                            `A ${outerR} ${outerR} 0 ${largeArc} 1 ${x2 * outerR} ${y2 * outerR}`,
+                            `L ${x2 * innerR} ${y2 * innerR}`,
+                            `A ${innerR} ${innerR} 0 ${largeArc} 0 ${x1 * innerR} ${y1 * innerR}`,
+                            'Z',
+                          ].join(' ');
+
+                          return { d, color: slice.color, label: slice.label, weight: slice.weight };
+                        });
+
+                        return (
+                          <div className="flex items-start gap-4">
+                            {/* Donut Chart */}
+                            <div className="flex-shrink-0">
+                              <svg width="100" height="100" viewBox="-1.15 -1.15 2.3 2.3">
+                                {paths.map((p, i) => (
+                                  <path key={i} d={p.d} fill={p.color} stroke="white" strokeWidth="0.02" className="dark:stroke-gray-700" />
+                                ))}
+                              </svg>
+                            </div>
+
+                            {/* Legend */}
+                            <div className="flex-1 space-y-1.5 min-w-0">
+                              {slices.map((slice, i) => (
+                                <div key={i} className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span
+                                      className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                      style={{ backgroundColor: slice.color }}
+                                    />
+                                    <span className="text-xs text-gray-700 dark:text-gray-300 truncate">
+                                      {slice.label}
+                                    </span>
+                                  </div>
+                                  <span className="text-xs font-semibold text-gray-900 dark:text-white flex-shrink-0">
+                                    {slice.weight.toFixed(1)}%
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })()
+                    ) : (
+                      <p className="text-sm text-gray-400 dark:text-gray-500">Holdings data not available</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Dividend Information Card */}
