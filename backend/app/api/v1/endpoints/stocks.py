@@ -371,6 +371,104 @@ async def get_commodity_quotes():
         )
 
 
+@router.get("/crypto-quotes")
+async def get_crypto_quotes():
+    """
+    Get quotes for 10 key cryptocurrencies.
+
+    Calls FMP batch-crypto-quotes, filters to our curated list,
+    and returns name/price/change data for the dashboard card + modal.
+    Falls back to individual /stable/quote calls for any symbols
+    missing from the batch response.
+    """
+    import httpx
+    from app.config import settings
+
+    api_key = settings.MASSIVE_API_KEY
+    base_url = "https://financialmodelingprep.com/stable"
+
+    # Symbol → display name mapping (order matters for the card preview)
+    CRYPTO_MAP = {
+        "BTCUSD": "Bitcoin",
+        "ETHUSD": "Ethereum",
+        "SOLUSD": "Solana",
+        "XRPUSD": "XRP",
+        "BNBUSD": "BNB",
+        "ADAUSD": "Cardano",
+        "DOGEUSD": "Dogecoin",
+        "AVAXUSD": "Avalanche",
+        "LINKUSD": "Chainlink",
+        "DOTUSD": "Polkadot",
+    }
+
+    try:
+        import asyncio
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{base_url}/batch-crypto-quotes",
+                params={"apikey": api_key},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            if not data or not isinstance(data, list):
+                data = []
+
+            # Build a lookup from the full batch response
+            lookup = {item.get("symbol", "").upper(): item for item in data}
+
+            # Identify symbols missing from the batch response
+            missing = [sym for sym in CRYPTO_MAP if sym not in lookup]
+
+            # Fallback: fetch individual quotes for any missing symbols
+            if missing:
+                async def _fetch_quote(sym: str):
+                    try:
+                        r = await client.get(
+                            f"{base_url}/quote",
+                            params={"symbol": sym, "apikey": api_key},
+                        )
+                        r.raise_for_status()
+                        items = r.json()
+                        if isinstance(items, list) and items:
+                            return items[0]
+                    except Exception:
+                        pass
+                    return None
+
+                fallback_results = await asyncio.gather(
+                    *[_fetch_quote(sym) for sym in missing]
+                )
+                for sym, result in zip(missing, fallback_results):
+                    if result:
+                        lookup[sym] = result
+
+            cryptos = []
+            for symbol, display_name in CRYPTO_MAP.items():
+                item = lookup.get(symbol)
+                if not item:
+                    continue
+                price = item.get("price")
+                change = item.get("change")
+                change_pct = item.get("changesPercentage") or item.get("changePercentage")
+                cryptos.append({
+                    "name": display_name,
+                    "symbol": symbol,
+                    "value": price,
+                    "change": change,
+                    "changePercent": change_pct,
+                })
+
+            return {"cryptos": cryptos, "count": len(cryptos)}
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching crypto quotes: {_safe_error(e)}",
+        )
+
+
 @router.get("/ipos")
 async def get_ipos():
     """

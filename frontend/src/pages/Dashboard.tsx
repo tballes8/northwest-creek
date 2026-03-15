@@ -449,7 +449,20 @@ const Dashboard: React.FC = () => {
       }
 
       // TODO: Indexes
-      // TODO: Crypto
+
+      // Crypto
+      try {
+        const cryptoResp = await axios.get(`${API_URL}/api/v1/stocks/crypto-quotes`, { headers });
+        const cryptoItems = cryptoResp.data?.cryptos || [];
+        setCrypto(cryptoItems.map((c: any) => ({
+          name: c.name,
+          value: c.value,
+          change: c.change,
+          changePercent: c.changePercent,
+        })));
+      } catch (err) {
+        console.warn('Could not fetch crypto quotes:', err);
+      }
     } catch (err) {
       console.warn('Could not fetch market overview:', err);
     } finally {
