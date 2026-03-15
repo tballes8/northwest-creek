@@ -12,6 +12,7 @@ from app.api.v1.endpoints.content import router as content_router
 from app.api.v1.endpoints.waitlist import router as waitlist_router
 from app.services.alert_checker import alert_checker
 from app.services.websocket_service import live_price_service
+from app.services.fmp_client import init_fmp_client, close_fmp_client
 
 
 settings = get_settings()
@@ -20,6 +21,9 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("🚀 NWC-Analytics API starting...")
+
+    # Persistent HTTP client for FMP API calls
+    await init_fmp_client()
 
     # Sprint 9: Wire alert checker into price stream
     alert_checker.set_broadcast_fn(live_price_service.broadcast_to_clients)
@@ -30,6 +34,7 @@ async def lifespan(app: FastAPI):
     yield
 
     await live_price_service.stop()
+    await close_fmp_client()
     print("👋 NWC-Analytics API shutting down...")
 
 

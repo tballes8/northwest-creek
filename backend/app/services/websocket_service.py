@@ -12,13 +12,7 @@ import json
 from typing import Set, Dict, Optional, Callable, Awaitable
 from datetime import datetime, time as dt_time
 import pytz
-import httpx
-from app.config import get_settings
-
-settings = get_settings()
-
-FMP_BASE = "https://financialmodelingprep.com/stable"
-API_KEY = settings.MASSIVE_API_KEY
+from app.services.fmp_client import get_fmp_client, API_KEY
 
 # How often to poll FMP for price updates (seconds)
 POLL_INTERVAL = 8
@@ -89,14 +83,13 @@ class LivePriceService:
 
                 symbols = ",".join(self.subscribed_tickers)
 
-                async with httpx.AsyncClient() as client:
-                    response = await client.get(
-                        f"{FMP_BASE}/batch-quote",
-                        params={"symbols": symbols, "apikey": API_KEY},
-                        timeout=10.0,
-                    )
-                    response.raise_for_status()
-                    data = response.json()
+                client = get_fmp_client()
+                response = await client.get(
+                    "batch-quote",
+                    params={"symbols": symbols, "apikey": API_KEY},
+                )
+                response.raise_for_status()
+                data = response.json()
 
                 if not data or not isinstance(data, list):
                     await asyncio.sleep(POLL_INTERVAL)

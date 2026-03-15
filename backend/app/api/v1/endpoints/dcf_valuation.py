@@ -3,7 +3,6 @@ DCF Valuation API Endpoints - Discounted Cash Flow Analysis
 ⭐ PAID TIERS ONLY
 """
 import re
-import httpx
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, Dict, Any
@@ -12,12 +11,7 @@ from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.services.market_data import market_data_service
 from app.services.financials_service import get_company_financials
-from app.config import get_settings
-
-settings = get_settings()
-
-FMP_BASE = "https://financialmodelingprep.com/stable"
-API_KEY = settings.MASSIVE_API_KEY
+from app.services.fmp_client import get_fmp_client, API_KEY
 
 
 def _safe_error(e: Exception) -> str:
@@ -46,33 +40,33 @@ async def _fetch_fmp_dcf(ticker: str) -> Dict[str, Any]:
         "enterprise_value": None,
     }
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            params = {"symbol": ticker, "apikey": API_KEY}
+        client = get_fmp_client()
+        params = {"symbol": ticker, "apikey": API_KEY}
 
-            # Simple + levered DCF (lightweight)
-            simple_resp = await client.get(f"{FMP_BASE}/discounted-cash-flow", params=params)
-            simple_resp.raise_for_status()
-            simple_data = simple_resp.json()
-            if simple_data and isinstance(simple_data, list) and len(simple_data) > 0:
-                result["dcf"] = simple_data[0].get("dcf")
-                result["stock_price"] = simple_data[0].get("Stock Price")
+        # Simple + levered DCF (lightweight)
+        simple_resp = await client.get("discounted-cash-flow", params=params)
+        simple_resp.raise_for_status()
+        simple_data = simple_resp.json()
+        if simple_data and isinstance(simple_data, list) and len(simple_data) > 0:
+            result["dcf"] = simple_data[0].get("dcf")
+            result["stock_price"] = simple_data[0].get("Stock Price")
 
-            levered_resp = await client.get(f"{FMP_BASE}/levered-discounted-cash-flow", params=params)
-            levered_resp.raise_for_status()
-            levered_data = levered_resp.json()
-            if levered_data and isinstance(levered_data, list) and len(levered_data) > 0:
-                result["levered_dcf"] = levered_data[0].get("dcf")
+        levered_resp = await client.get("levered-discounted-cash-flow", params=params)
+        levered_resp.raise_for_status()
+        levered_data = levered_resp.json()
+        if levered_data and isinstance(levered_data, list) and len(levered_data) > 0:
+            result["levered_dcf"] = levered_data[0].get("dcf")
 
-            # Advanced DCF — grab WACC and equity value from most recent projected year
-            adv_resp = await client.get(f"{FMP_BASE}/custom-discounted-cash-flow", params=params)
-            adv_resp.raise_for_status()
-            adv_data = adv_resp.json()
-            if adv_data and isinstance(adv_data, list) and len(adv_data) > 0:
-                latest = adv_data[0]  # newest projected year
-                result["wacc"] = latest.get("wacc")
-                result["equity_value_per_share"] = latest.get("equityValuePerShare")
-                result["terminal_value"] = latest.get("terminalValue")
-                result["enterprise_value"] = latest.get("enterpriseValue")
+        # Advanced DCF — grab WACC and equity value from most recent projected year
+        adv_resp = await client.get("custom-discounted-cash-flow", params=params)
+        adv_resp.raise_for_status()
+        adv_data = adv_resp.json()
+        if adv_data and isinstance(adv_data, list) and len(adv_data) > 0:
+            latest = adv_data[0]  # newest projected year
+            result["wacc"] = latest.get("wacc")
+            result["equity_value_per_share"] = latest.get("equityValuePerShare")
+            result["terminal_value"] = latest.get("terminalValue")
+            result["enterprise_value"] = latest.get("enterpriseValue")
 
     except Exception as e:
         print(f"⚠️ FMP DCF fetch failed for {ticker}: {e}")
@@ -86,17 +80,17 @@ async def _fetch_shares_outstanding(ticker: str) -> Optional[int]:
     Returns the outstandingShares count or None on failure.
     """
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                f"{FMP_BASE}/shares-float",
-                params={"symbol": ticker.upper(), "apikey": API_KEY},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            if data and isinstance(data, list) and len(data) > 0:
-                outstanding = data[0].get("outstandingShares")
-                if outstanding and outstanding > 0:
-                    return int(outstanding)
+        client = get_fmp_client()
+        resp = await client.get(
+            "shares-float",
+            params={"symbol": ticker.upper(), "apikey": API_KEY},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if data and isinstance(data, list) and len(data) > 0:
+            outstanding = data[0].get("outstandingShares")
+            if outstanding and outstanding > 0:
+                return int(outstanding)
     except Exception as e:
         print(f"⚠️ Shares float fetch failed for {ticker}: {e}")
     return None

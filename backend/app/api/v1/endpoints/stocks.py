@@ -5,9 +5,11 @@ import re
 from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, Date
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Optional
+import asyncio
 from app.services.market_data import market_data_service
+from app.services.fmp_client import get_fmp_client, API_KEY
 from app.db.session import get_db
 from app.schemas.daily_snapshot import DailySnapshotItem, DailySnapshotResponse
 from app.db.models import DailyStockSnapshot
@@ -214,13 +216,6 @@ async def get_treasury_rates():
     Get current Treasury rates with day-over-day change.
     Fetches 2 most recent days from FMP and computes the diff.
     """
-    import httpx
-    from app.config import settings
-    from datetime import datetime, timedelta
-
-    api_key = settings.MASSIVE_API_KEY
-    base_url = "https://financialmodelingprep.com/stable"
-
     # Fetch last 7 calendar days to ensure we get at least 2 trading days
     today = datetime.now().strftime("%Y-%m-%d")
     week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
@@ -241,35 +236,35 @@ async def get_treasury_rates():
     ]
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                f"{base_url}/treasury-rates",
-                params={"from": week_ago, "to": today, "apikey": api_key},
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        client = get_fmp_client()
+        resp = await client.get(
+            "treasury-rates",
+            params={"from": week_ago, "to": today, "apikey": API_KEY},
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
-            if not data or not isinstance(data, list) or len(data) < 1:
-                return {"rates": [], "date": None}
+        if not data or not isinstance(data, list) or len(data) < 1:
+            return {"rates": [], "date": None}
 
-            # FMP returns newest-first
-            current = data[0]
-            previous = data[1] if len(data) >= 2 else {}
+        # FMP returns newest-first
+        current = data[0]
+        previous = data[1] if len(data) >= 2 else {}
 
-            rates = []
-            for key, name in MATURITIES:
-                val = current.get(key)
-                prev_val = previous.get(key)
-                change = round(val - prev_val, 3) if val is not None and prev_val is not None else None
-                change_pct = round((change / prev_val) * 100, 2) if change is not None and prev_val and prev_val != 0 else None
-                rates.append({
-                    "name": name,
-                    "value": val,
-                    "change": change,
-                    "changePercent": change_pct,
-                })
+        rates = []
+        for key, name in MATURITIES:
+            val = current.get(key)
+            prev_val = previous.get(key)
+            change = round(val - prev_val, 3) if val is not None and prev_val is not None else None
+            change_pct = round((change / prev_val) * 100, 2) if change is not None and prev_val and prev_val != 0 else None
+            rates.append({
+                "name": name,
+                "value": val,
+                "change": change,
+                "changePercent": change_pct,
+            })
 
-            return {"rates": rates, "date": current.get("date")}
+        return {"rates": rates, "date": current.get("date")}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching treasury rates: {_safe_error(e)}")
@@ -283,12 +278,6 @@ async def get_commodity_quotes():
     Calls FMP batch-commodity-quotes, filters to our curated list,
     and returns name/price/change data for the dashboard card + modal.
     """
-    import httpx
-    from app.config import settings
-
-    api_key = settings.MASSIVE_API_KEY
-    base_url = "https://financialmodelingprep.com/stable"
-
     # Symbol → display name mapping (order matters for the card preview)
     COMMODITY_MAP = {
         "GCUSD": "Gold",
@@ -304,65 +293,63 @@ async def get_commodity_quotes():
     }
 
     try:
-        import asyncio
+        client = get_fmp_client()
+        resp = await client.get(
+            "batch-commodity-quotes",
+            params={"apikey": API_KEY},
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                f"{base_url}/batch-commodity-quotes",
-                params={"apikey": api_key},
+        if not data or not isinstance(data, list):
+            data = []
+
+        # Build a lookup from the full batch response
+        lookup = {item.get("symbol", "").upper(): item for item in data}
+
+        # Identify symbols missing from the batch response
+        missing = [sym for sym in COMMODITY_MAP if sym not in lookup]
+
+        # Fallback: fetch individual quotes for any missing symbols
+        if missing:
+            async def _fetch_quote(sym: str):
+                try:
+                    r = await client.get(
+                        "quote",
+                        params={"symbol": sym, "apikey": API_KEY},
+                    )
+                    r.raise_for_status()
+                    items = r.json()
+                    if isinstance(items, list) and items:
+                        return items[0]
+                except Exception:
+                    pass
+                return None
+
+            fallback_results = await asyncio.gather(
+                *[_fetch_quote(sym) for sym in missing]
             )
-            resp.raise_for_status()
-            data = resp.json()
+            for sym, result in zip(missing, fallback_results):
+                if result:
+                    lookup[sym] = result
 
-            if not data or not isinstance(data, list):
-                data = []
+        commodities = []
+        for symbol, display_name in COMMODITY_MAP.items():
+            item = lookup.get(symbol)
+            if not item:
+                continue
+            price = item.get("price")
+            change = item.get("change")
+            change_pct = item.get("changesPercentage") or item.get("changePercentage")
+            commodities.append({
+                "name": display_name,
+                "symbol": symbol,
+                "value": price,
+                "change": change,
+                "changePercent": change_pct,
+            })
 
-            # Build a lookup from the full batch response
-            lookup = {item.get("symbol", "").upper(): item for item in data}
-
-            # Identify symbols missing from the batch response
-            missing = [sym for sym in COMMODITY_MAP if sym not in lookup]
-
-            # Fallback: fetch individual quotes for any missing symbols
-            if missing:
-                async def _fetch_quote(sym: str):
-                    try:
-                        r = await client.get(
-                            f"{base_url}/quote",
-                            params={"symbol": sym, "apikey": api_key},
-                        )
-                        r.raise_for_status()
-                        items = r.json()
-                        if isinstance(items, list) and items:
-                            return items[0]
-                    except Exception:
-                        pass
-                    return None
-
-                fallback_results = await asyncio.gather(
-                    *[_fetch_quote(sym) for sym in missing]
-                )
-                for sym, result in zip(missing, fallback_results):
-                    if result:
-                        lookup[sym] = result
-
-            commodities = []
-            for symbol, display_name in COMMODITY_MAP.items():
-                item = lookup.get(symbol)
-                if not item:
-                    continue
-                price = item.get("price")
-                change = item.get("change")
-                change_pct = item.get("changesPercentage") or item.get("changePercentage")
-                commodities.append({
-                    "name": display_name,
-                    "symbol": symbol,
-                    "value": price,
-                    "change": change,
-                    "changePercent": change_pct,
-                })
-
-            return {"commodities": commodities, "count": len(commodities)}
+        return {"commodities": commodities, "count": len(commodities)}
 
     except Exception as e:
         raise HTTPException(
@@ -381,12 +368,6 @@ async def get_crypto_quotes():
     Falls back to individual /stable/quote calls for any symbols
     missing from the batch response.
     """
-    import httpx
-    from app.config import settings
-
-    api_key = settings.MASSIVE_API_KEY
-    base_url = "https://financialmodelingprep.com/stable"
-
     # Symbol → display name mapping (order matters for the card preview)
     CRYPTO_MAP = {
         "BTCUSD": "Bitcoin",
@@ -402,65 +383,63 @@ async def get_crypto_quotes():
     }
 
     try:
-        import asyncio
+        client = get_fmp_client()
+        resp = await client.get(
+            "batch-crypto-quotes",
+            params={"apikey": API_KEY},
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                f"{base_url}/batch-crypto-quotes",
-                params={"apikey": api_key},
+        if not data or not isinstance(data, list):
+            data = []
+
+        # Build a lookup from the full batch response
+        lookup = {item.get("symbol", "").upper(): item for item in data}
+
+        # Identify symbols missing from the batch response
+        missing = [sym for sym in CRYPTO_MAP if sym not in lookup]
+
+        # Fallback: fetch individual quotes for any missing symbols
+        if missing:
+            async def _fetch_quote(sym: str):
+                try:
+                    r = await client.get(
+                        "quote",
+                        params={"symbol": sym, "apikey": API_KEY},
+                    )
+                    r.raise_for_status()
+                    items = r.json()
+                    if isinstance(items, list) and items:
+                        return items[0]
+                except Exception:
+                    pass
+                return None
+
+            fallback_results = await asyncio.gather(
+                *[_fetch_quote(sym) for sym in missing]
             )
-            resp.raise_for_status()
-            data = resp.json()
+            for sym, result in zip(missing, fallback_results):
+                if result:
+                    lookup[sym] = result
 
-            if not data or not isinstance(data, list):
-                data = []
+        cryptos = []
+        for symbol, display_name in CRYPTO_MAP.items():
+            item = lookup.get(symbol)
+            if not item:
+                continue
+            price = item.get("price")
+            change = item.get("change")
+            change_pct = item.get("changesPercentage") or item.get("changePercentage")
+            cryptos.append({
+                "name": display_name,
+                "symbol": symbol,
+                "value": price,
+                "change": change,
+                "changePercent": change_pct,
+            })
 
-            # Build a lookup from the full batch response
-            lookup = {item.get("symbol", "").upper(): item for item in data}
-
-            # Identify symbols missing from the batch response
-            missing = [sym for sym in CRYPTO_MAP if sym not in lookup]
-
-            # Fallback: fetch individual quotes for any missing symbols
-            if missing:
-                async def _fetch_quote(sym: str):
-                    try:
-                        r = await client.get(
-                            f"{base_url}/quote",
-                            params={"symbol": sym, "apikey": api_key},
-                        )
-                        r.raise_for_status()
-                        items = r.json()
-                        if isinstance(items, list) and items:
-                            return items[0]
-                    except Exception:
-                        pass
-                    return None
-
-                fallback_results = await asyncio.gather(
-                    *[_fetch_quote(sym) for sym in missing]
-                )
-                for sym, result in zip(missing, fallback_results):
-                    if result:
-                        lookup[sym] = result
-
-            cryptos = []
-            for symbol, display_name in CRYPTO_MAP.items():
-                item = lookup.get(symbol)
-                if not item:
-                    continue
-                price = item.get("price")
-                change = item.get("change")
-                change_pct = item.get("changesPercentage") or item.get("changePercentage")
-                cryptos.append({
-                    "name": display_name,
-                    "symbol": symbol,
-                    "value": price,
-                    "change": change,
-                    "changePercent": change_pct,
-                })
-
-            return {"cryptos": cryptos, "count": len(cryptos)}
+        return {"cryptos": cryptos, "count": len(cryptos)}
 
     except Exception as e:
         raise HTTPException(
@@ -479,12 +458,6 @@ async def get_index_quotes():
     Falls back to individual /stable/quote calls for any symbols
     missing from the batch response.
     """
-    import httpx
-    from app.config import settings
-
-    api_key = settings.MASSIVE_API_KEY
-    base_url = "https://financialmodelingprep.com/stable"
-
     # Symbol → (display name, is_points) mapping
     # is_points=True means display raw value (no $ prefix)
     INDEX_MAP = {
@@ -501,65 +474,63 @@ async def get_index_quotes():
     }
 
     try:
-        import asyncio
+        client = get_fmp_client()
+        resp = await client.get(
+            "batch-index-quotes",
+            params={"apikey": API_KEY},
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                f"{base_url}/batch-index-quotes",
-                params={"apikey": api_key},
+        if not data or not isinstance(data, list):
+            data = []
+
+        # Build a lookup from the full batch response
+        lookup = {item.get("symbol", ""): item for item in data}
+
+        # Identify symbols missing from the batch response
+        missing = [sym for sym in INDEX_MAP if sym not in lookup]
+
+        # Fallback: fetch individual quotes for any missing symbols
+        if missing:
+            async def _fetch_quote(sym: str):
+                try:
+                    r = await client.get(
+                        "quote",
+                        params={"symbol": sym, "apikey": API_KEY},
+                    )
+                    r.raise_for_status()
+                    items = r.json()
+                    if isinstance(items, list) and items:
+                        return items[0]
+                except Exception:
+                    pass
+                return None
+
+            fallback_results = await asyncio.gather(
+                *[_fetch_quote(sym) for sym in missing]
             )
-            resp.raise_for_status()
-            data = resp.json()
+            for sym, result in zip(missing, fallback_results):
+                if result:
+                    lookup[sym] = result
 
-            if not data or not isinstance(data, list):
-                data = []
+        indexes = []
+        for symbol, (display_name, _) in INDEX_MAP.items():
+            item = lookup.get(symbol)
+            if not item:
+                continue
+            price = item.get("price")
+            change = item.get("change")
+            change_pct = item.get("changesPercentage") or item.get("changePercentage")
+            indexes.append({
+                "name": display_name,
+                "symbol": symbol,
+                "value": price,
+                "change": change,
+                "changePercent": change_pct,
+            })
 
-            # Build a lookup from the full batch response
-            lookup = {item.get("symbol", ""): item for item in data}
-
-            # Identify symbols missing from the batch response
-            missing = [sym for sym in INDEX_MAP if sym not in lookup]
-
-            # Fallback: fetch individual quotes for any missing symbols
-            if missing:
-                async def _fetch_quote(sym: str):
-                    try:
-                        r = await client.get(
-                            f"{base_url}/quote",
-                            params={"symbol": sym, "apikey": api_key},
-                        )
-                        r.raise_for_status()
-                        items = r.json()
-                        if isinstance(items, list) and items:
-                            return items[0]
-                    except Exception:
-                        pass
-                    return None
-
-                fallback_results = await asyncio.gather(
-                    *[_fetch_quote(sym) for sym in missing]
-                )
-                for sym, result in zip(missing, fallback_results):
-                    if result:
-                        lookup[sym] = result
-
-            indexes = []
-            for symbol, (display_name, _) in INDEX_MAP.items():
-                item = lookup.get(symbol)
-                if not item:
-                    continue
-                price = item.get("price")
-                change = item.get("change")
-                change_pct = item.get("changesPercentage") or item.get("changePercentage")
-                indexes.append({
-                    "name": display_name,
-                    "symbol": symbol,
-                    "value": price,
-                    "change": change,
-                    "changePercent": change_pct,
-                })
-
-            return {"indexes": indexes, "count": len(indexes)}
+        return {"indexes": indexes, "count": len(indexes)}
 
     except Exception as e:
         raise HTTPException(
@@ -575,13 +546,6 @@ async def get_ipos():
     Returns upcoming (next 21 days) and recent (last 7 days) IPOs.
     Filters out warrants, rights, units, foreign listings, and SPAC shells.
     """
-    import httpx
-    from app.config import settings
-    from datetime import datetime, timedelta
-
-    api_key = settings.MASSIVE_API_KEY
-    base_url = "https://financialmodelingprep.com/stable"
-
     today = datetime.now().strftime("%Y-%m-%d")
     seven_days_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
     twenty_one_days_ahead = (datetime.now() + timedelta(days=21)).strftime("%Y-%m-%d")
@@ -661,58 +625,58 @@ async def get_ipos():
     MAX_PER_TAB = 25
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            # Fetch upcoming IPOs (today through 21 days out)
-            try:
-                resp = await client.get(
-                    f"{base_url}/ipos-calendar",
-                    params={
-                        "from": today,
-                        "to": twenty_one_days_ahead,
-                        "apikey": api_key,
-                    },
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if isinstance(data, list):
-                        for ipo in data:
-                            sym = ipo.get("symbol", "")
-                            exchange = (ipo.get("exchange") or "").upper()
-                            if _is_junk_symbol(sym):
-                                continue
-                            if exchange and exchange not in US_EXCHANGES:
-                                continue
-                            results["upcoming"].append(_build_ipo_item(ipo, "upcoming"))
-                            if len(results["upcoming"]) >= MAX_PER_TAB:
-                                break
-            except Exception as inner_err:
-                print(f"IPO fetch error for upcoming: {inner_err}")
+        client = get_fmp_client()
+        # Fetch upcoming IPOs (today through 21 days out)
+        try:
+            resp = await client.get(
+                "ipos-calendar",
+                params={
+                    "from": today,
+                    "to": twenty_one_days_ahead,
+                    "apikey": API_KEY,
+                },
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list):
+                    for ipo in data:
+                        sym = ipo.get("symbol", "")
+                        exchange = (ipo.get("exchange") or "").upper()
+                        if _is_junk_symbol(sym):
+                            continue
+                        if exchange and exchange not in US_EXCHANGES:
+                            continue
+                        results["upcoming"].append(_build_ipo_item(ipo, "upcoming"))
+                        if len(results["upcoming"]) >= MAX_PER_TAB:
+                            break
+        except Exception as inner_err:
+            print(f"IPO fetch error for upcoming: {inner_err}")
 
-            # Fetch recent IPOs (last 7 days) as "pending/confirmed"
-            try:
-                resp = await client.get(
-                    f"{base_url}/ipos-calendar",
-                    params={
-                        "from": seven_days_ago,
-                        "to": today,
-                        "apikey": api_key,
-                    },
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if isinstance(data, list):
-                        for ipo in data:
-                            sym = ipo.get("symbol", "")
-                            exchange = (ipo.get("exchange") or "").upper()
-                            if _is_junk_symbol(sym):
-                                continue
-                            if exchange and exchange not in US_EXCHANGES:
-                                continue
-                            results["pending"].append(_build_ipo_item(ipo, "recent"))
-                            if len(results["pending"]) >= MAX_PER_TAB:
-                                break
-            except Exception as inner_err:
-                print(f"IPO fetch error for recent: {inner_err}")
+        # Fetch recent IPOs (last 7 days) as "pending/confirmed"
+        try:
+            resp = await client.get(
+                "ipos-calendar",
+                params={
+                    "from": seven_days_ago,
+                    "to": today,
+                    "apikey": API_KEY,
+                },
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list):
+                    for ipo in data:
+                        sym = ipo.get("symbol", "")
+                        exchange = (ipo.get("exchange") or "").upper()
+                        if _is_junk_symbol(sym):
+                            continue
+                        if exchange and exchange not in US_EXCHANGES:
+                            continue
+                        results["pending"].append(_build_ipo_item(ipo, "recent"))
+                        if len(results["pending"]) >= MAX_PER_TAB:
+                            break
+        except Exception as inner_err:
+            print(f"IPO fetch error for recent: {inner_err}")
 
         return results
 
@@ -729,8 +693,6 @@ async def get_dividends(ticker: str):
     when a current price is available.
     """
     try:
-        import asyncio
-
         # Fetch dividends and current quote concurrently
         div_task = market_data_service.get_dividends(ticker, limit=10)
         quote_task = market_data_service.get_quote(ticker)
@@ -797,41 +759,36 @@ async def search_tickers(q: str = Query(..., min_length=1, description="Search q
     Search for stocks by ticker symbol or company name using FMP.
     Returns matching tickers with company names.
     """
-    import httpx
-    from app.config import settings
-
-    api_key = settings.MASSIVE_API_KEY
-
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(
-                "https://financialmodelingprep.com/stable/search",
-                params={
-                    "query": q.strip(),
-                    "limit": 10,
-                    "apikey": api_key,
-                },
-            )
+        client = get_fmp_client()
+        resp = await client.get(
+            "search",
+            params={
+                "query": q.strip(),
+                "limit": 10,
+                "apikey": API_KEY,
+            },
+        )
 
-            if resp.status_code != 200:
-                return {"results": []}
+        if resp.status_code != 200:
+            return {"results": []}
 
-            data = resp.json()
-            if not isinstance(data, list):
-                return {"results": []}
+        data = resp.json()
+        if not isinstance(data, list):
+            return {"results": []}
 
-            results = []
-            for item in data:
-                results.append({
-                    "ticker": item.get("symbol"),
-                    "name": item.get("name"),
-                    "market": "stocks",
-                    "type": item.get("stockExchange"),
-                    "primary_exchange": item.get("stockExchange"),
-                    "active": True,
-                })
+        results = []
+        for item in data:
+            results.append({
+                "ticker": item.get("symbol"),
+                "name": item.get("name"),
+                "market": "stocks",
+                "type": item.get("stockExchange"),
+                "primary_exchange": item.get("stockExchange"),
+                "active": True,
+            })
 
-            return {"results": results}
+        return {"results": results}
 
     except Exception as e:
         print(f"Ticker search error: {e}")
@@ -853,57 +810,50 @@ async def get_earnings_calendar(
     **Returns:**
     - Array of earnings reports with EPS and revenue estimates
     """
-    import httpx
-    from app.config import settings
-    from datetime import datetime, timedelta
-
-    api_key = settings.MASSIVE_API_KEY
-    base_url = "https://financialmodelingprep.com/stable"
-
     today_str = datetime.now().strftime("%Y-%m-%d")
     end_str = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d")
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            params = {
-                "from": today_str,
-                "to": end_str,
-                "apikey": api_key,
-            }
+        client = get_fmp_client()
+        params = {
+            "from": today_str,
+            "to": end_str,
+            "apikey": API_KEY,
+        }
 
-            resp = await client.get(f"{base_url}/earnings-calendar", params=params)
-            resp.raise_for_status()
-            data = resp.json()
+        resp = await client.get("earnings-calendar", params=params)
+        resp.raise_for_status()
+        data = resp.json()
 
-            if not isinstance(data, list):
-                data = []
+        if not isinstance(data, list):
+            data = []
 
-            # Filter by symbol if provided
-            if symbol:
-                symbol_upper = symbol.strip().upper()
-                data = [e for e in data if e.get("symbol", "").upper() == symbol_upper]
+        # Filter by symbol if provided
+        if symbol:
+            symbol_upper = symbol.strip().upper()
+            data = [e for e in data if e.get("symbol", "").upper() == symbol_upper]
 
-            # Filter to US exchanges only (no .SS, .T, .TWO suffixes)
-            earnings = []
-            for item in data:
-                sym = item.get("symbol", "")
-                if "." in sym:
-                    continue  # skip non-US symbols
-                earnings.append({
-                    "symbol": sym,
-                    "date": item.get("date"),
-                    "eps_estimated": item.get("epsEstimated"),
-                    "eps_actual": item.get("epsActual"),
-                    "revenue_estimated": item.get("revenueEstimated"),
-                    "revenue_actual": item.get("revenueActual"),
-                })
+        # Filter to US exchanges only (no .SS, .T, .TWO suffixes)
+        earnings = []
+        for item in data:
+            sym = item.get("symbol", "")
+            if "." in sym:
+                continue  # skip non-US symbols
+            earnings.append({
+                "symbol": sym,
+                "date": item.get("date"),
+                "eps_estimated": item.get("epsEstimated"),
+                "eps_actual": item.get("epsActual"),
+                "revenue_estimated": item.get("revenueEstimated"),
+                "revenue_actual": item.get("revenueActual"),
+            })
 
-            return {
-                "earnings": earnings[:50],
-                "count": len(earnings),
-                "from": today_str,
-                "to": end_str,
-            }
+        return {
+            "earnings": earnings[:50],
+            "count": len(earnings),
+            "from": today_str,
+            "to": end_str,
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching earnings calendar: {_safe_error(e)}")
@@ -920,45 +870,39 @@ async def get_etf_info(symbol: str):
     **Returns:**
     - ETF metadata, sector breakdown, and fund details
     """
-    import httpx
-    from app.config import settings
-
-    api_key = settings.MASSIVE_API_KEY
-    base_url = "https://financialmodelingprep.com/stable"
-
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(
-                f"{base_url}/etf/info",
-                params={"symbol": symbol.upper(), "apikey": api_key},
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        client = get_fmp_client()
+        resp = await client.get(
+            "etf/info",
+            params={"symbol": symbol.upper(), "apikey": API_KEY},
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
-            if not data or not isinstance(data, list) or len(data) == 0:
-                raise HTTPException(status_code=404, detail=f"No ETF info found for {symbol}")
+        if not data or not isinstance(data, list) or len(data) == 0:
+            raise HTTPException(status_code=404, detail=f"No ETF info found for {symbol}")
 
-            info = data[0]
-            sectors = info.get("sectorsList", [])
+        info = data[0]
+        sectors = info.get("sectorsList", [])
 
-            return {
-                "symbol": info.get("symbol"),
-                "name": info.get("name"),
-                "description": info.get("description"),
-                "etf_company": info.get("etfCompany"),
-                "expense_ratio": info.get("expenseRatio"),
-                "aum": info.get("assetsUnderManagement"),
-                "nav": info.get("nav"),
-                "holdings_count": info.get("holdingsCount"),
-                "inception_date": info.get("inceptionDate"),
-                "avg_volume": info.get("avgVolume"),
-                "asset_class": info.get("assetClass"),
-                "is_actively_trading": info.get("isActivelyTrading"),
-                "sectors": [
-                    {"sector": s.get("industry"), "weight": s.get("exposure")}
-                    for s in sectors
-                ],
-            }
+        return {
+            "symbol": info.get("symbol"),
+            "name": info.get("name"),
+            "description": info.get("description"),
+            "etf_company": info.get("etfCompany"),
+            "expense_ratio": info.get("expenseRatio"),
+            "aum": info.get("assetsUnderManagement"),
+            "nav": info.get("nav"),
+            "holdings_count": info.get("holdingsCount"),
+            "inception_date": info.get("inceptionDate"),
+            "avg_volume": info.get("avgVolume"),
+            "asset_class": info.get("assetClass"),
+            "is_actively_trading": info.get("isActivelyTrading"),
+            "sectors": [
+                {"sector": s.get("industry"), "weight": s.get("exposure")}
+                for s in sectors
+            ],
+        }
 
     except HTTPException:
         raise
@@ -981,39 +925,33 @@ async def get_etf_holdings(
     **Returns:**
     - Array of holdings with ticker, name, weight, shares, and market value
     """
-    import httpx
-    from app.config import settings
-
-    api_key = settings.MASSIVE_API_KEY
-    base_url = "https://financialmodelingprep.com/stable"
-
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(
-                f"{base_url}/etf/holdings",
-                params={"symbol": symbol.upper(), "apikey": api_key},
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        client = get_fmp_client()
+        resp = await client.get(
+            "etf/holdings",
+            params={"symbol": symbol.upper(), "apikey": API_KEY},
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
-            if not data or not isinstance(data, list):
-                return {"symbol": symbol.upper(), "holdings": [], "count": 0}
+        if not data or not isinstance(data, list):
+            return {"symbol": symbol.upper(), "holdings": [], "count": 0}
 
-            holdings = []
-            for item in data[:limit]:
-                holdings.append({
-                    "ticker": item.get("asset"),
-                    "name": item.get("name"),
-                    "weight": item.get("weightPercentage"),
-                    "shares": item.get("sharesNumber"),
-                    "market_value": item.get("marketValue"),
-                })
+        holdings = []
+        for item in data[:limit]:
+            holdings.append({
+                "ticker": item.get("asset"),
+                "name": item.get("name"),
+                "weight": item.get("weightPercentage"),
+                "shares": item.get("sharesNumber"),
+                "market_value": item.get("marketValue"),
+            })
 
-            return {
-                "symbol": symbol.upper(),
-                "holdings": holdings,
-                "count": len(holdings),
-            }
+        return {
+            "symbol": symbol.upper(),
+            "holdings": holdings,
+            "count": len(holdings),
+        }
 
     except HTTPException:
         raise
@@ -1045,14 +983,8 @@ async def stock_screener(
     Screen stocks using FMP company screener.
     Filter by market cap, sector, price, beta, volume, dividends, and more.
     """
-    import httpx
-    from app.config import settings
-
-    api_key = settings.MASSIVE_API_KEY
-    base_url = "https://financialmodelingprep.com/stable"
-
     # Build params — only include non-None values
-    params: dict = {"apikey": api_key, "limit": limit}
+    params: dict = {"apikey": API_KEY, "limit": limit}
     param_map = {
         "marketCapMoreThan": market_cap_more_than,
         "marketCapLowerThan": market_cap_lower_than,
@@ -1076,41 +1008,41 @@ async def stock_screener(
             params[key] = val
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(f"{base_url}/company-screener", params=params)
-            resp.raise_for_status()
-            data = resp.json()
+        client = get_fmp_client()
+        resp = await client.get("company-screener", params=params)
+        resp.raise_for_status()
+        data = resp.json()
 
-            if not isinstance(data, list):
-                data = []
+        if not isinstance(data, list):
+            data = []
 
-            # Filter out non-US exchanges client-side for cleaner results
-            results = []
-            for item in data:
-                short_name = (item.get("exchangeShortName") or "").upper()
-                sym = item.get("symbol", "")
-                # Skip foreign-listed symbols (contain dots like .BA, .T)
-                if "." in sym:
-                    continue
-                results.append({
-                    "symbol": sym,
-                    "name": item.get("companyName"),
-                    "market_cap": item.get("marketCap"),
-                    "sector": item.get("sector"),
-                    "industry": item.get("industry"),
-                    "beta": item.get("beta"),
-                    "price": item.get("price"),
-                    "last_annual_dividend": item.get("lastAnnualDividend"),
-                    "volume": item.get("volume"),
-                    "exchange": item.get("exchangeShortName"),
-                    "is_etf": item.get("isEtf"),
-                    "is_actively_trading": item.get("isActivelyTrading"),
-                })
+        # Filter out non-US exchanges client-side for cleaner results
+        results = []
+        for item in data:
+            short_name = (item.get("exchangeShortName") or "").upper()
+            sym = item.get("symbol", "")
+            # Skip foreign-listed symbols (contain dots like .BA, .T)
+            if "." in sym:
+                continue
+            results.append({
+                "symbol": sym,
+                "name": item.get("companyName"),
+                "market_cap": item.get("marketCap"),
+                "sector": item.get("sector"),
+                "industry": item.get("industry"),
+                "beta": item.get("beta"),
+                "price": item.get("price"),
+                "last_annual_dividend": item.get("lastAnnualDividend"),
+                "volume": item.get("volume"),
+                "exchange": item.get("exchangeShortName"),
+                "is_etf": item.get("isEtf"),
+                "is_actively_trading": item.get("isActivelyTrading"),
+            })
 
-            return {
-                "results": results,
-                "count": len(results),
-            }
+        return {
+            "results": results,
+            "count": len(results),
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error running stock screener: {_safe_error(e)}")
@@ -1129,7 +1061,6 @@ async def get_stock_overview(ticker: str):
     """
     try:
         # Fetch both quote and company info concurrently
-        import asyncio
         quote_task = market_data_service.get_quote(ticker)
         company_task = market_data_service.get_company_info(ticker)
         

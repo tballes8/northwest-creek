@@ -9,17 +9,12 @@ from typing import List, Dict, Any, Optional, Set
 from datetime import datetime, date, time as dt_time, timedelta, timezone
 import pytz
 import httpx
-from app.config import get_settings
-
-settings = get_settings()
+from app.services.fmp_client import get_fmp_client, API_KEY
 
 router = APIRouter()
 
 # Eastern time for display
 ET = pytz.timezone('US/Eastern')
-
-FMP_BASE = "https://financialmodelingprep.com/stable"
-API_KEY = settings.MASSIVE_API_KEY
 
 
 def _safe_error(e: Exception) -> str:
@@ -33,10 +28,10 @@ def _safe_error(e: Exception) -> str:
 
 
 
-async def _get_market_status(client: httpx.AsyncClient) -> Optional[str]:
+async def _get_market_status() -> Optional[str]:
     """Fetch NASDAQ market status from FMP. Returns 'open', 'closed', or None."""
     try:
-        data = await _fmp_get(client, "exchange-market-hours", {"exchange": "NASDAQ"})
+        data = await _fmp_get("exchange-market-hours", {"exchange": "NASDAQ"})
         if data and isinstance(data, list) and len(data) > 0:
             is_open = data[0].get("isMarketOpen") or data[0].get("isTheStockMarketOpen")
             if is_open is True:
@@ -49,7 +44,6 @@ async def _get_market_status(client: httpx.AsyncClient) -> Optional[str]:
 
 
 async def _get_extended_hours_quotes(
-    client: httpx.AsyncClient,
     symbols: str,
     regular_quotes: Dict[str, Dict[str, Any]],
 ) -> Dict[str, Dict[str, Any]]:
@@ -66,7 +60,7 @@ async def _get_extended_hours_quotes(
         { "early": {price, change, change_percent}, "late": {…} }
     """
     try:
-        data = await _fmp_get(client, "batch-aftermarket-trade", {"symbols": symbols})
+        data = await _fmp_get("batch-aftermarket-trade", {"symbols": symbols})
         if not data or not isinstance(data, list):
             return {}
 
@@ -129,10 +123,10 @@ async def _get_extended_hours_quotes(
         return {}
 
 
-async def _get_holiday_dates(client: httpx.AsyncClient) -> Set[date]:
+async def _get_holiday_dates() -> Set[date]:
     """Fetch NASDAQ holidays from FMP. Returns a set of fully-closed dates."""
     try:
-        data = await _fmp_get(client, "holidays-by-exchange", {"exchange": "NASDAQ"})
+        data = await _fmp_get("holidays-by-exchange", {"exchange": "NASDAQ"})
         if not data or not isinstance(data, list):
             return set()
         closed = set()
@@ -152,12 +146,13 @@ def _is_trading_day(d: date, holidays: Set[date]) -> bool:
     return d.weekday() < 5 and d not in holidays
 
 
-async def _fmp_get(client: httpx.AsyncClient, path: str, params: dict = None) -> Any:
+async def _fmp_get(path: str, params: dict = None) -> Any:
     """FMP request helper."""
     if params is None:
         params = {}
     params["apikey"] = API_KEY
-    response = await client.get(f"{FMP_BASE}/{path}", params=params, timeout=15.0)
+    client = get_fmp_client()
+    response = await client.get(path, params=params)
     response.raise_for_status()
     return response.json()
 
@@ -181,19 +176,18 @@ async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
         # FMP /stable/batch-quote accepts comma-separated symbols
         symbols = ",".join(ticker_list)
 
-        async with httpx.AsyncClient() as client:
-            data = await _fmp_get(client, "batch-quote", {"symbols": symbols})
-            market_status = await _get_market_status(client)
+        data = await _fmp_get("batch-quote", {"symbols": symbols})
+        market_status = await _get_market_status()
 
-            # Build lookup of regular-session previousClose for change calc
-            regular_lookup: Dict[str, Dict[str, Any]] = {}
-            if data and isinstance(data, list):
-                for q in data:
-                    s = q.get("symbol")
-                    if s:
-                        regular_lookup[s] = {"previousClose": q.get("previousClose")}
+        # Build lookup of regular-session previousClose for change calc
+        regular_lookup: Dict[str, Dict[str, Any]] = {}
+        if data and isinstance(data, list):
+            for q in data:
+                s = q.get("symbol")
+                if s:
+                    regular_lookup[s] = {"previousClose": q.get("previousClose")}
 
-            ext_quotes = await _get_extended_hours_quotes(client, symbols, regular_lookup)
+        ext_quotes = await _get_extended_hours_quotes(symbols, regular_lookup)
 
         if not data or not isinstance(data, list):
             data = []
@@ -249,15 +243,14 @@ async def get_intraday_data(ticker: str) -> Dict[str, Any]:
     try:
         ticker_upper = ticker.upper()
 
-        async with httpx.AsyncClient() as client:
-            data = await _fmp_get(client, "quote", {"symbol": ticker_upper})
-            market_status = await _get_market_status(client)
+        data = await _fmp_get("quote", {"symbol": ticker_upper})
+        market_status = await _get_market_status()
 
-            regular_lookup = {ticker_upper: {"previousClose": None}}
-            if data and isinstance(data, list) and len(data) > 0:
-                regular_lookup[ticker_upper]["previousClose"] = data[0].get("previousClose")
+        regular_lookup = {ticker_upper: {"previousClose": None}}
+        if data and isinstance(data, list) and len(data) > 0:
+            regular_lookup[ticker_upper]["previousClose"] = data[0].get("previousClose")
 
-            ext_quotes = await _get_extended_hours_quotes(client, ticker_upper, regular_lookup)
+        ext_quotes = await _get_extended_hours_quotes(ticker_upper, regular_lookup)
 
         if not data or not isinstance(data, list) or len(data) == 0:
             raise HTTPException(
@@ -314,118 +307,117 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
         today = date.today()
         ticker_upper = ticker.upper()
 
-        async with httpx.AsyncClient(timeout=30.0) as http_client:
-            # Fetch holidays so we can skip non-trading days
-            holidays = await _get_holiday_dates(http_client)
+        # Fetch holidays so we can skip non-trading days
+        holidays = await _get_holiday_dates()
 
-            # Walk backwards skipping weekends and holidays
-            bars_found = False
-            bars_data_raw = []
-            data_date = today
+        # Walk backwards skipping weekends and holidays
+        bars_found = False
+        bars_data_raw = []
+        data_date = today
 
-            for days_back in range(15):
-                check_date = today - timedelta(days=days_back)
+        for days_back in range(15):
+            check_date = today - timedelta(days=days_back)
 
-                if not _is_trading_day(check_date, holidays):
-                    continue
+            if not _is_trading_day(check_date, holidays):
+                continue
 
-                try:
-                    intraday_data = await _fmp_get(
-                        http_client, "historical-chart/15min",
-                        {
-                            "symbol": ticker_upper,
-                            "from": check_date.isoformat(),
-                            "to": check_date.isoformat(),
-                        }
-                    )
-
-                    if intraday_data and isinstance(intraday_data, list) and len(intraday_data) > 0:
-                        bars_data_raw = intraday_data
-                        bars_found = True
-                        data_date = check_date
-                        break
-
-                except httpx.HTTPStatusError as e:
-                    if e.response.status_code == 403:
-                        raise HTTPException(
-                            status_code=status.HTTP_403_FORBIDDEN,
-                            detail="API key doesn't have access to intraday data. Please verify your FMP plan."
-                        )
-                    continue
-
-            if not bars_found:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"No recent trading data found for {ticker_upper}"
+            try:
+                intraday_data = await _fmp_get(
+                    "historical-chart/15min",
+                    {
+                        "symbol": ticker_upper,
+                        "from": check_date.isoformat(),
+                        "to": check_date.isoformat(),
+                    }
                 )
 
-            # Fetch pre-computed SMAs from FMP technical indicators (parallel)
-            sma_params = {"symbol": ticker_upper, "timeframe": "1day"}
-            sma_20_data, sma_50_data, sma_200_data = await asyncio.gather(
-                _fmp_get(http_client, "technical-indicators/sma", {**sma_params, "periodLength": 20}),
-                _fmp_get(http_client, "technical-indicators/sma", {**sma_params, "periodLength": 50}),
-                _fmp_get(http_client, "technical-indicators/sma", {**sma_params, "periodLength": 200}),
+                if intraday_data and isinstance(intraday_data, list) and len(intraday_data) > 0:
+                    bars_data_raw = intraday_data
+                    bars_found = True
+                    data_date = check_date
+                    break
+
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 403:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="API key doesn't have access to intraday data. Please verify your FMP plan."
+                    )
+                continue
+
+        if not bars_found:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No recent trading data found for {ticker_upper}"
             )
 
-            # Extract latest SMA value from each response (newest-first array)
-            def _extract_sma(data) -> Optional[float]:
-                if data and isinstance(data, list) and len(data) > 0:
-                    return data[0].get("sma")
-                return None
+        # Fetch pre-computed SMAs from FMP technical indicators (parallel)
+        sma_params = {"symbol": ticker_upper, "timeframe": "1day"}
+        sma_20_data, sma_50_data, sma_200_data = await asyncio.gather(
+            _fmp_get("technical-indicators/sma", {**sma_params, "periodLength": 20}),
+            _fmp_get("technical-indicators/sma", {**sma_params, "periodLength": 50}),
+            _fmp_get("technical-indicators/sma", {**sma_params, "periodLength": 200}),
+        )
 
-            ma_20 = _extract_sma(sma_20_data)
-            ma_50 = _extract_sma(sma_50_data)
-            ma_200 = _extract_sma(sma_200_data)
+        # Extract latest SMA value from each response (newest-first array)
+        def _extract_sma(data) -> Optional[float]:
+            if data and isinstance(data, list) and len(data) > 0:
+                return data[0].get("sma")
+            return None
 
-            # Process intraday bars — FMP returns newest-first, sort ascending
-            bars_data_raw.sort(key=lambda x: x.get("date", ""))
+        ma_20 = _extract_sma(sma_20_data)
+        ma_50 = _extract_sma(sma_50_data)
+        ma_200 = _extract_sma(sma_200_data)
 
-            bars_data = []
-            for bar in bars_data_raw:
-                # FMP returns date as "2026-03-10 09:30:00" string
-                bar_date_str = bar.get("date", "")
-                timestamp_et = None
-                if bar_date_str:
-                    try:
-                        dt_et = ET.localize(datetime.strptime(bar_date_str, "%Y-%m-%d %H:%M:%S"))
-                        timestamp_et = dt_et.isoformat()
-                    except ValueError:
-                        timestamp_et = bar_date_str
+        # Process intraday bars — FMP returns newest-first, sort ascending
+        bars_data_raw.sort(key=lambda x: x.get("date", ""))
 
-                bars_data.append({
-                    "timestamp": timestamp_et,
-                    "open": bar.get("open"),
-                    "high": bar.get("high"),
-                    "low": bar.get("low"),
-                    "close": bar.get("close"),
-                    "volume": bar.get("volume"),
-                    "vwap": None,  # FMP intraday bars don't include VWAP
-                    "ma_20": ma_20,
-                    "ma_50": ma_50,
-                    "ma_200": ma_200,
-                })
+        bars_data = []
+        for bar in bars_data_raw:
+            # FMP returns date as "2026-03-10 09:30:00" string
+            bar_date_str = bar.get("date", "")
+            timestamp_et = None
+            if bar_date_str:
+                try:
+                    dt_et = ET.localize(datetime.strptime(bar_date_str, "%Y-%m-%d %H:%M:%S"))
+                    timestamp_et = dt_et.isoformat()
+                except ValueError:
+                    timestamp_et = bar_date_str
 
-            # Determine if showing today's or previous day's data
-            is_today = data_date == today
-            market_status = "open" if is_today else "closed"
-            data_note = f"Showing most recent trading day ({data_date.strftime('%B %d, %Y')})" if not is_today else "Real-time data from today"
+            bars_data.append({
+                "timestamp": timestamp_et,
+                "open": bar.get("open"),
+                "high": bar.get("high"),
+                "low": bar.get("low"),
+                "close": bar.get("close"),
+                "volume": bar.get("volume"),
+                "vwap": None,  # FMP intraday bars don't include VWAP
+                "ma_20": ma_20,
+                "ma_50": ma_50,
+                "ma_200": ma_200,
+            })
 
-            return {
-                "ticker": ticker_upper,
-                "bars": bars_data,
-                "timespan": "minute",
-                "multiplier": 15,
-                "count": len(bars_data),
-                "data_date": data_date.isoformat(),
-                "is_today": is_today,
-                "market_status": market_status,
-                "moving_averages": {
-                    "ma_20": ma_20,
-                    "ma_50": ma_50,
-                    "ma_200": ma_200,
-                },
-                "note": data_note,
-            }
+        # Determine if showing today's or previous day's data
+        is_today = data_date == today
+        market_status = "open" if is_today else "closed"
+        data_note = f"Showing most recent trading day ({data_date.strftime('%B %d, %Y')})" if not is_today else "Real-time data from today"
+
+        return {
+            "ticker": ticker_upper,
+            "bars": bars_data,
+            "timespan": "minute",
+            "multiplier": 15,
+            "count": len(bars_data),
+            "data_date": data_date.isoformat(),
+            "is_today": is_today,
+            "market_status": market_status,
+            "moving_averages": {
+                "ma_20": ma_20,
+                "ma_50": ma_50,
+                "ma_200": ma_200,
+            },
+            "note": data_note,
+        }
 
     except HTTPException:
         raise

@@ -2,10 +2,10 @@
 Market data service - Financial Modeling Prep (FMP) integration
 """
 import re
-import httpx
 from typing import Dict, Any, List
 from datetime import datetime, timezone, timedelta
 from app.config import get_settings
+from app.services.fmp_client import get_fmp_client
 
 settings = get_settings()
 
@@ -23,9 +23,7 @@ def _safe_error(e: Exception) -> str:
 class MarketDataService:
 
     def __init__(self):
-        self.base_url = "https://financialmodelingprep.com/stable"
         self.api_key = settings.MASSIVE_API_KEY
-        self.timeout = 10.0
 
     @staticmethod
     def _is_warrant_ticker(ticker: str) -> bool:
@@ -45,14 +43,13 @@ class MarketDataService:
         if params is None:
             params = {}
         params["apikey"] = self.api_key
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self.base_url}/{path}",
-                params=params,
-                timeout=self.timeout,
-            )
-            response.raise_for_status()
-            return response.json()
+        client = get_fmp_client()
+        response = await client.get(
+            path,
+            params=params,
+        )
+        response.raise_for_status()
+        return response.json()
 
     @staticmethod
     def _format_timestamp(ts) -> str:

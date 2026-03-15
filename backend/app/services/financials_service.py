@@ -12,16 +12,9 @@ FMP Stable endpoints used:
   /stable/key-metrics-ttm?symbol=X     (pre-computed trailing-twelve-month metrics)
 """
 import asyncio
-import httpx
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional, List
-from app.config import get_settings
-
-settings = get_settings()
-
-BASE_URL = "https://financialmodelingprep.com/stable"
-API_KEY = settings.MASSIVE_API_KEY
-TIMEOUT = 15.0
+from app.services.fmp_client import get_fmp_client, API_KEY
 
 
 def _fmt(value: Optional[float], decimals: int = 2) -> Optional[float]:
@@ -52,12 +45,12 @@ def _sum_quarters(quarters: List[dict], field: str) -> Optional[float]:
     return sum(vals)
 
 
-async def _fetch(client: httpx.AsyncClient, path: str, params: dict) -> Any:
+async def _fetch(path: str, params: dict) -> Any:
     """Fetch a single FMP endpoint, return parsed JSON or empty list on failure."""
-    url = f"{BASE_URL}/{path}"
     full_params = {"apikey": API_KEY, **params}
     try:
-        response = await client.get(url, params=full_params, timeout=TIMEOUT)
+        client = get_fmp_client()
+        response = await client.get(path, params=full_params)
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -75,43 +68,42 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
     """
     ticker = ticker.upper()
 
-    async with httpx.AsyncClient() as client:
-        # Fire all requests in parallel
-        income_quarterly_task = _fetch(client, "income-statement", {
-            "symbol": ticker, "period": "quarter", "limit": 12,
-        })
-        balance_task = _fetch(client, "balance-sheet-statement", {
-            "symbol": ticker, "period": "quarter", "limit": 1,
-        })
-        cashflow_quarterly_task = _fetch(client, "cash-flow-statement", {
-            "symbol": ticker, "period": "quarter", "limit": 8,
-        })
-        ratios_task = _fetch(client, "ratios-ttm", {
-            "symbol": ticker,
-        })
-        key_metrics_task = _fetch(client, "key-metrics-ttm", {
-            "symbol": ticker,
-        })
-        # Profile lookup — get the current entity's CIK for staleness detection
-        profile_task = _fetch(client, "profile", {
-            "symbol": ticker,
-        })
+    # Fire all requests in parallel
+    income_quarterly_task = _fetch("income-statement", {
+        "symbol": ticker, "period": "quarter", "limit": 12,
+    })
+    balance_task = _fetch("balance-sheet-statement", {
+        "symbol": ticker, "period": "quarter", "limit": 1,
+    })
+    cashflow_quarterly_task = _fetch("cash-flow-statement", {
+        "symbol": ticker, "period": "quarter", "limit": 8,
+    })
+    ratios_task = _fetch("ratios-ttm", {
+        "symbol": ticker,
+    })
+    key_metrics_task = _fetch("key-metrics-ttm", {
+        "symbol": ticker,
+    })
+    # Profile lookup — get the current entity's CIK for staleness detection
+    profile_task = _fetch("profile", {
+        "symbol": ticker,
+    })
 
-        (
-            income_quarters,
-            balance_list,
-            cashflow_quarters,
-            ratios_list,
-            key_metrics_list,
-            profile_list,
-        ) = await asyncio.gather(
-            income_quarterly_task,
-            balance_task,
-            cashflow_quarterly_task,
-            ratios_task,
-            key_metrics_task,
-            profile_task,
-        )
+    (
+        income_quarters,
+        balance_list,
+        cashflow_quarters,
+        ratios_list,
+        key_metrics_list,
+        profile_list,
+    ) = await asyncio.gather(
+        income_quarterly_task,
+        balance_task,
+        cashflow_quarterly_task,
+        ratios_task,
+        key_metrics_task,
+        profile_task,
+    )
 
     # ── Normalise to lists (FMP returns arrays directly) ──────────────
     if not isinstance(income_quarters, list):
