@@ -4,7 +4,7 @@ Fetches all stock snapshots from FMP API and stores in database
 """
 import asyncio
 import os
-from sqlalchemy import delete, select, func
+from sqlalchemy import delete, insert, select, func
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from datetime import date
@@ -64,16 +64,41 @@ async def fetch_and_store_snapshots():
             print("⚠️ No stock list returned from FMP")
             return
 
-        # Filter to US-only tickers: skip foreign symbols (contain dots like .T, .PA)
-        # and tickers longer than 10 chars (DB column is VARCHAR(10))
+        # Fetch delisted companies to exclude them
+        print("📈 Fetching delisted companies from FMP...")
+        delisted_symbols = set()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            page = 0
+            while True:
+                resp = await client.get(
+                    f"{FMP_BASE}/delisted-companies",
+                    params={"apikey": api_key, "page": page, "limit": 100},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                if not data or not isinstance(data, list):
+                    break
+                for item in data:
+                    sym = item.get("symbol")
+                    if sym:
+                        delisted_symbols.add(sym.upper())
+                if len(data) < 100:
+                    break
+                page += 1
+        print(f"✅ Found {len(delisted_symbols)} delisted companies to exclude")
+
+        # Filter to US-only tickers: skip foreign symbols (contain dots like .T, .PA),
+        # tickers longer than 10 chars (DB column is VARCHAR(10)), and delisted stocks
         tickers = []
         for s in stock_list:
             sym = s.get("symbol")
             if not sym or "." in sym or len(sym) > 10:
                 continue
+            if sym.upper() in delisted_symbols:
+                continue
             tickers.append(sym)
 
-        print(f"✅ Got {len(tickers)} tickers from stock list")
+        print(f"✅ Got {len(tickers)} tickers from stock list (after filtering delisted)")
 
         # Step 2: Batch-fetch quotes
         print("📈 Fetching quotes in batches...")
@@ -147,11 +172,12 @@ async def fetch_and_store_snapshots():
                     )
                 )
 
-                # Insert new snapshots
+                # Bulk insert all snapshots in one statement
                 print(f"💾 Inserting {len(valid_snapshots)} snapshots...")
-                for snapshot_data in valid_snapshots:
-                    snapshot = DailyStockSnapshot(**snapshot_data)
-                    session.add(snapshot)
+                await session.execute(
+                    insert(DailyStockSnapshot),
+                    valid_snapshots
+                )
 
                 await session.commit()
                 print(f"✅ Successfully stored {len(valid_snapshots)} snapshots for {today}")
