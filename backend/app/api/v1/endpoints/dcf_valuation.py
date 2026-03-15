@@ -2,6 +2,7 @@
 DCF Valuation API Endpoints - Discounted Cash Flow Analysis
 ⭐ PAID TIERS ONLY
 """
+import asyncio
 import re
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,22 +44,24 @@ async def _fetch_fmp_dcf(ticker: str) -> Dict[str, Any]:
         client = get_fmp_client()
         params = {"symbol": ticker, "apikey": API_KEY}
 
-        # Simple + levered DCF (lightweight)
-        simple_resp = await client.get("discounted-cash-flow", params=params)
+        # Fetch all three DCF endpoints in parallel
+        simple_resp, levered_resp, adv_resp = await asyncio.gather(
+            client.get("discounted-cash-flow", params=params),
+            client.get("levered-discounted-cash-flow", params=params),
+            client.get("custom-discounted-cash-flow", params=params),
+        )
+
         simple_resp.raise_for_status()
         simple_data = simple_resp.json()
         if simple_data and isinstance(simple_data, list) and len(simple_data) > 0:
             result["dcf"] = simple_data[0].get("dcf")
             result["stock_price"] = simple_data[0].get("Stock Price")
 
-        levered_resp = await client.get("levered-discounted-cash-flow", params=params)
         levered_resp.raise_for_status()
         levered_data = levered_resp.json()
         if levered_data and isinstance(levered_data, list) and len(levered_data) > 0:
             result["levered_dcf"] = levered_data[0].get("dcf")
 
-        # Advanced DCF — grab WACC and equity value from most recent projected year
-        adv_resp = await client.get("custom-discounted-cash-flow", params=params)
         adv_resp.raise_for_status()
         adv_data = adv_resp.json()
         if adv_data and isinstance(adv_data, list) and len(adv_data) > 0:
@@ -127,9 +130,21 @@ async def get_dcf_suggestions(
     - Company information
     """
     try:
-        # Get company info and quote from FMP
-        quote = await market_data_service.get_quote(ticker)
-        company = await market_data_service.get_company_info(ticker)
+        # Fetch quote, company info, financials, FMP DCF, and shares in parallel
+        quote, company, fin_result, fmp_dcf, shares_outstanding = await asyncio.gather(
+            market_data_service.get_quote(ticker),
+            market_data_service.get_company_info(ticker),
+            get_company_financials(ticker),
+            _fetch_fmp_dcf(ticker.upper()),
+            _fetch_shares_outstanding(ticker),
+            return_exceptions=True,
+        )
+
+        # Quote and company are required — re-raise if they failed
+        if isinstance(quote, BaseException):
+            raise quote
+        if isinstance(company, BaseException):
+            raise company
 
         company_name = company.get("name", ticker)
         market_cap = company.get("market_cap") or 0
@@ -137,6 +152,14 @@ async def get_dcf_suggestions(
         industry = company.get("industry", "Unknown")
         sector = company.get("sector", "Other")
         security_type = company.get("type", "")
+
+        # Normalize optional results that may have failed
+        if isinstance(fin_result, BaseException):
+            fin_result = None
+        if isinstance(fmp_dcf, BaseException):
+            fmp_dcf = {}
+        if isinstance(shares_outstanding, BaseException):
+            shares_outstanding = None
 
         if current_price == 0:
             raise HTTPException(
@@ -269,12 +292,14 @@ async def get_dcf_suggestions(
         if adjustment["growth_note"]:
             discount_reasoning += f" ({adjustment['growth_note']})"
         
-        # ── Fetch actual financials from FMP (non-blocking) ───────
+        # ── Use pre-fetched financials ───────
         actuals = None
         dcf_sug = None
         growth_profile = None
         try:
-            fin_data = await get_company_financials(ticker)
+            if fin_result is None:
+                raise ValueError("Financials not available")
+            fin_data = fin_result
             dcf_sug = fin_data.get("dcf_suggestions") or {}
             income = fin_data.get("income_statement") or {}
             cash_flow_data = fin_data.get("cash_flow") or {}
@@ -337,12 +362,6 @@ async def get_dcf_suggestions(
             print(f"⚠️ Could not fetch financials for DCF suggestions ({ticker}): {_safe_error(fin_err)}")
             growth_from_actuals = False
             discount_from_actuals = False
-
-        # ── Fetch FMP pre-calculated DCF as benchmark ───────────────
-        fmp_dcf = await _fetch_fmp_dcf(ticker.upper())
-
-        # ── Fetch shares outstanding from FMP ───────────────────────
-        shares_outstanding = await _fetch_shares_outstanding(ticker)
 
         return {
             "ticker": ticker.upper(),
@@ -430,27 +449,43 @@ async def calculate_dcf(
     ⭐ **Professional Feature:** 20 DCF valuations daily with customizable assumptions!
     """
     try:
-        # Get current stock price and company info
-        try:
-            quote = await market_data_service.get_quote(ticker)
-            current_price = float(quote.get('price', 0))
-        except:
+        # Fetch quote, company, financials, shares, and FMP DCF in parallel
+        quote_r, company_r, fin_r, shares_r, fmp_dcf = await asyncio.gather(
+            market_data_service.get_quote(ticker),
+            market_data_service.get_company_info(ticker),
+            get_company_financials(ticker),
+            _fetch_shares_outstanding(ticker),
+            _fetch_fmp_dcf(ticker.upper()),
+            return_exceptions=True,
+        )
+
+        # Quote is required
+        if isinstance(quote_r, BaseException):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Could not fetch current price for {ticker}"
             )
-        
-        try:
-            company = await market_data_service.get_company_info(ticker)
-            company_name = company.get("name", ticker)
-            market_cap = company.get("market_cap")
-            security_type = company.get("type", "")
-        except:
+        current_price = float(quote_r.get('price', 0))
+
+        # Company info — graceful fallback
+        if isinstance(company_r, BaseException):
             company_name = ticker
             market_cap = None
             security_type = ""
-        
-        # ── Fetch actual financials from FMP ──────────────────────
+        else:
+            company_name = company_r.get("name", ticker)
+            market_cap = company_r.get("market_cap")
+            security_type = company_r.get("type", "")
+
+        # Normalize optional results
+        if isinstance(fin_r, BaseException):
+            fin_r = None
+        if isinstance(shares_r, BaseException):
+            shares_r = None
+        if isinstance(fmp_dcf, BaseException):
+            fmp_dcf = {}
+
+        # ── Extract financials from pre-fetched data ──────────────────────
         current_fcf = None
         shares_outstanding = None
         fcf_source = None
@@ -458,11 +493,10 @@ async def calculate_dcf(
         cash_and_equivalents = None
         total_debt = None
 
-        try:
-            fin_data = await get_company_financials(ticker)
-            cash_flow_data = fin_data.get("cash_flow") or {}
-            income_data = fin_data.get("income_statement") or {}
-            balance_sheet = fin_data.get("balance_sheet") or {}
+        if fin_r is not None:
+            cash_flow_data = fin_r.get("cash_flow") or {}
+            income_data = fin_r.get("income_statement") or {}
+            balance_sheet = fin_r.get("balance_sheet") or {}
 
             actual_fcf = cash_flow_data.get("free_cash_flow")
             if actual_fcf is not None:
@@ -482,15 +516,10 @@ async def calculate_dcf(
             cash_and_equivalents = balance_sheet.get("cash_and_equivalents") or balance_sheet.get("cash")
             total_debt = balance_sheet.get("total_debt") or balance_sheet.get("long_term_debt")
 
-        except Exception as fin_err:
-            print(f"⚠️ Could not fetch financials for DCF calc ({ticker}): {_safe_error(fin_err)}")
-
-        # Fallback: try shares-float endpoint if SEC filings didn't have shares
-        if shares_outstanding is None:
-            fmp_shares = await _fetch_shares_outstanding(ticker)
-            if fmp_shares:
-                shares_outstanding = fmp_shares
-                shares_source = "fmp_shares_float"
+        # Fallback: use pre-fetched shares-float if SEC filings didn't have shares
+        if shares_outstanding is None and shares_r:
+            shares_outstanding = shares_r
+            shares_source = "fmp_shares_float"
 
         # Priority 3: Market cap estimate (fallback when no filings exist)
         if current_fcf is None:
@@ -546,9 +575,6 @@ async def calculate_dcf(
         # Calculate margin of safety
         margin_of_safety = ((intrinsic_value - current_price) / current_price) * 100
         
-        # ── Fetch FMP pre-calculated DCF as benchmark ───────────────
-        fmp_dcf = await _fetch_fmp_dcf(ticker.upper())
-
         # Determine recommendation
         if margin_of_safety > 20:
             recommendation = "Strong Buy"
