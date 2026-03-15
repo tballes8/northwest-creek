@@ -448,7 +448,19 @@ const Dashboard: React.FC = () => {
         console.warn('Could not fetch commodity quotes:', err);
       }
 
-      // TODO: Indexes
+      // Indexes
+      try {
+        const indexResp = await axios.get(`${API_URL}/api/v1/stocks/index-quotes`, { headers });
+        const indexItems = indexResp.data?.indexes || [];
+        setIndexes(indexItems.map((i: any) => ({
+          name: i.name,
+          value: i.value,
+          change: i.change,
+          changePercent: i.changePercent,
+        })));
+      } catch (err) {
+        console.warn('Could not fetch index quotes:', err);
+      }
 
       // Crypto
       try {
@@ -1295,6 +1307,7 @@ return (
                              marketModal === 'indexes' ? indexes :
                              crypto;
                 const isTreasury = marketModal === 'treasury';
+                const isIndex = marketModal === 'indexes';
 
                 if (marketDataLoading) {
                   return (
@@ -1319,7 +1332,7 @@ return (
                       <tr>
                         <th className="px-5 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Name</th>
                         <th className="px-5 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                          {isTreasury ? 'Yield' : 'Price'}
+                          {isTreasury ? 'Yield' : isIndex ? 'Level' : 'Price'}
                         </th>
                         <th className="px-5 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Change</th>
                         <th className="px-5 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">% Change</th>
@@ -1333,6 +1346,8 @@ return (
                             {item.value != null
                               ? isTreasury
                                 ? `${item.value.toFixed(2)}%`
+                                : isIndex
+                                ? item.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                                 : `$${item.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                               : '—'}
                           </td>

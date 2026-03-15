@@ -469,6 +469,105 @@ async def get_crypto_quotes():
         )
 
 
+@router.get("/index-quotes")
+async def get_index_quotes():
+    """
+    Get quotes for 10 key market indexes.
+
+    Calls FMP batch-index-quotes, filters to our curated list,
+    and returns name/price/change data for the dashboard card + modal.
+    Falls back to individual /stable/quote calls for any symbols
+    missing from the batch response.
+    """
+    import httpx
+    from app.config import settings
+
+    api_key = settings.MASSIVE_API_KEY
+    base_url = "https://financialmodelingprep.com/stable"
+
+    # Symbol → (display name, is_points) mapping
+    # is_points=True means display raw value (no $ prefix)
+    INDEX_MAP = {
+        "^GSPC": ("S&P 500", True),
+        "^DJI": ("Dow Jones", True),
+        "^IXIC": ("NASDAQ Composite", True),
+        "^NDX": ("NASDAQ 100", True),
+        "^RUT": ("Russell 2000", True),
+        "^VIX": ("VIX", True),
+        "^GSPTSE": ("S&P/TSX", True),
+        "^FTSE": ("FTSE 100", True),
+        "^GDAXI": ("DAX", True),
+        "^N225": ("Nikkei 225", True),
+    }
+
+    try:
+        import asyncio
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{base_url}/batch-index-quotes",
+                params={"apikey": api_key},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            if not data or not isinstance(data, list):
+                data = []
+
+            # Build a lookup from the full batch response
+            lookup = {item.get("symbol", ""): item for item in data}
+
+            # Identify symbols missing from the batch response
+            missing = [sym for sym in INDEX_MAP if sym not in lookup]
+
+            # Fallback: fetch individual quotes for any missing symbols
+            if missing:
+                async def _fetch_quote(sym: str):
+                    try:
+                        r = await client.get(
+                            f"{base_url}/quote",
+                            params={"symbol": sym, "apikey": api_key},
+                        )
+                        r.raise_for_status()
+                        items = r.json()
+                        if isinstance(items, list) and items:
+                            return items[0]
+                    except Exception:
+                        pass
+                    return None
+
+                fallback_results = await asyncio.gather(
+                    *[_fetch_quote(sym) for sym in missing]
+                )
+                for sym, result in zip(missing, fallback_results):
+                    if result:
+                        lookup[sym] = result
+
+            indexes = []
+            for symbol, (display_name, _) in INDEX_MAP.items():
+                item = lookup.get(symbol)
+                if not item:
+                    continue
+                price = item.get("price")
+                change = item.get("change")
+                change_pct = item.get("changesPercentage") or item.get("changePercentage")
+                indexes.append({
+                    "name": display_name,
+                    "symbol": symbol,
+                    "value": price,
+                    "change": change,
+                    "changePercent": change_pct,
+                })
+
+            return {"indexes": indexes, "count": len(indexes)}
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching index quotes: {_safe_error(e)}",
+        )
+
+
 @router.get("/ipos")
 async def get_ipos():
     """
