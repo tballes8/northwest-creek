@@ -164,13 +164,9 @@ async def fetch_and_store_snapshots():
         # Create database session
         async with async_session_factory() as session:
             try:
-                # Delete existing snapshots for today (idempotent)
-                print(f"🗑️ Deleting existing snapshots for {today}")
-                await session.execute(
-                    delete(DailyStockSnapshot).where(
-                        DailyStockSnapshot.snapshot_date == today
-                    )
-                )
+                # Delete all existing snapshots before inserting fresh data
+                print(f"🗑️ Deleting all existing snapshots...")
+                await session.execute(delete(DailyStockSnapshot))
 
                 # Bulk insert all snapshots in one statement
                 print(f"💾 Inserting {len(valid_snapshots)} snapshots...")
