@@ -93,6 +93,42 @@ class MarketDataService:
         except Exception as e:
             raise ValueError(f"Error fetching quote for {ticker}: {_safe_error(e)}")
 
+    async def get_batch_quotes(self, tickers: List[str]) -> Dict[str, Dict[str, Any]]:
+        """
+        Fetch quotes for multiple tickers in a single FMP API call.
+        Returns a dict keyed by ticker symbol with the same format as get_quote().
+        """
+        if not tickers:
+            return {}
+
+        symbols = ",".join(t.upper().strip() for t in tickers)
+        try:
+            data = await self._fmp_get("batch-quote", {"symbols": symbols})
+
+            if not data or not isinstance(data, list):
+                return {}
+
+            quotes = {}
+            for result in data:
+                symbol = result.get("symbol", "")
+                quotes[symbol.upper()] = {
+                    "ticker": symbol,
+                    "price": result.get("price", 0),
+                    "change": result.get("change", 0),
+                    "change_percent": result.get("changePercentage", 0),
+                    "volume": int(result.get("volume", 0)),
+                    "high": result.get("dayHigh", 0),
+                    "low": result.get("dayLow", 0),
+                    "open": result.get("open", 0),
+                    "previous_close": result.get("previousClose", 0),
+                    "timestamp": self._format_timestamp(result.get("timestamp")),
+                }
+            return quotes
+
+        except Exception as e:
+            print(f"Error fetching batch quotes: {_safe_error(e)}")
+            return {}
+
     async def get_company_info(self, ticker: str) -> Dict[str, Any]:
         """
         Get company information using FMP /stable/profile.

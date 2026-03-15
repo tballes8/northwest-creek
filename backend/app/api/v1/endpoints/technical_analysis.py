@@ -2,6 +2,7 @@
 Stock Screener API Endpoints - Filter stocks by technical indicators
 ⭐ PAID TIERS ONLY ⭐
 """
+import asyncio
 import re
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -710,57 +711,74 @@ async def screen_watchlist(
             "message": "Add stocks to your watchlist to start screening!"
         }
     
-    # Screen each stock
-    matches = []
-    
-    for item in watchlist_items:
+    # Fetch all company names in one batch call, and all price histories in parallel
+    tickers = [item.ticker for item in watchlist_items]
+    company_quotes, *price_results = await asyncio.gather(
+        market_data_service.get_batch_quotes(tickers),
+        *(_get_price_history(item.ticker, 60) for item in watchlist_items),
+        return_exceptions=True,
+    )
+
+    # Build company name lookup — batch-quote gives us symbols; fall back to ticker
+    # Company info is only used for display name, so we fetch profiles in parallel too
+    async def _safe_company_name(ticker: str) -> str:
         try:
-            # Get historical data
-            prices_data, current_price = await _get_price_history(item.ticker, 60)
-            
-            # Get company name
-            try:
-                company = await market_data_service.get_company_info(item.ticker)
-                company_name = company.get("name", item.ticker)
-            except:
-                company_name = item.ticker
-            
+            info = await market_data_service.get_company_info(ticker)
+            return info.get("name", ticker)
+        except Exception:
+            return ticker
+
+    company_names = await asyncio.gather(
+        *(_safe_company_name(item.ticker) for item in watchlist_items)
+    )
+
+    # Screen each stock using pre-fetched data
+    matches = []
+
+    for i, item in enumerate(watchlist_items):
+        try:
+            price_result = price_results[i]
+            if isinstance(price_result, BaseException):
+                continue
+            prices_data, current_price = price_result
+            company_name = company_names[i]
+
             # Calculate indicators
             rsi_value = technical_indicators.calculate_rsi(prices_data)
             macd_data = technical_indicators.calculate_macd(prices_data)
             ma_data = technical_indicators.calculate_moving_averages(prices_data)
             bb_data = technical_indicators.calculate_bollinger_bands(prices_data)
-            
+
             # Check filters
             match_reasons = []
             is_match = True
-            
+
             # RSI filters
             if rsi_below is not None:
                 if rsi_value is None or rsi_value >= rsi_below:
                     is_match = False
                 else:
                     match_reasons.append(f"RSI {rsi_value:.1f} < {rsi_below}")
-            
+
             if rsi_above is not None:
                 if rsi_value is None or rsi_value <= rsi_above:
                     is_match = False
                 else:
                     match_reasons.append(f"RSI {rsi_value:.1f} > {rsi_above}")
-            
+
             # MACD filters
             if macd_bullish is not None:
                 if macd_data is None or macd_data["trend"] != "bullish":
                     is_match = False
                 else:
                     match_reasons.append(f"MACD Bullish ({macd_data['histogram']:.2f})")
-            
+
             if macd_bearish is not None:
                 if macd_data is None or macd_data["trend"] != "bearish":
                     is_match = False
                 else:
                     match_reasons.append(f"MACD Bearish ({macd_data['histogram']:.2f})")
-            
+
             # Moving average filters
             if above_sma_20 is not None:
                 above_20 = ma_data["sma_20"] and current_price > ma_data["sma_20"]
@@ -768,27 +786,27 @@ async def screen_watchlist(
                     is_match = False
                 elif above_20:
                     match_reasons.append(f"Above SMA20 (${ma_data['sma_20']:.2f})")
-            
+
             if above_sma_50 is not None:
                 above_50 = ma_data["sma_50"] and current_price > ma_data["sma_50"]
                 if above_sma_50 != above_50:
                     is_match = False
                 elif above_50:
                     match_reasons.append(f"Above SMA50 (${ma_data['sma_50']:.2f})")
-            
+
             # Bollinger filters
             if bollinger_oversold is not None:
                 if bb_data is None or bb_data["position"] != "below_lower":
                     is_match = False
                 else:
                     match_reasons.append(f"Below Bollinger Lower Band")
-            
+
             if bollinger_overbought is not None:
                 if bb_data is None or bb_data["position"] != "above_upper":
                     is_match = False
                 else:
                     match_reasons.append(f"Above Bollinger Upper Band")
-            
+
             # If all filters pass, add to matches
             if is_match:
                 matches.append({
@@ -802,8 +820,8 @@ async def screen_watchlist(
                     "bollinger_position": bb_data["position"] if bb_data else None,
                     "match_reasons": match_reasons
                 })
-        
-        except Exception as e:
+
+        except Exception:
             # Skip stocks that error out
             continue
     

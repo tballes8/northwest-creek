@@ -36,30 +36,30 @@ async def check_portfolio_limit(user: User, current_count: int) -> None:
 
 
 async def enrich_portfolio_with_prices(items: List[Portfolio]) -> List[schemas.PortfolioPositionResponse]:
-    """Enrich portfolio positions with current market data"""
+    """Enrich portfolio positions with current market data (single batch API call)"""
+    if not items:
+        return []
+
+    # Fetch all quotes in one API call
+    tickers = [item.ticker for item in items]
+    quotes = await market_data_service.get_batch_quotes(tickers)
+
     enriched_items = []
-    
     for item in items:
-        # Default values
+        quote = quotes.get(item.ticker.upper(), {})
+
         current_price = None
         total_value = None
         profit_loss = None
         profit_loss_percent = None
-        
-        # Try to fetch current price
-        try:
-            quote = await market_data_service.get_quote(item.ticker)
-            
-            if quote and quote.get('price'):
-                current_price = float(quote.get('price'))
-                total_value = current_price * float(item.quantity)
-                cost_basis = float(item.buy_price) * float(item.quantity)
-                profit_loss = total_value - cost_basis
-                profit_loss_percent = (profit_loss / cost_basis) * 100 if cost_basis > 0 else 0
-        except Exception as e:
-            print(f"Could not fetch data for {item.ticker}: {str(e)}")
-        
-        # Create response item
+
+        if quote.get('price'):
+            current_price = float(quote.get('price'))
+            total_value = current_price * float(item.quantity)
+            cost_basis = float(item.buy_price) * float(item.quantity)
+            profit_loss = total_value - cost_basis
+            profit_loss_percent = (profit_loss / cost_basis) * 100 if cost_basis > 0 else 0
+
         enriched_items.append(schemas.PortfolioPositionResponse(
             id=item.id,
             user_id=item.user_id,
@@ -75,7 +75,7 @@ async def enrich_portfolio_with_prices(items: List[Portfolio]) -> List[schemas.P
             profit_loss=profit_loss,
             profit_loss_percent=profit_loss_percent
         ))
-    
+
     return enriched_items
 
 

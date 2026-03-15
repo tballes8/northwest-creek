@@ -33,53 +33,44 @@ async def check_watchlist_limit(user: User, current_count: int) -> None:
 
 
 async def enrich_watchlist_with_prices(items: List[Watchlist]) -> List[schemas.WatchlistItemResponse]:
-    """Enrich watchlist items with current market data"""
+    """Enrich watchlist items with current market data (single batch API call)"""
+    if not items:
+        return []
+
+    # Fetch all quotes in one API call
+    tickers = [item.ticker for item in items]
+    quotes = await market_data_service.get_batch_quotes(tickers)
+
     enriched_items = []
-    
     for item in items:
-        try:
-            quote = await market_data_service.get_quote(item.ticker)
-            
-            # Calculate price vs target if target_price is set
-            price_vs_target = None
-            price_vs_target_percent = None
-            
-            if item.target_price and quote.get('price'):
-                # Convert Decimal to float for calculation
-                target_price_float = float(item.target_price) if item.target_price else None
-                current_price = float(quote.get('price'))
-                
-                if target_price_float:
-                    price_vs_target = current_price - target_price_float
-                    price_vs_target_percent = (price_vs_target / target_price_float) * 100
-            
-            enriched_items.append(schemas.WatchlistItemResponse(
-                id=item.id,
-                user_id=item.user_id,
-                ticker=item.ticker,
-                notes=item.notes,
-                target_price=float(item.target_price) if item.target_price else None,  # ← Convert to float
-                added_at=item.added_at,
-                # created_at=getattr(item, 'created_at', None),  # ← Include created_at if exists
-                price=float(quote.get('price')) if quote.get('price') else None,
-                change=float(quote.get('change')) if quote.get('change') else None,
-                change_percent=float(quote.get('change_percent')) if quote.get('change_percent') else None,
-                price_vs_target=price_vs_target,
-                price_vs_target_percent=price_vs_target_percent
-            ))
-        except Exception as e:
-            print(f"Error enriching {item.ticker}: {e}")
-            # If quote fetch fails, return item without price data
-            enriched_items.append(schemas.WatchlistItemResponse(
-                id=item.id,
-                user_id=item.user_id,
-                ticker=item.ticker,
-                notes=item.notes,
-                target_price=float(item.target_price) if item.target_price else None,
-                added_at=item.added_at,
-                # created_at=getattr(item, 'created_at', None)
-            ))
-    
+        quote = quotes.get(item.ticker.upper(), {})
+
+        # Calculate price vs target if target_price is set
+        price_vs_target = None
+        price_vs_target_percent = None
+
+        if item.target_price and quote.get('price'):
+            target_price_float = float(item.target_price)
+            current_price = float(quote.get('price'))
+
+            if target_price_float:
+                price_vs_target = current_price - target_price_float
+                price_vs_target_percent = (price_vs_target / target_price_float) * 100
+
+        enriched_items.append(schemas.WatchlistItemResponse(
+            id=item.id,
+            user_id=item.user_id,
+            ticker=item.ticker,
+            notes=item.notes,
+            target_price=float(item.target_price) if item.target_price else None,
+            added_at=item.added_at,
+            price=float(quote.get('price')) if quote.get('price') else None,
+            change=float(quote.get('change')) if quote.get('change') else None,
+            change_percent=float(quote.get('change_percent')) if quote.get('change_percent') else None,
+            price_vs_target=price_vs_target,
+            price_vs_target_percent=price_vs_target_percent
+        ))
+
     return enriched_items
 
 

@@ -203,32 +203,32 @@ async def get_alerts(
     active_count = 0
     triggered_count = 0
     
+    # Fetch all quotes in one API call
+    tickers = list({alert.ticker for alert in alerts})
+    quotes = await market_data_service.get_batch_quotes(tickers)
+
     for alert in alerts:
-        # Get current price
-        try:
-            quote = await market_data_service.get_quote(alert.ticker)
-            current_price = quote["price"]
-        except:
-            current_price = None
-        
+        quote = quotes.get(alert.ticker.upper(), {})
+        current_price = quote.get("price")
+
         # Calculate distance
         if current_price:
             if alert.condition == "above":
                 distance = float(alert.target_price) - current_price
             else:  # below
                 distance = current_price - float(alert.target_price)
-            
+
             distance_percent = (distance / current_price) * 100
         else:
             distance = None
             distance_percent = None
-        
+
         # Count active/triggered
         if alert.is_active:
             active_count += 1
         if alert.triggered_at:
             triggered_count += 1
-        
+
         alert_responses.append(AlertResponse(
             id=str(alert.id),
             ticker=alert.ticker,
