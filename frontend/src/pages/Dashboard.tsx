@@ -266,6 +266,12 @@ const Dashboard: React.FC = () => {
     return () => clearInterval(interval);
   }, [tickerList]);
 
+  // Auto-refresh market overview cards every 30 seconds (silent — no loading spinner)
+  useEffect(() => {
+    const interval = setInterval(() => loadMarketOverview(true), 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Close user menu on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -414,8 +420,8 @@ const Dashboard: React.FC = () => {
   };
 
   // Non-blocking market overview loader (Treasury, Commodities, Indexes, Crypto)
-  const loadMarketOverview = async () => {
-    setMarketDataLoading(true);
+  const loadMarketOverview = async (silent: boolean = false) => {
+    if (!silent) setMarketDataLoading(true);
     try {
       const token = localStorage.getItem('access_token');
       const headers = { Authorization: `Bearer ${token}` };
@@ -478,7 +484,7 @@ const Dashboard: React.FC = () => {
     } catch (err) {
       console.warn('Could not fetch market overview:', err);
     } finally {
-      setMarketDataLoading(false);
+      if (!silent) setMarketDataLoading(false);
     }
   };
 
