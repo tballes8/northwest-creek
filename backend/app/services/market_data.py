@@ -2,10 +2,12 @@
 Market data service - Financial Modeling Prep (FMP) integration
 """
 import re
+import httpx
 from typing import Dict, Any, List
 from datetime import datetime, timezone, timedelta
 from app.config import get_settings
 from app.services.fmp_client import get_fmp_client
+from app.utils.cache import SimpleCache
 
 settings = get_settings()
 
@@ -24,6 +26,8 @@ class MarketDataService:
 
     def __init__(self):
         self.api_key = settings.MASSIVE_API_KEY
+        self._quote_cache = SimpleCache(ttl_seconds=15)
+        self._profile_cache = SimpleCache(ttl_seconds=3600)
 
     @staticmethod
     def _is_warrant_ticker(ticker: str) -> bool:
@@ -65,6 +69,11 @@ class MarketDataService:
         Get real-time quote for a stock using FMP.
         FMP /stable/quote returns a list; we take the first element.
         """
+        cache_key = f"quote:{ticker.upper()}"
+        cached = self._quote_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         try:
             data = await self._fmp_get("quote", {"symbol": ticker})
 
@@ -73,7 +82,7 @@ class MarketDataService:
 
             result = data[0]
 
-            return {
+            quote = {
                 "ticker": ticker,
                 "price": result.get("price", 0),
                 "change": result.get("change", 0),
@@ -85,6 +94,9 @@ class MarketDataService:
                 "previous_close": result.get("previousClose", 0),
                 "timestamp": self._format_timestamp(result.get("timestamp")),
             }
+
+            self._quote_cache.set(cache_key, quote)
+            return quote
 
         except httpx.TimeoutException:
             raise ValueError(f"Timeout fetching data for {ticker}")
@@ -135,6 +147,11 @@ class MarketDataService:
         FMP profiles include sector directly — no SIC mapping needed.
         For fund-type tickers (ETF, etc.), FMP profile includes fund fields.
         """
+        cache_key = f"profile:{ticker.upper()}"
+        cached = self._profile_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
         try:
             data = await self._fmp_get("profile", {"symbol": ticker})
 
@@ -167,6 +184,7 @@ class MarketDataService:
                 "fund_total_assets": result.get("mktCap") if is_etf else None,
             }
 
+            self._profile_cache.set(cache_key, company)
             return company
 
         except httpx.TimeoutException:

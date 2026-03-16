@@ -5,9 +5,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional, Any
 
 class SimpleCache:
-    def __init__(self):
+    def __init__(self, ttl_seconds: int = 60):
         self._cache: Dict[str, tuple[Any, datetime]] = {}
-        self._ttl = timedelta(seconds=60)  # Cache for 60 seconds
+        self._ttl = timedelta(seconds=ttl_seconds)
     
     def get(self, key: str) -> Optional[Any]:
         """Get cached value if not expired"""

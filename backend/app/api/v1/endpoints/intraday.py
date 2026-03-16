@@ -33,7 +33,9 @@ async def _get_market_status() -> Optional[str]:
     try:
         data = await _fmp_get("exchange-market-hours", {"exchange": "NASDAQ"})
         if data and isinstance(data, list) and len(data) > 0:
-            is_open = data[0].get("isMarketOpen") or data[0].get("isTheStockMarketOpen")
+            is_open = data[0].get("isMarketOpen")
+            if is_open is None:
+                is_open = data[0].get("isTheStockMarketOpen")
             if is_open is True:
                 return "open"
             elif is_open is False:
