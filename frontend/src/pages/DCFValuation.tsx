@@ -908,18 +908,18 @@ const DCFValuation: React.FC = () => {
                         : suggestions.growth_profile.rule_of_40 >= 20
                         ? 'bg-yellow-50 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700'
                         : 'bg-red-50 dark:bg-red-900/30 border-red-300 dark:border-red-700'
-                    }`}>
+                      }`}>
                       <div className={`text-xl font-bold ${
                         suggestions.growth_profile.rule_of_40 >= 40
                           ? 'text-green-700 dark:text-green-300'
                           : suggestions.growth_profile.rule_of_40 >= 20
                           ? 'text-yellow-700 dark:text-yellow-300'
                           : 'text-red-700 dark:text-red-300'
-                      }`}>
+                        }`}>
                         {suggestions.growth_profile.rule_of_40}
                       </div>
-                      <div className="text-[10px] font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Rule of 40</div>
-                      <div className="text-[9px] text-gray-500 dark:text-gray-400 mt-0.5">
+                      <div className="text-[12px] font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Rule of 40</div>
+                      <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
                         {suggestions.growth_profile.rule_of_40_components.revenue_growth_yoy != null && (
                           <span>Growth {suggestions.growth_profile.rule_of_40_components.revenue_growth_yoy > 0 ? '+' : ''}{suggestions.growth_profile.rule_of_40_components.revenue_growth_yoy}%</span>
                         )}
@@ -927,7 +927,7 @@ const DCFValuation: React.FC = () => {
                           <span> + FCF {suggestions.growth_profile.rule_of_40_components.fcf_margin > 0 ? '+' : ''}{suggestions.growth_profile.rule_of_40_components.fcf_margin}%</span>
                         )}
                       </div>
-                      <div className="text-[8px] text-gray-400 dark:text-gray-500 mt-1 leading-snug max-w-[140px] mx-auto">
+                      <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 leading-snug max-w-[140px] mx-auto">
                         Revenue growth&nbsp;% plus free cash flow margin&nbsp;%. Above 40 signals strong growth-profitability balance.
                       </div>
                     </div>
