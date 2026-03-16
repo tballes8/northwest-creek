@@ -123,6 +123,13 @@ const AccountSettings: React.FC = () => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       
+      // If account was locked (trial cancellation), force logout
+      if (response.data.account_locked) {
+        localStorage.removeItem('access_token');
+        navigate('/login');
+        return;
+      }
+
       setCancelSuccess(response.data.message);
       setShowCancelConfirm(false);
       

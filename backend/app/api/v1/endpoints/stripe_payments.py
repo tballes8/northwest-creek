@@ -511,7 +511,7 @@ async def handle_subscription_updated(subscription, db: AsyncSession):
 
         
 async def handle_subscription_deleted(subscription, db: AsyncSession):
-    """Handle subscription cancellation — downgrade to beginner"""
+    """Handle subscription cancellation — lock account"""
     user_id = subscription['metadata'].get('user_id')
     if not user_id:
         return
@@ -521,8 +521,9 @@ async def handle_subscription_deleted(subscription, db: AsyncSession):
     
     if user:
         user.subscription_tier = 'beginner'
+        user.is_active = False
         await db.commit()
-        print(f"⚠️ User {user.email} subscription canceled, downgraded to beginner")
+        print(f"🔒 User {user.email} subscription deleted, account locked")
 
 
 async def handle_payment_failed(invoice, db: AsyncSession):
@@ -612,8 +613,8 @@ async def cancel_subscription_immediate(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Immediately cancel subscription and downgrade to beginner.
-    Used when user wants instant cancellation (no access until period end).
+    Immediately cancel subscription and lock account.
+    Used for trial cancellations — user is not charged, account is deactivated.
     """
     try:
         customers = stripe.Customer.list(email=current_user.email, limit=1)
@@ -624,27 +625,32 @@ async def cancel_subscription_immediate(
             )
         
         customer = customers.data[0]
-        subscriptions = stripe.Subscription.list(
-            customer=customer.id,
-            status='active',
-            limit=10
-        )
+
+        # Search both active and trialing subscriptions
+        cancelled_ids = []
+        for sub_status in ('active', 'trialing'):
+            subscriptions = stripe.Subscription.list(
+                customer=customer.id,
+                status=sub_status,
+                limit=10
+            )
+            for sub in subscriptions.data:
+                stripe.Subscription.cancel(sub.id)
+                cancelled_ids.append(sub.id)
+                print(f"🚫 Subscription {sub.id} ({sub_status}) cancelled immediately for {current_user.email}")
         
-        for sub in subscriptions.data:
-            stripe.Subscription.cancel(sub.id)
-            print(f"🚫 Subscription {sub.id} cancelled immediately for {current_user.email}")
-        
-        # Downgrade user immediately
+        # Lock the account
         old_tier = current_user.subscription_tier
+        current_user.is_active = False
         current_user.subscription_tier = 'beginner'
         await db.commit()
         
-        print(f"⚠️ User {current_user.email} downgraded from {old_tier} to beginner (immediate cancel)")
+        print(f"🔒 User {current_user.email} account locked (was {old_tier}, immediate cancel)")
         
         return {
             "status": "cancelled",
-            "message": "Your subscription has been cancelled and your account has been downgraded to the Beginner tier.",
-            "new_tier": "beginner",
+            "message": "Your subscription has been cancelled and your account has been closed.",
+            "account_locked": True,
         }
         
     except HTTPException:
