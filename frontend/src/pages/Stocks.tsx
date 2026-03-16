@@ -989,7 +989,13 @@ const Stocks: React.FC = () => {
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-xl font-bold text-gray-900 dark:text-white">Price History</h3>
                   <div className="flex gap-2">
-                    {[30, 90, 180, 365].map((days) => (
+                    {[
+                      { days: 30, label: '30D' },
+                      { days: 90, label: '90D' },
+                      { days: 180, label: '180D' },
+                      { days: 365, label: '1Y' },
+                      { days: 1825, label: '5Y' },
+                    ].map(({ days, label }) => (
                       <button
                         key={days}
                         onClick={() => handleHistoryDaysChange(days)}
@@ -999,7 +1005,7 @@ const Stocks: React.FC = () => {
                             : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
                         }`}
                       >
-                        {days}D
+                        {label}
                       </button>
                     ))}
                   </div>

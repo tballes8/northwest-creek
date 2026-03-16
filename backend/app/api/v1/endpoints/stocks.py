@@ -159,14 +159,14 @@ async def get_company_info(ticker: str):
 @router.get("/historical/{ticker}", response_model=HistoricalData)
 async def get_historical_data(
     ticker: str,
-    days: int = Query(default=90, ge=1, le=365, description="Number of days of historical data")
+    days: int = Query(default=90, ge=1, le=1825, description="Number of days of historical data (max 5 years)")
 ):
     """
     Get historical price data
     
     **Parameters:**
     - **ticker**: Stock symbol
-    - **days**: Number of days of history (1-365, default 30)
+    - **days**: Number of days of history (1-1825, default 90)
     
     **Returns:**
     - Array of daily OHLCV (Open, High, Low, Close, Volume) data

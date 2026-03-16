@@ -56,6 +56,7 @@ const AccountSettings: React.FC = () => {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [cancelSuccess, setCancelSuccess] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [trialEnd, setTrialEnd] = useState<number | null>(null);
 
   // Change password state
   const [passwordData, setPasswordData] = useState({
@@ -70,6 +71,7 @@ const AccountSettings: React.FC = () => {
 
   useEffect(() => {
     loadUser();
+    loadSubscriptionStatus();
   }, []);
 
   const loadUser = async () => {
@@ -86,6 +88,26 @@ const AccountSettings: React.FC = () => {
       setLoading(false);
     }
   };
+
+  const loadSubscriptionStatus = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const res = await axios.get(`${API_URL}/api/v1/stripe/subscription-status`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.data.trial_end) {
+        setTrialEnd(res.data.trial_end);
+      }
+    } catch {
+      // Non-fatal
+    }
+  };
+
+  const isOnTrial = (() => {
+    if (!trialEnd) return false;
+    const now = Math.floor(Date.now() / 1000);
+    return trialEnd > now;
+  })();
 
 
   const handleCancelSubscription = async (immediate: boolean = false) => {
@@ -412,39 +434,56 @@ const AccountSettings: React.FC = () => {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
               <div className="bg-red-50 dark:bg-red-900/30 px-6 py-5 border-b dark:border-gray-700">
-                <h3 className="text-xl font-bold text-red-700 dark:text-red-400">Cancel Subscription?</h3>
+                <h3 className="text-xl font-bold text-red-700 dark:text-red-400">
+                  {isOnTrial ? 'Cancel Trial?' : 'Cancel Subscription?'}
+                </h3>
               </div>
               
               <div className="px-6 py-5">
                 <p className="text-gray-700 dark:text-gray-300 mb-4">
-                  Are you sure you want to cancel your <strong>{tierInfo.name}</strong> subscription?
+                  Are you sure you want to cancel your <strong>{tierInfo.name}</strong> {isOnTrial ? 'trial' : 'subscription'}?
                 </p>
                 
                 <div className="bg-gray-50 dark:bg-gray-750 rounded-lg p-4 mb-4 border dark:border-gray-600">
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-2"><strong>What happens when you cancel:</strong></p>
                   <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1.5">
-                    <li className="flex items-start gap-2">
-                      <span className="text-yellow-500 mt-0.5">•</span>
-                      You'll keep access until the end of your current billing period
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-yellow-500 mt-0.5">•</span>
-                      After that, your account will be downgraded to the Free plan
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-yellow-500 mt-0.5">•</span>
-                      Items exceeding Free tier limits will be preserved but read-only
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <span className="text-green-500 mt-0.5">•</span>
-                      You can resubscribe anytime to regain full access
-                    </li>
+                    {isOnTrial ? (
+                      <>
+                        <li className="flex items-start gap-2">
+                          <span className="text-yellow-500 mt-0.5">•</span>
+                          Your trial will end immediately — you will not be charged
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-yellow-500 mt-0.5">•</span>
+                          Your data (watchlist, portfolio, alerts) will be preserved
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-green-500 mt-0.5">•</span>
+                          You can resubscribe anytime to regain full access
+                        </li>
+                      </>
+                    ) : (
+                      <>
+                        <li className="flex items-start gap-2">
+                          <span className="text-yellow-500 mt-0.5">•</span>
+                          You'll keep access until the end of your current billing period
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-yellow-500 mt-0.5">•</span>
+                          Your data (watchlist, portfolio, alerts) will be preserved
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-green-500 mt-0.5">•</span>
+                          You can resubscribe anytime to regain full access
+                        </li>
+                      </>
+                    )}
                   </ul>
                 </div>
 
                 <div className="flex gap-3">
                   <button
-                    onClick={() => handleCancelSubscription(false)}
+                    onClick={() => handleCancelSubscription(isOnTrial)}
                     disabled={cancelling}
                     className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white rounded-lg font-semibold transition-colors"
                   >
@@ -456,6 +495,8 @@ const AccountSettings: React.FC = () => {
                         </svg>
                         Cancelling...
                       </span>
+                    ) : isOnTrial ? (
+                      'Yes, Cancel Trial Now'
                     ) : (
                       'Yes, Cancel at Period End'
                     )}
