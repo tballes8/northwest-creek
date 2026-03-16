@@ -775,38 +775,57 @@ async def get_dividends(ticker: str):
 async def search_tickers(q: str = Query(..., min_length=1, description="Search query - ticker symbol or company name")):
     """
     Search for stocks by ticker symbol or company name using FMP.
-    Returns matching tickers with company names.
+
+    Calls both /stable/search (company name matching) and
+    /stable/search-symbol (ticker symbol matching) in parallel,
+    then merges and deduplicates results with symbol matches first.
     """
+    query = q.strip()
+
     try:
         client = get_fmp_client()
-        resp = await client.get(
-            "search",
-            params={
-                "query": q.strip(),
-                "limit": 10,
-                "apikey": API_KEY,
-            },
+        search_params = {"query": query, "limit": 10, "apikey": API_KEY}
+
+        # Fire both endpoints in parallel
+        name_resp, symbol_resp = await asyncio.gather(
+            client.get("search", params=search_params),
+            client.get("search-symbol", params=search_params),
+            return_exceptions=True,
         )
 
-        if resp.status_code != 200:
-            return {"results": []}
+        def _parse_response(resp) -> list:
+            if isinstance(resp, Exception):
+                return []
+            if resp.status_code != 200:
+                return []
+            data = resp.json()
+            return data if isinstance(data, list) else []
 
-        data = resp.json()
-        if not isinstance(data, list):
-            return {"results": []}
+        name_data = _parse_response(name_resp)
+        symbol_data = _parse_response(symbol_resp)
 
-        results = []
-        for item in data:
-            results.append({
+        def _to_result(item: dict) -> dict:
+            return {
                 "ticker": item.get("symbol"),
                 "name": item.get("name"),
                 "market": "stocks",
                 "type": item.get("stockExchange"),
                 "primary_exchange": item.get("stockExchange"),
                 "active": True,
-            })
+            }
 
-        return {"results": results}
+        # Symbol matches first (more relevant when user types a ticker),
+        # then name matches, deduplicated by ticker symbol.
+        seen: set = set()
+        results: list = []
+        for item in symbol_data + name_data:
+            sym = item.get("symbol")
+            if not sym or sym in seen:
+                continue
+            seen.add(sym)
+            results.append(_to_result(item))
+
+        return {"results": results[:15]}
 
     except Exception as e:
         print(f"Ticker search error: {e}")
