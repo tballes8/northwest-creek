@@ -340,7 +340,13 @@ async def get_commodity_quotes():
                 continue
             price = item.get("price")
             change = item.get("change")
-            change_pct = item.get("changesPercentage") or item.get("changePercentage")
+            change_pct = item.get("changesPercentage")
+            if change_pct is None:
+                change_pct = item.get("changePercentage")
+            if change_pct is None and price is not None and change is not None:
+                prev = price - change
+                if prev != 0:
+                    change_pct = round((change / prev) * 100, 4)
             commodities.append({
                 "name": display_name,
                 "symbol": symbol,
@@ -430,7 +436,13 @@ async def get_crypto_quotes():
                 continue
             price = item.get("price")
             change = item.get("change")
-            change_pct = item.get("changesPercentage") or item.get("changePercentage")
+            change_pct = item.get("changesPercentage")
+            if change_pct is None:
+                change_pct = item.get("changePercentage")
+            if change_pct is None and price is not None and change is not None:
+                prev = price - change
+                if prev != 0:
+                    change_pct = round((change / prev) * 100, 4)
             cryptos.append({
                 "name": display_name,
                 "symbol": symbol,
@@ -521,7 +533,13 @@ async def get_index_quotes():
                 continue
             price = item.get("price")
             change = item.get("change")
-            change_pct = item.get("changesPercentage") or item.get("changePercentage")
+            change_pct = item.get("changesPercentage")
+            if change_pct is None:
+                change_pct = item.get("changePercentage")
+            if change_pct is None and price is not None and change is not None:
+                prev = price - change
+                if prev != 0:
+                    change_pct = round((change / prev) * 100, 4)
             indexes.append({
                 "name": display_name,
                 "symbol": symbol,
