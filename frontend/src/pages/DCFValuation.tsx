@@ -902,7 +902,7 @@ const DCFValuation: React.FC = () => {
                     </div>
                   )}
                   {suggestions.growth_profile.rule_of_40 != null && (
-                    <div className={`text-center px-4 py-2 rounded-lg border ${
+                    <div className={`text-center px-8 py-4 rounded-lg border ${
                       suggestions.growth_profile.rule_of_40 >= 40
                         ? 'bg-green-50 dark:bg-green-900/30 border-green-300 dark:border-green-700'
                         : suggestions.growth_profile.rule_of_40 >= 20
