@@ -918,8 +918,8 @@ const DCFValuation: React.FC = () => {
                         }`}>
                         {suggestions.growth_profile.rule_of_40}
                       </div>
-                      <div className="text-[12px] font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Rule of 40</div>
-                      <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                      <div className="text-[14px] font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Rule of 40</div>
+                      <div className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5">
                         {suggestions.growth_profile.rule_of_40_components.revenue_growth_yoy != null && (
                           <span>Growth {suggestions.growth_profile.rule_of_40_components.revenue_growth_yoy > 0 ? '+' : ''}{suggestions.growth_profile.rule_of_40_components.revenue_growth_yoy}%</span>
                         )}
@@ -927,7 +927,7 @@ const DCFValuation: React.FC = () => {
                           <span> + FCF {suggestions.growth_profile.rule_of_40_components.fcf_margin > 0 ? '+' : ''}{suggestions.growth_profile.rule_of_40_components.fcf_margin}%</span>
                         )}
                       </div>
-                      <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-1 leading-snug max-w-[140px] mx-auto">
+                      <div className="text-[12px] text-gray-400 dark:text-gray-500 mt-1 leading-snug max-w-[140px] mx-auto">
                         Revenue growth&nbsp;% plus free cash flow margin&nbsp;%. Above 40 signals strong growth-profitability balance.
                       </div>
                     </div>
