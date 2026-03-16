@@ -25,13 +25,13 @@ def _safe_error(e: Exception) -> str:
 
 router = APIRouter()
 
-def require_paid_tier(current_user: User = Depends(get_current_user)):
-    """Require paid tier (Casual, Active, or Professional) for Technical Analysis access"""
+def require_subscription(current_user: User = Depends(get_current_user)):
+    """Validate user has a recognized subscription tier for Technical Analysis access"""
     allowed_tiers = ["beginner", "casual", "active", "professional"]
     if current_user.subscription_tier not in allowed_tiers:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Technical Analysis requires a paid subscription! Current tier: {current_user.subscription_tier.title()}. Upgrade to access this feature!"
+            detail=f"Technical Analysis requires a valid subscription. Current tier: {current_user.subscription_tier.title()}. Please contact support."
         )
     return current_user
 
@@ -74,7 +74,7 @@ def _strip_history(indicator_data):
 async def analyze_stock(
     ticker: str,
     days: int = Query(250, ge=30, le=365),
-    current_user: User = Depends(require_paid_tier),  # ← Changed
+    current_user: User = Depends(require_subscription),  # ← Changed
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -661,7 +661,7 @@ async def screen_watchlist(
     above_sma_50: Optional[bool] = Query(None, description="Price above 50-day SMA"),
     bollinger_oversold: Optional[bool] = Query(None, description="Below lower Bollinger Band"),
     bollinger_overbought: Optional[bool] = Query(None, description="Above upper Bollinger Band"),
-    current_user: User = Depends(require_paid_tier),  # CHANGED THIS LINE!
+    current_user: User = Depends(require_subscription),  # CHANGED THIS LINE!
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -840,7 +840,7 @@ async def screen_watchlist(
 
 @router.get("/presets/oversold")
 async def screen_oversold(
-    current_user: User = Depends(require_paid_tier),
+    current_user: User = Depends(require_subscription),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -862,7 +862,7 @@ async def screen_oversold(
 
 @router.get("/presets/overbought")
 async def screen_overbought(
-    current_user: User = Depends(require_paid_tier),
+    current_user: User = Depends(require_subscription),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -884,7 +884,7 @@ async def screen_overbought(
 
 @router.get("/presets/strong-uptrend")
 async def screen_strong_uptrend(
-    current_user: User = Depends(require_paid_tier),
+    current_user: User = Depends(require_subscription),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -908,7 +908,7 @@ async def screen_strong_uptrend(
 
 @router.get("/presets/reversal-candidates")
 async def screen_reversal_candidates(
-    current_user: User = Depends(require_paid_tier),
+    current_user: User = Depends(require_subscription),
     db: AsyncSession = Depends(get_db)
 ):
     """

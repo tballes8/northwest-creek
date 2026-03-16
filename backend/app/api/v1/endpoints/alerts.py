@@ -17,17 +17,9 @@ from app.schemas.alert import (
 from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.services.market_data import market_data_service
-from app.core.tier_limits import can_use_sms_alerts
+from app.core.tier_limits import can_use_sms_alerts, get_tier_limit, get_upgrade_tier
 
 router = APIRouter()
-
-# Subscription limits
-ALERT_LIMITS = {
-    "free": 0,
-    "casual": 5,
-    "active": 20,
-    "professional": 50
-}
 
 
 @router.post("/", response_model=AlertResponse, status_code=status.HTTP_201_CREATED)
@@ -44,8 +36,8 @@ async def create_alert(
     - Alert when price goes BELOW target (dip alert)
     
     **Limits by subscription tier:**
-    - Free: 0 alerts
-    - Casual: 5 alerts
+    - Beginner: 5 alerts
+    - Casual: 10 alerts
     - Active: 20 alerts
     - Professional: 50 alerts
     
@@ -60,15 +52,13 @@ async def create_alert(
     current_count = count_result.scalar()
     
     # Check limit
-    limit = ALERT_LIMITS.get(current_user.subscription_tier, 0)
+    limit = get_tier_limit(current_user.subscription_tier, "alerts")
     if current_count >= limit:
         # Get upgrade info
-        if current_user.subscription_tier == "free":
-            upgrade_msg = "Upgrade to Casual for 5 alerts ($20/month) or Active for 20 alerts ($40/month)!"
-        elif current_user.subscription_tier == "casual":
-            upgrade_msg = "Upgrade to Active for 20 alerts ($40/month) or Professional for 50 alerts ($100/month)!"
-        elif current_user.subscription_tier == "active":
-            upgrade_msg = "Upgrade to Professional for 50 alerts ($100/month)!"            
+        next_tier = get_upgrade_tier(current_user.subscription_tier)
+        if next_tier:
+            next_limit = get_tier_limit(next_tier, "alerts")
+            upgrade_msg = f"Upgrade to {next_tier.capitalize()} for {next_limit} alerts!"
         else:
             upgrade_msg = "Contact support for custom limits."
         
@@ -152,10 +142,10 @@ async def create_alert(
     remaining = limit - new_count
     
     if remaining > 0 and remaining <= 2:
-        if current_user.subscription_tier == "casual":
-            warning = f"⚠️ Warning: Only {remaining} alert{'s' if remaining != 1 else ''} remaining! Upgrade to Active for 20 alerts ($40/month)."
-        elif current_user.subscription_tier == "active":
-            warning = f"⚠️ Warning: Only {remaining} alert{'s' if remaining != 1 else ''} remaining! Upgrade to Professional for 50 alerts ($100/month)."
+        next_tier = get_upgrade_tier(current_user.subscription_tier)
+        if next_tier:
+            next_limit = get_tier_limit(next_tier, "alerts")
+            warning = f"⚠️ Warning: Only {remaining} alert{'s' if remaining != 1 else ''} remaining! Upgrade to {next_tier.capitalize()} for {next_limit} alerts."
         else:
             warning = None
         
@@ -186,7 +176,7 @@ async def get_alerts(
     )
     alerts = result.scalars().all()
     
-    limit = ALERT_LIMITS.get(current_user.subscription_tier, 0)
+    limit = get_tier_limit(current_user.subscription_tier, "alerts")
     
     if not alerts:
         return AlertsSummary(

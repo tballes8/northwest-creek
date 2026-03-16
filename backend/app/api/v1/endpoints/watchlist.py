@@ -10,25 +10,26 @@ from app.core.security import get_current_user
 from app.db.models import User, Watchlist  # ← SQLAlchemy models
 from app.schemas import watchlist as schemas  # ← Pydantic schemas
 from app.services.market_data import market_data_service
+from app.core.tier_limits import get_tier_limit, get_upgrade_tier
 from uuid import UUID
 
 router = APIRouter()
 
 async def check_watchlist_limit(user: User, current_count: int) -> None:
     """Check if user has reached their watchlist limit"""
-    limits = {
-        "free": 5,
-        "casual": 20,
-        "active": 45,
-        "professional": 75
-    }
-    
-    limit = limits.get(user.subscription_tier, 0)
+    limit = get_tier_limit(user.subscription_tier, "watchlist_stocks")
     
     if current_count >= limit:
+        next_tier = get_upgrade_tier(user.subscription_tier)
+        if next_tier:
+            next_limit = get_tier_limit(next_tier, "watchlist_stocks")
+            upgrade_msg = f" Upgrade to {next_tier.capitalize()} for {next_limit} stocks."
+        else:
+            upgrade_msg = ""
+        
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Watchlist limit reached. {user.subscription_tier.capitalize()} tier allows {int(limit)} stocks."
+            detail=f"Watchlist limit reached. {user.subscription_tier.capitalize()} tier allows {limit} stocks.{upgrade_msg}"
         )
 
 
