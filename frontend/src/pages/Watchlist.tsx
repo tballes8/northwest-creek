@@ -37,6 +37,10 @@ const Watchlist: React.FC = () => {
   const [editTargetPrice, setEditTargetPrice] = useState('');
   const previousPricesRef = useRef<Map<string, number>>(new Map());
 
+  // Sorting state
+  const [sortField, setSortField] = useState<string>('');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
   useEffect(() => {
     loadData();
   }, []);
@@ -326,6 +330,57 @@ const Watchlist: React.FC = () => {
     setShowIntradayModal(true);
   };
 
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const sortedWatchlist = useMemo(() => {
+    if (!sortField) return watchlist;
+    return [...watchlist].sort((a, b) => {
+      let aVal: any;
+      let bVal: any;
+
+      switch (sortField) {
+        case 'ticker':
+          aVal = a.ticker; bVal = b.ticker;
+          break;
+        case 'sector':
+          aVal = getSector(a.ticker); bVal = getSector(b.ticker);
+          break;
+        case 'price':
+          aVal = prices.get(a.ticker)?.price ?? a.price ?? 0;
+          bVal = prices.get(b.ticker)?.price ?? b.price ?? 0;
+          break;
+        case 'change':
+          aVal = a.change_percent ?? 0; bVal = b.change_percent ?? 0;
+          break;
+        case 'added_at':
+          aVal = (a as any).added_at || (a as any).created_at || '';
+          bVal = (b as any).added_at || (b as any).created_at || '';
+          break;
+        case 'target_price':
+          aVal = a.target_price ?? 0; bVal = b.target_price ?? 0;
+          break;
+        case 'vs_target':
+          aVal = a.price_vs_target_percent ?? 0; bVal = b.price_vs_target_percent ?? 0;
+          break;
+        default:
+          return 0;
+      }
+
+      if (typeof aVal === 'string') {
+        const cmp = aVal.localeCompare(bVal);
+        return sortDirection === 'asc' ? cmp : -cmp;
+      }
+      return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+    });
+  }, [watchlist, sortField, sortDirection, prices]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 dark:bg-gray-800 flex items-center justify-center transition-colors duration-200">
@@ -590,19 +645,43 @@ const Watchlist: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ticker</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Sector</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Current Price</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Day Change</th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Watching Since</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Started At</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">vs Start</th>
+                  {[
+                    { key: 'ticker', label: 'Ticker', align: 'text-left' },
+                    { key: 'sector', label: 'Sector', align: 'text-center' },
+                    { key: 'price', label: 'Current Price', align: 'text-right' },
+                    { key: 'change', label: 'Day Change', align: 'text-right' },
+                    { key: 'added_at', label: 'Watching Since', align: 'text-center' },
+                    { key: 'target_price', label: 'Started At', align: 'text-right' },
+                    { key: 'vs_target', label: 'vs Start', align: 'text-right' },
+                  ].map(col => (
+                    <th
+                      key={col.key}
+                      onClick={() => handleSort(col.key)}
+                      className={`px-6 py-3 ${col.align} text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200 select-none transition-colors`}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        {col.label}
+                        {sortField === col.key ? (
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            {sortDirection === 'asc'
+                              ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                              : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            }
+                          </svg>
+                        ) : (
+                          <svg className="w-3 h-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                          </svg>
+                        )}
+                      </span>
+                    </th>
+                  ))}
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Notes</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-700 divide-y divide-gray-200 dark:divide-gray-600">
-                {watchlist.map((stock) => (
+                {sortedWatchlist.map((stock) => (
                   <tr key={stock.id} className="hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button
