@@ -927,7 +927,7 @@ const DCFValuation: React.FC = () => {
                           <span> + FCF {suggestions.growth_profile.rule_of_40_components.fcf_margin > 0 ? '+' : ''}{suggestions.growth_profile.rule_of_40_components.fcf_margin}%</span>
                         )}
                       </div>
-                      <div className="text-[12px] text-gray-400 dark:text-gray-500 mt-1 leading-snug max-w-[200px] mx-auto">
+                      <div className="text-[12px] text-gray-400 dark:text-gray-500 mt-.5 leading-snug max-w-[200px] mx-auto">
                         Revenue growth&nbsp;% plus free cash flow margin&nbsp;%. Above 40 signals strong growth-profitability balance.
                       </div>
                     </div>
