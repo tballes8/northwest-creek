@@ -902,7 +902,7 @@ const DCFValuation: React.FC = () => {
                     </div>
                   )}
                   {suggestions.growth_profile.rule_of_40 != null && (
-                    <div className={`text-center px-8 py-3.5 rounded-lg border ${
+                    <div className={`text-center px-7 py-3 rounded-lg border ${
                       suggestions.growth_profile.rule_of_40 >= 40
                         ? 'bg-green-50 dark:bg-green-900/30 border-green-300 dark:border-green-700'
                         : suggestions.growth_profile.rule_of_40 >= 20
@@ -927,7 +927,7 @@ const DCFValuation: React.FC = () => {
                           <span> + FCF {suggestions.growth_profile.rule_of_40_components.fcf_margin > 0 ? '+' : ''}{suggestions.growth_profile.rule_of_40_components.fcf_margin}%</span>
                         )}
                       </div>
-                      <div className="text-[12px] text-gray-400 dark:text-gray-500 mt-1 leading-snug max-w-[180px] mx-auto">
+                      <div className="text-[12px] text-gray-400 dark:text-gray-500 mt-1 leading-snug max-w-[200px] mx-auto">
                         Revenue growth&nbsp;% plus free cash flow margin&nbsp;%. Above 40 signals strong growth-profitability balance.
                       </div>
                     </div>
