@@ -99,7 +99,7 @@ async def _fetch_shares_outstanding(ticker: str) -> Optional[int]:
     return None
 
 
-def require_subscription(current_user: User = Depends(get_current_user)):
+def require_valid_tier(current_user: User = Depends(get_current_user)):
     """Validate user has a recognized subscription tier for DCF Valuation access"""
     allowed_tiers = ["beginner", "casual", "active", "professional"]
     if current_user.subscription_tier not in allowed_tiers:
@@ -113,7 +113,7 @@ def require_subscription(current_user: User = Depends(get_current_user)):
 @router.get("/suggestions/{ticker}")
 async def get_dcf_suggestions(
     ticker: str,
-    current_user: User = Depends(require_subscription),
+    current_user: User = Depends(require_valid_tier),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -421,7 +421,7 @@ async def calculate_dcf(
     terminal_growth: float = Query(0.025, ge=0, le=0.10, description="Terminal growth rate (decimal)"),
     discount_rate: float = Query(0.10, ge=0.01, le=0.30, description="Discount rate / WACC (decimal)"),
     projection_years: int = Query(5, ge=3, le=10, description="Years to project"),
-    current_user: User = Depends(require_subscription),
+    current_user: User = Depends(require_valid_tier),
     db: AsyncSession = Depends(get_db)
 ):
     """

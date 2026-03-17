@@ -3,13 +3,13 @@ Portfolio endpoints - Track your investments
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 from typing import List
 from uuid import UUID
 from decimal import Decimal
 
 from app.db.session import get_db
-from app.core.security import get_current_user
+from app.api.dependencies import get_current_user
 from app.db.models import User, Portfolio
 from app.schemas import portfolio as schemas
 from app.services.market_data import market_data_service
@@ -130,10 +130,10 @@ async def add_position(
     """Add a position to portfolio"""
     # Check portfolio limit
     count_result = await db.execute(
-        select(Portfolio)
+        select(func.count(Portfolio.id))
         .where(Portfolio.user_id == current_user.id)
     )
-    current_count = len(count_result.scalars().all())
+    current_count = count_result.scalar() or 0
     await check_portfolio_limit(current_user, current_count)
     
     # Verify ticker is valid by fetching quote

@@ -332,7 +332,7 @@ async def update_alert(
     try:
         quote = await market_data_service.get_quote(alert.ticker)
         current_price = quote["price"]
-    except:
+    except Exception:
         current_price = None
     
     # Calculate distance

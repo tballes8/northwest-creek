@@ -644,57 +644,42 @@ async def get_ipos():
 
     try:
         client = get_fmp_client()
-        # Fetch upcoming IPOs (today through 21 days out)
-        try:
-            resp = await client.get(
-                "ipos-calendar",
-                params={
-                    "from": today,
-                    "to": twenty_one_days_ahead,
-                    "apikey": API_KEY,
-                },
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                if isinstance(data, list):
-                    for ipo in data:
-                        sym = ipo.get("symbol", "")
-                        exchange = (ipo.get("exchange") or "").upper()
-                        if _is_junk_symbol(sym):
-                            continue
-                        if exchange and exchange not in US_EXCHANGES:
-                            continue
-                        results["upcoming"].append(_build_ipo_item(ipo, "upcoming"))
-                        if len(results["upcoming"]) >= MAX_PER_TAB:
-                            break
-        except Exception as inner_err:
-            print(f"IPO fetch error for upcoming: {inner_err}")
 
-        # Fetch recent IPOs (last 7 days) as "pending/confirmed"
-        try:
-            resp = await client.get(
+        # Fetch upcoming and recent IPOs in parallel
+        upcoming_resp, recent_resp = await asyncio.gather(
+            client.get(
                 "ipos-calendar",
-                params={
-                    "from": seven_days_ago,
-                    "to": today,
-                    "apikey": API_KEY,
-                },
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                if isinstance(data, list):
-                    for ipo in data:
-                        sym = ipo.get("symbol", "")
-                        exchange = (ipo.get("exchange") or "").upper()
-                        if _is_junk_symbol(sym):
-                            continue
-                        if exchange and exchange not in US_EXCHANGES:
-                            continue
-                        results["pending"].append(_build_ipo_item(ipo, "recent"))
-                        if len(results["pending"]) >= MAX_PER_TAB:
-                            break
-        except Exception as inner_err:
-            print(f"IPO fetch error for recent: {inner_err}")
+                params={"from": today, "to": twenty_one_days_ahead, "apikey": API_KEY},
+            ),
+            client.get(
+                "ipos-calendar",
+                params={"from": seven_days_ago, "to": today, "apikey": API_KEY},
+            ),
+            return_exceptions=True,
+        )
+
+        def _process_ipo_response(resp, status_label: str, key: str):
+            if isinstance(resp, Exception):
+                print(f"IPO fetch error for {key}: {resp}")
+                return
+            if resp.status_code != 200:
+                return
+            data = resp.json()
+            if not isinstance(data, list):
+                return
+            for ipo in data:
+                sym = ipo.get("symbol", "")
+                exchange = (ipo.get("exchange") or "").upper()
+                if _is_junk_symbol(sym):
+                    continue
+                if exchange and exchange not in US_EXCHANGES:
+                    continue
+                results[key].append(_build_ipo_item(ipo, status_label))
+                if len(results[key]) >= MAX_PER_TAB:
+                    break
+
+        _process_ipo_response(upcoming_resp, "upcoming", "upcoming")
+        _process_ipo_response(recent_resp, "recent", "pending")
 
         return results
 
