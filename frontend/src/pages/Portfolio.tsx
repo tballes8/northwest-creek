@@ -60,7 +60,7 @@ const Portfolio: React.FC = () => {
   }>>({});
 
   // Column sorting
-  type SortColumn = 'ticker' | 'sector' | 'quantity' | 'buy_price' | 'current_price' | 'total_value' | 'profit_loss';
+  type SortColumn = 'ticker' | 'sector' | 'quantity' | 'buy_price' | 'current_price' | 'day_change' | 'total_value' | 'profit_loss';
   const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
@@ -483,6 +483,15 @@ const Portfolio: React.FC = () => {
             aVal = prices.get(a.ticker)?.price ?? a.current_price ?? 0;
             bVal = prices.get(b.ticker)?.price ?? b.current_price ?? 0;
             break;
+          case 'day_change': {
+            const aPx = prices.get(a.ticker)?.price ?? a.current_price ?? 0;
+            const aPrev = prevCloseMap[a.ticker];
+            aVal = aPrev ? ((aPx - aPrev) / aPrev) * 100 : 0;
+            const bPx = prices.get(b.ticker)?.price ?? b.current_price ?? 0;
+            const bPrev = prevCloseMap[b.ticker];
+            bVal = bPrev ? ((bPx - bPrev) / bPrev) * 100 : 0;
+            break;
+          }
           case 'total_value':
             aVal = a.total_value ?? 0;
             bVal = b.total_value ?? 0;
@@ -504,7 +513,7 @@ const Portfolio: React.FC = () => {
     }
 
     return result;
-  }, [portfolio, sectorFilter, sortColumn, sortDirection, prices]);
+  }, [portfolio, sectorFilter, sortColumn, sortDirection, prices, prevCloseMap]);
 
   if (loading) {
     return (
@@ -827,6 +836,7 @@ const Portfolio: React.FC = () => {
                     { key: 'quantity', label: 'Quantity', align: 'text-right' },
                     { key: 'buy_price', label: 'Cost Basis', align: 'text-right' },
                     { key: 'current_price', label: 'Current Price', align: 'text-right' },
+                    { key: 'day_change', label: 'Day Change', align: 'text-right' },
                     { key: 'total_value', label: 'Total Value', align: 'text-right' },
                     { key: 'profit_loss', label: 'P&L', align: 'text-right' },
                   ] as { key: SortColumn; label: string; align: string }[]).map(col => (
@@ -958,6 +968,24 @@ const Portfolio: React.FC = () => {
                                 {latePct! > 0 ? '↑' : '↓'}{Math.abs(latePct!).toFixed(2)}%
                               </span>
                             )}
+                          </div>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      {(() => {
+                        const displayPrice = prices.get(position.ticker)?.price ?? position.current_price;
+                        const prevClose = prevCloseMap[position.ticker];
+                        if (!displayPrice || !prevClose) return <div className="text-sm text-gray-500">-</div>;
+                        const change = displayPrice - prevClose;
+                        const changePct = (change / prevClose) * 100;
+                        const isUp = change >= 0;
+                        return (
+                          <div className={`text-sm font-semibold ${isUp ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {isUp ? '+' : ''}${change.toFixed(2)}
+                            <div className="text-xs">
+                              ({isUp ? '+' : ''}{changePct.toFixed(2)}%)
+                            </div>
                           </div>
                         );
                       })()}

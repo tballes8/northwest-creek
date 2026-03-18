@@ -1,7 +1,7 @@
 """
 Company Financials API Endpoints
 Provides financial statements and derived DCF inputs via FMP.
-⭐ PAID TIERS ONLY (Casual, Active, Professional)
+⭐ ALL PAID TIERS (Beginner, Casual, Active, Professional)
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.db.models import User
@@ -11,13 +11,13 @@ from app.services.financials_service import get_company_financials
 router = APIRouter()
 
 
-def require_paid_tier(current_user: User = Depends(get_current_user)):
-    """Require paid tier (Casual, Active, or Professional) for financials access"""
-    allowed_tiers = ["casual", "active", "professional"]
+def require_valid_tier(current_user: User = Depends(get_current_user)):
+    """Validate user has a recognized subscription tier for financials access"""
+    allowed_tiers = ["beginner", "casual", "active", "professional"]
     if current_user.subscription_tier not in allowed_tiers:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Financial summaries require a paid subscription! Current tier: {current_user.subscription_tier.title()}. Upgrade to access this feature!"
+            detail=f"Financial summaries require a valid subscription. Current tier: {current_user.subscription_tier.title()}. Please contact support."
         )
     return current_user
 
@@ -25,7 +25,7 @@ def require_paid_tier(current_user: User = Depends(get_current_user)):
 @router.get("/{ticker}")
 async def get_financials(
     ticker: str,
-    current_user: User = Depends(require_paid_tier),
+    current_user: User = Depends(require_valid_tier),
 ):
     """
     Get comprehensive company financial data:
