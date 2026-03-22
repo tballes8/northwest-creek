@@ -398,7 +398,7 @@ const pages = [
   { id: "iv", label: "IV Solver", icon: "σ" },
 ];
 
-export default function options-calculator() {
+export default function OptionsCalculator() {
   const [page, setPage] = useState("pricing");
   const [params, setParams] = useState({ S: "150.00", K: "155.00", days: "30", r: "5.0", sigma: "25.0", type: "call" });
 
