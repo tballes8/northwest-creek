@@ -26,6 +26,7 @@ import MICDecoder from './pages/MICDecoder';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsConditions from './pages/TermsConditions';
 import FAQ from './pages/FAQ';
+import OptionsCalculator from './pages/OptionsCalculator';
 
 
 const Payment = React.lazy(() => import('./pages/Payment'));
@@ -72,6 +73,7 @@ function App() {
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsConditions />} />
             <Route path="/faq" element={<FAQ />} />
+            <Route path="/options-calculator" element={<OptionsCalculator />} />
           </Routes>
         </Suspense>
       </LivePriceProvider>
