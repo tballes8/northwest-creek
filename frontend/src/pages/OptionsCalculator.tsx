@@ -391,12 +391,299 @@ function IVSolverPage({ params }) {
   );
 }
 
+// ─── Spread Strategy Definitions ───
+const STRATEGIES = {
+  bullCall: {
+    label: "Bull Call Spread",
+    desc: "Buy lower-strike call, sell higher-strike call. Bullish, limited risk & reward.",
+    legs: (S, K1, K2, _K3, _K4, T, r, sig) => [
+      { type: "call", K: K1, dir: 1, label: "Buy Call" },
+      { type: "call", K: K2, dir: -1, label: "Sell Call" },
+    ],
+    strikes: ["K1", "K2"],
+    strikeLabels: { K1: "Lower Strike ($)", K2: "Upper Strike ($)" },
+    defaults: (S) => ({ K1: (S * 0.97).toFixed(2), K2: (S * 1.03).toFixed(2) }),
+  },
+  bearPut: {
+    label: "Bear Put Spread",
+    desc: "Buy higher-strike put, sell lower-strike put. Bearish, limited risk & reward.",
+    legs: (S, K1, K2) => [
+      { type: "put", K: K2, dir: 1, label: "Buy Put" },
+      { type: "put", K: K1, dir: -1, label: "Sell Put" },
+    ],
+    strikes: ["K1", "K2"],
+    strikeLabels: { K1: "Lower Strike ($)", K2: "Upper Strike ($)" },
+    defaults: (S) => ({ K1: (S * 0.97).toFixed(2), K2: (S * 1.03).toFixed(2) }),
+  },
+  ironCondor: {
+    label: "Iron Condor",
+    desc: "Sell OTM put & call spreads. Profits from low volatility within a price range.",
+    legs: (S, K1, K2, K3, K4) => [
+      { type: "put", K: K1, dir: 1, label: "Buy Put (wing)" },
+      { type: "put", K: K2, dir: -1, label: "Sell Put" },
+      { type: "call", K: K3, dir: -1, label: "Sell Call" },
+      { type: "call", K: K4, dir: 1, label: "Buy Call (wing)" },
+    ],
+    strikes: ["K1", "K2", "K3", "K4"],
+    strikeLabels: { K1: "Put Wing ($)", K2: "Put Short ($)", K3: "Call Short ($)", K4: "Call Wing ($)" },
+    defaults: (S) => ({ K1: (S * 0.90).toFixed(2), K2: (S * 0.95).toFixed(2), K3: (S * 1.05).toFixed(2), K4: (S * 1.10).toFixed(2) }),
+  },
+  straddle: {
+    label: "Straddle",
+    desc: "Buy call & put at the same strike. Profits from large moves in either direction.",
+    legs: (S, K1) => [
+      { type: "call", K: K1, dir: 1, label: "Buy Call" },
+      { type: "put", K: K1, dir: 1, label: "Buy Put" },
+    ],
+    strikes: ["K1"],
+    strikeLabels: { K1: "Strike Price ($)" },
+    defaults: (S) => ({ K1: S.toFixed(2) }),
+  },
+};
+
+// ─── Spreads Page ───
+function SpreadsPage({ params }) {
+  const S = +params.S, T = +params.days / 365, r = +params.r / 100, sig = +params.sigma / 100;
+  const [strategy, setStrategy] = useState("bullCall");
+  const strat = STRATEGIES[strategy];
+  const [strikes, setStrikes] = useState(() => strat.defaults(+params.S));
+
+  const handleStrategyChange = (key) => {
+    setStrategy(key);
+    setStrikes(STRATEGIES[key].defaults(S));
+  };
+
+  const setStrike = (k) => (e) => setStrikes(prev => ({ ...prev, [k]: e.target.value }));
+
+  const K1 = +strikes.K1 || S, K2 = +strikes.K2 || S * 1.03, K3 = +strikes.K3 || S * 1.05, K4 = +strikes.K4 || S * 1.10;
+  const legs = strat.legs(S, K1, K2, K3, K4, T, r, sig);
+
+  // Calculate prices and Greeks per leg
+  const legDetails = legs.map(leg => {
+    const price = bsPrice(S, leg.K, T, r, sig, leg.type);
+    const greeks = bsGreeks(S, leg.K, T, r, sig, leg.type);
+    return { ...leg, price, greeks };
+  });
+
+  const netPremium = legDetails.reduce((sum, l) => sum + l.dir * l.price, 0);
+  const netGreeks = {
+    delta: legDetails.reduce((s, l) => s + l.dir * l.greeks.delta, 0),
+    gamma: legDetails.reduce((s, l) => s + l.dir * l.greeks.gamma, 0),
+    theta: legDetails.reduce((s, l) => s + l.dir * l.greeks.theta, 0),
+    vega: legDetails.reduce((s, l) => s + l.dir * l.greeks.vega, 0),
+    rho: legDetails.reduce((s, l) => s + l.dir * l.greeks.rho, 0),
+  };
+
+  // P&L at expiration across price range
+  const lo = S * 0.7, hi = S * 1.3, steps = 150;
+  const pts = [];
+  let minPnl = Infinity, maxPnl = -Infinity;
+  for (let i = 0; i <= steps; i++) {
+    const st = lo + (hi - lo) * i / steps;
+    let pnlExp = 0, pnlNow = 0;
+    for (const leg of legDetails) {
+      const intrinsic = Math.max(leg.type === "call" ? st - leg.K : leg.K - st, 0);
+      pnlExp += leg.dir * (intrinsic - leg.price);
+      pnlNow += leg.dir * (bsPrice(st, leg.K, T, r, sig, leg.type) - leg.price);
+    }
+    pts.push({ st, pnlExp, pnlNow });
+    minPnl = Math.min(minPnl, pnlExp, pnlNow);
+    maxPnl = Math.max(maxPnl, pnlExp, pnlNow);
+  }
+  const pad = (maxPnl - minPnl) * 0.1 || 5;
+  const yMin = minPnl - pad, yMax = maxPnl + pad;
+
+  // SVG chart
+  const W = 640, H = 300, mx = 55, my = 30;
+  const toX = (v) => mx + (v - lo) / (hi - lo) * (W - 2 * mx);
+  const toY = (v) => my + (1 - (v - yMin) / (yMax - yMin)) * (H - 2 * my);
+  const pathExp = pts.map((p, i) => `${i === 0 ? "M" : "L"}${toX(p.st).toFixed(1)},${toY(p.pnlExp).toFixed(1)}`).join("");
+  const pathNow = pts.map((p, i) => `${i === 0 ? "M" : "L"}${toX(p.st).toFixed(1)},${toY(p.pnlNow).toFixed(1)}`).join("");
+  const zeroY = toY(0);
+
+  // Y-axis ticks
+  const yTicks = [];
+  const yRange = yMax - yMin;
+  const yStep = Math.pow(10, Math.floor(Math.log10(yRange))) || 1;
+  const niceStep = yRange / yStep > 8 ? yStep * 2 : yRange / yStep < 3 ? yStep / 2 : yStep;
+  for (let v = Math.ceil(yMin / niceStep) * niceStep; v <= yMax; v += niceStep) yTicks.push(v);
+
+  // Max profit / loss / breakevens from the expiration P&L curve
+  const expPnls = pts.map(p => p.pnlExp);
+  const maxProfit = Math.max(...expPnls);
+  const maxLoss = Math.min(...expPnls);
+  // Find breakevens (zero crossings)
+  const breakevens = [];
+  for (let i = 1; i < pts.length; i++) {
+    if ((pts[i - 1].pnlExp <= 0 && pts[i].pnlExp >= 0) || (pts[i - 1].pnlExp >= 0 && pts[i].pnlExp <= 0)) {
+      const ratio = Math.abs(pts[i - 1].pnlExp) / (Math.abs(pts[i - 1].pnlExp) + Math.abs(pts[i].pnlExp));
+      breakevens.push(pts[i - 1].st + ratio * (pts[i].st - pts[i - 1].st));
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {/* Strategy selector */}
+      <div style={{ ...cardBox, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+        <span style={{ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginRight: 4 }}>Strategy:</span>
+        {Object.entries(STRATEGIES).map(([key, s]) => (
+          <button key={key} style={pillBtn(strategy === key)} onClick={() => handleStrategyChange(key)}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Strategy description */}
+      <div style={{ fontSize: 12, color: C.textDim, padding: "0 2px" }}>{strat.desc}</div>
+
+      {/* Strike inputs */}
+      <div style={{ ...cardBox, display: "grid", gridTemplateColumns: `repeat(${Math.min(strat.strikes.length + 2, 4)}, 1fr)`, gap: 12 }}>
+        {strat.strikes.map(k => (
+          <div key={k} style={inputGroup}>
+            <span style={labelStyle}>{strat.strikeLabels[k]}</span>
+            <input style={inputStyle} type="number" step="0.50" value={strikes[k] || ""} onChange={setStrike(k)} />
+          </div>
+        ))}
+        <div style={inputGroup}>
+          <span style={labelStyle}>Days to Expiry</span>
+          <input style={{ ...inputStyle, background: C.card, color: C.textDim }} type="number" value={params.days} disabled />
+        </div>
+        <div style={inputGroup}>
+          <span style={labelStyle}>Volatility (%)</span>
+          <input style={{ ...inputStyle, background: C.card, color: C.textDim }} type="number" value={params.sigma} disabled />
+        </div>
+      </div>
+
+      {/* Leg breakdown */}
+      <div style={cardBox}>
+        <div style={{ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Leg Breakdown</div>
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 8, fontSize: 12 }}>
+          <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>LEG</div>
+          <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, textAlign: "right" }}>STRIKE</div>
+          <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, textAlign: "right" }}>PRICE</div>
+          <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, textAlign: "right" }}>DELTA</div>
+          {legDetails.map((l, i) => (
+            <div key={i} style={{ display: "contents" }}>
+              <div style={{ color: l.dir > 0 ? C.greenText : C.redText, padding: "4px 0" }}>
+                {l.dir > 0 ? "+" : "−"} {l.label} ({l.type})
+              </div>
+              <div style={{ color: C.textSec, textAlign: "right", padding: "4px 0" }}>${l.K.toFixed(2)}</div>
+              <div style={{ color: l.dir > 0 ? C.redText : C.greenText, textAlign: "right", padding: "4px 0" }}>
+                {l.dir > 0 ? "−" : "+"}${l.price.toFixed(2)}
+              </div>
+              <div style={{ color: C.textSec, textAlign: "right", padding: "4px 0" }}>{(l.dir * l.greeks.delta).toFixed(4)}</div>
+            </div>
+          ))}
+          <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 6, fontWeight: 700, color: C.text }}>Net</div>
+          <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 6 }} />
+          <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 6, textAlign: "right", fontWeight: 700, color: netPremium < 0 ? C.greenText : C.redText, fontFamily: "monospace" }}>
+            {netPremium < 0 ? "+" : "−"}${Math.abs(netPremium).toFixed(2)}
+          </div>
+          <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 6, textAlign: "right", fontWeight: 700, color: C.text, fontFamily: "monospace" }}>
+            {netGreeks.delta.toFixed(4)}
+          </div>
+        </div>
+        <div style={{ marginTop: 8, fontSize: 11, color: C.textMuted }}>
+          {netPremium > 0 ? `Net debit: $${netPremium.toFixed(2)} paid` : `Net credit: $${Math.abs(netPremium).toFixed(2)} received`}
+        </div>
+      </div>
+
+      {/* P&L Chart */}
+      <div style={cardBox}>
+        <div style={{ display: "flex", gap: 16, marginBottom: 12, justifyContent: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            <div style={{ width: 16, height: 3, background: C.accent, borderRadius: 2 }} />
+            <span style={{ color: C.textDim }}>At Expiration</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            <div style={{ width: 16, height: 3, background: C.greenText, borderRadius: 2, opacity: 0.6 }} />
+            <span style={{ color: C.textDim }}>Current (theoretical)</span>
+          </div>
+        </div>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
+          {yTicks.map(v => (
+            <g key={v}>
+              <line x1={mx} x2={W - mx} y1={toY(v)} y2={toY(v)} stroke={C.border} strokeWidth={0.5} />
+              <text x={mx - 6} y={toY(v) + 4} fill={C.textMuted} fontSize={10} textAnchor="end">${v.toFixed(0)}</text>
+            </g>
+          ))}
+          <line x1={mx} x2={W - mx} y1={zeroY} y2={zeroY} stroke={C.textDim} strokeWidth={1} strokeDasharray="4,3" />
+          <text x={W - mx + 4} y={zeroY + 4} fill={C.textDim} fontSize={9}>$0</text>
+          {/* Strike markers */}
+          {legDetails.map((l, i) => (
+            <g key={i}>
+              <line x1={toX(l.K)} x2={toX(l.K)} y1={my} y2={H - my} stroke={C.textMuted} strokeWidth={0.7} strokeDasharray="3,4" opacity={0.5} />
+              <text x={toX(l.K)} y={H - my + 12} fill={C.textMuted} fontSize={8} textAnchor="middle">${l.K.toFixed(0)}</text>
+            </g>
+          ))}
+          {/* Breakeven markers */}
+          {breakevens.map((be, i) => (
+            <g key={`be${i}`}>
+              <line x1={toX(be)} x2={toX(be)} y1={my} y2={H - my} stroke={C.accent} strokeWidth={1} strokeDasharray="2,3" opacity={0.6} />
+              <text x={toX(be)} y={my - 6} fill={C.accent} fontSize={9} textAnchor="middle">BE=${be.toFixed(2)}</text>
+            </g>
+          ))}
+          {/* Profit zone fill */}
+          <path d={pathExp + `L${toX(hi).toFixed(1)},${zeroY.toFixed(1)}L${toX(lo).toFixed(1)},${zeroY.toFixed(1)}Z`} fill="url(#profitGrad)" opacity={0.15} />
+          <defs>
+            <linearGradient id="profitGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={C.green} />
+              <stop offset="50%" stopColor="transparent" />
+              <stop offset="100%" stopColor={C.red} />
+            </linearGradient>
+          </defs>
+          <path d={pathNow} fill="none" stroke={C.greenText} strokeWidth={2} opacity={0.55} />
+          <path d={pathExp} fill="none" stroke={C.accent} strokeWidth={2.5} />
+          <text x={mx} y={H - 4} fill={C.textMuted} fontSize={10}>Stock: ${lo.toFixed(0)}</text>
+          <text x={W - mx} y={H - 4} fill={C.textMuted} fontSize={10} textAnchor="end">${hi.toFixed(0)}</text>
+        </svg>
+      </div>
+
+      {/* Summary stats */}
+      <div style={{ display: "flex", gap: 12 }}>
+        {[
+          { label: "NET PREMIUM", val: `${netPremium > 0 ? "−" : "+"}$${Math.abs(netPremium).toFixed(2)}`, color: netPremium > 0 ? C.redText : C.greenText, bg: netPremium > 0 ? "rgba(239,68,68,0.08)" : "rgba(34,197,94,0.08)" },
+          { label: "MAX PROFIT", val: maxProfit > 50000 ? "Unlimited" : `$${maxProfit.toFixed(2)}`, color: C.greenText, bg: "rgba(34,197,94,0.08)" },
+          { label: "MAX LOSS", val: maxLoss < -50000 ? "Unlimited" : `$${maxLoss.toFixed(2)}`, color: C.redText, bg: "rgba(239,68,68,0.08)" },
+          { label: breakevens.length > 1 ? "BREAKEVENS" : "BREAKEVEN", val: breakevens.length ? breakevens.map(b => `$${b.toFixed(2)}`).join(" / ") : "N/A", color: C.accent, bg: C.accentGlow },
+        ].map(s => (
+          <div key={s.label} style={{ flex: 1, textAlign: "center", padding: 10, borderRadius: 8, background: s.bg }}>
+            <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 2 }}>{s.label}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: s.color, fontFamily: "monospace" }}>{s.val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Net Greeks */}
+      <div style={cardBox}>
+        <div style={{ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Net Greeks</div>
+        <div style={{ display: "flex", gap: 12 }}>
+          {[
+            { name: "Delta", sym: "Δ", val: netGreeks.delta, color: C.accent },
+            { name: "Gamma", sym: "Γ", val: netGreeks.gamma, color: C.purple },
+            { name: "Theta", sym: "Θ", val: netGreeks.theta, color: C.redText },
+            { name: "Vega", sym: "ν", val: netGreeks.vega, color: C.yellow },
+            { name: "Rho", sym: "ρ", val: netGreeks.rho, color: C.accentHover },
+          ].map(g => (
+            <div key={g.name} style={{ flex: 1, textAlign: "center", padding: "8px 4px", borderRadius: 8, background: C.cardAlt }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: g.color, fontFamily: "serif" }}>{g.sym}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "monospace", marginTop: 2 }}>{g.val.toFixed(4)}</div>
+              <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{g.name}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main App ───
 const pages = [
   { id: "pricing", label: "Option Pricing", icon: "⚡" },
   { id: "greeks", label: "Greeks", icon: "Δ" },
   { id: "payoff", label: "P&L Payoff", icon: "📈" },
   { id: "iv", label: "IV Solver", icon: "σ" },
+  { id: "spreads", label: "Spreads", icon: "🔀" },
 ];
 
 export default function OptionsCalculator() {
@@ -432,16 +719,19 @@ export default function OptionsCalculator() {
             {pages.find(p => p.id === page)?.icon}{" "}
             {pages.find(p => p.id === page)?.label}
           </h2>
-          <div style={{ display: "flex", gap: 6 }}>
-            <button style={pillBtn(params.type === "call")} onClick={() => setParams(p => ({...p, type: "call"}))}>Call</button>
-            <button style={pillBtn(params.type === "put")} onClick={() => setParams(p => ({...p, type: "put"}))}>Put</button>
-          </div>
+          {page !== "spreads" && (
+            <div style={{ display: "flex", gap: 6 }}>
+              <button style={pillBtn(params.type === "call")} onClick={() => setParams(p => ({...p, type: "call"}))}>Call</button>
+              <button style={pillBtn(params.type === "put")} onClick={() => setParams(p => ({...p, type: "put"}))}>Put</button>
+            </div>
+          )}
         </div>
         <InputPanel params={params} setParams={setParams} />
         {page === "pricing" && <PricingPage params={params} />}
         {page === "greeks" && <GreeksPage params={params} />}
         {page === "payoff" && <PayoffPage params={params} />}
         {page === "iv" && <IVSolverPage params={params} />}
+        {page === "spreads" && <SpreadsPage params={params} />}
       </div>
     </div>
   );
