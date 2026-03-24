@@ -158,6 +158,48 @@ const TechnicalAnalysis: React.FC = () => {
   const [showMomentum, setShowMomentum] = useState(false);
   const [showVolatility, setShowVolatility] = useState(false);
   const [showTrend, setShowTrend] = useState(false);
+
+  // Map signal indicator names to chart section IDs and their category toggle
+  const scrollToChart = (indicator: string) => {
+    const name = indicator.toLowerCase();
+    let chartId = '';
+    let expandCategory: (() => void) | null = null;
+
+    // Basic charts (always visible)
+    if (name.includes('bollinger')) { chartId = 'chart-bollinger'; }
+    else if (name.includes('moving average') || name.includes('golden cross') || name.includes('death cross') || name === 'sma' || name === 'ema') { chartId = 'chart-moving-averages'; }
+    else if (name.includes('rsi') || name === 'relative strength index') { chartId = 'chart-rsi'; }
+    else if (name.includes('macd')) { chartId = 'chart-macd'; }
+    // Volume indicators
+    else if (name.includes('vwap')) { chartId = 'chart-vwap'; expandCategory = () => setShowVolume(true); }
+    else if (name.includes('obv') || name.includes('on-balance') || name.includes('a/d')) { chartId = 'chart-obv'; expandCategory = () => setShowVolume(true); }
+    // Momentum indicators
+    else if (name.includes('stochastic') || name.includes('stoch')) { chartId = 'chart-stochastic'; expandCategory = () => setShowMomentum(true); }
+    else if (name.includes('adx') || name.includes('directional')) { chartId = 'chart-adx'; expandCategory = () => setShowMomentum(true); }
+    else if (name.includes('cci')) { chartId = 'chart-cci'; expandCategory = () => setShowMomentum(true); }
+    else if (name.includes('roc') || name.includes('rate of change')) { chartId = 'chart-roc'; expandCategory = () => setShowMomentum(true); }
+    // Volatility indicators
+    else if (name.includes('atr') || name.includes('average true range')) { chartId = 'chart-atr'; expandCategory = () => setShowVolatility(true); }
+    else if (name.includes('keltner')) { chartId = 'chart-keltner'; expandCategory = () => setShowVolatility(true); }
+    else if (name.includes('std') || name.includes('standard dev')) { chartId = 'chart-volatility-summary'; expandCategory = () => setShowVolatility(true); }
+    // Trend indicators
+    else if (name.includes('parabolic') || name.includes('sar')) { chartId = 'chart-parabolic-sar'; expandCategory = () => setShowTrend(true); }
+    else if (name.includes('ichimoku')) { chartId = 'chart-ichimoku'; expandCategory = () => setShowTrend(true); }
+    else if (name.includes('donchian')) { chartId = 'chart-donchian'; expandCategory = () => setShowTrend(true); }
+
+    if (!chartId) return;
+
+    // Expand the category if needed, then scroll after React re-renders
+    if (expandCategory) {
+      expandCategory();
+      setTimeout(() => {
+        document.getElementById(chartId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    } else {
+      document.getElementById(chartId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   const [watchlistMsg, setWatchlistMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [addingToWatchlist, setAddingToWatchlist] = useState(false);
   const [usageCount, setUsageCount] = useState(0);
@@ -1354,7 +1396,8 @@ const TechnicalAnalysis: React.FC = () => {
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Trading Signals</h3>
                 <div className="space-y-3">
                   {analysisData.signals.map((signal, index) => (
-                    <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" onClick={() => scrollToChart(signal.indicator)}>
+
                       <div className="flex-shrink-0 flex items-center gap-3">
                         <span className={`px-2 py-1 rounded text-xs font-bold ${
                           signal.type === 'buy' 
@@ -1377,7 +1420,7 @@ const TechnicalAnalysis: React.FC = () => {
             )}
 
             {/* Bollinger Bands + Volume Chart */}
-            <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+            <div id="chart-bollinger" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Bollinger Bands &amp; Volume</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     📊 <strong>How to read:</strong> Green dashed line = Lower Bollinger Band (potential buy zone), 
@@ -1402,7 +1445,7 @@ const TechnicalAnalysis: React.FC = () => {
             </div>
 
             {/* Moving Averages Chart with Golden/Death Cross */}
-            <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+            <div id="chart-moving-averages" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Moving Averages — Trend &amp; Crossovers</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     📊 <strong>How to read:</strong> Yellow line = 20-day SMA (short-term trend), 
@@ -1430,7 +1473,7 @@ const TechnicalAnalysis: React.FC = () => {
             </div>        
 
             {/* RSI Chart */}
-            <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+            <div id="chart-rsi" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">RSI (Relative Strength Index)</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     Current RSI: <strong className={analysisData.indicators.rsi.value && analysisData.indicators.rsi.value < 30 ? 'text-green-500' : analysisData.indicators.rsi.value && analysisData.indicators.rsi.value > 70 ? 'text-red-500' : 'text-gray-900 dark:text-white'}>
@@ -1464,7 +1507,7 @@ const TechnicalAnalysis: React.FC = () => {
             </div>
 
             {/* MACD Chart */}
-            <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+            <div id="chart-macd" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">MACD (Moving Average Convergence Divergence)</h3>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                 Current Trend: <strong className={analysisData.indicators.macd.trend === 'bullish' ? 'text-green-500' : 'text-red-500'}>
@@ -1578,7 +1621,7 @@ const TechnicalAnalysis: React.FC = () => {
               <div className="space-y-4">
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">📊 Volume Indicators</h3>
                 {/* VWAP Chart */}
-                <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                <div id="chart-vwap" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">VWAP (Volume Weighted Average Price)</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     VWAP calculates the average price weighted by volume throughout the day. Institutional traders use it as a benchmark — price above VWAP suggests buyers are in control and the stock has bullish momentum, while price below VWAP indicates selling pressure. It helps identify fair value and is one of the most widely used indicators by professional traders.
@@ -1614,7 +1657,7 @@ const TechnicalAnalysis: React.FC = () => {
                   ))}
                 </div>
                 {/* OBV Chart */}
-                <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                <div id="chart-obv" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">On-Balance Volume (OBV)</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">OBV tracks cumulative buying and selling pressure by adding volume on up days and subtracting on down days. A rising OBV confirms an uptrend is supported by strong volume. When OBV diverges from price — such as price rising while OBV falls — it often signals an impending trend reversal.</p>
                   <div style={{ height: '250px' }}>
@@ -1634,7 +1677,7 @@ const TechnicalAnalysis: React.FC = () => {
               <div className="space-y-4">
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">⚡ Momentum Indicators</h3>
                 {/* Stochastic Oscillator */}
-                <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                <div id="chart-stochastic" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Stochastic Oscillator</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     The Stochastic Oscillator compares a stock's closing price to its price range over a set period. Readings above 80 indicate overbought conditions where a pullback may occur, while readings below 20 suggest oversold conditions where a bounce is likely. Crossovers between the %K and %D lines generate buy and sell signals.
@@ -1652,7 +1695,7 @@ const TechnicalAnalysis: React.FC = () => {
                   </div>
                 </div>
                 {/* ADX */}
-                <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                <div id="chart-adx" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ADX (Average Directional Index)</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     ADX measures trend strength regardless of direction — values above 25 indicate a strong trend worth trading, while values below 20 suggest a weak or sideways market. The +DI and -DI lines show direction: when +DI is above -DI the trend is bullish, and vice versa. Together they help determine whether to use trend-following or range-bound strategies.
@@ -1671,7 +1714,7 @@ const TechnicalAnalysis: React.FC = () => {
                 </div>
                 {/* CCI + ROC */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                  <div id="chart-cci" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                     <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">CCI (Commodity Channel Index)</h4>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">CCI measures how far the current price deviates from its statistical average. Readings above +100 indicate overbought conditions and potential for a pullback, while readings below -100 signal oversold conditions and a possible bounce. It is useful for identifying cyclical trends and price extremes across any asset class.</p>
                     <div style={{ height: '200px' }}>
@@ -1685,7 +1728,7 @@ const TechnicalAnalysis: React.FC = () => {
                       }} options={chartOptions} />
                     </div>
                   </div>
-                  <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                  <div id="chart-roc" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                     <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ROC (Rate of Change)</h4>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">ROC measures the percentage change in price over a specific period, making it useful for identifying overbought or oversold conditions as well as trend reversals. A rising ROC above zero confirms bullish momentum, while a falling ROC below zero signals bearish pressure. Extreme readings often precede price corrections.</p>
                     <div style={{ height: '200px' }}>
@@ -1728,7 +1771,7 @@ const TechnicalAnalysis: React.FC = () => {
               <div className="space-y-4">
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">🌊 Volatility Indicators</h3>
                 {/* ATR Chart */}
-                <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                <div id="chart-atr" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ATR (Average True Range)</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">ATR measures market volatility by calculating the average range between high and low prices over a given period. Higher ATR means greater volatility and wider price swings, which is important for setting stop-loss levels and position sizing. Traders use ATR to avoid placing stops too tight in volatile markets or too wide in calm ones.</p>
                   <div style={{ height: '250px' }}>
@@ -1741,7 +1784,7 @@ const TechnicalAnalysis: React.FC = () => {
                   </div>
                 </div>
                 {/* Keltner Channels (overlay on price) */}
-                <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                <div id="chart-keltner" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Keltner Channels</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Keltner Channels plot an EMA with upper and lower bands based on ATR. Price breaking above the upper channel suggests strong bullish momentum and a potential breakout, while a break below the lower channel signals bearish pressure. Price staying within the channels indicates normal trading. They are commonly used with Bollinger Bands to identify squeeze setups.</p>
                   <div style={{ height: '350px' }}>
@@ -1778,7 +1821,7 @@ const TechnicalAnalysis: React.FC = () => {
               <div className="space-y-4">
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">📈 Trend Indicators</h3>
                 {/* Parabolic SAR (dots on price chart) */}
-                <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                <div id="chart-parabolic-sar" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Parabolic SAR</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Parabolic SAR (Stop and Reverse) places dots above or below the price to indicate trend direction. Dots below the price confirm an uptrend, while dots above signal a downtrend. When the dots flip sides it generates a reversal signal, making it particularly useful for setting trailing stop-losses and identifying entry and exit points during trending markets.</p>
                   <div style={{ height: '350px' }}>
@@ -1794,7 +1837,7 @@ const TechnicalAnalysis: React.FC = () => {
                   </div>
                 </div>
                 {/* Ichimoku Cloud */}
-                <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                <div id="chart-ichimoku" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Ichimoku Cloud</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">The Ichimoku Cloud is a comprehensive indicator that shows support/resistance levels, trend direction, and momentum all at once. Price above the cloud is bullish, below is bearish, and within the cloud is neutral. The Tenkan-Sen and Kijun-Sen lines act like short-term and medium-term moving averages — their crossovers generate trade signals similar to moving average crossovers.</p>
                   <div style={{ height: '400px' }}>
@@ -1811,7 +1854,7 @@ const TechnicalAnalysis: React.FC = () => {
                   </div>
                 </div>
                 {/* Donchian Channels */}
-                <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                <div id="chart-donchian" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Donchian Channels</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Donchian Channels plot the highest high and lowest low over a set period, creating a breakout trading system. A price break above the upper channel signals a potential new uptrend, while a break below the lower channel signals a new downtrend. Made famous by the "Turtle Traders," this indicator is a foundational tool for trend-following and breakout strategies.</p>
                   <div style={{ height: '350px' }}>
