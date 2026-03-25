@@ -662,16 +662,9 @@ const Watchlist: React.FC = () => {
                       <span className="inline-flex items-center gap-1">
                         {col.label}
                         {sortField === col.key ? (
-                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            {sortDirection === 'asc'
-                              ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                              : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            }
-                          </svg>
+                          <span className="text-primary-500">{sortDirection === 'asc' ? '▲' : '▼'}</span>
                         ) : (
-                          <svg className="w-3 h-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                          </svg>
+                          <span className="text-gray-300 dark:text-gray-600">⇅</span>
                         )}
                       </span>
                     </th>
