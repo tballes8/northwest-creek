@@ -44,6 +44,26 @@ export interface PortfolioPosition {
   created_at: string;
 }
 
+export interface DividendRecord {
+  cash_amount: number | null;
+  currency: string;
+  declaration_date: string | null;
+  ex_dividend_date: string | null;
+  pay_date: string | null;
+  record_date: string | null;
+  frequency: number | null;
+  distribution_type: string | null;
+}
+
+export interface DividendInfo {
+  ticker: string;
+  has_dividends: boolean;
+  dividends: DividendRecord[];
+  annual_dividend: number | null;
+  annual_yield: number | null;
+  frequency_label: string | null;
+}
+
 export interface Alert {
   id: string;
   ticker: string;

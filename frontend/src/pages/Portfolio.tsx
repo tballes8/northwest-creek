@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
-import { authAPI, portfolioAPI } from '../services/api';
+import { authAPI, portfolioAPI, stocksAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import BackToTop from '../components/BackToTop';
@@ -59,8 +59,19 @@ const Portfolio: React.FC = () => {
     marketStatus?: string | null;
   }>>({});
 
+  // Dividend data
+  const [dividendMap, setDividendMap] = useState<Record<string, {
+    annual_dividend: number | null;
+    annual_yield: number | null;
+    frequency_label: string | null;
+    has_dividends: boolean;
+    dividends: any[];
+  }>>({});
+  const [dividendsLoading, setDividendsLoading] = useState(false);
+  const [expandedDividend, setExpandedDividend] = useState<string | null>(null);
+
   // Column sorting
-  type SortColumn = 'ticker' | 'sector' | 'quantity' | 'buy_price' | 'current_price' | 'day_change' | 'total_value' | 'profit_loss';
+  type SortColumn = 'ticker' | 'sector' | 'quantity' | 'buy_price' | 'current_price' | 'day_change' | 'total_value' | 'profit_loss' | 'annual_div' | 'yield';
   const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
@@ -92,6 +103,33 @@ const Portfolio: React.FC = () => {
       };
     }
   }, [tickerList, isConnected, subscribe, unsubscribe]);
+
+  // Fetch dividend data for all portfolio tickers
+  useEffect(() => {
+    if (!tickerList) return;
+    const tickers = tickerList.split(',');
+    setDividendsLoading(true);
+    Promise.allSettled(tickers.map(t => stocksAPI.getDividends(t)))
+      .then(results => {
+        const newMap: typeof dividendMap = {};
+        results.forEach((result, idx) => {
+          const ticker = tickers[idx];
+          if (result.status === 'fulfilled') {
+            const d = result.value.data;
+            newMap[ticker] = {
+              annual_dividend: d.annual_dividend,
+              annual_yield: d.annual_yield,
+              frequency_label: d.frequency_label,
+              has_dividends: d.has_dividends,
+              dividends: d.dividends || [],
+            };
+          }
+        });
+        setDividendMap(newMap);
+      })
+      .catch(() => {})
+      .finally(() => setDividendsLoading(false));
+  }, [tickerList]);
 
   useEffect(() => {
     if (prices.size === 0) return;
@@ -303,7 +341,16 @@ const Portfolio: React.FC = () => {
     const dayChange = totalPrevClose > 0 ? totalValue - totalPrevClose : 0;
     const dayChangePercent = totalPrevClose > 0 ? (dayChange / totalPrevClose) * 100 : 0;
 
-    return { totalValue, totalCost, totalPL, totalPLPercent, dayChange, dayChangePercent };
+    const totalAnnualDividends = portfolio.reduce((sum, pos) => {
+      const divInfo = dividendMap[pos.ticker];
+      if (divInfo?.annual_dividend) {
+        return sum + (divInfo.annual_dividend * pos.quantity);
+      }
+      return sum;
+    }, 0);
+    const portfolioDividendYield = totalValue > 0 ? (totalAnnualDividends / totalValue) * 100 : 0;
+
+    return { totalValue, totalCost, totalPL, totalPLPercent, dayChange, dayChangePercent, totalAnnualDividends, portfolioDividendYield };
   };
 
   const handleAddPosition = async (e: React.FormEvent) => {
@@ -500,6 +547,14 @@ const Portfolio: React.FC = () => {
             aVal = a.profit_loss ?? 0;
             bVal = b.profit_loss ?? 0;
             break;
+          case 'annual_div':
+            aVal = (dividendMap[a.ticker]?.annual_dividend ?? 0) * a.quantity;
+            bVal = (dividendMap[b.ticker]?.annual_dividend ?? 0) * b.quantity;
+            break;
+          case 'yield':
+            aVal = dividendMap[a.ticker]?.annual_yield ?? 0;
+            bVal = dividendMap[b.ticker]?.annual_yield ?? 0;
+            break;
           default:
             return 0;
         }
@@ -513,7 +568,7 @@ const Portfolio: React.FC = () => {
     }
 
     return result;
-  }, [portfolio, sectorFilter, sortColumn, sortDirection, prices, prevCloseMap]);
+  }, [portfolio, sectorFilter, sortColumn, sortDirection, prices, prevCloseMap, dividendMap]);
 
   if (loading) {
     return (
@@ -626,7 +681,7 @@ const Portfolio: React.FC = () => {
 
       <div className="max-w-screen-2xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         {/* Portfolio Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
           <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Day Change</div>
             <div className={`text-2xl font-bold ${
@@ -658,6 +713,15 @@ const Portfolio: React.FC = () => {
               totals.totalPLPercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
             }`}>
               {totals.totalPLPercent >= 0 ? '+' : ''}{totals.totalPLPercent.toFixed(2)}%
+            </div>
+          </div>
+          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Annual Dividends</div>
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+              ${totals.totalAnnualDividends.toFixed(2)}
+            </div>
+            <div className="text-xs mt-0.5 text-gray-500 dark:text-gray-400">
+              Yield: {totals.portfolioDividendYield.toFixed(2)}%
             </div>
           </div>
         </div>
@@ -838,6 +902,8 @@ const Portfolio: React.FC = () => {
                     { key: 'current_price', label: 'Current Price', align: 'text-right' },
                     { key: 'day_change', label: 'Day Change', align: 'text-right' },
                     { key: 'total_value', label: 'Total Value', align: 'text-right' },
+                    { key: 'annual_div', label: 'Ann. Dividend', align: 'text-right' },
+                    { key: 'yield', label: 'Yield', align: 'text-right' },
                     { key: 'profit_loss', label: 'P&L', align: 'text-right' },
                   ] as { key: SortColumn; label: string; align: string }[]).map(col => (
                     <th
@@ -861,7 +927,8 @@ const Portfolio: React.FC = () => {
               </thead>
               <tbody className="bg-white dark:bg-gray-700 divide-y divide-gray-200 dark:divide-gray-600">
                 {sortedPortfolio.map((position) => (
-                  <tr key={position.id} className="hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                  <React.Fragment key={position.id}>
+                  <tr className="hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button
                         onClick={() => handleTickerClick(position.ticker)}
@@ -995,10 +1062,36 @@ const Portfolio: React.FC = () => {
                         ${position.total_value?.toFixed(2) || '-'}
                       </div>
                     </td>
+                    {/* Annual Dividend */}
+                    <td
+                      className="px-6 py-4 whitespace-nowrap text-right cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                      onClick={() => setExpandedDividend(prev => prev === position.ticker ? null : position.ticker)}
+                      title="Click to view dividend history"
+                    >
+                      {(() => {
+                        const divInfo = dividendMap[position.ticker];
+                        if (!divInfo?.annual_dividend) return <div className="text-sm text-gray-400">—</div>;
+                        const positionIncome = divInfo.annual_dividend * position.quantity;
+                        return (
+                          <div>
+                            <div className="text-sm text-green-600 dark:text-green-400 font-medium">${positionIncome.toFixed(2)}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">{divInfo.frequency_label || ''}</div>
+                          </div>
+                        );
+                      })()}
+                    </td>
+                    {/* Yield */}
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      {(() => {
+                        const divInfo = dividendMap[position.ticker];
+                        if (!divInfo?.annual_yield) return <div className="text-sm text-gray-400">—</div>;
+                        return <div className="text-sm text-green-600 dark:text-green-400 font-medium">{divInfo.annual_yield.toFixed(2)}%</div>;
+                      })()}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className={`text-sm font-semibold ${
-                        (position.profit_loss ?? 0) >= 0 
-                          ? 'text-green-600 dark:text-green-400' 
+                        (position.profit_loss ?? 0) >= 0
+                          ? 'text-green-600 dark:text-green-400'
                           : 'text-red-600 dark:text-red-400'
                       }`}>
                         {position.profit_loss !== undefined 
@@ -1061,6 +1154,30 @@ const Portfolio: React.FC = () => {
                       )}
                     </td>
                   </tr>
+                  {expandedDividend === position.ticker && dividendMap[position.ticker]?.dividends?.length > 0 && (
+                    <tr>
+                      <td colSpan={12} className="px-6 py-4 bg-gray-50 dark:bg-gray-800">
+                        <div className="text-sm font-medium text-gray-900 dark:text-white mb-2">
+                          Dividend History — {position.ticker}
+                        </div>
+                        <div className="grid grid-cols-4 gap-2 text-xs text-gray-500 dark:text-gray-400 font-medium mb-1 pb-1 border-b border-gray-200 dark:border-gray-700">
+                          <div>Ex-Date</div>
+                          <div>Pay Date</div>
+                          <div>Amount</div>
+                          <div>Type</div>
+                        </div>
+                        {dividendMap[position.ticker].dividends.slice(0, 8).map((div: any, idx: number) => (
+                          <div key={idx} className="grid grid-cols-4 gap-2 text-xs text-gray-700 dark:text-gray-300 py-1.5 border-b border-gray-100 dark:border-gray-700/50">
+                            <div>{div.ex_dividend_date || '—'}</div>
+                            <div>{div.pay_date || '—'}</div>
+                            <div className="text-green-600 dark:text-green-400 font-medium">${div.cash_amount?.toFixed(4) || '—'}</div>
+                            <div className="capitalize">{div.distribution_type || '—'}</div>
+                          </div>
+                        ))}
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 ))}
               </tbody>
             </table>

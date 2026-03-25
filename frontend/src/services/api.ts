@@ -132,6 +132,9 @@ export const stocksAPI = {
     }
     return axiosInstance.get(`/stocks/daily-snapshot`, { params });
   },
+
+  getDividends: (ticker: string) =>
+    axiosInstance.get(`/stocks/dividends/${ticker}`),
 };
 
 // DCF API
