@@ -80,7 +80,7 @@ const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
 
         {/* Nav links + user menu fill remaining space */}
         <div className="flex-1 flex items-center justify-between pr-4 sm:pr-6 lg:pr-8 min-w-0">
-          <div className="hidden md:flex items-center space-x-5 lg:space-x-6">
+          <div className="hidden md:flex items-center justify-center flex-1 space-x-5 lg:space-x-6">
             {NAV_LINKS.map((link) => (
               <Link
                 key={link.key}
@@ -90,6 +90,7 @@ const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
                     ? 'text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1 whitespace-nowrap'
                     : 'text-gray-300 hover:text-white whitespace-nowrap'
                 }
+                style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive" }}
               >
                 {link.label}
               </Link>
