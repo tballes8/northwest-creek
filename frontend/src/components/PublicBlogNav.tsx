@@ -16,6 +16,11 @@ const PublicBlogNav: React.FC = () => {
           </span>
         </Link>
 
+        {/* Tagline */}
+        <span className="hidden md:inline text-sm text-gray-400 font-medium">
+          Professional Stock Analysis for Retail Investors
+        </span>
+
         {/* CTA buttons */}
         <div className="flex items-center gap-3">
           <Link

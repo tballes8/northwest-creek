@@ -93,9 +93,6 @@ const BlogList: React.FC = () => {
         {/* Header */}
         <div className="mb-10">
           <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-3">Blog</h1>
-          <p className="text-lg text-gray-600 dark:text-gray-400">
-            Professional Stock Analysis for Retail Investors
-          </p>
         </div>
 
         {/* Category Filter */}
