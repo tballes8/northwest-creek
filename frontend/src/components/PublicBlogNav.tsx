@@ -17,16 +17,18 @@ const PublicBlogNav: React.FC = () => {
         </Link>
 
         {/* Tagline */}
-        <span className="hidden md:inline text-sm text-gray-400 font-medium">
+        <span className="hidden md:inline text-sm text-gray-400 font-medium"
+              style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.5rem', fontStyle: 'italic' }}
+        >
           Professional Stock Analysis for Retail Investors
         </span>
 
         {/* CTA buttons */}
         <div className="flex items-center gap-3">
-          <Link
-            to="/#pricing"
+          <Link to="/#pricing"
             className="px-4 py-2 text-sm font-medium text-primary-400 border border-primary-500 rounded-lg hover:bg-primary-500/10 transition-colors whitespace-nowrap"
           >
+            
             Choose a Plan
           </Link>
           <Link
