@@ -596,7 +596,6 @@ const Landing: React.FC = () => {
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">15 DCF valuations per week</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Technical Analysis</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Email price alerts</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Priority support</span></li>
               </ul>
               <Link
                 to="/registerwithpayment?tier=casual"
@@ -621,7 +620,7 @@ const Landing: React.FC = () => {
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">10 DCF valuations per day</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Advanced Technical Analysis</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Email price alerts</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Priority support</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Options Calculator</span></li>
               </ul>              
               <Link
                 to="/registerwithpayment?tier=active"
@@ -646,7 +645,7 @@ const Landing: React.FC = () => {
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">20 DCF valuations per day</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Full Technical Analysis suite</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Email & indicator alerts</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Priority support</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Options Calculator</span></li>
               </ul>              
               <Link
                 to="/registerwithpayment?tier=professional"
