@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import NavBar from '../components/NavBar';
+import PublicBlogNav from '../components/PublicBlogNav';
 import BackToTop from '../components/BackToTop';
 import { authAPI } from '../services/api';
 import { User } from '../types';
@@ -32,10 +33,17 @@ const BlogList: React.FC = () => {
 
   useEffect(() => {
     const loadData = async () => {
-      try {
-        const userRes = await authAPI.getCurrentUser();
-        setUser(userRes.data);
+      // User fetch is optional — don't let it block blog loading
+      if (localStorage.getItem('access_token')) {
+        try {
+          const userRes = await authAPI.getCurrentUser();
+          setUser(userRes.data);
+        } catch {
+          // Not logged in or token expired — show public nav
+        }
+      }
 
+      try {
         const [postsRes, catsRes] = await Promise.all([
           axios.get(`${API_URL}/api/v1/content/blogs`),
           axios.get(`${API_URL}/api/v1/content/blogs/categories`),
@@ -74,8 +82,12 @@ const BlogList: React.FC = () => {
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:title" content="Blog — NWC-Analytics" />
       <meta name="twitter:description" content="Expert stock analysis articles and market insights for retail investors." />
-      {/* Nav */}
-      <NavBar currentPage="blogs" user={user} onLogout={handleLogout} />
+      {/* Nav — full navbar for logged-in users, soft-sell for public */}
+      {user ? (
+        <NavBar currentPage="blogs" user={user} onLogout={handleLogout} />
+      ) : (
+        <PublicBlogNav />
+      )}
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         {/* Header */}

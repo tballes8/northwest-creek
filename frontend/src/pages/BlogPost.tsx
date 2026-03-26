@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import NavBar from '../components/NavBar';
+import PublicBlogNav from '../components/PublicBlogNav';
 import BackToTop from '../components/BackToTop';
 import { User } from '../types';
 import { authAPI } from '../services/api';
@@ -151,8 +152,12 @@ const BlogPost: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
-      {/* Navigation */}
-      <NavBar currentPage="blogs" user={user} onLogout={handleLogout} />
+      {/* Navigation — full navbar for logged-in users, soft-sell for public */}
+      {user ? (
+        <NavBar currentPage="blogs" user={user} onLogout={handleLogout} />
+      ) : (
+        <PublicBlogNav />
+      )}
 
       {/* Content area — same max-width as Dashboard */}
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
