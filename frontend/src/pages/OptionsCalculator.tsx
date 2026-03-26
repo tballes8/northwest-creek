@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { authAPI } from "../services/api";
+import NavBar from "../components/NavBar";
 import UpgradeRequiredPage from "../pages/UpgradeRequired";
 
 // ─── Math Utilities ───
@@ -739,15 +740,19 @@ export default function OptionsCalculator() {
     );
   }
 
+  const handleLogout = () => {
+    localStorage.removeItem('access_token');
+    navigate('/login');
+  };
+
   return (
-    <div style={{ display: "flex", minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+      <NavBar currentPage="options-calculator" user={user} onLogout={handleLogout} />
+      <div style={{ display: "flex", flex: 1 }}>
       {/* Sidebar — matches nav bg-gray-900 with border-gray-700 */}
       <div style={sidebarStyle}>
         <div style={{ padding: "0 20px 24px", borderBottom: `1px solid ${C.border}`, marginBottom: 8 }}>
-          <div style={{ fontSize: 18, fontWeight: 700, color: C.accent, fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontStyle: "italic" }}>
-            NWC-Analytics
-          </div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.text, marginTop: 4, letterSpacing: "-0.01em" }}>Options Calculator</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.text, letterSpacing: "-0.01em" }}>Options Calculator</div>
           <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>Institutional-grade tools</div>
         </div>
         {pages.map(p => (
@@ -781,6 +786,7 @@ export default function OptionsCalculator() {
         {page === "payoff" && <PayoffPage params={params} />}
         {page === "iv" && <IVSolverPage params={params} />}
         {page === "spreads" && <SpreadsPage params={params} />}
+      </div>
       </div>
     </div>
   );
