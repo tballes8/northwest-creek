@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { authAPI } from "../services/api";
 import NavBar from "../components/NavBar";
+import { useTheme } from "../contexts/ThemeContext";
 import UpgradeRequiredPage from "../pages/UpgradeRequired";
 
 // ─── Math Utilities ───
@@ -78,37 +79,66 @@ function impliedVol(S, K, T, r, marketPrice, type) {
   return mid;
 }
 
-// ─── Color System (matches Dashboard.tsx: gray-900/800/700, teal primary, green/red P&L) ───
-const C = {
+// ─── Color System ───
+const CDark = {
   bg: "#1f2937",          // gray-800 — main page bg
   card: "#374151",        // gray-700 — card bg
   cardAlt: "#1f2937",     // gray-800 — nested/alt bg
   sidebar: "#111827",     // gray-900 — nav bg
-  border: "#4b5563",      // gray-600 — borders (matches dark:border-gray-500)
+  border: "#4b5563",      // gray-600
   borderLight: "#6b7280", // gray-500
-  accent: "#2dd4bf",      // teal-400 / primary-400
-  accentHover: "#14b8a6", // teal-500 / primary-500
-  accentStrong: "#0d9488", // teal-600 / primary-600
+  accent: "#2dd4bf",      // teal-400
+  accentHover: "#14b8a6", // teal-500
+  accentStrong: "#0d9488", // teal-600
   accentGlow: "rgba(45,212,191,0.1)",
   accentGlow2: "rgba(45,212,191,0.2)",
-  text: "#f9fafb",        // gray-50 — white text
-  textSec: "#d1d5db",     // gray-300 — secondary text
-  textDim: "#9ca3af",     // gray-400 — dim text
+  text: "#f9fafb",        // gray-50
+  textSec: "#d1d5db",     // gray-300
+  textDim: "#9ca3af",     // gray-400
   textMuted: "#6b7280",   // gray-500
-  green: "#22c55e",       // green-500
-  greenDim: "#166534",    // green-900/30
-  greenText: "#4ade80",   // green-400 (dark mode P&L)
-  red: "#ef4444",         // red-500
-  redDim: "#991b1b",      // red-900/30
-  redText: "#f87171",     // red-400 (dark mode P&L)
-  yellow: "#eab308",      // yellow-500
-  purple: "#a855f7",      // purple-500
+  green: "#22c55e",
+  greenDim: "#166534",
+  greenText: "#4ade80",
+  red: "#ef4444",
+  redDim: "#991b1b",
+  redText: "#f87171",
+  yellow: "#eab308",
+  purple: "#a855f7",
 };
 
-const sidebarStyle = {
+const CLight = {
+  bg: "#f9fafb",          // gray-50
+  card: "#ffffff",        // white
+  cardAlt: "#f3f4f6",    // gray-100
+  sidebar: "#ffffff",     // white
+  border: "#d1d5db",      // gray-300
+  borderLight: "#e5e7eb", // gray-200
+  accent: "#0d9488",      // teal-600
+  accentHover: "#0f766e", // teal-700
+  accentStrong: "#115e59", // teal-800
+  accentGlow: "rgba(13,148,136,0.08)",
+  accentGlow2: "rgba(13,148,136,0.15)",
+  text: "#111827",        // gray-900
+  textSec: "#374151",     // gray-700
+  textDim: "#6b7280",     // gray-500
+  textMuted: "#9ca3af",   // gray-400
+  green: "#16a34a",       // green-600
+  greenDim: "#dcfce7",    // green-100
+  greenText: "#15803d",   // green-700
+  red: "#dc2626",         // red-600
+  redDim: "#fee2e2",      // red-100
+  redText: "#b91c1c",     // red-700
+  yellow: "#ca8a04",      // yellow-600
+  purple: "#9333ea",      // purple-600
+};
+
+// Mutable reference — set by the main component before each render
+let C = CDark;
+
+const sidebarStyle = () => ({
   width: 220, minHeight: "100%", background: C.sidebar, borderRight: `1px solid ${C.border}`,
   display: "flex", flexDirection: "column", padding: "20px 0", flexShrink: 0,
-};
+});
 
 const navBtn = (active) => ({
   padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: active ? 600 : 400,
@@ -118,13 +148,13 @@ const navBtn = (active) => ({
 });
 
 const inputGroup = { display: "flex", flexDirection: "column", gap: 4 };
-const labelStyle = { fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" };
-const inputStyle = {
+const labelStyle = () => ({ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" });
+const inputStyle = () => ({
   background: C.cardAlt, border: `1px solid ${C.border}`, borderRadius: 6, color: C.text,
   padding: "8px 10px", fontSize: 14, outline: "none", width: "100%", boxSizing: "border-box",
-};
-const selectStyle = { ...inputStyle, cursor: "pointer" };
-const cardBox = { background: C.card, borderRadius: 10, border: `1px solid ${C.border}`, padding: 16 };
+});
+const selectStyle = () => ({ ...inputStyle(), cursor: "pointer" });
+const cardBox = () => ({ background: C.card, borderRadius: 10, border: `1px solid ${C.border}`, padding: 16 });
 const pillBtn = (active) => ({
   padding: "6px 16px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer",
   border: `1px solid ${active ? C.accent : C.border}`,
@@ -136,30 +166,30 @@ const pillBtn = (active) => ({
 function InputPanel({ params, setParams }) {
   const set = (k) => (e) => setParams(p => ({ ...p, [k]: e.target.value }));
   return (
-    <div style={{ ...cardBox, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+    <div style={{ ...cardBox(), display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
       <div style={inputGroup}>
-        <span style={labelStyle}>Stock Price ($)</span>
-        <input style={inputStyle} type="number" step="0.01" value={params.S} onChange={set("S")} />
+        <span style={labelStyle()}>Stock Price ($)</span>
+        <input style={inputStyle()} type="number" step="0.01" value={params.S} onChange={set("S")} />
       </div>
       <div style={inputGroup}>
-        <span style={labelStyle}>Strike Price ($)</span>
-        <input style={inputStyle} type="number" step="0.01" value={params.K} onChange={set("K")} />
+        <span style={labelStyle()}>Strike Price ($)</span>
+        <input style={inputStyle()} type="number" step="0.01" value={params.K} onChange={set("K")} />
       </div>
       <div style={inputGroup}>
-        <span style={labelStyle}>Days to Expiry</span>
-        <input style={inputStyle} type="number" step="1" value={params.days} onChange={set("days")} />
+        <span style={labelStyle()}>Days to Expiry</span>
+        <input style={inputStyle()} type="number" step="1" value={params.days} onChange={set("days")} />
       </div>
       <div style={inputGroup}>
-        <span style={labelStyle}>Risk-Free Rate (%)</span>
-        <input style={inputStyle} type="number" step="0.1" value={params.r} onChange={set("r")} />
+        <span style={labelStyle()}>Risk-Free Rate (%)</span>
+        <input style={inputStyle()} type="number" step="0.1" value={params.r} onChange={set("r")} />
       </div>
       <div style={inputGroup}>
-        <span style={labelStyle}>Volatility (%)</span>
-        <input style={inputStyle} type="number" step="0.1" value={params.sigma} onChange={set("sigma")} />
+        <span style={labelStyle()}>Volatility (%)</span>
+        <input style={inputStyle()} type="number" step="0.1" value={params.sigma} onChange={set("sigma")} />
       </div>
       <div style={inputGroup}>
-        <span style={labelStyle}>Option Type</span>
-        <select style={selectStyle} value={params.type} onChange={set("type")}>
+        <span style={labelStyle()}>Option Type</span>
+        <select style={selectStyle()} value={params.type} onChange={set("type")}>
           <option value="call">Call</option>
           <option value="put">Put</option>
         </select>
@@ -179,7 +209,7 @@ function PricingPage({ params }) {
   const mColor = moneyness === "ITM" ? C.greenText : moneyness === "OTM" ? C.redText : C.accent;
 
   const Stat = ({ label: l, value: v, sub, color }) => (
-    <div style={{ ...cardBox, flex: 1, textAlign: "center" }}>
+    <div style={{ ...cardBox(), flex: 1, textAlign: "center" }}>
       <div style={{ fontSize: 11, color: C.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>{l}</div>
       <div style={{ fontSize: 26, fontWeight: 700, color: color || C.text }}>{v}</div>
       {sub && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 4 }}>{sub}</div>}
@@ -227,7 +257,7 @@ function GreeksPage({ params }) {
           : gd.name === "Vega" ? Math.min(gd.val / 0.3 * 100, 100)
           : Math.min(Math.abs(gd.val) / 0.3 * 100, 100);
         return (
-          <div key={gd.name} style={cardBox}>
+          <div key={gd.name} style={cardBox()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span style={{ fontSize: 18, fontWeight: 700, color: barColors[gd.name], fontFamily: "serif", width: 20, textAlign: "center" }}>{icons[gd.name]}</span>
@@ -282,7 +312,7 @@ function PayoffPage({ params }) {
   const zeroX = toX(breakeven);
 
   return (
-    <div style={cardBox}>
+    <div style={cardBox()}>
       <div style={{ display: "flex", gap: 16, marginBottom: 12, justifyContent: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
           <div style={{ width: 16, height: 3, background: C.accent, borderRadius: 2 }} />
@@ -355,10 +385,10 @@ function IVSolverPage({ params }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div style={{ ...cardBox, display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
+      <div style={{ ...cardBox(), display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
         <div style={{ ...inputGroup, flex: "1 1 140px" }}>
-          <span style={labelStyle}>Market Option Price ($)</span>
-          <input style={inputStyle} type="number" step="0.01" value={mktPrice} onChange={e => setMktPrice(e.target.value)} />
+          <span style={labelStyle()}>Market Option Price ($)</span>
+          <input style={inputStyle()} type="number" step="0.01" value={mktPrice} onChange={e => setMktPrice(e.target.value)} />
         </div>
         <div style={{ flex: "1 1 140px", textAlign: "center", padding: "8px 0" }}>
           <div style={{ fontSize: 11, color: C.textDim, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Implied Volatility</div>
@@ -371,7 +401,7 @@ function IVSolverPage({ params }) {
           </div>
         </div>
       </div>
-      <div style={cardBox}>
+      <div style={cardBox()}>
         <div style={{ fontSize: 12, color: C.textDim, marginBottom: 8, textAlign: "center" }}>Option Price vs. Implied Volatility</div>
         <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
           {[0, 0.25, 0.5, 0.75, 1].map(f => {
@@ -528,7 +558,7 @@ function SpreadsPage({ params }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {/* Strategy selector */}
-      <div style={{ ...cardBox, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+      <div style={{ ...cardBox(), display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
         <span style={{ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginRight: 4 }}>Strategy:</span>
         {Object.entries(STRATEGIES).map(([key, s]) => (
           <button key={key} style={pillBtn(strategy === key)} onClick={() => handleStrategyChange(key)}>
@@ -541,25 +571,25 @@ function SpreadsPage({ params }) {
       <div style={{ fontSize: 12, color: C.textDim, padding: "0 2px" }}>{strat.desc}</div>
 
       {/* Strike inputs */}
-      <div style={{ ...cardBox, display: "grid", gridTemplateColumns: `repeat(${Math.min(strat.strikes.length + 2, 4)}, 1fr)`, gap: 12 }}>
+      <div style={{ ...cardBox(), display: "grid", gridTemplateColumns: `repeat(${Math.min(strat.strikes.length + 2, 4)}, 1fr)`, gap: 12 }}>
         {strat.strikes.map(k => (
           <div key={k} style={inputGroup}>
-            <span style={labelStyle}>{strat.strikeLabels[k]}</span>
-            <input style={inputStyle} type="number" step="0.50" value={strikes[k] || ""} onChange={setStrike(k)} />
+            <span style={labelStyle()}>{strat.strikeLabels[k]}</span>
+            <input style={inputStyle()} type="number" step="0.50" value={strikes[k] || ""} onChange={setStrike(k)} />
           </div>
         ))}
         <div style={inputGroup}>
-          <span style={labelStyle}>Days to Expiry</span>
-          <input style={{ ...inputStyle, background: C.card, color: C.textDim }} type="number" value={params.days} disabled />
+          <span style={labelStyle()}>Days to Expiry</span>
+          <input style={{ ...inputStyle(), background: C.card, color: C.textDim }} type="number" value={params.days} disabled />
         </div>
         <div style={inputGroup}>
-          <span style={labelStyle}>Volatility (%)</span>
-          <input style={{ ...inputStyle, background: C.card, color: C.textDim }} type="number" value={params.sigma} disabled />
+          <span style={labelStyle()}>Volatility (%)</span>
+          <input style={{ ...inputStyle(), background: C.card, color: C.textDim }} type="number" value={params.sigma} disabled />
         </div>
       </div>
 
       {/* Leg breakdown */}
-      <div style={cardBox}>
+      <div style={cardBox()}>
         <div style={{ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Leg Breakdown</div>
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 8, fontSize: 12 }}>
           <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>LEG</div>
@@ -593,7 +623,7 @@ function SpreadsPage({ params }) {
       </div>
 
       {/* P&L Chart */}
-      <div style={cardBox}>
+      <div style={cardBox()}>
         <div style={{ display: "flex", gap: 16, marginBottom: 12, justifyContent: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
             <div style={{ width: 16, height: 3, background: C.accent, borderRadius: 2 }} />
@@ -659,7 +689,7 @@ function SpreadsPage({ params }) {
       </div>
 
       {/* Net Greeks */}
-      <div style={cardBox}>
+      <div style={cardBox()}>
         <div style={{ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Net Greeks</div>
         <div style={{ display: "flex", gap: 12 }}>
           {[
@@ -692,8 +722,12 @@ const pages = [
 
 export default function OptionsCalculator() {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const [user, setUser] = useState<any>(null);
   const [userLoading, setUserLoading] = useState(true);
+
+  // Set the mutable color reference based on current theme
+  C = theme === "dark" ? CDark : CLight;
   const [page, setPage] = useState("pricing");
   const [params, setParams] = useState({ S: "150.00", K: "155.00", days: "30", r: "5.0", sigma: "25.0", type: "call" });
 
@@ -717,8 +751,8 @@ export default function OptionsCalculator() {
   // Loading state
   if (userLoading) {
     return (
-      <div style={{ display: "flex", minHeight: "100vh", background: "#1a1d23", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ color: "#9ca3af" }}>Loading...</div>
+      <div style={{ display: "flex", minHeight: "100vh", background: C.bg, alignItems: "center", justifyContent: "center" }}>
+        <div style={{ color: C.textDim }}>Loading...</div>
       </div>
     );
   }
@@ -750,7 +784,7 @@ export default function OptionsCalculator() {
       <NavBar currentPage="options-calculator" user={user} onLogout={handleLogout} />
       <div style={{ display: "flex", flex: 1 }}>
       {/* Sidebar — matches nav bg-gray-900 with border-gray-700 */}
-      <div style={sidebarStyle}>
+      <div style={sidebarStyle()}>
         <div style={{ padding: "0 20px 24px", borderBottom: `1px solid ${C.border}`, marginBottom: 8 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: C.text, letterSpacing: "-0.01em" }}>Options Calculator</div>
           <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>Institutional-grade tools</div>

@@ -103,7 +103,7 @@ const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
 
         {/* Nav links + user menu fill remaining space */}
         <div className="flex-1 flex items-center justify-between pr-4 sm:pr-6 lg:pr-8 min-w-0">
-          <div className="hidden md:flex items-center justify-center flex-1 space-x-5 lg:space-x-6" ref={navRef}>
+          <div className="hidden md:flex items-center justify-center flex-1 space-x-8 lg:space-x-12" ref={navRef}>
             {NAV_ITEMS.map((item) => {
               const fontStyle = { fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.35rem' };
 
