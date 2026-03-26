@@ -90,7 +90,7 @@ const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
                     ? 'text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1 whitespace-nowrap'
                     : 'text-gray-300 hover:text-white whitespace-nowrap'
                 }
-                style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.6rem' }}
+                style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1rem' }}
               >
                 {link.label}
               </Link>
