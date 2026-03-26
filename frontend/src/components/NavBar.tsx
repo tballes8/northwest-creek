@@ -23,14 +23,32 @@ interface NavBarProps {
   onLogout: () => void;
 }
 
-const NAV_LINKS: { to: string; key: PageKey; label: string }[] = [
+type NavItem = {
+  label: string;
+  icon?: string;
+} & (
+  | { to: string; key: PageKey; children?: never }
+  | { to?: never; key?: never; children: { to: string; key: PageKey; label: string; icon: string }[] }
+);
+
+const NAV_ITEMS: NavItem[] = [
   { to: '/dashboard', key: 'dashboard', label: 'Dashboard' },
-  { to: '/watchlist', key: 'watchlist', label: 'Watchlist' },
-  { to: '/portfolio', key: 'portfolio', label: 'Portfolio' },
-  { to: '/alerts', key: 'alerts', label: 'Alerts' },
-  { to: '/stocks', key: 'stocks', label: 'Stocks' },
-  { to: '/technical-analysis', key: 'technical-analysis', label: 'Technical Analysis' },
-  { to: '/dcf-valuation', key: 'dcf-valuation', label: 'DCF Valuation' },
+  {
+    label: 'Tracker',
+    children: [
+      { to: '/portfolio', key: 'portfolio', label: 'Portfolio', icon: '📊' },
+      { to: '/watchlist', key: 'watchlist', label: 'Watchlist', icon: '👁' },
+      { to: '/alerts', key: 'alerts', label: 'Alerts', icon: '🔔' },
+    ],
+  },
+  {
+    label: 'Analytics',
+    children: [
+      { to: '/stocks', key: 'stocks', label: 'Stock Research', icon: '🔍' },
+      { to: '/technical-analysis', key: 'technical-analysis', label: 'Technical Analysis', icon: '📈' },
+      { to: '/dcf-valuation', key: 'dcf-valuation', label: 'DCF Valuation', icon: '💰' },
+    ],
+  },
   { to: '/options-calculator', key: 'options-calculator', label: 'Options Calc' },
 ];
 
@@ -51,13 +69,18 @@ const getTierBadge = (tier: string) => {
 
 const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLDivElement>(null);
 
-  // Close menu on outside click
+  // Close menus on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
         setUserMenuOpen(false);
+      }
+      if (navRef.current && !navRef.current.contains(e.target as Node)) {
+        setOpenDropdown(null);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -80,21 +103,67 @@ const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
 
         {/* Nav links + user menu fill remaining space */}
         <div className="flex-1 flex items-center justify-between pr-4 sm:pr-6 lg:pr-8 min-w-0">
-          <div className="hidden md:flex items-center justify-center flex-1 space-x-5 lg:space-x-6">
-            {NAV_LINKS.map((link) => (
-              <Link
-                key={link.key}
-                to={link.to}
-                className={
-                  currentPage === link.key
-                    ? 'text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1 whitespace-nowrap'
-                    : 'text-gray-300 hover:text-white whitespace-nowrap'
-                }
-                style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.35rem' }}
-              >
-                {link.label}
-              </Link>
-            ))}
+          <div className="hidden md:flex items-center justify-center flex-1 space-x-5 lg:space-x-6" ref={navRef}>
+            {NAV_ITEMS.map((item) => {
+              const fontStyle = { fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.35rem' };
+
+              if (item.children) {
+                const isChildActive = item.children.some((c) => c.key === currentPage);
+                const isOpen = openDropdown === item.label;
+                return (
+                  <div key={item.label} className="relative">
+                    <button
+                      onClick={() => setOpenDropdown(isOpen ? null : item.label)}
+                      className={
+                        isChildActive
+                          ? 'text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1 whitespace-nowrap flex items-center gap-1'
+                          : 'text-gray-300 hover:text-white whitespace-nowrap flex items-center gap-1'
+                      }
+                      style={fontStyle}
+                    >
+                      {item.label}
+                      <svg className={`w-3.5 h-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {isOpen && (
+                      <div className="absolute left-0 mt-3 w-56 bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50 py-2 animate-in fade-in duration-150">
+                        {item.children.map((child) => (
+                          <Link
+                            key={child.key}
+                            to={child.to}
+                            onClick={() => setOpenDropdown(null)}
+                            className={`flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                              currentPage === child.key
+                                ? 'text-primary-400 bg-gray-700/50'
+                                : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                            }`}
+                          >
+                            <span>{child.icon}</span>
+                            {child.label}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              return (
+                <Link
+                  key={item.key}
+                  to={item.to!}
+                  className={
+                    currentPage === item.key
+                      ? 'text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1 whitespace-nowrap'
+                      : 'text-gray-300 hover:text-white whitespace-nowrap'
+                  }
+                  style={fontStyle}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
           </div>
 
           <div className="flex items-center space-x-4 ml-auto">
