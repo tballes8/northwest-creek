@@ -371,11 +371,19 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
         ma_50 = _extract_sma(sma_50_data)
         ma_200 = _extract_sma(sma_200_data)
 
-        # Filter to only bars from the target date (FMP may return extra days)
-        date_prefix = data_date.isoformat()  # "YYYY-MM-DD"
-        bars_data_raw = [b for b in bars_data_raw if b.get("date", "").startswith(date_prefix)]
+        # FMP may ignore from/to and return multiple days of bars.
+        # Find the most recent date present in the data, keep only that day.
+        bars_data_raw.sort(key=lambda x: x.get("date", ""), reverse=True)
+        if bars_data_raw:
+            latest_date_str = bars_data_raw[0].get("date", "")[:10]  # "YYYY-MM-DD"
+            bars_data_raw = [b for b in bars_data_raw if b.get("date", "").startswith(latest_date_str)]
+            # Update data_date to reflect the actual date in the bars
+            try:
+                data_date = date.fromisoformat(latest_date_str)
+            except ValueError:
+                pass
 
-        # Process intraday bars — FMP returns newest-first, sort ascending
+        # Sort ascending for chart display
         bars_data_raw.sort(key=lambda x: x.get("date", ""))
 
         bars_data = []
