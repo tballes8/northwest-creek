@@ -1,5 +1,8 @@
 // @ts-nocheck
-import { useState, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { authAPI } from "../services/api";
+import UpgradeRequiredPage from "../pages/UpgradeRequired";
 
 // ─── Math Utilities ───
 const norm = {
@@ -687,8 +690,54 @@ const pages = [
 ];
 
 export default function OptionsCalculator() {
+  const navigate = useNavigate();
+  const [user, setUser] = useState<any>(null);
+  const [userLoading, setUserLoading] = useState(true);
   const [page, setPage] = useState("pricing");
   const [params, setParams] = useState({ S: "150.00", K: "155.00", days: "30", r: "5.0", sigma: "25.0", type: "call" });
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const response = await authAPI.getCurrentUser();
+        setUser(response.data);
+      } catch (error: any) {
+        if (error.response?.status === 401) {
+          localStorage.removeItem('access_token');
+          navigate('/login');
+        }
+      } finally {
+        setUserLoading(false);
+      }
+    };
+    loadUser();
+  }, [navigate]);
+
+  // Loading state
+  if (userLoading) {
+    return (
+      <div style={{ display: "flex", minHeight: "100vh", background: "#1a1d23", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ color: "#9ca3af" }}>Loading...</div>
+      </div>
+    );
+  }
+
+  // Tier gate: only Active and Professional can access
+  const allowedTiers = ['active', 'professional'];
+  if (!user || !allowedTiers.includes(user.subscription_tier)) {
+    return (
+      <UpgradeRequiredPage
+        user={user}
+        feature="Options Calculator"
+        featureDescription="Advanced options pricing with Black-Scholes, Greeks, and spread strategies."
+        minimumTier="active"
+        onLogout={() => {
+          localStorage.removeItem('access_token');
+          navigate('/login');
+        }}
+      />
+    );
+  }
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>

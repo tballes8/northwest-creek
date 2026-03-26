@@ -73,7 +73,7 @@ function App() {
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsConditions />} />
             <Route path="/faq" element={<FAQ />} />
-            <Route path="/options-calculator" element={<OptionsCalculator />} />
+            <Route path="/options-calculator" element={<ProtectedRoute><OptionsCalculator /></ProtectedRoute>} />
           </Routes>
         </Suspense>
       </LivePriceProvider>

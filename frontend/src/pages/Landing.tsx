@@ -151,7 +151,7 @@ const Landing: React.FC = () => {
           <p className="text-center text-gray-600 dark:text-gray-400 mb-16 max-w-2xl mx-auto">
             Institutional-grade analysis tools designed for retail investors — no Bloomberg terminal required.
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             {/* Feature 1 — Technical Analysis */}
             <div className="bg-white dark:bg-gray-600 p-8 rounded-xl shadow-lg dark:shadow-gray-200/50 hover:shadow-xl transition-shadow border dark:border-gray-300">
               <div className="w-12 h-12 bg-primary-100 dark:bg-primary-900/30 rounded-lg flex items-center justify-center mb-4">
@@ -192,8 +192,22 @@ const Landing: React.FC = () => {
               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Price Alerts</h3>
               <p className="text-gray-600 dark:text-gray-300">
                 Set custom price targets and get notified instantly when stocks hit your levels.
-                Never miss a breakout or buying opportunity — alerts work 24/7 so you're always 
+                Never miss a breakout or buying opportunity — alerts work 24/7 so you're always
                 in the loop.
+              </p>
+            </div>
+
+            {/* Feature 4 — Options Calculator */}
+            <div className="bg-white dark:bg-gray-600 p-8 rounded-xl shadow-lg dark:shadow-gray-200/50 hover:shadow-xl transition-shadow border dark:border-gray-300">
+              <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Options Calculator</h3>
+              <p className="text-gray-600 dark:text-gray-300">
+                Price options with Black-Scholes and Binomial models, visualize P&L at expiration,
+                and calculate Greeks for any strategy — from single legs to multi-leg spreads.
               </p>
             </div>
           </div>
@@ -370,6 +384,110 @@ const Landing: React.FC = () => {
                   <div className="bg-gray-800 rounded p-2"><span className="text-gray-400">Terminal Growth:</span> <span className="text-white">2.5%</span></div>
                   <div className="bg-gray-800 rounded p-2"><span className="text-gray-400">Projection:</span> <span className="text-white">10 Years</span></div>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Options Calculator Section */}
+          <div className="grid md:grid-cols-2 gap-12 items-center">
+            <div>
+              <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 mb-4">
+                🧮 Options Pricing
+              </div>
+              <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+                Options Calculator
+              </h3>
+              <p className="text-lg text-gray-600 dark:text-gray-300 mb-6">
+                Institutional-grade options pricing powered by Black-Scholes and Binomial models.
+                Visualize profit & loss at expiration, calculate net Greeks across multi-leg positions,
+                and evaluate spreads before you trade.
+              </p>
+              <ul className="space-y-3">
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">P&L charts with breakeven analysis at expiration and current theoretical value</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Full Greeks suite — Delta, Gamma, Theta, Vega, and Rho</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Multi-leg strategies: bull call, bear put, iron condor, straddle</span></li>
+                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Implied volatility solver and sensitivity analysis</span></li>
+              </ul>
+            </div>
+            {/* Static mockup — P&L graph + Greeks */}
+            <div className="bg-gray-900 rounded-xl p-6 shadow-2xl border border-gray-700">
+              <div className="text-gray-400 text-sm mb-3">Bull Call Spread — $146 / $155</div>
+              {/* P&L Chart Mockup */}
+              <div className="relative bg-gray-800 rounded-lg p-4 mb-4" style={{ height: 200 }}>
+                <div className="absolute top-2 left-0 right-0 flex justify-center gap-6 text-xs text-gray-400">
+                  <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-cyan-400 rounded"></span> At Expiration</span>
+                  <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-green-400 rounded"></span> Current (theoretical)</span>
+                </div>
+                {/* SVG P&L curve */}
+                <svg viewBox="0 0 400 160" className="w-full h-full" preserveAspectRatio="none">
+                  {/* Zero line */}
+                  <line x1="0" y1="80" x2="400" y2="80" stroke="#6b7280" strokeWidth="1" strokeDasharray="6,4" />
+                  {/* Breakeven label */}
+                  <line x1="200" y1="20" x2="200" y2="140" stroke="#6b7280" strokeWidth="0.5" strokeDasharray="4,4" />
+                  <text x="200" y="16" textAnchor="middle" fill="#2dd4bf" fontSize="10" fontWeight="600">BE=$149.84</text>
+                  {/* At Expiration line (cyan) */}
+                  <polyline
+                    points="0,110 80,110 100,110 180,110 200,80 220,40 240,30 400,30"
+                    fill="none" stroke="#22d3ee" strokeWidth="2.5" strokeLinejoin="round"
+                  />
+                  {/* Profit fill */}
+                  <polygon
+                    points="200,80 220,40 240,30 400,30 400,80"
+                    fill="#22d3ee" opacity="0.15"
+                  />
+                  {/* Loss fill */}
+                  <polygon
+                    points="0,110 80,110 100,110 180,110 200,80 0,80"
+                    fill="#ef4444" opacity="0.08"
+                  />
+                  {/* Current theoretical line (green) */}
+                  <polyline
+                    points="0,105 60,102 120,95 160,85 200,70 240,55 280,45 320,38 400,34"
+                    fill="none" stroke="#4ade80" strokeWidth="1.5" strokeLinejoin="round"
+                  />
+                  {/* Axis labels */}
+                  <text x="4" y="32" fill="#9ca3af" fontSize="9">$5</text>
+                  <text x="4" y="78" fill="#9ca3af" fontSize="9">$0</text>
+                  <text x="4" y="118" fill="#9ca3af" fontSize="9">-$5</text>
+                  <text x="60" y="155" fill="#9ca3af" fontSize="8">$146</text>
+                  <text x="240" y="155" fill="#9ca3af" fontSize="8">$155</text>
+                </svg>
+              </div>
+              {/* Key Metrics */}
+              <div className="grid grid-cols-4 gap-2 mb-4">
+                <div className="bg-gray-800 rounded-lg p-2 text-center">
+                  <div className="text-gray-500 text-[10px] uppercase tracking-wider">Net Premium</div>
+                  <div className="text-red-400 font-bold text-sm">-$4.34</div>
+                </div>
+                <div className="bg-gray-800 rounded-lg p-2 text-center">
+                  <div className="text-gray-500 text-[10px] uppercase tracking-wider">Max Profit</div>
+                  <div className="text-white font-bold text-sm">$4.66</div>
+                </div>
+                <div className="bg-gray-800 rounded-lg p-2 text-center">
+                  <div className="text-gray-500 text-[10px] uppercase tracking-wider">Max Loss</div>
+                  <div className="text-white font-bold text-sm">-$4.34</div>
+                </div>
+                <div className="bg-primary-900/40 rounded-lg p-2 text-center border border-primary-700/50">
+                  <div className="text-gray-500 text-[10px] uppercase tracking-wider">Breakeven</div>
+                  <div className="text-primary-400 font-bold text-sm">$149.84</div>
+                </div>
+              </div>
+              {/* Net Greeks */}
+              <div className="text-gray-500 text-[10px] uppercase tracking-wider mb-2">Net Greeks</div>
+              <div className="grid grid-cols-5 gap-2">
+                {[
+                  { symbol: '\u0394', label: 'Delta', value: '0.3920', color: 'text-blue-400' },
+                  { symbol: '\u0393', label: 'Gamma', value: '-0.0028', color: 'text-purple-400' },
+                  { symbol: '\u0398', label: 'Theta', value: '-0.0020', color: 'text-yellow-400' },
+                  { symbol: '\u03BD', label: 'Vega', value: '-0.0130', color: 'text-cyan-400' },
+                  { symbol: '\u03C1', label: 'Rho', value: '0.0448', color: 'text-green-400' },
+                ].map(g => (
+                  <div key={g.label} className="bg-gray-800 rounded-lg p-2 text-center">
+                    <div className={`text-lg font-bold ${g.color}`}>{g.symbol}</div>
+                    <div className="text-white font-bold text-xs">{g.value}</div>
+                    <div className="text-gray-500 text-[10px]">{g.label}</div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>

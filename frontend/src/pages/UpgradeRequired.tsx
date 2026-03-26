@@ -420,6 +420,10 @@ const COMPARISON_ROWS: ComparisonRow[] = [
     values: { beginner: false, casual: false, active: false, professional: true },
   },
   {
+    label: 'Options Calculator',
+    values: { beginner: false, casual: false, active: true, professional: true },
+  },
+  {
     label: '14-Day Free Trial',
     values: { beginner: true, casual: true, active: false, professional: false },
   },
