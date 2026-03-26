@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import ThemeToggle from '../components/ThemeToggle';
+import NavBar from '../components/NavBar';
 import { User } from '../types';
 import { authAPI } from '../services/api';
 // HTML file upload utilities
@@ -228,6 +228,11 @@ const AdminContent: React.FC = () => {
     setTimeout(() => setMessage(null), 4000);
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem('access_token');
+    navigate('/login');
+  };
+
   // ── Render ──────────────────────────────────────────────
 
   if (loading) {
@@ -243,26 +248,7 @@ const AdminContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-800">
-      {/* Nav */}
-      <nav className="bg-gray-900 shadow-sm border-b border-gray-700">
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <img src="/images/logo.png" alt="NWC-Analytics" className="h-10 w-10 mr-3" />
-              <span className="text-xl font-bold text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>NWC-Analytics</span>
-            </div>
-            <div className="hidden md:flex items-center space-x-8">
-              <Link to="/dashboard" className="text-gray-400 hover:text-white">Dashboard</Link>
-              <Link to="/portfolio" className="text-gray-300 hover:text-white">Portfolio</Link>
-              <span className="text-amber-400 font-medium border-b-2 border-amber-400 pb-1">Admin Panel</span>
-            </div>
-            <div className="flex items-center space-x-4">
-              <ThemeToggle />
-              <Link to="/dashboard" className="text-sm text-gray-300 hover:text-teal-400">{user?.email}</Link>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <NavBar currentPage="admin" user={user} onLogout={handleLogout} />
 
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}

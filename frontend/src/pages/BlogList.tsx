@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import ThemeToggle from '../components/ThemeToggle';
+import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
+import { authAPI } from '../services/api';
+import { User } from '../types';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -21,6 +23,8 @@ interface BlogPostItem {
 }
 
 const BlogList: React.FC = () => {
+  const navigate = useNavigate();
+  const [user, setUser] = useState<User | null>(null);
   const [posts, setPosts] = useState<BlogPostItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -29,6 +33,9 @@ const BlogList: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
+        const userRes = await authAPI.getCurrentUser();
+        setUser(userRes.data);
+
         const [postsRes, catsRes] = await Promise.all([
           axios.get(`${API_URL}/api/v1/content/blogs`),
           axios.get(`${API_URL}/api/v1/content/blogs/categories`),
@@ -48,6 +55,11 @@ const BlogList: React.FC = () => {
     ? posts.filter((p) => p.category === selectedCategory)
     : posts;
 
+  const handleLogout = () => {
+    localStorage.removeItem('access_token');
+    navigate('/');
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-800">
       {/* SEO — React 19 hoists to <head> */}
@@ -63,21 +75,7 @@ const BlogList: React.FC = () => {
       <meta name="twitter:title" content="Blog — NWC-Analytics" />
       <meta name="twitter:description" content="Expert stock analysis articles and market insights for retail investors." />
       {/* Nav */}
-      <nav className="bg-gray-900 shadow-sm border-b border-gray-700">
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <Link to="/" className="flex items-center">
-              <img src="/images/logo.png" alt="NWC-Analytics" className="h-10 w-10 mr-3" />
-              <span className="text-xl font-bold text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>
-                NWC-Analytics
-              </span>
-            </Link>
-            <div className="flex items-center">
-              <ThemeToggle />
-            </div>
-          </div>
-        </div>
-      </nav>
+      <NavBar currentPage="blogs" user={user} onLogout={handleLogout} />
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         {/* Header */}
