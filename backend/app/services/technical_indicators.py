@@ -494,3 +494,190 @@ class TechnicalIndicators:
 
 # Global instance
 technical_indicators = TechnicalIndicators()
+
+
+def generate_summary(rsi, macd_data, ma_data, bb_data, current_price, advanced=None):
+    """
+    Generate overall trading summary using weighted indicator scoring.
+
+    Weight tiers:
+      2 — Trend indicators (MACD, ADX, MA alignment, Ichimoku)
+      1 — Oscillators & confirmation (RSI, BB, Stochastic, CCI, SAR, VWAP, OBV)
+
+    Directional-only: volatility indicators (ATR, Keltner, Std Dev, Donchian)
+    and ROC (redundant with MACD) are excluded from scoring.
+    """
+    if advanced is None:
+        advanced = {}
+
+    # Each entry: (name, score contribution, weight applied)
+    contributions = []
+
+    # ── MACD (weight 2) ───────────────────────────────────────────────
+    if macd_data and isinstance(macd_data, dict):
+        trend = macd_data.get("trend")
+        if trend == "bullish":
+            contributions.append(("MACD", 2))
+        elif trend == "bearish":
+            contributions.append(("MACD", -2))
+
+    # ── ADX + Directional Index (weight 2) ────────────────────────────
+    adx_data = advanced.get("adx")
+    if adx_data and isinstance(adx_data, dict):
+        adx_val = adx_data.get("adx")
+        direction = adx_data.get("direction")
+        strength = adx_data.get("strength")
+        # Only score if trend is meaningful (ADX > ~20)
+        if strength in ("trending", "very_strong") and direction:
+            if direction == "bullish":
+                contributions.append(("ADX", 2))
+            elif direction == "bearish":
+                contributions.append(("ADX", -2))
+
+    # ── Moving Average alignment (weight 2) ───────────────────────────
+    # Score based on price position relative to SMA 20 and SMA 50
+    if ma_data and isinstance(ma_data, dict):
+        sma_20 = ma_data.get("sma_20")
+        sma_50 = ma_data.get("sma_50")
+        ma_score = 0
+        if sma_20 is not None:
+            if current_price > sma_20:
+                ma_score += 1
+            else:
+                ma_score -= 1
+        if sma_50 is not None:
+            if current_price > sma_50:
+                ma_score += 1
+            else:
+                ma_score -= 1
+        # Normalize: both above = +2, both below = -2, split = 0
+        if ma_score != 0:
+            contributions.append(("Moving Averages", ma_score))
+
+    # ── Ichimoku Cloud (weight 2) ─────────────────────────────────────
+    ich_data = advanced.get("ichimoku")
+    if ich_data and isinstance(ich_data, dict):
+        ich_signal = ich_data.get("signal")
+        if ich_signal == "bullish":
+            contributions.append(("Ichimoku", 2))
+        elif ich_signal == "bearish":
+            contributions.append(("Ichimoku", -2))
+        # "in_cloud" = neutral, no contribution
+
+    # ── Parabolic SAR (weight 1) ──────────────────────────────────────
+    sar_data = advanced.get("parabolic_sar")
+    if sar_data and isinstance(sar_data, dict):
+        sar_trend = sar_data.get("trend")
+        if sar_trend == "uptrend":
+            contributions.append(("Parabolic SAR", 1))
+        elif sar_trend == "downtrend":
+            contributions.append(("Parabolic SAR", -1))
+
+    # ── RSI (weight 1) — only at extremes ─────────────────────────────
+    if rsi is not None:
+        if rsi < 30:
+            contributions.append(("RSI", 1))
+        elif rsi > 70:
+            contributions.append(("RSI", -1))
+
+    # ── Bollinger Bands (weight 1) ────────────────────────────────────
+    if bb_data and isinstance(bb_data, dict):
+        position = bb_data.get("position")
+        if position == "below_lower":
+            contributions.append(("Bollinger Bands", 1))
+        elif position == "above_upper":
+            contributions.append(("Bollinger Bands", -1))
+
+    # ── Stochastic (weight 1) ─────────────────────────────────────────
+    stoch = advanced.get("stochastic")
+    if stoch and isinstance(stoch, dict):
+        stoch_signal = stoch.get("signal")
+        if stoch_signal == "oversold":
+            contributions.append(("Stochastic", 1))
+        elif stoch_signal == "overbought":
+            contributions.append(("Stochastic", -1))
+
+    # ── CCI (weight 1) ────────────────────────────────────────────────
+    cci_data = advanced.get("cci")
+    if cci_data and isinstance(cci_data, dict):
+        cci_signal = cci_data.get("signal")
+        if cci_signal == "oversold":
+            contributions.append(("CCI", 1))
+        elif cci_signal == "overbought":
+            contributions.append(("CCI", -1))
+
+    # ── VWAP (weight 1) ───────────────────────────────────────────────
+    vwap_data = advanced.get("vwap")
+    if vwap_data and isinstance(vwap_data, dict):
+        vwap_signal = vwap_data.get("signal")
+        if vwap_signal == "bullish":
+            contributions.append(("VWAP", 1))
+        elif vwap_signal == "bearish":
+            contributions.append(("VWAP", -1))
+
+    # ── OBV (weight 1) ────────────────────────────────────────────────
+    obv_data = advanced.get("obv")
+    if obv_data and isinstance(obv_data, dict):
+        obv_signal = obv_data.get("signal")
+        if obv_signal == "bullish":
+            contributions.append(("OBV", 1))
+        elif obv_signal == "bearish":
+            contributions.append(("OBV", -1))
+
+    # ── Tally ─────────────────────────────────────────────────────────
+    total_score = sum(s for _, s in contributions)
+    bullish_count = sum(1 for _, s in contributions if s > 0)
+    bearish_count = sum(1 for _, s in contributions if s < 0)
+    indicators_counted = len(contributions)
+
+    # ── Determine outlook ─────────────────────────────────────────────
+    #   Strong Bullish:  score >= 6
+    #   Bullish:         score 3 to 5
+    #   Neutral:         score -2 to 2
+    #   Bearish:         score -5 to -3
+    #   Strong Bearish:  score <= -6
+    if total_score >= 6:
+        outlook = "bullish"
+        label = "Strong Bullish"
+    elif total_score >= 3:
+        outlook = "bullish"
+        label = "Bullish"
+    elif total_score <= -6:
+        outlook = "bearish"
+        label = "Strong Bearish"
+    elif total_score <= -3:
+        outlook = "bearish"
+        label = "Bearish"
+    else:
+        outlook = "neutral"
+        label = "Neutral"
+
+    # ── Build message ─────────────────────────────────────────────────
+    if indicators_counted == 0:
+        message = "Insufficient indicator data for outlook"
+    elif outlook == "neutral":
+        message = f"Mixed signals - wait for clearer trend ({bullish_count} bullish, {bearish_count} bearish of {indicators_counted} indicators)"
+    else:
+        direction = "bullish" if total_score > 0 else "bearish"
+        dominant_count = bullish_count if total_score > 0 else bearish_count
+        message = f"{label} outlook — {dominant_count} of {indicators_counted} indicators {direction} (score: {total_score:+d})"
+
+    # ── Build breakdown for transparency ──────────────────────────────
+    breakdown = []
+    for name, score in contributions:
+        breakdown.append({
+            "indicator": name,
+            "direction": "bullish" if score > 0 else "bearish",
+            "weight": abs(score),
+        })
+
+    return {
+        "outlook": outlook,
+        "strength": total_score,
+        "message": message,
+        "score": total_score,
+        "indicators_counted": indicators_counted,
+        "bullish_count": bullish_count,
+        "bearish_count": bearish_count,
+        "breakdown": breakdown,
+    }

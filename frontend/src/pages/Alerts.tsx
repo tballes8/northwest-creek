@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authAPI, alertsAPI } from '../services/api';
+import { authAPI, alertsAPI, technicalAlertsAPI } from '../services/api';
 import { User } from '../types';
 import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
@@ -16,17 +16,54 @@ interface Alert {
   created_at: string;
 }
 
+interface TechnicalAlert {
+  id: string;
+  ticker: string;
+  alert_type: string;
+  config: Record<string, any>;
+  config_display: string;
+  alert_type_display: string;
+  last_state?: Record<string, any>;
+  is_active: boolean;
+  sms_enabled: boolean;
+  triggered_at?: string;
+  trigger_details?: Record<string, any>;
+  notes?: string;
+  created_at: string;
+}
+
+type Tab = 'all' | 'price' | 'technical';
+
+const ALERT_TYPE_OPTIONS = [
+  { value: 'sentiment_shift', label: 'Sentiment Shift', description: 'Alert when overall outlook changes' },
+  { value: 'ma_crossover', label: 'MA Crossover', description: 'Golden Cross or Death Cross' },
+  { value: 'rsi_extreme', label: 'RSI Extreme', description: 'RSI crosses overbought/oversold' },
+  { value: 'macd_cross', label: 'MACD Cross', description: 'MACD histogram flips sign' },
+  { value: 'bollinger_breach', label: 'Bollinger Breach', description: 'Price breaks Bollinger Bands' },
+];
+
 const Alerts: React.FC = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [techAlerts, setTechAlerts] = useState<TechnicalAlert[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<Tab>('all');
+
+  // Price alert form
   const [addingAlert, setAddingAlert] = useState(false);
+  const [alertFormType, setAlertFormType] = useState<'price' | 'technical'>('price');
   const [newTicker, setNewTicker] = useState('');
   const [newCondition, setNewCondition] = useState<'above' | 'below'>('above');
   const [newTargetPrice, setNewTargetPrice] = useState('');
   const [newNotes, setNewNotes] = useState('');
+
+  // Technical alert form
+  const [newAlertType, setNewAlertType] = useState('sentiment_shift');
+  const [newConfig, setNewConfig] = useState<Record<string, any>>({ target_outlook: 'bullish' });
+
   const [error, setError] = useState('');
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -37,8 +74,12 @@ const Alerts: React.FC = () => {
       const userResponse = await authAPI.getCurrentUser();
       setUser(userResponse.data);
 
-      const alertsResponse = await alertsAPI.getAll();
+      const [alertsResponse, techResponse] = await Promise.all([
+        alertsAPI.getAll(),
+        technicalAlertsAPI.getAll().catch(() => ({ data: { alerts: [] } })),
+      ]);
       setAlerts(alertsResponse.data.alerts || []);
+      setTechAlerts(techResponse.data.alerts || []);
     } catch (error) {
       console.error('Failed to load data:', error);
       if ((error as any).response?.status === 401) {
@@ -50,8 +91,7 @@ const Alerts: React.FC = () => {
     }
   };
 
-
-  // ── Alert CRUD handlers ──────────────────────────────────────
+  // ── Price Alert CRUD ────────────────────────────────────────────
 
   const handleAddAlert = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,20 +107,6 @@ const Alerts: React.FC = () => {
       return;
     }
 
-    // Check tier limits
-    const limits = {
-      beginner: 5,
-      casual: 10,
-      active: 20,
-      professional: 50
-    };
-    const limit = limits[user?.subscription_tier as keyof typeof limits] || 5;
-
-    if (alerts.length >= limit) {
-      setError(`You've reached your ${user?.subscription_tier} tier limit of ${limit} alerts`);
-      return;
-    }
-
     try {
       await alertsAPI.create({
         ticker: newTicker.toUpperCase().trim(),
@@ -88,68 +114,125 @@ const Alerts: React.FC = () => {
         target_price: parseFloat(newTargetPrice),
         notes: newNotes.trim() || undefined,
       });
-
       await loadData();
-
-      setNewTicker('');
-      setNewCondition('above');
-      setNewTargetPrice('');
-      setNewNotes('');
-      setAddingAlert(false);
+      resetForm();
     } catch (err: any) {
-      console.error('Add alert error:', err.response?.data);
-      setError(err.response?.data?.detail || 'Failed to create alert. Please try again.');
+      setError(err.response?.data?.detail || 'Failed to create alert.');
     }
   };
 
-  const handleDeleteAlert = async (id: string) => {
-    if (!window.confirm('Delete this alert?')) {
+  // ── Technical Alert CRUD ────────────────────────────────────────
+
+  const handleAddTechnicalAlert = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setCreating(true);
+
+    if (!newTicker.trim()) {
+      setError('Please enter a ticker symbol');
+      setCreating(false);
       return;
     }
 
     try {
-      await alertsAPI.delete(id);
-      setAlerts(prevList => prevList.filter(alert => alert.id !== id));
+      await technicalAlertsAPI.create({
+        ticker: newTicker.toUpperCase().trim(),
+        alert_type: newAlertType,
+        config: newConfig,
+        notes: newNotes.trim() || undefined,
+      });
+      await loadData();
+      resetForm();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to create technical alert.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleDeleteAlert = async (id: string, type: 'price' | 'technical') => {
+    if (!window.confirm('Delete this alert?')) return;
+    try {
+      if (type === 'price') {
+        await alertsAPI.delete(id);
+        setAlerts(prev => prev.filter(a => a.id !== id));
+      } else {
+        await technicalAlertsAPI.delete(id);
+        setTechAlerts(prev => prev.filter(a => a.id !== id));
+      }
     } catch (err) {
-      console.error('Failed to delete alert:', err);
       setError('Failed to delete alert');
       await loadData();
     }
   };
 
-  const handleToggleAlert = async (id: string, currentStatus: boolean) => {
+  const handleToggleAlert = async (id: string, currentStatus: boolean, type: 'price' | 'technical') => {
     try {
-      await alertsAPI.update(id, { is_active: !currentStatus });
+      if (type === 'price') {
+        await alertsAPI.update(id, { is_active: !currentStatus });
+      } else {
+        await technicalAlertsAPI.update(id, { is_active: !currentStatus });
+      }
       await loadData();
     } catch (err) {
-      console.error('Failed to toggle alert:', err);
       setError('Failed to update alert');
     }
   };
 
+  const resetForm = () => {
+    setAddingAlert(false);
+    setNewTicker('');
+    setNewCondition('above');
+    setNewTargetPrice('');
+    setNewNotes('');
+    setNewAlertType('sentiment_shift');
+    setNewConfig({ target_outlook: 'bullish' });
+    setError('');
+  };
+
+  // When alert type changes, reset config to defaults
+  const handleAlertTypeChange = (type: string) => {
+    setNewAlertType(type);
+    switch (type) {
+      case 'sentiment_shift':
+        setNewConfig({ target_outlook: 'bullish' });
+        break;
+      case 'ma_crossover':
+        setNewConfig({ cross_type: 'golden_cross' });
+        break;
+      case 'rsi_extreme':
+        setNewConfig({ direction: 'above', threshold: 70 });
+        break;
+      case 'macd_cross':
+        setNewConfig({ cross_type: 'bullish' });
+        break;
+      case 'bollinger_breach':
+        setNewConfig({ breach_type: 'upper' });
+        break;
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     navigate('/');
   };
 
-  const getTierLimit = () => {
-    const limits = {
-      beginner: 5,
-      casual: 10,
-      active: 20,
-      professional: 50
-    };
-    return limits[user?.subscription_tier as keyof typeof limits] || 5;
-  };
+  // ── Computed values ─────────────────────────────────────────────
 
-  const getActiveAlertsCount = () => {
-    return alerts.filter(alert => alert.is_active && !alert.triggered_at).length;
-  };
+  const allCombined = alerts.length + techAlerts.length;
+  const activeCount =
+    alerts.filter(a => a.is_active && !a.triggered_at).length +
+    techAlerts.filter(a => a.is_active && !a.triggered_at).length;
+  const triggeredCount =
+    alerts.filter(a => a.triggered_at).length +
+    techAlerts.filter(a => a.triggered_at).length;
 
-  const getTriggeredAlertsCount = () => {
-    return alerts.filter(alert => alert.triggered_at).length;
-  };
+  const tierLimit = (() => {
+    const limits: Record<string, number> = { beginner: 5, casual: 10, active: 20, professional: 50 };
+    return limits[user?.subscription_tier || 'beginner'] || 5;
+  })();
+
+  // ── Render ──────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -162,24 +245,118 @@ const Alerts: React.FC = () => {
     );
   }
 
+  // Dynamic config form based on selected alert type
+  const renderConfigFields = () => {
+    switch (newAlertType) {
+      case 'sentiment_shift':
+        return (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Target Outlook *</label>
+            <select
+              value={newConfig.target_outlook || 'bullish'}
+              onChange={e => setNewConfig({ target_outlook: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="bullish">Bullish</option>
+              <option value="bearish">Bearish</option>
+              <option value="neutral">Neutral</option>
+            </select>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Alert fires when sentiment transitions TO this outlook</p>
+          </div>
+        );
+      case 'ma_crossover':
+        return (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cross Type *</label>
+            <select
+              value={newConfig.cross_type || 'golden_cross'}
+              onChange={e => setNewConfig({ cross_type: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="golden_cross">Golden Cross (SMA20 crosses above SMA50)</option>
+              <option value="death_cross">Death Cross (SMA20 crosses below SMA50)</option>
+            </select>
+          </div>
+        );
+      case 'rsi_extreme':
+        return (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Direction *</label>
+              <select
+                value={newConfig.direction || 'above'}
+                onChange={e => {
+                  const dir = e.target.value;
+                  setNewConfig({ direction: dir, threshold: dir === 'above' ? 70 : 30 });
+                }}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="above">Overbought (RSI rises above)</option>
+                <option value="below">Oversold (RSI drops below)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Threshold *</label>
+              <input
+                type="number"
+                value={newConfig.threshold || (newConfig.direction === 'below' ? 30 : 70)}
+                onChange={e => setNewConfig({ ...newConfig, threshold: parseFloat(e.target.value) })}
+                min={newConfig.direction === 'below' ? 10 : 60}
+                max={newConfig.direction === 'below' ? 40 : 90}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+          </div>
+        );
+      case 'macd_cross':
+        return (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Cross Type *</label>
+            <select
+              value={newConfig.cross_type || 'bullish'}
+              onChange={e => setNewConfig({ cross_type: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="bullish">Bullish Cross (histogram turns positive)</option>
+              <option value="bearish">Bearish Cross (histogram turns negative)</option>
+            </select>
+          </div>
+        );
+      case 'bollinger_breach':
+        return (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Band *</label>
+            <select
+              value={newConfig.breach_type || 'upper'}
+              onChange={e => setNewConfig({ breach_type: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="upper">Upper Band Breach (potentially overbought)</option>
+              <option value="lower">Lower Band Breach (potentially oversold)</option>
+            </select>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
-      {/* Navigation */}
       <NavBar currentPage="alerts" user={user} onLogout={handleLogout} />
 
-      {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header with Summary */}
+        {/* Header */}
         <div className="mb-8">
           <div className="flex justify-between items-center mb-6">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Price Alerts</h1>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Alerts</h1>
               <p className="text-gray-600 dark:text-gray-400 mt-1">
-                {alerts.length} of {getTierLimit()} alerts
+                {allCombined} of {tierLimit} alerts
               </p>
             </div>
             <button
-              onClick={() => setAddingAlert(!addingAlert)}
+              onClick={() => { setAddingAlert(!addingAlert); setError(''); }}
               className="px-6 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors flex items-center"
             >
               <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -189,15 +366,13 @@ const Alerts: React.FC = () => {
             </button>
           </div>
 
-          {/* Alert Summary Cards */}
+          {/* Summary Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 hover:shadow-xl dark:hover:shadow-gray-200/30 transition-shadow p-6 border dark:border-gray-500">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Active Alerts</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                    {getActiveAlertsCount()}
-                  </p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{activeCount}</p>
                 </div>
                 <div className="bg-green-100 dark:bg-green-900/30 p-3 rounded-full">
                   <svg className="w-6 h-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -211,9 +386,7 @@ const Alerts: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Triggered</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                    {getTriggeredAlertsCount()}
-                  </p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{triggeredCount}</p>
                 </div>
                 <div className="bg-purple-100 dark:bg-purple-900/30 p-3 rounded-full">
                   <svg className="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -227,9 +400,7 @@ const Alerts: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600 dark:text-gray-400">Total Alerts</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                    {alerts.length}
-                  </p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{allCombined}</p>
                 </div>
                 <div className="bg-primary-100 dark:bg-primary-900/30 p-3 rounded-full">
                   <svg className="w-6 h-6 text-primary-600 dark:text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -241,106 +412,185 @@ const Alerts: React.FC = () => {
           </div>
         </div>
 
-        {/* Add Alert Form */}
+        {/* Create Alert Form */}
         {addingAlert && (
           <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500 mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Create Price Alert</h2>
-            
+            {/* Form type selector */}
+            <div className="flex gap-2 mb-6">
+              <button
+                type="button"
+                onClick={() => { setAlertFormType('price'); setError(''); }}
+                className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                  alertFormType === 'price'
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                }`}
+              >
+                Price Alert
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAlertFormType('technical'); setError(''); }}
+                className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                  alertFormType === 'technical'
+                    ? 'bg-teal-600 text-white'
+                    : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                }`}
+              >
+                Technical Indicator Alert
+              </button>
+            </div>
+
             {error && (
               <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg mb-4">
                 {error}
               </div>
             )}
 
-            <form onSubmit={handleAddAlert} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {alertFormType === 'price' ? (
+              /* Price Alert Form */
+              <form onSubmit={handleAddAlert} className="space-y-4">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Create Price Alert</h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Ticker Symbol *</label>
+                    <input
+                      type="text"
+                      value={newTicker}
+                      onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
+                      placeholder="AAPL"
+                      maxLength={10}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Condition *</label>
+                    <select
+                      value={newCondition}
+                      onChange={(e) => setNewCondition(e.target.value as 'above' | 'below')}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    >
+                      <option value="above">Above</option>
+                      <option value="below">Below</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Target Price *</label>
+                    <input
+                      type="number"
+                      value={newTargetPrice}
+                      onChange={(e) => setNewTargetPrice(e.target.value)}
+                      placeholder="150.00"
+                      step="0.01"
+                      min="0"
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      required
+                    />
+                  </div>
+                </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Ticker Symbol *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Notes (optional)</label>
                   <input
                     type="text"
-                    value={newTicker}
-                    onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
-                    placeholder="AAPL"
-                    maxLength={10}
+                    value={newNotes}
+                    onChange={(e) => setNewNotes(e.target.value)}
+                    placeholder="Why are you setting this alert?"
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    required
                   />
                 </div>
+                <div className="flex gap-3">
+                  <button type="submit" className="px-6 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors">
+                    Create Alert
+                  </button>
+                  <button type="button" onClick={resetForm} className="px-6 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-medium transition-colors">
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* Technical Alert Form */
+              <form onSubmit={handleAddTechnicalAlert} className="space-y-4">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Create Technical Indicator Alert</h2>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Checked daily after market close. Alerts fire on state transitions, not current state.</p>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Condition *
-                  </label>
-                  <select
-                    value={newCondition}
-                    onChange={(e) => setNewCondition(e.target.value as 'above' | 'below')}
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  >
-                    <option value="above">Above</option>
-                    <option value="below">Below</option>
-                  </select>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Ticker Symbol *</label>
+                    <input
+                      type="text"
+                      value={newTicker}
+                      onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
+                      placeholder="AAPL"
+                      maxLength={10}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Alert Type *</label>
+                    <select
+                      value={newAlertType}
+                      onChange={(e) => handleAlertTypeChange(e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                    >
+                      {ALERT_TYPE_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label} — {opt.description}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
+                {/* Dynamic config fields */}
+                {renderConfigFields()}
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Target Price *
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Notes (optional)</label>
                   <input
-                    type="number"
-                    value={newTargetPrice}
-                    onChange={(e) => setNewTargetPrice(e.target.value)}
-                    placeholder="150.00"
-                    step="0.01"
-                    min="0"
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    required
+                    type="text"
+                    value={newNotes}
+                    onChange={(e) => setNewNotes(e.target.value)}
+                    placeholder="Why are you setting this alert?"
+                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Notes (optional)
-                </label>
-                <input
-                  type="text"
-                  value={newNotes}
-                  onChange={(e) => setNewNotes(e.target.value)}
-                  placeholder="Why are you setting this alert?"
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  type="submit"
-                  className="px-6 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors"
-                >
-                  Create Alert
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAddingAlert(false);
-                    setNewTicker('');
-                    setNewCondition('above');
-                    setNewTargetPrice('');
-                    setNewNotes('');
-                    setError('');
-                  }}
-                  className="px-6 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-medium transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    disabled={creating}
+                    className="px-6 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {creating ? 'Creating...' : 'Create Technical Alert'}
+                  </button>
+                  <button type="button" onClick={resetForm} className="px-6 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-900 dark:text-white rounded-lg font-medium transition-colors">
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         )}
 
+        {/* Tabs */}
+        <div className="flex gap-1 mb-6 bg-gray-200 dark:bg-gray-900 p-1 rounded-lg w-fit">
+          {(['all', 'price', 'technical'] as Tab[]).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                activeTab === tab
+                  ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              {tab === 'all' ? `All (${allCombined})` : tab === 'price' ? `Price (${alerts.length})` : `Technical (${techAlerts.length})`}
+            </button>
+          ))}
+        </div>
+
         {/* Alerts Table */}
-        {alerts.length === 0 ? (
+        {allCombined === 0 ? (
           <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-12 border dark:border-gray-500 text-center">
             <div className="bg-gray-100 dark:bg-gray-600 rounded-full w-24 h-24 flex items-center justify-center mx-auto mb-6">
               <svg className="w-12 h-12 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -348,13 +598,8 @@ const Alerts: React.FC = () => {
               </svg>
             </div>
             <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">No Alerts Yet</h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Create your first price alert to get notified when stocks hit your target
-            </p>
-            <button
-              onClick={() => setAddingAlert(true)}
-              className="px-6 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors"
-            >
+            <p className="text-gray-600 dark:text-gray-400 mb-6">Create your first alert to get notified when conditions are met</p>
+            <button onClick={() => setAddingAlert(true)} className="px-6 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium transition-colors">
               Create Your First Alert
             </button>
           </div>
@@ -364,79 +609,94 @@ const Alerts: React.FC = () => {
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Ticker</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Type</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Condition</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Target Price</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Notes</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-700 divide-y divide-gray-200 dark:divide-gray-600">
-                {alerts.map((alert) => (
-                  <tr key={alert.id} className="hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                {/* Price Alerts */}
+                {(activeTab === 'all' || activeTab === 'price') && alerts.map(alert => (
+                  <tr key={`price-${alert.id}`} className="hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-bold text-gray-900 dark:text-white">{alert.ticker}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
-                        {new Date(alert.created_at).toLocaleDateString()}
-                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{new Date(alert.created_at).toLocaleDateString()}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200">
+                        Price
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         {alert.condition === 'above' ? (
-                          <>
-                            <svg className="w-4 h-4 text-green-600 dark:text-green-400 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                            </svg>
-                            <span className="text-sm text-green-600 dark:text-green-400 font-medium">Above</span>
-                          </>
+                          <span className="text-sm text-green-600 dark:text-green-400 font-medium">Above ${alert.target_price.toFixed(2)}</span>
                         ) : (
-                          <>
-                            <svg className="w-4 h-4 text-red-600 dark:text-red-400 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                            <span className="text-sm text-red-600 dark:text-red-400 font-medium">Below</span>
-                          </>
+                          <span className="text-sm text-red-600 dark:text-red-400 font-medium">Below ${alert.target_price.toFixed(2)}</span>
                         )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="text-sm font-semibold text-gray-900 dark:text-white">
-                        ${alert.target_price.toFixed(2)}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {alert.triggered_at ? (
-                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-200">
-                          Triggered
-                        </span>
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-200">Triggered</span>
                       ) : alert.is_active ? (
-                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200">
-                          Active
-                        </span>
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200">Active</span>
                       ) : (
-                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-200">
-                          Paused
-                        </span>
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-200">Paused</span>
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
-                        {alert.notes || '-'}
-                      </div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">{alert.notes || '-'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
                       {!alert.triggered_at && (
-                        <button
-                          onClick={() => handleToggleAlert(alert.id, alert.is_active)}
-                          className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300"
-                        >
+                        <button onClick={() => handleToggleAlert(alert.id, alert.is_active, 'price')} className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300">
                           {alert.is_active ? 'Pause' : 'Resume'}
                         </button>
                       )}
-                      <button
-                        onClick={() => handleDeleteAlert(alert.id)}
-                        className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                      >
+                      <button onClick={() => handleDeleteAlert(alert.id, 'price')} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+
+                {/* Technical Alerts */}
+                {(activeTab === 'all' || activeTab === 'technical') && techAlerts.map(alert => (
+                  <tr key={`tech-${alert.id}`} className="hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-bold text-gray-900 dark:text-white">{alert.ticker}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{new Date(alert.created_at).toLocaleDateString()}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-teal-100 dark:bg-teal-900/50 text-teal-800 dark:text-teal-200">
+                        {alert.alert_type_display}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900 dark:text-white max-w-xs">{alert.config_display}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {alert.triggered_at ? (
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-200">Triggered</span>
+                      ) : alert.is_active ? (
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200">Active</span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 dark:bg-gray-600 text-gray-800 dark:text-gray-200">Paused</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">{alert.notes || '-'}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                      {!alert.triggered_at && (
+                        <button onClick={() => handleToggleAlert(alert.id, alert.is_active, 'technical')} className="text-teal-600 hover:text-teal-900 dark:text-teal-400 dark:hover:text-teal-300">
+                          {alert.is_active ? 'Pause' : 'Resume'}
+                        </button>
+                      )}
+                      <button onClick={() => handleDeleteAlert(alert.id, 'technical')} className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300">
                         Delete
                       </button>
                     </td>

@@ -1,5 +1,5 @@
 from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Numeric, Date, Index, Integer
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
@@ -39,6 +39,7 @@ class User(Base):
     watchlists = relationship("Watchlist", back_populates="user", cascade="all, delete-orphan")
     portfolio = relationship("Portfolio", back_populates="user", cascade="all, delete-orphan")
     alerts = relationship("PriceAlert", back_populates="user", cascade="all, delete-orphan")
+    technical_alerts = relationship("TechnicalAlert", back_populates="user", cascade="all, delete-orphan")
 
     @property
     def phone_last_four(self) -> str | None:
@@ -93,6 +94,25 @@ class PriceAlert(Base):
     
     # Relationship to user
     user = relationship("User", back_populates="alerts")
+
+
+class TechnicalAlert(Base):
+    __tablename__ = "technical_alerts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    ticker = Column(String(10), nullable=False)
+    alert_type = Column(String(30), nullable=False)
+    config = Column(JSONB, nullable=False)
+    last_state = Column(JSONB, nullable=True)
+    is_active = Column(Boolean, default=True)
+    sms_enabled = Column(Boolean, default=False)
+    triggered_at = Column(DateTime(timezone=True), nullable=True)
+    trigger_details = Column(JSONB, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="technical_alerts")
 
 
 class WaitlistSignup(Base):

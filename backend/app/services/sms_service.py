@@ -134,3 +134,12 @@ def build_price_alert_message(
         f"NWC Alert: {ticker} {direction} your ${target_price:.2f} target — "
         f"now trading at ${current_price:.2f}."
     )
+
+
+def build_technical_alert_message(
+    ticker: str,
+    alert_type: str,
+    trigger_summary: str,
+) -> str:
+    """Build a concise SMS body for a triggered technical alert (< 160 chars)."""
+    return f"NWC Alert: {ticker} — {trigger_summary}"

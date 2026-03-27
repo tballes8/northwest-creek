@@ -93,6 +93,27 @@ export const alertsAPI = {
     axiosInstance.patch(`/alerts/${id}`, data),
 };
 
+// Technical Alerts API
+export const technicalAlertsAPI = {
+  getAll: () =>
+    axiosInstance.get('/technical-alerts/'),
+
+  create: (data: {
+    ticker: string;
+    alert_type: string;
+    config: Record<string, any>;
+    notes?: string;
+    sms_enabled?: boolean;
+  }) =>
+    axiosInstance.post('/technical-alerts/', data),
+
+  delete: (id: string) =>
+    axiosInstance.delete(`/technical-alerts/${id}`),
+
+  update: (id: string, data: { is_active?: boolean; notes?: string; sms_enabled?: boolean }) =>
+    axiosInstance.patch(`/technical-alerts/${id}`, data),
+};
+
 // Phone / SMS Verification API
 export const phoneAPI = {
   getStatus: () =>

@@ -7,7 +7,7 @@ from sqlalchemy import select, func
 from typing import List
 from decimal import Decimal
 
-from app.db.models import User, PriceAlert
+from app.db.models import User, PriceAlert, TechnicalAlert
 from app.schemas.alert import (
     AlertCreate,
     AlertUpdate,
@@ -45,12 +45,18 @@ async def create_alert(
     - "Alert me when TSLA goes above $500"
     - "Alert me when AAPL drops below $250"
     """
-    # Check current count
-    count_result = await db.execute(
+    # Check current count (price + technical combined)
+    price_count_result = await db.execute(
         select(func.count(PriceAlert.id)).where(PriceAlert.user_id == current_user.id)
     )
-    current_count = count_result.scalar()
-    
+    price_count = price_count_result.scalar()
+
+    tech_count_result = await db.execute(
+        select(func.count(TechnicalAlert.id)).where(TechnicalAlert.user_id == current_user.id)
+    )
+    tech_count = tech_count_result.scalar()
+    current_count = price_count + tech_count
+
     # Check limit
     limit = get_tier_limit(current_user.subscription_tier, "alerts")
     if current_count >= limit:
@@ -61,10 +67,10 @@ async def create_alert(
             upgrade_msg = f"Upgrade to {next_tier.capitalize()} for {next_limit} alerts!"
         else:
             upgrade_msg = "Contact support for custom limits."
-        
+
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Alert limit reached! You have {current_count}/{limit} price alerts. {upgrade_msg}"
+            detail=f"Alert limit reached! You have {current_count}/{limit} total alerts (price + technical). {upgrade_msg}"
         )
     
     # Verify ticker exists and get current price
@@ -177,14 +183,20 @@ async def get_alerts(
     alerts = result.scalars().all()
     
     limit = get_tier_limit(current_user.subscription_tier, "alerts")
-    
+
+    # Count technical alerts for combined quota display
+    tech_count_result = await db.execute(
+        select(func.count(TechnicalAlert.id)).where(TechnicalAlert.user_id == current_user.id)
+    )
+    tech_count = tech_count_result.scalar()
+
     if not alerts:
         return AlertsSummary(
             alerts=[],
             total_alerts=0,
             active_alerts=0,
             triggered_alerts=0,
-            alerts_used=0,
+            alerts_used=tech_count,
             alerts_limit=limit
         )
     
@@ -239,7 +251,7 @@ async def get_alerts(
         total_alerts=len(alerts),
         active_alerts=active_count,
         triggered_alerts=triggered_count,
-        alerts_used=len(alerts),
+        alerts_used=len(alerts) + tech_count,
         alerts_limit=limit
     )
 
