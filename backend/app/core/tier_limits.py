@@ -37,7 +37,7 @@ TIER_LIMITS = {
         "portfolio_entries": 45,
         "alerts": 20,
         "sms_alerts": True,
-        "indicator_alerts": 0,
+        "indicator_alerts": 5,
         "stock_reviews": 10,          # per day
         "dcf_valuations": 10,         # per day
         "technical_analysis": 10,     # per day
