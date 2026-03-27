@@ -2,3 +2,8 @@
 name = "Daily Stock Snapshot"
 schedule = "0 6 * * *"
 command = "python -m app.tasks.fetch_daily_snapshots"
+
+[[jobs]]
+name = "Technical Alert Check"
+schedule = "30 21 * * 1-5"
+command = "python -m app.tasks.check_technical_alerts"
