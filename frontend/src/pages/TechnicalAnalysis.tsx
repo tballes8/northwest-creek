@@ -236,13 +236,14 @@ const TechnicalAnalysis: React.FC = () => {
     // Auto-analyze if ticker is provided via URL
     if (urlTicker) {
       setTicker(urlTicker);
-      
+
       // Pre-fetch hint only — real warrant detection happens after API response
       const isWarrantHint = detectWarrantHint(urlTicker);
       setIsWarrant(isWarrantHint);
       if (isWarrantHint) {
         setRelatedCommonStock(getRelatedCommonStock(urlTicker));
       }
+      performAnalysis(urlTicker);
     }
   }, [urlTicker]);
 

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import ThemeToggle from './ThemeToggle';
 import { User } from '../types';
 
@@ -67,11 +67,18 @@ const getTierBadge = (tier: string) => {
   );
 };
 
+const TICKER_PAGES: Set<PageKey> = new Set(['stocks', 'technical-analysis', 'dcf-valuation']);
+
 const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
+  const [searchParams] = useSearchParams();
+  const currentTicker = searchParams.get('ticker') || '';
+
+  const buildTo = (to: string, key: PageKey) =>
+    currentTicker && TICKER_PAGES.has(key) ? `${to}?ticker=${currentTicker}` : to;
 
   // Close menus on outside click
   useEffect(() => {
@@ -131,7 +138,7 @@ const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
                         {item.children.map((child) => (
                           <Link
                             key={child.key}
-                            to={child.to}
+                            to={buildTo(child.to, child.key)}
                             onClick={() => setOpenDropdown(null)}
                             className={`flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
                               currentPage === child.key
@@ -152,7 +159,7 @@ const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
               return (
                 <Link
                   key={item.key}
-                  to={item.to!}
+                  to={buildTo(item.to!, item.key!)}
                   className={
                     currentPage === item.key
                       ? 'text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1 whitespace-nowrap'
