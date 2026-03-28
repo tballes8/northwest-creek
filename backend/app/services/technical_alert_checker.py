@@ -16,10 +16,30 @@ from app.db.models import TechnicalAlert, User
 from app.services.market_data import market_data_service
 from app.services.technical_indicators import technical_indicators, generate_summary
 from app.services.sms_service import send_alert_sms, build_technical_alert_message
+from app.services.financials_service import get_company_financials
 
 settings = get_settings()
 EMAIL_ON_TRIGGER = True
 FMP_CONCURRENCY = 5  # max parallel FMP requests
+
+INDICATOR_ALERT_TYPES = {"sentiment_shift", "ma_crossover", "rsi_extreme", "macd_cross", "bollinger_breach"}
+FUNDAMENTAL_ALERT_TYPES = {"dcf_valuation", "rule_of_40"}
+
+# Sector DCF defaults: (growth_rate, terminal_growth, discount_rate, projection_years)
+_SECTOR_DEFAULTS = {
+    "Technology": (0.15, 0.03, 0.12, 7),
+    "Healthcare": (0.08, 0.025, 0.09, 5),
+    "Financial Services": (0.06, 0.02, 0.11, 5),
+    "Consumer Cyclical": (0.07, 0.025, 0.10, 5),
+    "Consumer Defensive": (0.05, 0.02, 0.08, 5),
+    "Energy": (0.04, 0.015, 0.12, 5),
+    "Industrials": (0.06, 0.025, 0.09, 5),
+    "Real Estate": (0.04, 0.02, 0.09, 5),
+    "Utilities": (0.03, 0.02, 0.07, 5),
+    "Communication Services": (0.08, 0.025, 0.10, 6),
+    "Materials": (0.05, 0.02, 0.10, 5),
+}
+_DEFAULT_PROFILE = (0.06, 0.025, 0.10, 5)
 
 
 class TechnicalAlertChecker:
@@ -61,13 +81,24 @@ class TechnicalAlertChecker:
             nonlocal triggered_count
             async with semaphore:
                 try:
-                    indicators = await self._compute_indicators(ticker)
-                    if indicators is None:
-                        print(f"   ⚠️  Skipping {ticker}: insufficient data")
-                        return
+                    needs_indicators = any(a.alert_type in INDICATOR_ALERT_TYPES for a in ticker_alerts)
+                    needs_fundamentals = any(a.alert_type in FUNDAMENTAL_ALERT_TYPES for a in ticker_alerts)
+
+                    indicators = None
+                    fundamentals = None
+
+                    if needs_indicators:
+                        indicators = await self._compute_indicators(ticker)
+                    if needs_fundamentals:
+                        fundamentals = await self._compute_fundamentals(ticker)
 
                     for alert in ticker_alerts:
-                        triggered, new_state, details = self._evaluate_alert(alert, indicators)
+                        if alert.alert_type in INDICATOR_ALERT_TYPES and indicators is None:
+                            continue
+                        if alert.alert_type in FUNDAMENTAL_ALERT_TYPES and fundamentals is None:
+                            continue
+
+                        triggered, new_state, details = self._evaluate_alert(alert, indicators, fundamentals)
 
                         # Always update last_state regardless of trigger
                         alert.last_state = new_state
@@ -125,9 +156,20 @@ class TechnicalAlertChecker:
         }
 
     def _evaluate_alert(
-        self, alert: TechnicalAlert, indicators: Dict[str, Any]
+        self, alert: TechnicalAlert,
+        indicators: Optional[Dict[str, Any]] = None,
+        fundamentals: Optional[Dict[str, Any]] = None,
     ) -> Tuple[bool, dict, dict]:
         """Returns (triggered, new_state, trigger_details)."""
+        atype = alert.alert_type
+
+        # Fundamental-based alerts
+        if atype == "dcf_valuation":
+            return self._eval_dcf_valuation(alert, fundamentals)
+        if atype == "rule_of_40":
+            return self._eval_rule_of_40(alert, fundamentals)
+
+        # Indicator-based alerts
         evaluators = {
             "sentiment_shift": self._eval_sentiment_shift,
             "ma_crossover": self._eval_ma_crossover,
@@ -135,7 +177,7 @@ class TechnicalAlertChecker:
             "macd_cross": self._eval_macd_cross,
             "bollinger_breach": self._eval_bollinger_breach,
         }
-        evaluator = evaluators.get(alert.alert_type)
+        evaluator = evaluators.get(atype)
         if not evaluator:
             return False, alert.last_state or {}, {}
         return evaluator(alert, indicators)
@@ -273,6 +315,196 @@ class TechnicalAlertChecker:
         }
         return triggered, new_state, details
 
+    # ── Fundamental-based evaluators ─────────────────────────────────
+
+    async def _compute_fundamentals(self, ticker: str) -> Optional[Dict[str, Any]]:
+        """Fetch quote, company info, and financials for DCF / Rule-of-40 alerts."""
+        try:
+            quote, company, financials = await asyncio.gather(
+                market_data_service.get_quote(ticker),
+                market_data_service.get_company_info(ticker),
+                get_company_financials(ticker),
+                return_exceptions=True,
+            )
+            if isinstance(quote, BaseException) or isinstance(company, BaseException):
+                return None
+            if isinstance(financials, BaseException):
+                financials = None
+
+            current_price = float(quote.get("price", 0))
+            if current_price == 0:
+                return None
+
+            return {
+                "current_price": current_price,
+                "company": company,
+                "financials": financials,
+            }
+        except Exception as e:
+            print(f"   ⚠️  Could not fetch fundamentals for {ticker}: {e}")
+            return None
+
+    @staticmethod
+    def _compute_dcf_rating(fundamentals: Dict[str, Any]) -> Tuple[Optional[str], float, float]:
+        """Calculate DCF rating using sector defaults. Returns (rating_key, margin_of_safety, intrinsic_value)."""
+        company = fundamentals["company"]
+        fin = fundamentals["financials"]
+        current_price = fundamentals["current_price"]
+
+        if fin is None:
+            return None, 0.0, 0.0
+
+        sector = company.get("sector", "Other")
+        market_cap = company.get("market_cap") or 0
+
+        # Sector defaults
+        growth_rate, terminal_growth, discount_rate, projection_years = _SECTOR_DEFAULTS.get(sector, _DEFAULT_PROFILE)
+
+        # Size adjustment
+        if market_cap >= 200_000_000_000:
+            g_adj, d_adj = -0.01, -0.01
+        elif market_cap >= 10_000_000_000:
+            g_adj, d_adj = 0, 0
+        elif market_cap >= 2_000_000_000:
+            g_adj, d_adj = 0.01, 0.01
+        elif market_cap >= 300_000_000:
+            g_adj, d_adj = 0.02, 0.02
+        else:
+            g_adj, d_adj = 0.03, 0.03
+
+        growth_rate = max(0.01, min(0.30, growth_rate + g_adj))
+        discount_rate = max(0.06, min(0.20, discount_rate + d_adj))
+
+        # Extract FCF
+        cash_flow_data = fin.get("cash_flow") or {}
+        current_fcf = cash_flow_data.get("free_cash_flow")
+        if current_fcf is None:
+            current_fcf = cash_flow_data.get("operating_cash_flow")
+        if current_fcf is None:
+            current_fcf = (market_cap * 0.05) if market_cap else (current_price * 1_000_000)
+
+        # Extract shares outstanding
+        income_data = fin.get("income_statement") or {}
+        shares = income_data.get("diluted_shares_outstanding")
+        if not shares or shares <= 0:
+            shares = (market_cap / current_price) if (market_cap and current_price > 0) else 1_000_000
+
+        # Project cash flows
+        pv_sum = 0
+        last_year_fcf = current_fcf
+        for year in range(1, projection_years + 1):
+            fcf = current_fcf * ((1 + growth_rate) ** year)
+            pv = fcf / ((1 + discount_rate) ** year)
+            pv_sum += pv
+            last_year_fcf = fcf
+
+        # Terminal value
+        if discount_rate <= terminal_growth:
+            return None, 0.0, 0.0
+        terminal_value = (last_year_fcf * (1 + terminal_growth)) / (discount_rate - terminal_growth)
+        terminal_pv = terminal_value / ((1 + discount_rate) ** projection_years)
+
+        # Equity value (with net cash adjustment)
+        balance_sheet = fin.get("balance_sheet") or {}
+        cash = balance_sheet.get("cash_and_equivalents") or balance_sheet.get("cash") or 0
+        debt = balance_sheet.get("total_debt") or balance_sheet.get("long_term_debt") or 0
+        enterprise_value = pv_sum + terminal_pv
+        equity_value = enterprise_value + (cash - debt)
+        intrinsic_value = equity_value / shares
+
+        # Margin of safety & rating
+        margin_of_safety = ((intrinsic_value - current_price) / current_price) * 100
+
+        if margin_of_safety > 20:
+            rating = "strong_buy"
+        elif margin_of_safety > 10:
+            rating = "buy"
+        elif margin_of_safety > -10:
+            rating = "hold"
+        elif margin_of_safety > -20:
+            rating = "sell"
+        else:
+            rating = "strong_sell"
+
+        return rating, margin_of_safety, intrinsic_value
+
+    def _eval_dcf_valuation(self, alert, fundamentals):
+        """Detect DCF rating transition to target."""
+        if fundamentals is None:
+            return False, alert.last_state or {}, {}
+
+        rating, mos, iv = self._compute_dcf_rating(fundamentals)
+        if rating is None:
+            return False, alert.last_state or {}, {}
+
+        last_rating = (alert.last_state or {}).get("rating")
+        target_rating = alert.config["target_rating"]
+
+        new_state = {
+            "rating": rating,
+            "margin_of_safety": round(mos, 2),
+            "intrinsic_value": round(iv, 2),
+            "current_price": round(fundamentals["current_price"], 2),
+        }
+
+        triggered = (
+            rating == target_rating
+            and last_rating is not None
+            and last_rating != target_rating
+        )
+        details = {
+            "from_rating": last_rating,
+            "to_rating": rating,
+            "margin_of_safety": round(mos, 2),
+            "intrinsic_value": round(iv, 2),
+            "current_price": round(fundamentals["current_price"], 2),
+        }
+        return triggered, new_state, details
+
+    def _eval_rule_of_40(self, alert, fundamentals):
+        """Detect Rule of 40 crossing threshold."""
+        if fundamentals is None:
+            return False, alert.last_state or {}, {}
+
+        fin = fundamentals.get("financials")
+        if fin is None:
+            return False, alert.last_state or {}, {}
+
+        gp = fin.get("growth_profile") or {}
+        if gp.get("is_stale"):
+            return False, alert.last_state or {}, {}
+
+        r40 = gp.get("rule_of_40")
+        if r40 is None:
+            return False, alert.last_state or {}, {}
+
+        threshold = alert.config["threshold"]
+        direction = alert.config["direction"]
+        was_above = (alert.last_state or {}).get("above_threshold")
+        currently_above = r40 >= threshold
+
+        new_state = {
+            "rule_of_40": r40,
+            "above_threshold": currently_above,
+            "components": gp.get("rule_of_40_components"),
+        }
+
+        if was_above is None:
+            return False, new_state, {}
+
+        triggered = False
+        if direction == "above" and currently_above and not was_above:
+            triggered = True
+        elif direction == "below" and not currently_above and was_above:
+            triggered = True
+
+        details = {
+            "rule_of_40": r40,
+            "threshold": threshold,
+            "components": gp.get("rule_of_40_components"),
+        }
+        return triggered, new_state, details
+
     # ── Trigger & Notifications ───────────────────────────────────────
 
     async def _trigger_alert(self, db: AsyncSession, alert: TechnicalAlert, trigger_details: dict):
@@ -362,6 +594,15 @@ class TechnicalAlertChecker:
         elif alert_type == "bollinger_breach":
             band = "upper" if config.get("breach_type") == "upper" else "lower"
             return f"broke {band} Bollinger Band — price ${details.get('price', '?')}"
+        elif alert_type == "dcf_valuation":
+            from_r = (details.get("from_rating") or "?").replace("_", " ").title()
+            to_r = (details.get("to_rating") or "?").replace("_", " ").title()
+            return f"DCF rating shifted {from_r} → {to_r} (MoS: {details.get('margin_of_safety', '?')}%)"
+        elif alert_type == "rule_of_40":
+            r40 = details.get("rule_of_40", "?")
+            threshold = details.get("threshold", 40)
+            direction = "above" if config.get("direction") == "above" else "below"
+            return f"Rule of 40 crossed {direction} {threshold} — now {r40}"
         return "indicator alert triggered"
 
     @staticmethod
@@ -447,6 +688,10 @@ class TechnicalAlertChecker:
         Compute the current indicator state for a newly created alert.
         Called at alert creation time so the first cron run can detect transitions.
         """
+        # Fundamental-based types don't need historical price indicators
+        if alert_type in FUNDAMENTAL_ALERT_TYPES:
+            return await self._seed_fundamental_state(ticker, alert_type, config)
+
         indicators = await self._compute_indicators(ticker)
         if indicators is None:
             return {}
@@ -491,6 +736,40 @@ class TechnicalAlertChecker:
                 "upper": round(bb["upper"], 2),
                 "lower": round(bb["lower"], 2),
                 "price": round(indicators["current_price"], 2),
+            }
+
+        return {}
+
+    async def _seed_fundamental_state(self, ticker: str, alert_type: str, config: dict) -> dict:
+        """Seed initial state for fundamental-based alert types."""
+        fundamentals = await self._compute_fundamentals(ticker)
+        if fundamentals is None:
+            return {}
+
+        if alert_type == "dcf_valuation":
+            rating, mos, iv = self._compute_dcf_rating(fundamentals)
+            if rating is None:
+                return {}
+            return {
+                "rating": rating,
+                "margin_of_safety": round(mos, 2),
+                "intrinsic_value": round(iv, 2),
+                "current_price": round(fundamentals["current_price"], 2),
+            }
+
+        elif alert_type == "rule_of_40":
+            fin = fundamentals.get("financials")
+            if fin is None:
+                return {}
+            gp = fin.get("growth_profile") or {}
+            r40 = gp.get("rule_of_40")
+            if r40 is None:
+                return {}
+            threshold = config.get("threshold", 40)
+            return {
+                "rule_of_40": r40,
+                "above_threshold": r40 >= threshold,
+                "components": gp.get("rule_of_40_components"),
             }
 
         return {}

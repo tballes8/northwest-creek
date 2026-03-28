@@ -40,6 +40,8 @@ const ALERT_TYPE_OPTIONS = [
   { value: 'rsi_extreme', label: 'RSI Extreme', description: 'RSI crosses overbought/oversold' },
   { value: 'macd_cross', label: 'MACD Cross', description: 'MACD histogram flips sign' },
   { value: 'bollinger_breach', label: 'Bollinger Breach', description: 'Price breaks Bollinger Bands' },
+  { value: 'dcf_valuation', label: 'DCF Valuation', description: 'DCF rating turns Buy/Sell' },
+  { value: 'rule_of_40', label: 'Rule of 40', description: 'Rule of 40 crosses threshold' },
 ];
 
 const Alerts: React.FC = () => {
@@ -209,6 +211,12 @@ const Alerts: React.FC = () => {
       case 'bollinger_breach':
         setNewConfig({ breach_type: 'upper' });
         break;
+      case 'dcf_valuation':
+        setNewConfig({ target_rating: 'strong_buy' });
+        break;
+      case 'rule_of_40':
+        setNewConfig({ direction: 'above', threshold: 40 });
+        break;
     }
   };
 
@@ -334,6 +342,51 @@ const Alerts: React.FC = () => {
               <option value="upper">Upper Band Breach (potentially overbought)</option>
               <option value="lower">Lower Band Breach (potentially oversold)</option>
             </select>
+          </div>
+        );
+      case 'dcf_valuation':
+        return (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Target Rating *</label>
+            <select
+              value={newConfig.target_rating || 'strong_buy'}
+              onChange={e => setNewConfig({ target_rating: e.target.value })}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="strong_buy">Strong Buy (undervalued by &gt;20%)</option>
+              <option value="buy">Buy (undervalued by &gt;10%)</option>
+              <option value="sell">Sell (overvalued by &gt;10%)</option>
+              <option value="strong_sell">Strong Sell (overvalued by &gt;20%)</option>
+            </select>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Uses sector-default DCF parameters. Alert fires when rating transitions TO this value.</p>
+          </div>
+        );
+      case 'rule_of_40':
+        return (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Direction *</label>
+              <select
+                value={newConfig.direction || 'above'}
+                onChange={e => setNewConfig({ ...newConfig, direction: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="above">Crosses Above</option>
+                <option value="below">Drops Below</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Threshold *</label>
+              <input
+                type="number"
+                value={newConfig.threshold ?? 40}
+                onChange={e => setNewConfig({ ...newConfig, threshold: parseFloat(e.target.value) })}
+                min={0}
+                max={100}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Revenue Growth % + FCF Margin %. Standard threshold is 40.</p>
+            </div>
           </div>
         );
       default:

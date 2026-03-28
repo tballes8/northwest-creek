@@ -12,6 +12,8 @@ VALID_ALERT_TYPES = {
     "rsi_extreme",
     "macd_cross",
     "bollinger_breach",
+    "dcf_valuation",
+    "rule_of_40",
 }
 
 ALERT_TYPE_LABELS = {
@@ -20,6 +22,8 @@ ALERT_TYPE_LABELS = {
     "rsi_extreme": "RSI Extreme",
     "macd_cross": "MACD Cross",
     "bollinger_breach": "Bollinger Band Breach",
+    "dcf_valuation": "DCF Valuation",
+    "rule_of_40": "Rule of 40",
 }
 
 
@@ -63,6 +67,24 @@ def _validate_config(alert_type: str, config: dict) -> dict:
             raise ValueError("bollinger_breach requires config.breach_type: 'upper' or 'lower'")
         return {"breach_type": breach_type}
 
+    elif alert_type == "dcf_valuation":
+        target = config.get("target_rating")
+        if target not in ("strong_buy", "buy", "sell", "strong_sell"):
+            raise ValueError("dcf_valuation requires config.target_rating: 'strong_buy', 'buy', 'sell', or 'strong_sell'")
+        return {"target_rating": target}
+
+    elif alert_type == "rule_of_40":
+        direction = config.get("direction")
+        if direction not in ("above", "below"):
+            raise ValueError("rule_of_40 requires config.direction: 'above' or 'below'")
+        threshold = config.get("threshold")
+        if threshold is None:
+            threshold = 40
+        threshold = float(threshold)
+        if not (0 <= threshold <= 100):
+            raise ValueError("rule_of_40 threshold must be between 0-100")
+        return {"direction": direction, "threshold": threshold}
+
     raise ValueError(f"Unknown alert_type: {alert_type}")
 
 
@@ -82,6 +104,12 @@ def _config_display(alert_type: str, config: dict, ticker: str) -> str:
     elif alert_type == "bollinger_breach":
         label = "upper band" if config["breach_type"] == "upper" else "lower band"
         return f"Alert when {ticker} breaks {label}"
+    elif alert_type == "dcf_valuation":
+        label = config["target_rating"].replace("_", " ").title()
+        return f"Alert when {ticker} DCF rating turns {label}"
+    elif alert_type == "rule_of_40":
+        dir_label = "rises above" if config["direction"] == "above" else "drops below"
+        return f"Alert when {ticker} Rule of 40 {dir_label} {config['threshold']:.0f}"
     return ""
 
 
