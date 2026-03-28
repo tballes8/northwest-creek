@@ -136,6 +136,12 @@ interface TechnicalAnalysisData {
     outlook: string;
     strength: number;
     message: string;
+    price_range?: {
+      support: number;
+      resistance: number;
+      support_levels_count: number;
+      resistance_levels_count: number;
+    } | null;
   };
 }
 
@@ -958,25 +964,40 @@ const TechnicalAnalysis: React.FC = () => {
 
               {/* Outlook Summary */}
               <div className={`p-4 rounded-lg ${
-                analysisData.summary.outlook === 'bullish' 
+                analysisData.summary.outlook === 'bullish'
                   ? 'bg-green-50 dark:bg-green-900/30 border border-green-500 dark:border-green-600'
                   : analysisData.summary.outlook === 'bearish'
                   ? 'bg-red-50 dark:bg-red-900/30 border border-red-500 dark:border-red-600'
                   : 'bg-gray-50 dark:bg-gray-600 border border-gray-400 dark:border-gray-500'
               }`}>
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">
-                    {analysisData.summary.outlook === 'bullish' ? '🟢' : 
-                     analysisData.summary.outlook === 'bearish' ? '🔴' : '🟡'}
-                  </span>
-                  <div>
-                    <div className="font-bold text-lg capitalize text-gray-900 dark:text-white">
-                      {analysisData.summary.outlook} Outlook
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">
+                      {analysisData.summary.outlook === 'bullish' ? '🟢' :
+                       analysisData.summary.outlook === 'bearish' ? '🔴' : '🟡'}
+                    </span>
+                    <div>
+                      <div className="font-bold text-lg capitalize text-gray-900 dark:text-white">
+                        {analysisData.summary.outlook} Outlook
+                      </div>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
+                        {analysisData.summary.message}
+                      </p>
                     </div>
-                    <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
-                      {analysisData.summary.message}
-                    </p>
                   </div>
+                  {analysisData.summary.price_range && (
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        Technical Range
+                      </div>
+                      <div className="text-lg font-bold text-gray-900 dark:text-white mt-0.5">
+                        ${analysisData.summary.price_range.support.toFixed(2)} – ${analysisData.summary.price_range.resistance.toFixed(2)}
+                      </div>
+                      <div className="text-xs italic text-gray-500 dark:text-gray-400 mt-0.5">
+                        Indicator-derived range, not a price target
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

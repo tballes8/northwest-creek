@@ -496,6 +496,94 @@ class TechnicalIndicators:
 technical_indicators = TechnicalIndicators()
 
 
+def _calculate_price_range(current_price, bb_data, ma_data, advanced):
+    """
+    Derive a technical support/resistance range from price-level indicators.
+
+    Collects upper-bound (resistance) and lower-bound (support) price levels
+    from Bollinger Bands, Keltner Channels, Donchian Channels, Ichimoku Cloud,
+    SMAs, VWAP, and Parabolic SAR. Returns the median of each as the range.
+    """
+    import statistics
+
+    support_levels = []
+    resistance_levels = []
+
+    # Bollinger Bands
+    if bb_data and isinstance(bb_data, dict):
+        if bb_data.get("lower_band") is not None:
+            support_levels.append(bb_data["lower_band"])
+        if bb_data.get("upper_band") is not None:
+            resistance_levels.append(bb_data["upper_band"])
+
+    # Keltner Channels
+    keltner = advanced.get("keltner")
+    if keltner and isinstance(keltner, dict):
+        if keltner.get("lower") is not None:
+            support_levels.append(keltner["lower"])
+        if keltner.get("upper") is not None:
+            resistance_levels.append(keltner["upper"])
+
+    # Donchian Channels
+    donchian = advanced.get("donchian")
+    if donchian and isinstance(donchian, dict):
+        if donchian.get("lower") is not None:
+            support_levels.append(donchian["lower"])
+        if donchian.get("upper") is not None:
+            resistance_levels.append(donchian["upper"])
+
+    # Ichimoku Cloud — lower edge = support, upper edge = resistance
+    ichimoku = advanced.get("ichimoku")
+    if ichimoku and isinstance(ichimoku, dict):
+        senkou_a = ichimoku.get("senkou_a")
+        senkou_b = ichimoku.get("senkou_b")
+        if senkou_a is not None and senkou_b is not None:
+            support_levels.append(min(senkou_a, senkou_b))
+            resistance_levels.append(max(senkou_a, senkou_b))
+
+    # Moving Averages — classify as support or resistance relative to price
+    if ma_data and isinstance(ma_data, dict):
+        for key in ("sma_20", "sma_50", "sma_200"):
+            val = ma_data.get(key)
+            if val is not None:
+                if val <= current_price:
+                    support_levels.append(val)
+                else:
+                    resistance_levels.append(val)
+
+    # VWAP — classify as support or resistance relative to price
+    vwap = advanced.get("vwap")
+    if vwap and isinstance(vwap, dict):
+        vwap_val = vwap.get("value")
+        if vwap_val is not None:
+            if vwap_val <= current_price:
+                support_levels.append(vwap_val)
+            else:
+                resistance_levels.append(vwap_val)
+
+    # Parabolic SAR — uptrend SAR is below price (support), downtrend is above (resistance)
+    sar = advanced.get("parabolic_sar")
+    if sar and isinstance(sar, dict):
+        sar_val = sar.get("value")
+        sar_trend = sar.get("trend")
+        if sar_val is not None:
+            if sar_trend == "uptrend":
+                support_levels.append(sar_val)
+            else:
+                resistance_levels.append(sar_val)
+
+    # Need at least 2 levels on each side for a meaningful range
+    if len(support_levels) < 2 or len(resistance_levels) < 2:
+        return None
+
+    return {
+        "support": round(statistics.median(support_levels), 2),
+        "resistance": round(statistics.median(resistance_levels), 2),
+        "support_levels_count": len(support_levels),
+        "resistance_levels_count": len(resistance_levels),
+    }
+
+
 def generate_summary(rsi, macd_data, ma_data, bb_data, current_price, advanced=None):
     """
     Generate overall trading summary using weighted indicator scoring.
@@ -671,6 +759,9 @@ def generate_summary(rsi, macd_data, ma_data, bb_data, current_price, advanced=N
             "weight": abs(score),
         })
 
+    # ── Technical Price Range ───────────────────────────────────────
+    price_range = _calculate_price_range(current_price, bb_data, ma_data, advanced)
+
     return {
         "outlook": outlook,
         "strength": total_score,
@@ -680,4 +771,5 @@ def generate_summary(rsi, macd_data, ma_data, bb_data, current_price, advanced=N
         "bullish_count": bullish_count,
         "bearish_count": bearish_count,
         "breakdown": breakdown,
+        "price_range": price_range,
     }
