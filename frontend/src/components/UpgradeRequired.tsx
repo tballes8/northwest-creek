@@ -54,7 +54,7 @@ const TIER_INFO: Record<string, {
       '5 technical analyses per week',
       '5 DCF valuations per week',
       '5 price alerts',
-      'Top 10 stock list download',
+
     ],
   },
   active: {
@@ -69,7 +69,7 @@ const TIER_INFO: Record<string, {
       '5 technical analyses per day',
       '5 DCF valuations per day',
       '20 price alerts',
-      'Level 2 stock list download',
+
     ],
   },
   professional: {
@@ -84,7 +84,7 @@ const TIER_INFO: Record<string, {
       '20 technical analyses per day',
       '20 DCF valuations per day',
       '50 price alerts',
-      'Level 3 stock list download',
+
       'Ad-free experience',
     ],
   },
