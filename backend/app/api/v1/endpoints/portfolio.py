@@ -144,18 +144,46 @@ async def add_position(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid ticker symbol: {position_data.ticker}"
         )
-    
-    # Create portfolio position
-    db_item = Portfolio(
-        user_id=current_user.id,
-        ticker=position_data.ticker.upper(),
-        quantity=position_data.quantity,
-        buy_price=position_data.buy_price,
-        buy_date=position_data.buy_date,
-        notes=position_data.notes
+
+    # Check if ticker already exists in portfolio — aggregate if so
+    existing_result = await db.execute(
+        select(Portfolio).where(
+            and_(
+                Portfolio.user_id == current_user.id,
+                Portfolio.ticker == position_data.ticker.upper()
+            )
+        )
     )
-    
-    db.add(db_item)
+    existing = existing_result.scalar_one_or_none()
+
+    if existing:
+        # Recalculate weighted average cost basis
+        old_total = float(existing.quantity) * float(existing.buy_price)
+        new_total = float(position_data.quantity) * float(position_data.buy_price)
+        combined_qty = float(existing.quantity) + float(position_data.quantity)
+        avg_cost = (old_total + new_total) / combined_qty
+
+        existing.quantity = combined_qty
+        existing.buy_price = round(avg_cost, 2)
+        # Keep the earlier buy_date
+        if position_data.buy_date < existing.buy_date:
+            existing.buy_date = position_data.buy_date
+        # Append notes if provided
+        if position_data.notes:
+            existing.notes = f"{existing.notes}\n{position_data.notes}" if existing.notes else position_data.notes
+
+        db_item = existing
+    else:
+        db_item = Portfolio(
+            user_id=current_user.id,
+            ticker=position_data.ticker.upper(),
+            quantity=position_data.quantity,
+            buy_price=position_data.buy_price,
+            buy_date=position_data.buy_date,
+            notes=position_data.notes
+        )
+        db.add(db_item)
+
     await db.commit()
     await db.refresh(db_item)
     
