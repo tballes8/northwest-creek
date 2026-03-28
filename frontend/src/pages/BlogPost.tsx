@@ -70,6 +70,7 @@ const IframeContent: React.FC<{ html: string }> = ({ html }) => {
   const srcDoc = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<base target="_blank" rel="noopener noreferrer">
 <style>${baseCSS}</style>
 </head>
 <body>${extractBody(html)}
@@ -99,7 +100,7 @@ const IframeContent: React.FC<{ html: string }> = ({ html }) => {
     <iframe
       ref={iframeRef}
       srcDoc={srcDoc}
-      sandbox="allow-scripts allow-same-origin"
+      sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
       className="w-full border-0"
       style={{ minHeight: '200px', overflow: 'hidden' }}
       title="Blog post content"

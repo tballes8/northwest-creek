@@ -597,7 +597,7 @@ const AdminContent: React.FC = () => {
                         {blogFormData.content ? (
                           <iframe
                             srcDoc={blogFormData.content}
-                            sandbox="allow-scripts allow-same-origin"
+                            sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
                             className="w-full border-0"
                             style={{ minHeight: '400px', height: '60vh' }}
                             title="Blog preview"
