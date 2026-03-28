@@ -40,6 +40,7 @@ class User(Base):
     portfolio = relationship("Portfolio", back_populates="user", cascade="all, delete-orphan")
     alerts = relationship("PriceAlert", back_populates="user", cascade="all, delete-orphan")
     technical_alerts = relationship("TechnicalAlert", back_populates="user", cascade="all, delete-orphan")
+    feature_usage = relationship("FeatureUsage", back_populates="user", cascade="all, delete-orphan")
 
     @property
     def phone_last_four(self) -> str | None:
@@ -130,6 +131,23 @@ class WaitlistSignup(Base):
     ip_address = Column(String(45), nullable=True)        # IPv4 or IPv6, for rate-limit / abuse detection
     converted = Column(Boolean, default=False)            # flipped True when they register a real account
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class FeatureUsage(Base):
+    """Tracks per-user, per-feature usage for time-based tier limits (daily/weekly)."""
+    __tablename__ = "feature_usage"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    feature = Column(String(50), nullable=False)   # e.g. "dcf_valuations", "stock_reviews", "technical_analysis"
+    used_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="feature_usage")
+
+    __table_args__ = (
+        Index('idx_feature_usage_user_feature', 'user_id', 'feature'),
+        Index('idx_feature_usage_used_at', 'used_at'),
+    )
 
 
 class DailyStockSnapshot(Base):

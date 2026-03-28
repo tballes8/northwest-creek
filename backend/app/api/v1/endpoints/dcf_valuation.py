@@ -4,15 +4,18 @@ DCF Valuation API Endpoints - Discounted Cash Flow Analysis
 """
 import asyncio
 import re
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func as sa_func
 from typing import Optional, Dict, Any
-from app.db.models import User
+from app.db.models import User, FeatureUsage
 from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.services.market_data import market_data_service
 from app.services.financials_service import get_company_financials
 from app.services.fmp_client import get_fmp_client, API_KEY
+from app.core.tier_limits import get_tier_limit, get_review_period, get_upgrade_tier
 
 
 def _safe_error(e: Exception) -> str:
@@ -108,6 +111,58 @@ def require_valid_tier(current_user: User = Depends(get_current_user)):
             detail=f"DCF Valuation requires a valid subscription. Current tier: {current_user.subscription_tier.title()}. Please contact support."
         )
     return current_user
+
+
+async def check_dcf_limit(user: User, db: AsyncSession) -> int:
+    """Check if user has reached their DCF valuation limit for the current period.
+
+    Returns the current usage count. Raises 403 if the limit is exceeded.
+    """
+    limit = get_tier_limit(user.subscription_tier, "dcf_valuations")
+    period = get_review_period(user.subscription_tier)
+
+    now = datetime.now(timezone.utc)
+    if period == "day":
+        window_start = now - timedelta(days=1)
+    else:  # "week"
+        window_start = now - timedelta(weeks=1)
+
+    result = await db.execute(
+        select(sa_func.count(FeatureUsage.id))
+        .where(
+            FeatureUsage.user_id == user.id,
+            FeatureUsage.feature == "dcf_valuations",
+            FeatureUsage.used_at >= window_start,
+        )
+    )
+    current_count = result.scalar() or 0
+
+    if current_count >= limit:
+        next_tier = get_upgrade_tier(user.subscription_tier)
+        if next_tier:
+            next_limit = get_tier_limit(next_tier, "dcf_valuations")
+            upgrade_msg = f" Upgrade to {next_tier.capitalize()} for {next_limit} DCF valuations per {get_review_period(next_tier)}."
+        else:
+            upgrade_msg = ""
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "message": f"DCF valuation limit reached. {user.subscription_tier.capitalize()} tier allows {limit} per {period}.{upgrade_msg}",
+                "current_usage": current_count,
+                "max_usage": limit,
+                "period": period,
+            }
+        )
+
+    return current_count
+
+
+async def record_dcf_usage(user: User, db: AsyncSession) -> None:
+    """Record a DCF valuation usage event."""
+    usage = FeatureUsage(user_id=user.id, feature="dcf_valuations")
+    db.add(usage)
+    await db.commit()
 
 
 @router.get("/suggestions/{ticker}")
@@ -448,6 +503,9 @@ async def calculate_dcf(
     
     ⭐ **Professional Feature:** 20 DCF valuations daily with customizable assumptions!
     """
+    # Enforce tier-based usage limit before doing any work
+    await check_dcf_limit(current_user, db)
+
     try:
         # Fetch quote, company, financials, shares, and FMP DCF in parallel
         quote_r, company_r, fin_r, shares_r, fmp_dcf = await asyncio.gather(
@@ -597,7 +655,7 @@ async def calculate_dcf(
             recommendation_color = "red"
             recommendation_message = f"Stock appears significantly overvalued by {abs(margin_of_safety):.1f}%."
         
-        return {
+        dcf_result = {
             "ticker": ticker,
             "company_name": company_name,
             "security_type": security_type,
@@ -648,7 +706,12 @@ async def calculate_dcf(
                 "source": "FMP Discounted Cash Flow model",
             },
         }
-    
+
+        # Record usage only after a successful calculation
+        await record_dcf_usage(current_user, db)
+
+        return dcf_result
+
     except HTTPException:
         raise
     except Exception as e:

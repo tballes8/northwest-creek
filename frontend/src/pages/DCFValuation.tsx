@@ -299,21 +299,11 @@ const DCFValuation: React.FC = () => {
     }
   }, [urlTicker, hasLoadedInitialSuggestions, searchParams, loadSuggestions]);
 
-  const TIER_LIMITS: Record<string, number> = {
-    beginner: 5, casual: 15, active: 10, professional: 20
-  };
-
-  const tierLimit = TIER_LIMITS[user?.subscription_tier || 'beginner'] || 5;
-
-  const [usageCount, setUsageCount] = useState(0);
+  const [limitData, setLimitData] = useState<{ currentUsage: number; maxUsage: number; period: string } | null>(null);
 
   const handleCalculate = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (user && usageCount >= tierLimit) {
-      return;
-    }
-  
     if (!ticker.trim()) {
       setError('Please enter a ticker symbol');
       return;
@@ -330,13 +320,20 @@ const DCFValuation: React.FC = () => {
         discount_rate: discountRate / 100,
         projection_years: projectionYears
       });
-    
+
       setDcfData(response.data);
       setShowSuggestions(false);
-      setUsageCount(prev => prev + 1);
     } catch (err: any) {
       console.error('DCF calculation error:', err);
-      setError(err.response?.data?.detail || 'Failed to calculate DCF. Please check the ticker symbol and try again.');
+      if (err.response?.status === 403 && err.response?.data?.detail?.current_usage !== undefined) {
+        setLimitData({
+          currentUsage: err.response.data.detail.current_usage,
+          maxUsage: err.response.data.detail.max_usage,
+          period: err.response.data.detail.period,
+        });
+      } else {
+        setError(err.response?.data?.detail || 'Failed to calculate DCF. Please check the ticker symbol and try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -426,7 +423,7 @@ const DCFValuation: React.FC = () => {
       </div>
     );
   };
-  if (usageCount >= tierLimit) {
+  if (limitData) {
     return (
       <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
         <NavBar currentPage="dcf-valuation" user={user} onLogout={handleLogout} />
@@ -434,8 +431,9 @@ const DCFValuation: React.FC = () => {
           feature="DCF Valuation"
           currentTier={user?.subscription_tier || "beginner"}
           limitReached={true}
-          currentUsage={usageCount}
-          maxUsage={tierLimit}
+          currentUsage={limitData.currentUsage}
+          maxUsage={limitData.maxUsage}
+          onBack={() => setLimitData(null)}
         />
       </div>
     );
