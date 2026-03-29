@@ -447,6 +447,67 @@ def _build_growth_profile(
     if latest_yoy_growth is not None and fcf_margin is not None:
         rule_of_40 = round(latest_yoy_growth + fcf_margin, 1)
 
+    # ── Rule of 40 trend (rolling TTM basis per quarter) ────────────
+    rule_of_40_trend = []
+    fcf_by_period = {e["period"]: e["value"] for e in fcf_trend}
+
+    for i, entry in enumerate(revenue_growth_trend):
+        period = entry["period"]
+        yoy_growth = entry["value"]
+
+        # Need YoY growth (requires i>=4) and 4Q window for TTM (requires i>=3)
+        if yoy_growth is None or i < 3:
+            rule_of_40_trend.append({
+                "period": period,
+                "period_end": entry["period_end"],
+                "value": None,
+                "revenue_growth": yoy_growth,
+                "fcf_margin": None,
+            })
+            continue
+
+        # TTM revenue: sum of 4 quarters ending at current
+        ttm_rev_values = [revenue_trend[j]["value"] for j in range(i - 3, i + 1)]
+        # TTM FCF: match the same 4 periods by label
+        ttm_periods = [revenue_growth_trend[j]["period"] for j in range(i - 3, i + 1)]
+        ttm_fcf_values = [fcf_by_period.get(p) for p in ttm_periods]
+
+        if (all(v is not None for v in ttm_rev_values)
+                and all(v is not None for v in ttm_fcf_values)):
+            ttm_rev_sum = sum(ttm_rev_values)
+            ttm_fcf_sum = sum(ttm_fcf_values)
+            if ttm_rev_sum > 0:
+                q_fcf_margin = round((ttm_fcf_sum / ttm_rev_sum) * 100, 1)
+                q_r40 = round(yoy_growth + q_fcf_margin, 1)
+                rule_of_40_trend.append({
+                    "period": period,
+                    "period_end": entry["period_end"],
+                    "value": q_r40,
+                    "revenue_growth": yoy_growth,
+                    "fcf_margin": q_fcf_margin,
+                })
+                continue
+
+        rule_of_40_trend.append({
+            "period": period,
+            "period_end": entry["period_end"],
+            "value": None,
+            "revenue_growth": yoy_growth,
+            "fcf_margin": None,
+        })
+
+    # Trend direction: compare first and last valid values
+    valid_r40 = [e["value"] for e in rule_of_40_trend if e["value"] is not None]
+    rule_of_40_trend_direction = None
+    if len(valid_r40) >= 2:
+        change = valid_r40[-1] - valid_r40[0]
+        if change > 5:
+            rule_of_40_trend_direction = "improving"
+        elif change < -5:
+            rule_of_40_trend_direction = "declining"
+        else:
+            rule_of_40_trend_direction = "stable"
+
     # Only return profile if we have meaningful data
     has_data = any(p.get("value") is not None for p in revenue_trend)
     if not has_data:
@@ -488,6 +549,8 @@ def _build_growth_profile(
         rule_of_40 = None
         latest_yoy_growth = None
         fcf_margin = None
+        rule_of_40_trend = []
+        rule_of_40_trend_direction = None
 
     return {
         "revenue_trend": revenue_trend,
@@ -496,6 +559,8 @@ def _build_growth_profile(
         "fcf_trend": fcf_trend,
         "revenue_growth_trend": revenue_growth_trend,
         "rule_of_40": rule_of_40,
+        "rule_of_40_trend": rule_of_40_trend,
+        "rule_of_40_trend_direction": rule_of_40_trend_direction,
         "rule_of_40_components": {
             "revenue_growth_yoy": latest_yoy_growth,
             "fcf_margin": fcf_margin,

@@ -6,7 +6,8 @@ import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
 import UpgradeRequired from '../components/UpgradeRequired';
 import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
+  BarChart, Bar, LineChart, Line, AreaChart, Area,
+  XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, Cell
 } from 'recharts';
 
@@ -65,6 +66,14 @@ interface DCFSuggestions {
     fcf_trend: Array<{ period: string; period_end: string | null; value: number | null }>;
     revenue_growth_trend: Array<{ period: string; period_end: string | null; value: number | null }>;
     rule_of_40: number | null;
+    rule_of_40_trend: Array<{
+      period: string;
+      period_end: string | null;
+      value: number | null;
+      revenue_growth: number | null;
+      fcf_margin: number | null;
+    }>;
+    rule_of_40_trend_direction: 'improving' | 'declining' | 'stable' | null;
     rule_of_40_components: {
       revenue_growth_yoy: number | null;
       fcf_margin: number | null;
@@ -693,37 +702,88 @@ const DCFValuation: React.FC = () => {
                       </div>
                     </div>
                   )}
-                  {suggestions.growth_profile.rule_of_40 != null && (
-                    <div className={`text-center px-7 py-3 rounded-lg border ${
-                      suggestions.growth_profile.rule_of_40 >= 40
-                        ? 'bg-green-50 dark:bg-green-900/30 border-green-300 dark:border-green-700'
-                        : suggestions.growth_profile.rule_of_40 >= 20
-                        ? 'bg-yellow-50 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700'
-                        : 'bg-red-50 dark:bg-red-900/30 border-red-300 dark:border-red-700'
-                      }`}>
-                      <div className={`text-xl font-bold ${
-                        suggestions.growth_profile.rule_of_40 >= 40
-                          ? 'text-green-700 dark:text-green-300'
-                          : suggestions.growth_profile.rule_of_40 >= 20
-                          ? 'text-yellow-700 dark:text-yellow-300'
-                          : 'text-red-700 dark:text-red-300'
+                  {suggestions.growth_profile.rule_of_40 != null && (() => {
+                    const r40 = suggestions.growth_profile.rule_of_40!;
+                    const dir = suggestions.growth_profile.rule_of_40_trend_direction;
+                    const trendData = (suggestions.growth_profile.rule_of_40_trend || []).filter(d => d.value != null);
+                    const strokeColor = r40 >= 40 ? '#22c55e' : r40 >= 20 ? '#eab308' : '#ef4444';
+                    const dirColor = dir === 'improving'
+                      ? 'text-green-600 dark:text-green-400'
+                      : dir === 'declining'
+                      ? 'text-red-600 dark:text-red-400'
+                      : 'text-gray-500 dark:text-gray-400';
+                    const dirLabel = dir === 'improving' ? 'Improving ↑' : dir === 'declining' ? 'Declining ↓' : dir === 'stable' ? 'Stable →' : null;
+
+                    return (
+                      <div className={`px-5 py-4 rounded-lg border ${
+                        r40 >= 40
+                          ? 'bg-green-50 dark:bg-green-900/30 border-green-300 dark:border-green-700'
+                          : r40 >= 20
+                          ? 'bg-yellow-50 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700'
+                          : 'bg-red-50 dark:bg-red-900/30 border-red-300 dark:border-red-700'
                         }`}>
-                        {suggestions.growth_profile.rule_of_40}
-                      </div>
-                      <div className="text-[14px] font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Rule of 40</div>
-                      <div className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5">
-                        {suggestions.growth_profile.rule_of_40_components.revenue_growth_yoy != null && (
-                          <span>Growth {suggestions.growth_profile.rule_of_40_components.revenue_growth_yoy > 0 ? '+' : ''}{suggestions.growth_profile.rule_of_40_components.revenue_growth_yoy}%</span>
+                        <div className="text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <span className={`text-xl font-bold ${
+                              r40 >= 40
+                                ? 'text-green-700 dark:text-green-300'
+                                : r40 >= 20
+                                ? 'text-yellow-700 dark:text-yellow-300'
+                                : 'text-red-700 dark:text-red-300'
+                              }`}>
+                              {r40}
+                            </span>
+                            {dirLabel && (
+                              <span className={`text-xs font-semibold ${dirColor}`}>{dirLabel}</span>
+                            )}
+                          </div>
+                          <div className="text-[14px] font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Rule of 40</div>
+                          <div className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5">
+                            {suggestions.growth_profile.rule_of_40_components.revenue_growth_yoy != null && (
+                              <span>Growth {suggestions.growth_profile.rule_of_40_components.revenue_growth_yoy > 0 ? '+' : ''}{suggestions.growth_profile.rule_of_40_components.revenue_growth_yoy}%</span>
+                            )}
+                            {suggestions.growth_profile.rule_of_40_components.fcf_margin != null && (
+                              <span> + FCF {suggestions.growth_profile.rule_of_40_components.fcf_margin > 0 ? '+' : ''}{suggestions.growth_profile.rule_of_40_components.fcf_margin}%</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {trendData.length >= 2 && (
+                          <div className="mt-3">
+                            <ResponsiveContainer width="100%" height={80}>
+                              <AreaChart data={trendData} margin={{ top: 5, right: 5, left: 5, bottom: 0 }}>
+                                <defs>
+                                  <linearGradient id="r40Gradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor={strokeColor} stopOpacity={0.3} />
+                                    <stop offset="95%" stopColor={strokeColor} stopOpacity={0.05} />
+                                  </linearGradient>
+                                </defs>
+                                <XAxis dataKey="period" tick={{ fontSize: 8, fill: '#9CA3AF' }} interval="preserveStartEnd" axisLine={false} tickLine={false} />
+                                <ReferenceLine y={40} stroke="#6B7280" strokeDasharray="3 3" strokeWidth={1} />
+                                <Tooltip content={({ active, payload, label }: any) => {
+                                  if (!active || !payload?.length) return null;
+                                  const d = payload[0].payload;
+                                  return (
+                                    <div className="bg-gray-800 text-white text-xs px-3 py-2 rounded shadow-lg border border-gray-600">
+                                      <p className="font-medium">{label}</p>
+                                      <p className="text-primary-300 font-bold">Rule of 40: {d.value}</p>
+                                      {d.revenue_growth != null && <p className="text-gray-300">Growth: {d.revenue_growth > 0 ? '+' : ''}{d.revenue_growth}%</p>}
+                                      {d.fcf_margin != null && <p className="text-gray-300">FCF Margin: {d.fcf_margin > 0 ? '+' : ''}{d.fcf_margin}%</p>}
+                                    </div>
+                                  );
+                                }} />
+                                <Area type="monotone" dataKey="value" stroke={strokeColor} fill="url(#r40Gradient)" strokeWidth={2} dot={{ fill: strokeColor, r: 2.5, strokeWidth: 0 }} activeDot={{ r: 4, strokeWidth: 0 }} />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </div>
                         )}
-                        {suggestions.growth_profile.rule_of_40_components.fcf_margin != null && (
-                          <span> + FCF {suggestions.growth_profile.rule_of_40_components.fcf_margin > 0 ? '+' : ''}{suggestions.growth_profile.rule_of_40_components.fcf_margin}%</span>
-                        )}
+
+                        <div className="text-[12px] text-gray-400 dark:text-gray-500 mt-1 leading-snug max-w-[280px] mx-auto text-center">
+                          Revenue growth&nbsp;% plus free cash flow margin&nbsp;%. Above 40 signals strong growth-profitability balance.
+                        </div>
                       </div>
-                      <div className="text-[12px] text-gray-400 dark:text-gray-500 mt-.5 leading-snug max-w-[200px] mx-auto">
-                        Revenue growth&nbsp;% plus free cash flow margin&nbsp;%. Above 40 signals strong growth-profitability balance.
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
