@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { authAPI } from "../services/api";
 import NavBar from "../components/NavBar";
 import { useTheme } from "../contexts/ThemeContext";
@@ -476,11 +476,15 @@ const STRATEGIES = {
 };
 
 // ─── Spreads Page ───
-function SpreadsPage({ params }) {
+function SpreadsPage({ params, initialStrategy, initialStrikes }) {
   const S = +params.S, T = +params.days / 365, r = +params.r / 100, sig = +params.sigma / 100;
-  const [strategy, setStrategy] = useState("bullCall");
+  const initStrat = initialStrategy && STRATEGIES[initialStrategy] ? initialStrategy : "bullCall";
+  const [strategy, setStrategy] = useState(initStrat);
   const strat = STRATEGIES[strategy];
-  const [strikes, setStrikes] = useState(() => strat.defaults(+params.S));
+  const [strikes, setStrikes] = useState(() => {
+    const defaults = STRATEGIES[initStrat].defaults(+params.S);
+    return initialStrikes ? { ...defaults, ...initialStrikes } : defaults;
+  });
 
   const handleStrategyChange = (key) => {
     setStrategy(key);
@@ -722,14 +726,35 @@ const pages = [
 
 export default function OptionsCalculator() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { theme } = useTheme();
   const [user, setUser] = useState<any>(null);
   const [userLoading, setUserLoading] = useState(true);
 
   // Set the mutable color reference based on current theme
   C = theme === "dark" ? CDark : CLight;
-  const [page, setPage] = useState("pricing");
-  const [params, setParams] = useState({ S: "150.00", K: "155.00", days: "30", r: "5.0", sigma: "25.0", type: "call" });
+  const [page, setPage] = useState(searchParams.get("page") || "pricing");
+  const [params, setParams] = useState({
+    S: searchParams.get("S") || "150.00",
+    K: searchParams.get("K") || "155.00",
+    days: searchParams.get("days") || "30",
+    r: searchParams.get("r") || "5.0",
+    sigma: searchParams.get("sigma") || "25.0",
+    type: searchParams.get("type") || "call",
+  });
+
+  // Pre-fill spread strikes from URL (used by "Trade This" → "Open in Options Calculator")
+  const urlStrategy = searchParams.get("strategy") || undefined;
+  const urlStrikes = (() => {
+    const k1 = searchParams.get("K1"), k2 = searchParams.get("K2");
+    if (k1 || k2) {
+      const s = {};
+      if (k1) s.K1 = k1;
+      if (k2) s.K2 = k2;
+      return s;
+    }
+    return undefined;
+  })();
 
   useEffect(() => {
     const loadUser = async () => {
@@ -819,7 +844,7 @@ export default function OptionsCalculator() {
         {page === "greeks" && <GreeksPage params={params} />}
         {page === "payoff" && <PayoffPage params={params} />}
         {page === "iv" && <IVSolverPage params={params} />}
-        {page === "spreads" && <SpreadsPage params={params} />}
+        {page === "spreads" && <SpreadsPage params={params} initialStrategy={urlStrategy} initialStrikes={urlStrikes} />}
       </div>
       </div>
     </div>

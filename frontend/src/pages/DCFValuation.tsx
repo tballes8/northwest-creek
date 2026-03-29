@@ -11,6 +11,119 @@ import {
   Tooltip, ResponsiveContainer, ReferenceLine, Cell
 } from 'recharts';
 
+// ─── Black-Scholes utilities (for Trade This strategy suggestions) ───
+const _norm = {
+  cdf: (x: number): number => {
+    const a1=0.254829592, a2=-0.284496736, a3=1.421413741, a4=-1.453152027, a5=1.061405429, p=0.3275911;
+    const sign = x < 0 ? -1 : 1;
+    const t = 1 / (1 + p * Math.abs(x));
+    const y = 1 - (((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t * Math.exp(-x*x/2);
+    return 0.5 * (1 + sign * y);
+  }
+};
+
+function _bsPrice(S: number, K: number, T: number, r: number, sigma: number, type: "call" | "put"): number {
+  if (T <= 0 || sigma <= 0) return Math.max(type === "call" ? S - K : K - S, 0);
+  const d1 = (Math.log(S/K) + (r + sigma*sigma/2)*T) / (sigma*Math.sqrt(T));
+  const d2 = d1 - sigma*Math.sqrt(T);
+  if (type === "call") return S*_norm.cdf(d1) - K*Math.exp(-r*T)*_norm.cdf(d2);
+  return K*Math.exp(-r*T)*_norm.cdf(-d2) - S*_norm.cdf(-d1);
+}
+
+function _roundStrike(price: number): number {
+  if (price >= 50) return Math.round(price / 5) * 5;
+  if (price >= 25) return Math.round(price / 2.5) * 2.5;
+  return Math.round(price);
+}
+
+interface TradeSuggestion {
+  strategyType: string;
+  strategyName: string;
+  direction: "bullish" | "bearish";
+  K1: number;
+  K2: number;
+  spreadCost: number;
+  maxProfit: number;
+  maxLoss: number;
+  breakeven: number;
+  probProfit: number;
+  contracts: number;
+  days: number;
+}
+
+function suggestStrategy(
+  currentPrice: number,
+  targetPrice: number,
+  confidence: "low" | "medium" | "high",
+  days: number,
+  maxCapital: number,
+): TradeSuggestion | null {
+  const isBullish = targetPrice > currentPrice * 1.02;
+  const isBearish = targetPrice < currentPrice * 0.98;
+  if (!isBullish && !isBearish) return null;
+
+  const T = days / 365;
+  const sigma = 0.30;
+  const r = 0.05;
+  let K1: number, K2: number, strategyType: string, strategyName: string;
+
+  if (isBullish) {
+    strategyType = "bullCall";
+    strategyName = "Bull Call Spread";
+    if (confidence === "high") {
+      K1 = _roundStrike(currentPrice);
+      K2 = _roundStrike(Math.min(targetPrice, currentPrice * 1.15));
+    } else if (confidence === "medium") {
+      K1 = _roundStrike(currentPrice);
+      K2 = _roundStrike(currentPrice + (targetPrice - currentPrice) * 0.5);
+    } else {
+      K1 = _roundStrike(currentPrice * 0.97);
+      K2 = _roundStrike(currentPrice * 1.03);
+    }
+    const minGap = currentPrice >= 50 ? 5 : currentPrice >= 25 ? 2.5 : 1;
+    if (K2 <= K1) K2 = K1 + minGap;
+  } else {
+    strategyType = "bearPut";
+    strategyName = "Bear Put Spread";
+    if (confidence === "high") {
+      K1 = _roundStrike(Math.max(targetPrice, currentPrice * 0.85));
+      K2 = _roundStrike(currentPrice);
+    } else if (confidence === "medium") {
+      K1 = _roundStrike(currentPrice - (currentPrice - targetPrice) * 0.5);
+      K2 = _roundStrike(currentPrice);
+    } else {
+      K1 = _roundStrike(currentPrice * 0.97);
+      K2 = _roundStrike(currentPrice * 1.03);
+    }
+    const minGap = currentPrice >= 50 ? 5 : currentPrice >= 25 ? 2.5 : 1;
+    if (K1 >= K2) K1 = K2 - minGap;
+  }
+
+  let spreadCost: number, maxProfit: number, breakeven: number;
+  if (isBullish) {
+    spreadCost = _bsPrice(currentPrice, K1, T, r, sigma, "call") - _bsPrice(currentPrice, K2, T, r, sigma, "call");
+    maxProfit = (K2 - K1) - spreadCost;
+    breakeven = K1 + spreadCost;
+  } else {
+    spreadCost = _bsPrice(currentPrice, K2, T, r, sigma, "put") - _bsPrice(currentPrice, K1, T, r, sigma, "put");
+    maxProfit = (K2 - K1) - spreadCost;
+    breakeven = K2 - spreadCost;
+  }
+  const maxLoss = spreadCost;
+
+  const d = (Math.log(currentPrice / breakeven) + (r - 0.5 * sigma * sigma) * T) / (sigma * Math.sqrt(T));
+  const probProfit = Math.min(100, Math.max(0,
+    (isBullish ? _norm.cdf(d) : 1 - _norm.cdf(d)) * 100
+  ));
+
+  const contracts = maxCapital > 0 && spreadCost > 0 ? Math.floor(maxCapital / (spreadCost * 100)) : 0;
+
+  return {
+    strategyType, strategyName, direction: isBullish ? "bullish" : "bearish",
+    K1, K2, spreadCost, maxProfit, maxLoss, breakeven, probProfit, contracts, days,
+  };
+}
+
 interface DCFSuggestions {
   ticker: string;
   company_name: string;
@@ -174,6 +287,12 @@ const DCFValuation: React.FC = () => {
     opMargin: number | null;
     deRatio: number | null;
   } | null>(null);
+
+  // Trade This modal state
+  const [showTradeModal, setShowTradeModal] = useState(false);
+  const [tradeTimeframe, setTradeTimeframe] = useState<"14" | "30" | "90">("30");
+  const [tradeConfidence, setTradeConfidence] = useState<"low" | "medium" | "high">("medium");
+  const [tradeMaxCapital, setTradeMaxCapital] = useState("1000");
 
   // Warrant detection is now API-driven using Polygon's `type` field (CS, WARRANT, ETF, etc.)
   // These helpers are only used as a pre-fetch hint for explicit separator patterns
@@ -1123,6 +1242,35 @@ const DCFValuation: React.FC = () => {
               <div>
                 <p className="text-gray-700 dark:text-gray-300">{dcfData.recommendation.message}</p>
               </div>
+
+              {/* Trade This button — Active/Professional only */}
+              {dcfData.recommendation.rating !== 'Hold' && (() => {
+                const isTradeEligible = ['active', 'professional'].includes(user?.subscription_tier || '');
+                return (
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+                    {isTradeEligible ? (
+                      <button
+                        onClick={() => setShowTradeModal(true)}
+                        className="w-full py-2.5 px-4 rounded-lg font-semibold text-sm transition-colors bg-indigo-600 hover:bg-indigo-700 text-white"
+                      >
+                        Trade This — Suggest Options Strategy
+                      </button>
+                    ) : (
+                      <div className="text-center">
+                        <button
+                          disabled
+                          className="w-full py-2.5 px-4 rounded-lg font-semibold text-sm bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 cursor-not-allowed"
+                        >
+                          Trade This — Suggest Options Strategy
+                        </button>
+                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                          Available on Active and Professional plans — <Link to="/account" className="text-indigo-500 hover:underline">Upgrade</Link>
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* FMP Benchmark Comparison */}
@@ -1363,6 +1511,159 @@ const DCFValuation: React.FC = () => {
         )}
       </div>
       <BackToTop />
+
+      {/* Trade This Modal */}
+      {showTradeModal && dcfData && (() => {
+        const suggestion = suggestStrategy(
+          dcfData.current_price,
+          dcfData.valuation.intrinsic_value_per_share,
+          tradeConfidence,
+          parseInt(tradeTimeframe),
+          parseFloat(tradeMaxCapital) || 0,
+        );
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowTradeModal(false)}>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl border dark:border-gray-600 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-600">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Trade This: {dcfData.ticker}</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    ${dcfData.current_price.toFixed(2)} current — ${dcfData.valuation.intrinsic_value_per_share.toFixed(2)} DCF target ({dcfData.recommendation.rating})
+                  </p>
+                </div>
+                <button onClick={() => setShowTradeModal(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">&times;</button>
+              </div>
+
+              {/* Inputs */}
+              <div className="px-6 py-4 space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Timeframe</label>
+                    <select
+                      value={tradeTimeframe}
+                      onChange={e => setTradeTimeframe(e.target.value as "14" | "30" | "90")}
+                      className="w-full px-2 py-1.5 text-sm border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    >
+                      <option value="14">2 Weeks</option>
+                      <option value="30">1 Month</option>
+                      <option value="90">3 Months</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Confidence</label>
+                    <select
+                      value={tradeConfidence}
+                      onChange={e => setTradeConfidence(e.target.value as "low" | "medium" | "high")}
+                      className="w-full px-2 py-1.5 text-sm border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Max Capital ($)</label>
+                    <input
+                      type="number"
+                      value={tradeMaxCapital}
+                      onChange={e => setTradeMaxCapital(e.target.value)}
+                      className="w-full px-2 py-1.5 text-sm border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                      min="0"
+                      step="100"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Strategy Result */}
+              <div className="px-6 pb-4">
+                {suggestion ? (
+                  <div className="space-y-3">
+                    <div className={`rounded-lg p-4 border ${
+                      suggestion.direction === 'bullish'
+                        ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700'
+                        : 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700'
+                    }`}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-lg">{suggestion.direction === 'bullish' ? '📈' : '📉'}</span>
+                        <span className="font-bold text-gray-900 dark:text-white">{suggestion.strategyName}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="bg-white/60 dark:bg-gray-800/60 rounded px-3 py-2">
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">Long Strike</div>
+                          <div className="font-bold text-gray-900 dark:text-white">${suggestion.K1.toFixed(2)}</div>
+                        </div>
+                        <div className="bg-white/60 dark:bg-gray-800/60 rounded px-3 py-2">
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">Short Strike</div>
+                          <div className="font-bold text-gray-900 dark:text-white">${suggestion.K2.toFixed(2)}</div>
+                        </div>
+                        <div className="bg-white/60 dark:bg-gray-800/60 rounded px-3 py-2">
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">Est. Cost / Contract</div>
+                          <div className="font-bold text-red-600 dark:text-red-400">${(suggestion.spreadCost * 100).toFixed(0)}</div>
+                        </div>
+                        <div className="bg-white/60 dark:bg-gray-800/60 rounded px-3 py-2">
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">Max Profit / Contract</div>
+                          <div className="font-bold text-green-600 dark:text-green-400">${(suggestion.maxProfit * 100).toFixed(0)}</div>
+                        </div>
+                        <div className="bg-white/60 dark:bg-gray-800/60 rounded px-3 py-2">
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">Max Loss / Contract</div>
+                          <div className="font-bold text-red-600 dark:text-red-400">${(suggestion.maxLoss * 100).toFixed(0)}</div>
+                        </div>
+                        <div className="bg-white/60 dark:bg-gray-800/60 rounded px-3 py-2">
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">Breakeven</div>
+                          <div className="font-bold text-gray-900 dark:text-white">${suggestion.breakeven.toFixed(2)}</div>
+                        </div>
+                        <div className="bg-white/60 dark:bg-gray-800/60 rounded px-3 py-2">
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">Prob. of Profit</div>
+                          <div className="font-bold text-gray-900 dark:text-white">{suggestion.probProfit.toFixed(0)}%</div>
+                        </div>
+                        <div className="bg-white/60 dark:bg-gray-800/60 rounded px-3 py-2">
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase">Contracts Affordable</div>
+                          <div className="font-bold text-gray-900 dark:text-white">{suggestion.contracts}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        const params = new URLSearchParams({
+                          page: 'spreads',
+                          S: dcfData.current_price.toFixed(2),
+                          days: suggestion.days.toString(),
+                          sigma: '30.0',
+                          r: '5.0',
+                          strategy: suggestion.strategyType,
+                          K1: suggestion.K1.toFixed(2),
+                          K2: suggestion.K2.toFixed(2),
+                        });
+                        navigate(`/options-calculator?${params.toString()}`);
+                      }}
+                      className="w-full py-2.5 px-4 rounded-lg font-semibold text-sm transition-colors bg-indigo-600 hover:bg-indigo-700 text-white"
+                    >
+                      Open in Options Calculator
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-center py-6 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Your DCF analysis suggests the stock is fairly valued (within 2% of current price).
+                    </p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                      Consider waiting for a clearer thesis before entering an options position.
+                    </p>
+                  </div>
+                )}
+
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 text-center leading-tight mt-2">
+                  Educational only — estimates use 30% implied volatility and 5% risk-free rate. Verify strikes, pricing, and liquidity with your broker before trading.
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
