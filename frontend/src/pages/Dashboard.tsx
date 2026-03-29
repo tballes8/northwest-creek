@@ -8,6 +8,8 @@ import { useLivePriceContext } from '../contexts/LivePriceContext';
 import MarketStatusBadge from '../components/MarketStatusBadge';
 import SectorPieChart from '../components/SectorPieChart';
 import { computeSectorBreakdown, SECTOR_COLORS, SectorBreakdown } from '../utils/sectorMap';
+import '../styles/livePrice.css';
+import axios from 'axios';
 
 const EMPTY_SECTORS: SectorBreakdown[] = [
   'Technology', 'Healthcare', 'Financial Services', 'Consumer Cyclical',
@@ -21,8 +23,6 @@ const EMPTY_SECTORS: SectorBreakdown[] = [
   color: SECTOR_COLORS[sector] || SECTOR_COLORS['Other'],
   tickers: [],
 }));
-import '../styles/livePrice.css';
-import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
