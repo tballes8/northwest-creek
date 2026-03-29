@@ -7,7 +7,20 @@ import BackToTop from '../components/BackToTop';
 import { useLivePriceContext } from '../contexts/LivePriceContext';
 import MarketStatusBadge from '../components/MarketStatusBadge';
 import SectorPieChart from '../components/SectorPieChart';
-import { computeSectorBreakdown } from '../utils/sectorMap';
+import { computeSectorBreakdown, SECTOR_COLORS, SectorBreakdown } from '../utils/sectorMap';
+
+const EMPTY_SECTORS: SectorBreakdown[] = [
+  'Technology', 'Healthcare', 'Financial Services', 'Consumer Cyclical',
+  'Communication Services', 'Industrials', 'Consumer Defensive', 'Energy',
+  'Real Estate', 'Utilities', 'Basic Materials',
+].map(sector => ({
+  sector,
+  count: 0,
+  value: 0,
+  percentage: 0,
+  color: SECTOR_COLORS[sector] || SECTOR_COLORS['Other'],
+  tickers: [],
+}));
 import '../styles/livePrice.css';
 import axios from 'axios';
 
@@ -971,19 +984,25 @@ return (
               </div>
             </div>
           ) : (
-            <div className="text-center py-8">
-              <div className="bg-gray-100 dark:bg-gray-700 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                </svg>
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400">Click a sector to find stocks</p>
+              <div className="pt-2">
+                <SectorPieChart
+                  data={EMPTY_SECTORS}
+                  title="Sector Breakdown"
+                  mode="count"
+                  size={140}
+                  onSectorClick={handleSectorClick}
+                />
               </div>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">No stocks in watchlist</p>
-              <Link
-                to="/watchlist"
-                className="inline-block bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
-              >
-                Add Your First Stock
-              </Link>
+              <div className="border-t dark:border-gray-600 pt-3">
+                <Link
+                  to="/watchlist"
+                  className="text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 text-sm font-medium"
+                >
+                  Manage your watchlist →
+                </Link>
+              </div>
             </div>
           )}
         </div>
