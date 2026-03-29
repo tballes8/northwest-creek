@@ -145,7 +145,15 @@ const Stocks: React.FC = () => {
       return cached ? JSON.parse(cached) : [];
     } catch { return []; }
   });
-  const [sectorSnapshots, setSectorSnapshots] = useState<DailySnapshot[]>([]);
+  const [sectorSnapshots, setSectorSnapshots] = useState<DailySnapshot[]>(() => {
+    try {
+      if (sectorParam) {
+        const cached = sessionStorage.getItem(`nwc_sector_snapshots_${sectorParam}`);
+        return cached ? JSON.parse(cached) : [];
+      }
+      return [];
+    } catch { return []; }
+  });
   const [sectorLoading, setSectorLoading] = useState(false);
   const [activeSector, setActiveSector] = useState(sectorParam);
   const [isWarrant, setIsWarrant] = useState(false);
@@ -279,6 +287,7 @@ const Stocks: React.FC = () => {
   };
 
   const clearSectorContext = () => {
+    try { sessionStorage.removeItem(`nwc_sector_snapshots_${activeSector}`); } catch {}
     setActiveSector('');
     setSectorSnapshots([]);
     navigate('/stocks', { replace: true });
@@ -302,7 +311,9 @@ const Stocks: React.FC = () => {
       const shuffled = [...sectorTickers].sort(() => Math.random() - 0.5);
       const subset = shuffled.slice(0, 100);
       const response = await stocksAPI.getDailySnapshot(10, subset);
-      setSectorSnapshots(response.data.snapshots || []);
+      const snaps = response.data.snapshots || [];
+      setSectorSnapshots(snaps);
+      try { sessionStorage.setItem(`nwc_sector_snapshots_${sector}`, JSON.stringify(snaps)); } catch {}
     } catch (error) {
       console.error('Failed to load sector snapshots:', error);
       setSectorSnapshots([]);
@@ -1374,13 +1385,21 @@ const Stocks: React.FC = () => {
                         </button>
                       ))}
                     </div>
-                    <button
-                      onClick={() => loadSectorSnapshots(activeSector)}
-                      className="mt-4 px-4 py-2 text-white rounded-lg text-sm transition-colors font-medium hover:opacity-90"
-                      style={{ backgroundColor: SECTOR_COLORS[activeSector] || SECTOR_COLORS['Other'] }}
-                    >
-                      🔄 Load Different {activeSector} Stocks
-                    </button>
+                    <div className="mt-4 flex items-center justify-center gap-3">
+                      <button
+                        onClick={() => loadSectorSnapshots(activeSector)}
+                        className="px-4 py-2 text-white rounded-lg text-sm transition-colors font-medium hover:opacity-90"
+                        style={{ backgroundColor: SECTOR_COLORS[activeSector] || SECTOR_COLORS['Other'] }}
+                      >
+                        🔄 Load Different {activeSector} Stocks
+                      </button>
+                      <button
+                        onClick={() => { clearSectorContext(); loadDailySnapshots(); }}
+                        className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg text-sm transition-colors font-medium"
+                      >
+                        🎲 10 Random Stocks
+                      </button>
+                    </div>
                   </>
                 ) : (
                   <div className="text-center py-6">
