@@ -517,6 +517,110 @@ class EmailService:
         )
 
 
+    def send_payment_failed_email(self, to_email: str, user_name: str, plan_name: str) -> bool:
+        """Notify user that their payment failed and action is needed"""
+        self._ensure_initialized()
+        settings = _get_settings()
+        account_url = f"{settings.FRONTEND_URL}/account"
+
+        print(f"📧 Sending payment failed email to {to_email}")
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f3f4f6; }}
+                .container {{ max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
+                .header {{ background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%); color: white; padding: 40px 30px; text-align: center; }}
+                .header h1 {{ margin: 0; font-size: 28px; font-weight: 700; }}
+                .content {{ padding: 40px 30px; }}
+                .content p {{ margin: 0 0 16px 0; color: #374151; }}
+                .button {{ display: inline-block; background: #0d9488; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 24px 0; }}
+                .footer {{ background-color: #f9fafb; padding: 24px 30px; text-align: center; font-size: 12px; color: #9ca3af; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header"><h1>Payment Issue</h1></div>
+                <div class="content">
+                    <p>Hi {user_name},</p>
+                    <p>We were unable to process your payment for the <strong>{plan_name}</strong> plan. This usually happens when a card expires or has insufficient funds.</p>
+                    <p>To keep your subscription active, please update your payment method:</p>
+                    <div style="text-align: center;">
+                        <a href="{account_url}" class="button">Update Payment Method →</a>
+                    </div>
+                    <p style="font-size: 14px; color: #6b7280;">If your payment isn't resolved within a few days, your account will be downgraded to the Beginner plan. Your data (watchlist, portfolio, alerts) will be preserved.</p>
+                    <p style="font-size: 14px; color: #6b7280;">Questions? Contact us at <a href="mailto:support@nwc-analytics.com" style="color: #0d9488;">support@nwc-analytics.com</a></p>
+                </div>
+                <div class="footer">
+                    <p><strong>NWC-Analytics</strong></p>
+                    <p>Intelligent Stock Analysis & Portfolio Management</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        return self.send_email(
+            to_email=to_email,
+            subject=f"Action Required: Payment Failed for {plan_name}",
+            html_content=html_content,
+            from_email_override=self.support_email
+        )
+
+    def send_trial_ending_email(self, to_email: str, user_name: str, plan_name: str, days_remaining: int) -> bool:
+        """Warn user their trial is ending soon"""
+        self._ensure_initialized()
+        settings = _get_settings()
+        account_url = f"{settings.FRONTEND_URL}/account"
+
+        print(f"📧 Sending trial ending email to {to_email} ({days_remaining} days left)")
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f3f4f6; }}
+                .container {{ max-width: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }}
+                .header {{ background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%); color: white; padding: 40px 30px; text-align: center; }}
+                .header h1 {{ margin: 0; font-size: 28px; font-weight: 700; }}
+                .content {{ padding: 40px 30px; }}
+                .content p {{ margin: 0 0 16px 0; color: #374151; }}
+                .button {{ display: inline-block; background: #0d9488; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 24px 0; }}
+                .footer {{ background-color: #f9fafb; padding: 24px 30px; text-align: center; font-size: 12px; color: #9ca3af; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header"><h1>Your Trial Ends in {days_remaining} Days</h1></div>
+                <div class="content">
+                    <p>Hi {user_name},</p>
+                    <p>Your free trial of the <strong>{plan_name}</strong> plan ends in <strong>{days_remaining} days</strong>.</p>
+                    <p>If you have a payment method on file, your subscription will continue automatically — no action needed. If not, please add one to keep your access:</p>
+                    <div style="text-align: center;">
+                        <a href="{account_url}" class="button">Manage Subscription →</a>
+                    </div>
+                    <p style="font-size: 14px; color: #6b7280;">If you'd rather not continue, you can cancel anytime from your account settings before the trial ends — you won't be charged.</p>
+                    <p style="font-size: 14px; color: #6b7280;">Questions? <a href="mailto:support@nwc-analytics.com" style="color: #0d9488;">support@nwc-analytics.com</a></p>
+                </div>
+                <div class="footer">
+                    <p><strong>NWC-Analytics</strong></p>
+                    <p>Intelligent Stock Analysis & Portfolio Management</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        return self.send_email(
+            to_email=to_email,
+            subject=f"Your NWC-Analytics Trial Ends in {days_remaining} Days",
+            html_content=html_content,
+            from_email_override=self.sales_email
+        )
+
 
 # Singleton instance
 email_service = EmailService()

@@ -4,6 +4,9 @@ Supports both:
   - Stripe Checkout (redirect) via /create-checkout-session
   - Stripe Elements (in-app) via /create-subscription
 """
+import logging
+import time
+from collections import OrderedDict
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -16,6 +19,30 @@ from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.config import settings
 from app.services.email_service import email_service
+
+logger = logging.getLogger(__name__)
+
+
+# ---- Webhook Event Deduplication ----
+# Prevents duplicate processing when Stripe retries delivery.
+# TTL-based: entries older than 24h are evicted on insert.
+_PROCESSED_EVENTS: OrderedDict[str, float] = OrderedDict()
+_EVENT_TTL = 86400  # 24 hours
+
+def _is_duplicate_event(event_id: str) -> bool:
+    """Check if we've already processed this webhook event."""
+    now = time.time()
+    # Evict stale entries (oldest are first in OrderedDict)
+    while _PROCESSED_EVENTS:
+        oldest_key, oldest_ts = next(iter(_PROCESSED_EVENTS.items()))
+        if now - oldest_ts > _EVENT_TTL:
+            _PROCESSED_EVENTS.pop(oldest_key)
+        else:
+            break
+    if event_id in _PROCESSED_EVENTS:
+        return True
+    _PROCESSED_EVENTS[event_id] = now
+    return False
 
 router = APIRouter()
 
@@ -127,6 +154,11 @@ async def create_subscription(
                     'user_id': str(current_user.id),
                 }
             )
+
+        # Cache Stripe customer ID on user record to avoid future lookups
+        if not current_user.stripe_customer_id or current_user.stripe_customer_id != customer.id:
+            current_user.stripe_customer_id = customer.id
+            await db.commit()
 
         # ── Step 2: Check for existing active subscription ────
         existing_subs = stripe.Subscription.list(
@@ -368,10 +400,10 @@ async def stripe_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db)
 ):
-    """Handle Stripe webhook events"""
+    """Handle Stripe webhook events with deduplication and error logging."""
     payload = await request.body()
     sig_header = request.headers.get('stripe-signature')
-    
+
     try:
         event = stripe.Webhook.construct_event(
             payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
@@ -380,156 +412,265 @@ async def stripe_webhook(
         raise HTTPException(status_code=400, detail="Invalid payload")
     except stripe.error.SignatureVerificationError:
         raise HTTPException(status_code=400, detail="Invalid signature")
-    
+
+    event_id = event.get('id', '')
     event_type = event['type']
-    print(f"📨 Stripe webhook: {event_type}")
-    
-    if event_type == 'checkout.session.completed':
-        session = event['data']['object']
-        await handle_checkout_completed(session, db)
-    
-    elif event_type == 'invoice.paid':
-        # This fires for both Checkout and Elements-based subscriptions
-        invoice = event['data']['object']
-        await handle_invoice_paid(invoice, db)
-    
-    elif event_type == 'customer.subscription.updated':
-        subscription = event['data']['object']
-        await handle_subscription_updated(subscription, db)
-    
-    elif event_type == 'customer.subscription.deleted':
-        subscription = event['data']['object']
-        await handle_subscription_deleted(subscription, db)
-    
-    elif event_type == 'invoice.payment_failed':
-        invoice = event['data']['object']
-        await handle_payment_failed(invoice, db)
-    
-    elif event_type == 'customer.subscription.trial_will_end':
-        subscription = event['data']['object']
-        user_id = subscription['metadata'].get('user_id')
-        if user_id:
-            print(f"⏰ Trial ending soon for user {user_id}, subscription {subscription['id']}")
-    
+    logger.info(f"Stripe webhook received: {event_type} (event={event_id})")
+
+    # Deduplicate — Stripe retries on timeout, don't process twice
+    if _is_duplicate_event(event_id):
+        logger.info(f"Skipping duplicate webhook event: {event_id}")
+        return {"status": "duplicate_skipped"}
+
+    try:
+        if event_type == 'checkout.session.completed':
+            session = event['data']['object']
+            await handle_checkout_completed(session, db)
+
+        elif event_type == 'invoice.paid':
+            invoice = event['data']['object']
+            await handle_invoice_paid(invoice, db)
+
+        elif event_type == 'customer.subscription.updated':
+            subscription = event['data']['object']
+            await handle_subscription_updated(subscription, db)
+
+        elif event_type == 'customer.subscription.deleted':
+            subscription = event['data']['object']
+            await handle_subscription_deleted(subscription, db)
+
+        elif event_type == 'invoice.payment_failed':
+            invoice = event['data']['object']
+            await handle_payment_failed(invoice, db)
+
+        elif event_type == 'customer.subscription.trial_will_end':
+            subscription = event['data']['object']
+            await handle_trial_will_end(subscription, db)
+
+        else:
+            logger.info(f"Unhandled webhook event type: {event_type}")
+
+    except Exception as e:
+        # Log the full error with context so we can debug subscriber issues
+        logger.error(f"WEBHOOK HANDLER FAILED: {event_type} event={event_id} error={e}", exc_info=True)
+        # Return 500 so Stripe retries this event
+        raise HTTPException(status_code=500, detail=f"Webhook handler error: {event_type}")
+
     return {"status": "success"}
 
 
 # ---- Webhook Handlers ----
 
 async def handle_checkout_completed(session, db: AsyncSession):
-    """Handle successful Stripe Checkout — upgrade user's subscription"""
+    """Handle successful Stripe Checkout — upgrade user's subscription."""
     user_id = session['metadata'].get('user_id')
     if not user_id:
-        print("No user_id in checkout session metadata")
+        logger.warning("No user_id in checkout session metadata")
         return
-    
+
     subscription_id = session.get('subscription')
-    if subscription_id:
-        subscription = stripe.Subscription.retrieve(subscription_id)
-        price_id = subscription['items']['data'][0]['price']['id']
-        new_tier = get_tier_for_price(price_id)
-        
-        result = await db.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
-        
-        if user:
-            old_tier = user.subscription_tier
-            user.subscription_tier = new_tier
-            await db.commit()
-            print(f"✅ User {user.email} upgraded to {new_tier} (via Checkout)")
-            
-            if old_tier != new_tier:
-                try:
-                    plan_name = get_plan_name_for_price(price_id)
-                    email_service.send_payment_success_email(
-                        to_email=user.email,
-                        user_name=user.full_name or user.email,
-                        plan_name=plan_name,
-                        tier=new_tier
-                    )
-                except Exception as email_err:
-                    print(f"⚠️ Payment success email failed: {email_err}")
+    if not subscription_id:
+        return
+
+    subscription = stripe.Subscription.retrieve(subscription_id)
+    price_id = subscription['items']['data'][0]['price']['id']
+    new_tier = get_tier_for_price(price_id)
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        logger.error(f"User {user_id} not found in DB for checkout.session.completed")
+        return
+
+    old_tier = user.subscription_tier
+    user.subscription_tier = new_tier
+    user.is_active = True
+    await db.commit()
+    logger.info(f"User {user.email} tier updated: {old_tier} -> {new_tier} (checkout.session.completed)")
+
+    if old_tier != new_tier:
+        try:
+            plan_name = get_plan_name_for_price(price_id)
+            email_service.send_payment_success_email(
+                to_email=user.email,
+                user_name=user.full_name or user.email,
+                plan_name=plan_name,
+                tier=new_tier
+            )
+        except Exception as email_err:
+            logger.warning(f"Payment success email failed for {user.email}: {email_err}")
 
 
 async def handle_invoice_paid(invoice, db: AsyncSession):
-    """Handle successful invoice payment — works for both Checkout and Elements flows"""
+    """Handle successful invoice payment — works for both Checkout and Elements flows.
+
+    This is the AUTHORITATIVE tier update path. If this fails, the user's tier
+    won't match their Stripe subscription, so errors must propagate (not be swallowed).
+    """
     subscription_id = invoice.get('subscription')
     if not subscription_id:
         return
-    
-    try:
-        subscription = stripe.Subscription.retrieve(subscription_id)
-        user_id = subscription['metadata'].get('user_id')
-        
-        if not user_id:
-            print(f"No user_id in subscription {subscription_id} metadata")
-            return
-        
-        price_id = subscription['items']['data'][0]['price']['id']
-        new_tier = get_tier_for_price(price_id)
-        
-        result = await db.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
-        
-        if user:
-            old_tier = user.subscription_tier
-            user.subscription_tier = new_tier
-            await db.commit()
-            print(f"✅ User {user.email} upgraded to {new_tier} (via invoice.paid)")
-            
-            if old_tier != new_tier:
-                try:
-                    plan_name = get_plan_name_for_price(price_id)
-                    email_service.send_payment_success_email(
-                        to_email=user.email,
-                        user_name=user.full_name or user.email,
-                        plan_name=plan_name,
-                        tier=new_tier
-                    )
-                except Exception as email_err:
-                    print(f"⚠️ Payment success email failed: {email_err}")
-    except Exception as e:
-        print(f"Error handling invoice.paid: {e}")
+
+    subscription = stripe.Subscription.retrieve(subscription_id)
+    user_id = subscription['metadata'].get('user_id')
+
+    if not user_id:
+        logger.warning(f"No user_id in subscription {subscription_id} metadata — cannot update tier")
+        return
+
+    price_id = subscription['items']['data'][0]['price']['id']
+    new_tier = get_tier_for_price(price_id)
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        logger.error(f"User {user_id} not found in DB for invoice.paid (subscription={subscription_id})")
+        return
+
+    old_tier = user.subscription_tier
+    user.subscription_tier = new_tier
+    # Ensure account is active (could have been degraded by a prior payment failure)
+    user.is_active = True
+    await db.commit()
+    logger.info(f"User {user.email} tier updated: {old_tier} -> {new_tier} (invoice.paid)")
+
+    if old_tier != new_tier:
+        try:
+            plan_name = get_plan_name_for_price(price_id)
+            email_service.send_payment_success_email(
+                to_email=user.email,
+                user_name=user.full_name or user.email,
+                plan_name=plan_name,
+                tier=new_tier
+            )
+        except Exception as email_err:
+            # Email failure is non-critical — log but don't fail the webhook
+            logger.warning(f"Payment success email failed for {user.email}: {email_err}")
 
 
 async def handle_subscription_updated(subscription, db: AsyncSession):
-    """Handle subscription updates (e.g., plan changes)"""
+    """Handle subscription updates (e.g., plan changes, status transitions)."""
     user_id = subscription['metadata'].get('user_id')
     if not user_id:
         return
-    
+
+    sub_status = subscription.get('status')
     price_id = subscription['items']['data'][0]['price']['id']
     new_tier = get_tier_for_price(price_id)
-    
+
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
-    
-    if user:
-        user.subscription_tier = new_tier
-        await db.commit()
-        print(f"✅ User {user.email} subscription updated to {new_tier}")
 
-        
+    if not user:
+        logger.warning(f"User {user_id} not found for subscription.updated")
+        return
+
+    # If subscription moved to past_due or unpaid, don't upgrade — keep current tier
+    # and let handle_payment_failed deal with the notification
+    if sub_status in ('past_due', 'unpaid', 'canceled'):
+        logger.info(f"Subscription {subscription['id']} status={sub_status} for {user.email} — skipping tier update")
+        return
+
+    old_tier = user.subscription_tier
+    user.subscription_tier = new_tier
+    await db.commit()
+    logger.info(f"User {user.email} subscription updated: {old_tier} -> {new_tier} (status={sub_status})")
+
+
 async def handle_subscription_deleted(subscription, db: AsyncSession):
-    """Handle subscription cancellation — lock account"""
+    """Handle subscription end — lock account.
+
+    Fires when: cancel-at-period-end reaches its end, or all payment retries exhausted.
+    Account is locked (is_active=False) but data is preserved in DB.
+    User can resubscribe to unlock.
+    """
     user_id = subscription['metadata'].get('user_id')
     if not user_id:
         return
-    
+
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
-    
+
     if user:
-        user.subscription_tier = 'beginner'
+        old_tier = user.subscription_tier
         user.is_active = False
         await db.commit()
-        print(f"🔒 User {user.email} subscription deleted, account locked")
+        logger.info(f"User {user.email} subscription ended: was {old_tier}, account locked (data preserved)")
 
 
 async def handle_payment_failed(invoice, db: AsyncSession):
-    """Handle failed payment"""
+    """Handle failed payment — notify user and log for monitoring.
+
+    Stripe will retry failed payments automatically (Smart Retries).
+    We don't downgrade immediately — let Stripe exhaust retries first.
+    If all retries fail, Stripe sends customer.subscription.deleted which downgrades.
+    """
+    subscription_id = invoice.get('subscription')
     customer_email = invoice.get('customer_email')
-    print(f"❌ Payment failed for {customer_email}")
+    attempt_count = invoice.get('attempt_count', 1)
+
+    logger.error(f"Payment failed: email={customer_email} subscription={subscription_id} attempt={attempt_count}")
+
+    # Look up user to send notification
+    if subscription_id:
+        try:
+            subscription = stripe.Subscription.retrieve(subscription_id)
+            user_id = subscription['metadata'].get('user_id')
+
+            if user_id:
+                result = await db.execute(select(User).where(User.id == user_id))
+                user = result.scalar_one_or_none()
+
+                if user:
+                    price_id = subscription['items']['data'][0]['price']['id']
+                    plan_name = get_plan_name_for_price(price_id)
+                    try:
+                        email_service.send_payment_failed_email(
+                            to_email=user.email,
+                            user_name=user.full_name or user.email,
+                            plan_name=plan_name,
+                        )
+                        logger.info(f"Payment failed email sent to {user.email}")
+                    except Exception as email_err:
+                        logger.warning(f"Payment failed email could not be sent to {user.email}: {email_err}")
+        except Exception as e:
+            logger.error(f"Error looking up user for payment failure: {e}")
+
+
+async def handle_trial_will_end(subscription, db: AsyncSession):
+    """Handle trial ending soon — send warning email so user isn't surprised by charge."""
+    user_id = subscription['metadata'].get('user_id')
+    if not user_id:
+        return
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        logger.warning(f"User {user_id} not found for trial_will_end")
+        return
+
+    trial_end = subscription.get('trial_end')
+    days_remaining = 3  # Stripe fires this event ~3 days before trial end
+    if trial_end:
+        import time as _time
+        days_remaining = max(1, int((trial_end - _time.time()) / 86400))
+
+    price_id = subscription['items']['data'][0]['price']['id']
+    plan_name = get_plan_name_for_price(price_id)
+
+    try:
+        email_service.send_trial_ending_email(
+            to_email=user.email,
+            user_name=user.full_name or user.email,
+            plan_name=plan_name,
+            days_remaining=days_remaining,
+        )
+        logger.info(f"Trial ending email sent to {user.email} ({days_remaining} days left)")
+    except Exception as email_err:
+        logger.warning(f"Trial ending email failed for {user.email}: {email_err}")
 
 
 # ---- Cancel Subscription ----
@@ -639,17 +780,16 @@ async def cancel_subscription_immediate(
                 cancelled_ids.append(sub.id)
                 print(f"🚫 Subscription {sub.id} ({sub_status}) cancelled immediately for {current_user.email}")
         
-        # Lock the account
+        # Trial cancel: lock immediately — no paid time remaining
         old_tier = current_user.subscription_tier
         current_user.is_active = False
-        current_user.subscription_tier = 'beginner'
         await db.commit()
-        
-        print(f"🔒 User {current_user.email} account locked (was {old_tier}, immediate cancel)")
-        
+
+        logger.info(f"User {current_user.email} trial cancelled immediately: was {old_tier}, account locked")
+
         return {
             "status": "cancelled",
-            "message": "Your subscription has been cancelled and your account has been closed.",
+            "message": "Your trial has been cancelled. Your data is preserved — resubscribe anytime to regain access.",
             "account_locked": True,
         }
         
@@ -674,10 +814,11 @@ async def cancel_subscription_immediate(
 async def get_subscription_status(
     current_user: User = Depends(get_current_user)
 ):
-    """Get current user's subscription status including trial info"""
+    """Get current user's subscription status including trial info and period end date."""
     trial_end = None
     subscription_status = None
     cancel_at_period_end = False
+    current_period_end = None
 
     try:
         customers = stripe.Customer.list(email=current_user.email, limit=1)
@@ -694,11 +835,12 @@ async def get_subscription_status(
                     sub = subs.data[0]
                     subscription_status = sub['status']
                     cancel_at_period_end = sub.get('cancel_at_period_end', False)
+                    current_period_end = sub.get('current_period_end')  # Unix timestamp
                     if sub.get('trial_end'):
                         trial_end = sub['trial_end']  # Unix timestamp
                     break
     except Exception as e:
-        print(f"⚠️ Error fetching Stripe subscription status: {e}")
+        logger.warning(f"Error fetching Stripe subscription status for {current_user.email}: {e}")
 
     return {
         "subscription_tier": current_user.subscription_tier,
@@ -706,6 +848,7 @@ async def get_subscription_status(
         "subscription_status": subscription_status,
         "trial_end": trial_end,
         "cancel_at_period_end": cancel_at_period_end,
+        "current_period_end": current_period_end,
     }
 
 

@@ -38,9 +38,9 @@ TIER_LIMITS = {
         "alerts": 20,
         "sms_alerts": True,
         "indicator_alerts": 5,
-        "stock_reviews": 10,          # per day
-        "dcf_valuations": 10,         # per day
-        "technical_analysis": 10,     # per day
+        "stock_reviews": 20,          # per day
+        "dcf_valuations": 20,         # per day
+        "technical_analysis": 20,     # per day
 
         "review_period": "day",
     },
@@ -50,9 +50,9 @@ TIER_LIMITS = {
         "alerts": 50,
         "sms_alerts": True,
         "indicator_alerts": 20,
-        "stock_reviews": 20,          # per day
-        "dcf_valuations": 20,         # per day
-        "technical_analysis": 20,     # per day
+        "stock_reviews": 40,          # per day
+        "dcf_valuations": 40,         # per day
+        "technical_analysis": 40,     # per day
 
         "review_period": "day",
         "ad_free": True,

@@ -25,6 +25,9 @@ class User(Base):
     
     # Subscription tiers: beginner, casual, active, professional
     subscription_tier = Column(String(50), default="beginner")
+
+    # Stripe linkage — avoids repeated API lookups by email
+    stripe_customer_id = Column(String(255), nullable=True, index=True)
     
     # Phone / SMS alert fields
     phone_number = Column(String(20), nullable=True)
