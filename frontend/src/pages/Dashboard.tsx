@@ -126,6 +126,13 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     loadDashboardData();
+    try {
+      sessionStorage.removeItem('nwc_active_sector');
+      // Clear any cached sector snapshots so a fresh sector click fetches new data
+      Object.keys(sessionStorage).forEach(key => {
+        if (key.startsWith('nwc_sector_snapshots_')) sessionStorage.removeItem(key);
+      });
+    } catch {}
   }, [location.pathname]);
 
   // Derive a stable ticker string so we only re-subscribe when actual tickers change

@@ -145,17 +145,20 @@ const Stocks: React.FC = () => {
       return cached ? JSON.parse(cached) : [];
     } catch { return []; }
   });
+  const resolvedSector = sectorParam || (() => {
+    try { return sessionStorage.getItem('nwc_active_sector') || ''; } catch { return ''; }
+  })();
   const [sectorSnapshots, setSectorSnapshots] = useState<DailySnapshot[]>(() => {
     try {
-      if (sectorParam) {
-        const cached = sessionStorage.getItem(`nwc_sector_snapshots_${sectorParam}`);
+      if (resolvedSector) {
+        const cached = sessionStorage.getItem(`nwc_sector_snapshots_${resolvedSector}`);
         return cached ? JSON.parse(cached) : [];
       }
       return [];
     } catch { return []; }
   });
   const [sectorLoading, setSectorLoading] = useState(false);
-  const [activeSector, setActiveSector] = useState(sectorParam);
+  const [activeSector, setActiveSector] = useState(resolvedSector);
   const [isWarrant, setIsWarrant] = useState(false);
   const [relatedCommonStock, setRelatedCommonStock] = useState<string | null>(null);
   const [watchlistMsg, setWatchlistMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -204,10 +207,12 @@ const Stocks: React.FC = () => {
       loadTopGainers();
       loadTopLosers();
     }
-    if (sectorParam) {
-      setActiveSector(sectorParam);
+    const sector = sectorParam || resolvedSector;
+    if (sector) {
+      setActiveSector(sector);
+      try { sessionStorage.setItem('nwc_active_sector', sector); } catch {}
       if (sectorSnapshots.length === 0) {
-        loadSectorSnapshots(sectorParam);
+        loadSectorSnapshots(sector);
       }
     }
   }, [initialTicker, showTopGainers, sectorParam]);
@@ -287,7 +292,10 @@ const Stocks: React.FC = () => {
   };
 
   const clearSectorContext = () => {
-    try { sessionStorage.removeItem(`nwc_sector_snapshots_${activeSector}`); } catch {}
+    try {
+      sessionStorage.removeItem(`nwc_sector_snapshots_${activeSector}`);
+      sessionStorage.removeItem('nwc_active_sector');
+    } catch {}
     setActiveSector('');
     setSectorSnapshots([]);
     navigate('/stocks', { replace: true });
@@ -577,7 +585,8 @@ const Stocks: React.FC = () => {
     setSearchInput(tickerSymbol);
     loadStockData(tickerSymbol);
     loadNews(tickerSymbol);
-    navigate(`/stocks?ticker=${tickerSymbol.toUpperCase()}`);
+    const sectorQuery = activeSector ? `&sector=${encodeURIComponent(activeSector)}` : '';
+    navigate(`/stocks?ticker=${tickerSymbol.toUpperCase()}${sectorQuery}`);
   };
 
   const handleRelatedStockClick = () => {
