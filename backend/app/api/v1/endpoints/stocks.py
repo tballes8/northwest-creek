@@ -51,31 +51,33 @@ async def get_daily_snapshot(
     - Random selection of stocks from today's snapshot with change percentages
     """
     try:
-        # Get today's date
-        today = date.today()
-        
+        # Use the most recent snapshot date (handles weekends/holidays)
+        latest_date_query = select(func.max(DailyStockSnapshot.snapshot_date))
+        latest_date_result = await db.execute(latest_date_query)
+        snapshot_date = latest_date_result.scalar() or date.today()
+
         # Build base filter
-        base_filter = DailyStockSnapshot.snapshot_date == today
-        
+        base_filter = DailyStockSnapshot.snapshot_date == snapshot_date
+
         # If tickers provided, also filter by those tickers
         ticker_list = None
         if tickers:
             ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()]
             if ticker_list:
-                base_filter = (DailyStockSnapshot.snapshot_date == today) & (
+                base_filter = (DailyStockSnapshot.snapshot_date == snapshot_date) & (
                     DailyStockSnapshot.ticker.in_(ticker_list)
                 )
-        
+
         # Get total count
         count_query = select(func.count(DailyStockSnapshot.id)).where(base_filter)
         count_result = await db.execute(count_query)
         total_count = count_result.scalar() or 0
-        
+
         if total_count == 0:
             return {
                 "snapshots": [],
                 "total_count": 0,
-                "snapshot_date": today
+                "snapshot_date": snapshot_date
             }
         
         # Get random snapshots
@@ -92,7 +94,7 @@ async def get_daily_snapshot(
         return {
             "snapshots": snapshots,
             "total_count": total_count,
-            "snapshot_date": today
+            "snapshot_date": snapshot_date
         }
         
     except Exception as e:

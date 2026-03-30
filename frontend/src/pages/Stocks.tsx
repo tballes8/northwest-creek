@@ -313,7 +313,9 @@ const Stocks: React.FC = () => {
       const response = await stocksAPI.getDailySnapshot(10, subset);
       const snaps = response.data.snapshots || [];
       setSectorSnapshots(snaps);
-      try { sessionStorage.setItem(`nwc_sector_snapshots_${sector}`, JSON.stringify(snaps)); } catch {}
+      if (snaps.length > 0) {
+        try { sessionStorage.setItem(`nwc_sector_snapshots_${sector}`, JSON.stringify(snaps)); } catch {}
+      }
     } catch (error) {
       console.error('Failed to load sector snapshots:', error);
       setSectorSnapshots([]);
