@@ -1072,6 +1072,93 @@ async def stock_screener(
         raise HTTPException(status_code=500, detail=f"Error running stock screener: {_safe_error(e)}")
 
 
+@router.get("/analyst-estimates/{ticker}")
+async def get_analyst_estimates(ticker: str):
+    """
+    Get analyst estimates and price target consensus for a stock.
+
+    Returns:
+    - forward_eps: next-year average EPS estimate
+    - forward_eps_high / forward_eps_low: estimate range
+    - num_analysts_eps: number of analysts covering EPS
+    - forward_revenue_avg: next-year average revenue estimate
+    - estimate_year: the fiscal year the forward EPS applies to
+    - price_target_consensus: mean analyst price target
+    - price_target_high / price_target_low: target range
+    - price_target_median: median target
+    """
+    sym = ticker.upper().strip()
+    try:
+        client = get_fmp_client()
+
+        estimates_resp, targets_resp = await asyncio.gather(
+            client.get("analyst-estimates", params={"symbol": sym, "apikey": API_KEY, "limit": 4}),
+            client.get("price-target-consensus", params={"symbol": sym, "apikey": API_KEY}),
+            return_exceptions=True,
+        )
+
+        # ── Analyst EPS estimates ───────────────────────────────────────────
+        forward_eps = None
+        forward_eps_high = None
+        forward_eps_low = None
+        forward_revenue_avg = None
+        num_analysts_eps = None
+        estimate_year = None
+
+        if not isinstance(estimates_resp, Exception) and estimates_resp.status_code == 200:
+            estimates_data = estimates_resp.json()
+            if isinstance(estimates_data, list) and estimates_data:
+                from datetime import date as _date
+                current_year = _date.today().year
+                # Pick the first entry whose date year is >= current year (forward-looking)
+                for entry in estimates_data:
+                    entry_year = None
+                    try:
+                        entry_year = int(str(entry.get("date", ""))[:4])
+                    except (ValueError, TypeError):
+                        pass
+                    if entry_year and entry_year >= current_year:
+                        forward_eps = entry.get("estimatedEpsAvg")
+                        forward_eps_high = entry.get("estimatedEpsHigh")
+                        forward_eps_low = entry.get("estimatedEpsLow")
+                        forward_revenue_avg = entry.get("estimatedRevenueAvg")
+                        num_analysts_eps = entry.get("numberAnalystEstimatedEps")
+                        estimate_year = entry_year
+                        break
+
+        # ── Price target consensus ──────────────────────────────────────────
+        price_target_consensus = None
+        price_target_high = None
+        price_target_low = None
+        price_target_median = None
+
+        if not isinstance(targets_resp, Exception) and targets_resp.status_code == 200:
+            targets_data = targets_resp.json()
+            if isinstance(targets_data, list) and targets_data:
+                t = targets_data[0]
+                price_target_consensus = t.get("targetConsensus")
+                price_target_high = t.get("targetHigh")
+                price_target_low = t.get("targetLow")
+                price_target_median = t.get("targetMedian")
+
+        return {
+            "ticker": sym,
+            "forward_eps": forward_eps,
+            "forward_eps_high": forward_eps_high,
+            "forward_eps_low": forward_eps_low,
+            "forward_revenue_avg": forward_revenue_avg,
+            "num_analysts_eps": num_analysts_eps,
+            "estimate_year": estimate_year,
+            "price_target_consensus": price_target_consensus,
+            "price_target_high": price_target_high,
+            "price_target_low": price_target_low,
+            "price_target_median": price_target_median,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching analyst estimates: {_safe_error(e)}")
+
+
 @router.get("/{ticker}", response_model=dict)
 async def get_stock_overview(ticker: str):
     """

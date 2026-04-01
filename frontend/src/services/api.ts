@@ -182,6 +182,8 @@ export const technicalAPI = {
 export const financialsAPI = {
   get: (ticker: string) =>
     axiosInstance.get(`/financials/${ticker}`),
+  getAnalystEstimates: (ticker: string) =>
+    axiosInstance.get(`/stocks/analyst-estimates/${ticker}`),
 };
 
 // Stripe / Subscription API

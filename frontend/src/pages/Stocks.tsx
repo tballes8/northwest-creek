@@ -118,6 +118,19 @@ interface SearchSuggestion {
   primary_exchange?: string;
 }
 
+interface AnalystEstimates {
+  forward_eps: number | null;
+  forward_eps_high: number | null;
+  forward_eps_low: number | null;
+  forward_revenue_avg: number | null;
+  num_analysts_eps: number | null;
+  estimate_year: number | null;
+  price_target_consensus: number | null;
+  price_target_high: number | null;
+  price_target_low: number | null;
+  price_target_median: number | null;
+}
+
 const Stocks: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -173,6 +186,7 @@ const Stocks: React.FC = () => {
   const [etfHoldings, setEtfHoldings] = useState<EtfHolding[]>([]);
   const [holdingsLoading, setHoldingsLoading] = useState(false);
   const [peRatio, setPeRatio] = useState<number | null>(null);
+  const [analystEstimates, setAnalystEstimates] = useState<AnalystEstimates | null>(null);
 
   const detectWarrantHint = (tickerSymbol: string): boolean => {
     const upper = tickerSymbol.toUpperCase();
@@ -280,6 +294,7 @@ const Stocks: React.FC = () => {
     setDividendInfo(null);
     setEtfHoldings([]);
     setPeRatio(null);
+    setAnalystEstimates(null);
     setError('');
     setIsWarrant(false);
     setRelatedCommonStock(null);
@@ -460,6 +475,7 @@ const Stocks: React.FC = () => {
       }
       loadDividends(symbol);
       loadPeRatio(symbol);
+      loadAnalystEstimates(symbol);
 
       // ETF holdings — non-blocking, only for fund types
       const companyType = companyResult.value.data?.type || '';
@@ -536,6 +552,16 @@ const Stocks: React.FC = () => {
       setPeRatio(typeof pe === 'number' ? pe : null);
     } catch {
       setPeRatio(null);
+    }
+  };
+
+  const loadAnalystEstimates = async (symbol: string) => {
+    try {
+      const { financialsAPI } = await import('../services/api');
+      const response = await financialsAPI.getAnalystEstimates(symbol);
+      setAnalystEstimates(response.data);
+    } catch {
+      setAnalystEstimates(null);
     }
   };
 
@@ -869,11 +895,43 @@ const Stocks: React.FC = () => {
                   <div className={`text-lg font-semibold ${quote.change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {quote.change >= 0 ? '+' : ''}{quote.change.toFixed(2)} ({quote.change_percent >= 0 ? '+' : ''}{quote.change_percent.toFixed(2)}%)
                   </div>
-                  {peRatio !== null && !isFundType(company.type) && !isWarrant && (
-                    <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                      This company is trading at <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.round(peRatio)}x</span> trailing earnings (P/E)
-                    </div>
-                  )}
+                  {!isFundType(company.type) && !isWarrant && (() => {
+                    const forwardEps = analystEstimates?.forward_eps;
+                    const forwardPE = forwardEps && forwardEps > 0 ? quote.price / forwardEps : null;
+                    const target = analystEstimates?.price_target_consensus;
+                    const upside = target ? ((target - quote.price) / quote.price) * 100 : null;
+                    const estYear = analystEstimates?.estimate_year;
+                    const numAnalysts = analystEstimates?.num_analysts_eps;
+
+                    return (
+                      <div className="mt-1 space-y-0.5">
+                        {forwardPE !== null ? (
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            Trading at <span className="font-semibold text-gray-700 dark:text-gray-200">{forwardPE.toFixed(1)}x</span> forward earnings
+                            {estYear && <span className="text-xs ml-1">({estYear}E{numAnalysts ? `, ${numAnalysts} analysts` : ''})</span>}
+                            {peRatio !== null && <span className="text-xs ml-1 text-gray-400 dark:text-gray-500">· {Math.round(peRatio)}x trailing</span>}
+                          </div>
+                        ) : peRatio !== null ? (
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            Trading at <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.round(peRatio)}x</span> trailing earnings (P/E)
+                          </div>
+                        ) : null}
+                        {target !== null && target !== undefined && upside !== null && (
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            Analyst price target: <span className="font-semibold text-gray-700 dark:text-gray-200">${target.toFixed(2)}</span>
+                            <span className={`ml-1.5 text-xs font-medium ${upside >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                              {upside >= 0 ? '+' : ''}{upside.toFixed(1)}% from current price
+                            </span>
+                            {analystEstimates?.price_target_low != null && analystEstimates?.price_target_high != null && (
+                              <span className="text-xs ml-1 text-gray-400 dark:text-gray-500">
+                                (${analystEstimates.price_target_low.toFixed(0)}–${analystEstimates.price_target_high.toFixed(0)} range)
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
               {/* Add to Watchlist */}
