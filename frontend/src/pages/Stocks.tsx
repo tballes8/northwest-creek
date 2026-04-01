@@ -172,6 +172,7 @@ const Stocks: React.FC = () => {
   const [dividendLoading, setDividendLoading] = useState(false);
   const [etfHoldings, setEtfHoldings] = useState<EtfHolding[]>([]);
   const [holdingsLoading, setHoldingsLoading] = useState(false);
+  const [peRatio, setPeRatio] = useState<number | null>(null);
 
   const detectWarrantHint = (tickerSymbol: string): boolean => {
     const upper = tickerSymbol.toUpperCase();
@@ -278,6 +279,7 @@ const Stocks: React.FC = () => {
     setNews([]);
     setDividendInfo(null);
     setEtfHoldings([]);
+    setPeRatio(null);
     setError('');
     setIsWarrant(false);
     setRelatedCommonStock(null);
@@ -457,6 +459,7 @@ const Stocks: React.FC = () => {
         setRelatedCommonStock(null);
       }
       loadDividends(symbol);
+      loadPeRatio(symbol);
 
       // ETF holdings — non-blocking, only for fund types
       const companyType = companyResult.value.data?.type || '';
@@ -522,6 +525,17 @@ const Stocks: React.FC = () => {
       setEtfHoldings([]);
     } finally {
       setHoldingsLoading(false);
+    }
+  };
+
+  const loadPeRatio = async (symbol: string) => {
+    try {
+      const { financialsAPI } = await import('../services/api');
+      const response = await financialsAPI.get(symbol);
+      const pe = response.data?.ratios?.pe_ratio;
+      setPeRatio(typeof pe === 'number' ? pe : null);
+    } catch {
+      setPeRatio(null);
     }
   };
 
@@ -855,6 +869,11 @@ const Stocks: React.FC = () => {
                   <div className={`text-lg font-semibold ${quote.change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {quote.change >= 0 ? '+' : ''}{quote.change.toFixed(2)} ({quote.change_percent >= 0 ? '+' : ''}{quote.change_percent.toFixed(2)}%)
                   </div>
+                  {peRatio !== null && !isFundType(company.type) && !isWarrant && (
+                    <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                      This company is trading at <span className="font-semibold text-gray-700 dark:text-gray-200">{Math.round(peRatio)}x</span> trailing earnings (P/E)
+                    </div>
+                  )}
                 </div>
               </div>
               {/* Add to Watchlist */}
