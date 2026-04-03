@@ -109,8 +109,13 @@ const Dashboard: React.FC = () => {
   const [marketDataLoading, setMarketDataLoading] = useState(false);
   const [marketModal, setMarketModal] = useState<'treasury' | 'commodities' | 'indexes' | 'crypto' | null>(null);
 
-  // AI portfolio analysis
-  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  // AI portfolio analysis — persisted in sessionStorage so it survives navigation
+  const [aiSummary, setAiSummary] = useState<string | null>(() => {
+    try { return sessionStorage.getItem('nwc_ai_summary'); } catch { return null; }
+  });
+  const [aiGeneratedAt, setAiGeneratedAt] = useState<string | null>(() => {
+    try { return sessionStorage.getItem('nwc_ai_summary_at'); } catch { return null; }
+  });
   const [aiLoading, setAiLoading] = useState(false);
 
   // Sector breakdowns for pie charts
@@ -596,6 +601,10 @@ const Dashboard: React.FC = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
+    try {
+      sessionStorage.removeItem('nwc_ai_summary');
+      sessionStorage.removeItem('nwc_ai_summary_at');
+    } catch {}
     navigate('/');
   };
 
@@ -611,7 +620,14 @@ const Dashboard: React.FC = () => {
     setAiLoading(true);
     try {
       const response = await portfolioAPI.analyze();
-      setAiSummary(response.data.summary);
+      const summary = response.data.summary;
+      const generatedAt = response.data.generated_at;
+      setAiSummary(summary);
+      setAiGeneratedAt(generatedAt);
+      try {
+        sessionStorage.setItem('nwc_ai_summary', summary);
+        sessionStorage.setItem('nwc_ai_summary_at', generatedAt);
+      } catch {}
     } catch (err: any) {
       const detail = err?.response?.data?.detail;
       if (err?.response?.status === 403) {
@@ -823,6 +839,11 @@ return (
                     <div className="flex items-center gap-2 mb-2">
                       <span className="text-indigo-600 dark:text-indigo-400 text-base">✦</span>
                       <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">AI-generated summary</span>
+                      {aiGeneratedAt && (
+                        <span className="text-xs text-gray-400 dark:text-gray-500">
+                          · {new Date(aiGeneratedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{aiSummary}</p>
                   </div>
