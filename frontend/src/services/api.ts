@@ -67,15 +67,18 @@ export const watchlistAPI = {
 export const portfolioAPI = {
   getAll: () =>
     axiosInstance.get('/portfolio'),
-  
+
   add: (data: { ticker: string; quantity: number; buy_price: number; buy_date: string; notes?: string }) =>
     axiosInstance.post('/portfolio/positions', data),
-  
+
   remove: (id: string) =>
     axiosInstance.delete(`/portfolio/positions/${id}`),
-  
+
   update: (id: string, data: any) =>
     axiosInstance.put(`/portfolio/positions/${id}`, data),
+
+  analyze: () =>
+    axiosInstance.post('/portfolio/analyze'),
 };
 
 // Alerts API

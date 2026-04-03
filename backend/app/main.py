@@ -6,7 +6,8 @@ from app.config import get_settings
 from app.api.v1.endpoints import (
     alerts, auth, dcf_valuation, indicators, portfolio,
     stocks, watchlist, technical_analysis, stripe_payments,
-    intraday, live_prices, financials, phone, technical_alerts
+    intraday, live_prices, financials, phone, technical_alerts,
+    portfolio_analysis
 )
 from app.api.v1.endpoints.content import router as content_router
 from app.api.v1.endpoints.waitlist import router as waitlist_router
@@ -97,3 +98,4 @@ app.include_router(financials.router, prefix="/api/v1/financials", tags=["financ
 app.include_router(phone.router, prefix=f"/api/{settings.API_VERSION}/phone", tags=["Phone"])
 app.include_router(waitlist_router, prefix="/api/v1/waitlist", tags=["waitlist"])
 app.include_router(technical_alerts.router, prefix="/api/v1/technical-alerts", tags=["Technical Alerts"])
+app.include_router(portfolio_analysis.router, prefix="/api/v1/portfolio", tags=["Portfolio Analysis"])

@@ -15,6 +15,7 @@ TIER_LIMITS = {
         "stock_reviews": 5,           # per week
         "dcf_valuations": 5,          # per week
         "technical_analysis": 5,      # per week
+        "ai_analysis": 0,             # not available
 
         "review_period": "week",
         "trial_days": 14,
@@ -28,6 +29,7 @@ TIER_LIMITS = {
         "stock_reviews": 15,          # per week
         "dcf_valuations": 15,         # per week
         "technical_analysis": 15,     # per week
+        "ai_analysis": 5,             # per week
 
         "review_period": "week",
         "trial_days": 14,
@@ -41,6 +43,7 @@ TIER_LIMITS = {
         "stock_reviews": 20,          # per day
         "dcf_valuations": 20,         # per day
         "technical_analysis": 20,     # per day
+        "ai_analysis": 10,            # per day
 
         "review_period": "day",
     },
@@ -53,6 +56,7 @@ TIER_LIMITS = {
         "stock_reviews": 40,          # per day
         "dcf_valuations": 40,         # per day
         "technical_analysis": 40,     # per day
+        "ai_analysis": 25,            # per day
 
         "review_period": "day",
         "ad_free": True,

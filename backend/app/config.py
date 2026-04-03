@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: str = Field(default="", env="TWILIO_AUTH_TOKEN")
     TWILIO_FROM_NUMBER: str = Field(default="", env="TWILIO_FROM_NUMBER")
 
+    # Anthropic AI
+    ANTHROPIC_API_KEY: str = Field(default="", env="ANTHROPIC_API_KEY")
+
     # Stripe Settings
     STRIPE_SECRET_KEY: str = Field(default="", env="STRIPE_SECRET_KEY")
     STRIPE_PUBLISHABLE_KEY: str = Field(default="", env="STRIPE_PUBLISHABLE_KEY")
