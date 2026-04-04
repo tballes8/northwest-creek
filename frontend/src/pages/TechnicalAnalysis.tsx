@@ -157,6 +157,11 @@ const TechnicalAnalysis: React.FC = () => {
   const [isWarrant, setIsWarrant] = useState(false);
   const [relatedCommonStock, setRelatedCommonStock] = useState<string | null>(null);
   
+  // AI stock analysis
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [aiGeneratedAt, setAiGeneratedAt] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
   // Advanced indicator panel toggles
   const [showVolume, setShowVolume] = useState(false);
   const [showMomentum, setShowMomentum] = useState(false);
@@ -278,6 +283,8 @@ const TechnicalAnalysis: React.FC = () => {
     setFinancialsData(null);
     setShowFinancials(false);
     setFinancialsError(null);
+    setAiSummary(null);
+    setAiGeneratedAt(null);
 
     try {
       const response = await technicalAPI.analyze(symbol.toUpperCase());
@@ -320,6 +327,27 @@ const TechnicalAnalysis: React.FC = () => {
         return;
       }
       await performAnalysis(ticker);
+  };
+
+  const handleAiAnalysis = async () => {
+    if (!analysisData) return;
+    setAiLoading(true);
+    try {
+      const response = await technicalAPI.aiAnalysis(analysisData.ticker);
+      setAiSummary(response.data.summary);
+      setAiGeneratedAt(response.data.generated_at);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      if (err?.response?.status === 403) {
+        const msg = typeof detail === 'object' ? detail.message : detail;
+        setAiSummary(msg || 'AI Analysis is not available on your current plan.');
+      } else {
+        setAiSummary('Unable to generate analysis at this time. Please try again.');
+      }
+      setAiGeneratedAt(null);
+    } finally {
+      setAiLoading(false);
+    }
   };
 
   const handleTickerChange = (value: string) => {
@@ -959,6 +987,58 @@ const TechnicalAnalysis: React.FC = () => {
                   <span className={`text-sm font-medium ${watchlistMsg.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {watchlistMsg.text}
                   </span>
+                )}
+              </div>
+
+              {/* AI Analysis */}
+              <div className="mb-4">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleAiAnalysis}
+                    disabled={aiLoading}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {aiLoading ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Analyzing indicators...
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-base leading-none">✦</span>
+                        AI Analysis
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {aiSummary && (
+                  <div className="mt-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-indigo-600 dark:text-indigo-400 text-base">✦</span>
+                          <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">AI-generated summary</span>
+                          {aiGeneratedAt && (
+                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                              · {new Date(aiGeneratedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{aiSummary}</p>
+                      </div>
+                      <button
+                        onClick={handleAiAnalysis}
+                        disabled={aiLoading}
+                        className="flex-shrink-0 text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
 

@@ -179,6 +179,8 @@ export const dcfAPI = {
 export const technicalAPI = {
   analyze: (ticker: string) =>
     axiosInstance.get(`/technical-analysis/analyze/${ticker}`),
+  aiAnalysis: (ticker: string) =>
+    axiosInstance.get(`/stocks/${ticker}/ai-analysis`),
 };
 
 // Financials API

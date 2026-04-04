@@ -589,7 +589,7 @@ const Landing: React.FC = () => {
               </div>
               <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium mb-6">14-day free trial</p>
               <ul className="space-y-3 mb-8">
-                <li className="flex items-start"><Check /><span className="font-bold text-gray-900 dark:text-white">✦ AI Portfolio Analysis — 5/week</span></li>
+                <li className="flex items-start"><Check /><span className="font-bold text-gray-900 dark:text-white">✦ AI Analysis (Portfolio & Stock) — 5/week</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">20 watchlist stocks</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">20 portfolio entries</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">10 price alerts</span></li>
@@ -614,7 +614,7 @@ const Landing: React.FC = () => {
                 <span className="text-gray-600 dark:text-gray-400">/month</span>
               </div>
               <ul className="space-y-3 mb-8">
-                <li className="flex items-start"><Check /><span className="font-bold text-gray-900 dark:text-white">✦ AI Portfolio Analysis — 10/day</span></li>
+                <li className="flex items-start"><Check /><span className="font-bold text-gray-900 dark:text-white">✦ AI Analysis (Portfolio & Stock) — 10/day</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">45 watchlist stocks</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">45 portfolio entries</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">20 price alerts</span></li>
@@ -640,7 +640,7 @@ const Landing: React.FC = () => {
                 <span className="text-gray-600 dark:text-gray-400">/month</span>
               </div>
               <ul className="space-y-3 mb-8">
-                <li className="flex items-start"><Check /><span className="font-bold text-gray-900 dark:text-white">✦ AI Portfolio Analysis — 25/day</span></li>
+                <li className="flex items-start"><Check /><span className="font-bold text-gray-900 dark:text-white">✦ AI Analysis (Portfolio & Stock) — 25/day</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">75 watchlist stocks</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">75 portfolio entries</span></li>
                 <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">50 price alerts</span></li>
