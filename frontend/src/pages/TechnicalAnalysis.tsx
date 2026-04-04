@@ -1035,7 +1035,7 @@ const TechnicalAnalysis: React.FC = () => {
                     </button>
                   </div>
                 </div>
-              )
+              )}
 
               {/* Outlook Summary */}
               <div className={`p-4 rounded-lg ${
