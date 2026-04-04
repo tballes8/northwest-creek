@@ -952,6 +952,26 @@ const TechnicalAnalysis: React.FC = () => {
               {/* Quick Actions: Watchlist + Cross-page links */}
               <div className="flex flex-wrap items-center gap-3 mb-4">
                 <button
+                  onClick={handleAiAnalysis}
+                  disabled={aiLoading}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {aiLoading ? (
+                    <>
+                      <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-base leading-none">✦</span>
+                      AI Analysis
+                    </>
+                  )}
+                </button>
+                <button
                   onClick={handleAddToWatchlist}
                   disabled={addingToWatchlist}
                   className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 dark:bg-yellow-600 dark:hover:bg-yellow-700 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 flex items-center gap-2"
@@ -990,57 +1010,32 @@ const TechnicalAnalysis: React.FC = () => {
                 )}
               </div>
 
-              {/* AI Analysis */}
-              <div className="mb-4">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={handleAiAnalysis}
-                    disabled={aiLoading}
-                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {aiLoading ? (
-                      <>
-                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                        Analyzing indicators...
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-base leading-none">✦</span>
-                        AI Analysis
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {aiSummary && (
-                  <div className="mt-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="text-indigo-600 dark:text-indigo-400 text-base">✦</span>
-                          <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">AI-generated summary</span>
-                          {aiGeneratedAt && (
-                            <span className="text-xs text-gray-400 dark:text-gray-500">
-                              · {new Date(aiGeneratedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{aiSummary}</p>
+              {/* AI Analysis Summary */}
+              {aiSummary && (
+                <div className="mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-indigo-600 dark:text-indigo-400 text-base">✦</span>
+                        <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">AI-generated summary</span>
+                        {aiGeneratedAt && (
+                          <span className="text-xs text-gray-400 dark:text-gray-500">
+                            · {new Date(aiGeneratedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                          </span>
+                        )}
                       </div>
-                      <button
-                        onClick={handleAiAnalysis}
-                        disabled={aiLoading}
-                        className="flex-shrink-0 text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                      >
-                        Refresh
-                      </button>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{aiSummary}</p>
                     </div>
+                    <button
+                      onClick={handleAiAnalysis}
+                      disabled={aiLoading}
+                      className="flex-shrink-0 text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                    >
+                      Refresh
+                    </button>
                   </div>
-                )}
-              </div>
+                </div>
+              )
 
               {/* Outlook Summary */}
               <div className={`p-4 rounded-lg ${
