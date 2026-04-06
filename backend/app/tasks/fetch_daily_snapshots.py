@@ -90,6 +90,7 @@ async def fetch_and_store_snapshots():
         # Filter to US-only tickers: skip foreign symbols (contain dots like .T, .PA),
         # tickers longer than 10 chars (DB column is VARCHAR(10)), and delisted stocks
         tickers = []
+        ticker_type_map: dict[str, str] = {}  # ticker -> asset type (CS, ETF, WARRANT, etc.)
         for s in stock_list:
             sym = s.get("symbol")
             if not sym or "." in sym or len(sym) > 10:
@@ -97,6 +98,8 @@ async def fetch_and_store_snapshots():
             if sym.upper() in delisted_symbols:
                 continue
             tickers.append(sym)
+            asset_type = s.get("type") or s.get("exchangeShortName") or "CS"
+            ticker_type_map[sym] = str(asset_type).upper()
 
         print(f"✅ Got {len(tickers)} tickers from stock list (after filtering delisted)")
 
@@ -145,6 +148,7 @@ async def fetch_and_store_snapshots():
                             'close_price': close_price,
                             'change_percent': change_percent,
                             'snapshot_date': today,
+                            'asset_type': ticker_type_map.get(ticker, 'CS'),
                         })
 
                 except Exception as batch_err:

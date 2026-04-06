@@ -38,15 +38,17 @@ router = APIRouter()
 async def get_daily_snapshot(
     limit: int = Query(default=10, ge=1, le=50),
     tickers: Optional[str] = Query(default=None, description="Comma-separated tickers to filter by"),
+    asset_type: Optional[str] = Query(default=None, description="Filter by asset type, e.g. 'ETF' or 'CS'"),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Get random stocks from today's daily snapshot
-    
+
     **Parameters:**
     - **limit**: Number of random stocks to return (1-50, default 10)
     - **tickers**: Optional comma-separated list of tickers to filter by (e.g. "AAPL,MSFT,GOOGL")
-    
+    - **asset_type**: Optional asset type filter (e.g. "ETF", "CS")
+
     **Returns:**
     - Random selection of stocks from today's snapshot with change percentages
     """
@@ -64,9 +66,11 @@ async def get_daily_snapshot(
         if tickers:
             ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()]
             if ticker_list:
-                base_filter = (DailyStockSnapshot.snapshot_date == snapshot_date) & (
-                    DailyStockSnapshot.ticker.in_(ticker_list)
-                )
+                base_filter = base_filter & DailyStockSnapshot.ticker.in_(ticker_list)
+
+        # If asset_type provided, filter by it
+        if asset_type:
+            base_filter = base_filter & (DailyStockSnapshot.asset_type == asset_type.upper())
 
         # Get total count
         count_query = select(func.count(DailyStockSnapshot.id)).where(base_filter)

@@ -158,6 +158,12 @@ const Stocks: React.FC = () => {
       return cached ? JSON.parse(cached) : [];
     } catch { return []; }
   });
+  const [etfSnapshots, setEtfSnapshots] = useState<DailySnapshot[]>(() => {
+    try {
+      const cached = sessionStorage.getItem('nwc_etf_snapshots');
+      return cached ? JSON.parse(cached) : [];
+    } catch { return []; }
+  });
   const resolvedSector = sectorParam || (() => {
     try { return sessionStorage.getItem('nwc_active_sector') || ''; } catch { return ''; }
   })();
@@ -213,6 +219,9 @@ const Stocks: React.FC = () => {
     loadUser();
     if (dailySnapshots.length === 0) {
       loadDailySnapshots();
+    }
+    if (etfSnapshots.length === 0) {
+      loadDailyEtfSnapshots();
     }
     if (initialTicker) {
       loadStockData(initialTicker);
@@ -351,12 +360,23 @@ const Stocks: React.FC = () => {
 
   const loadDailySnapshots = async () => {
     try {
-      const response = await stocksAPI.getDailySnapshot(10);
+      const response = await stocksAPI.getDailySnapshot(10, undefined, 'CS');
       const snaps = response.data.snapshots || [];
       setDailySnapshots(snaps);
       try { sessionStorage.setItem('nwc_daily_snapshots', JSON.stringify(snaps)); } catch {}
     } catch (error) {
       console.error('Failed to load daily snapshots:', error);
+    }
+  };
+
+  const loadDailyEtfSnapshots = async () => {
+    try {
+      const response = await stocksAPI.getDailySnapshot(10, undefined, 'ETF');
+      const snaps = response.data.snapshots || [];
+      setEtfSnapshots(snaps);
+      try { sessionStorage.setItem('nwc_etf_snapshots', JSON.stringify(snaps)); } catch {}
+    } catch (error) {
+      console.error('Failed to load ETF snapshots:', error);
     }
   };
 
@@ -1536,6 +1556,38 @@ const Stocks: React.FC = () => {
                   className="mt-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg text-sm transition-colors font-medium"
                 >
                   🔄 Load Different Stocks
+                </button>
+              </div>
+            )}
+
+            {/* Randomly Selected ETFs */}
+            {etfSnapshots.length > 0 && (
+              <div className="mt-8 border-t border-gray-200 dark:border-gray-600 pt-8">
+                <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Randomly selected ETFs from today's market</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                  To start researching a different 10 ETFs click the Load Different ETFs button
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                  {etfSnapshots.map((snap) => (
+                    <button
+                      key={snap.ticker}
+                      onClick={() => handleTickerClick(snap.ticker)}
+                      className="p-4 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors text-left group"
+                    >
+                      <div className="font-semibold text-lg text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
+                        {snap.ticker}
+                      </div>
+                      <div className={`text-sm font-medium ${snap.change_percent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {snap.change_percent >= 0 ? '+' : ''}{snap.change_percent.toFixed(2)}%
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={loadDailyEtfSnapshots}
+                  className="mt-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg text-sm transition-colors font-medium"
+                >
+                  🔄 Load Different ETFs
                 </button>
               </div>
             )}

@@ -12,7 +12,8 @@ class DailySnapshotItem(BaseModel):
     close_price: float
     change_percent: float
     snapshot_date: date
-    
+    asset_type: str | None = None
+
     class Config:
         from_attributes = True
 

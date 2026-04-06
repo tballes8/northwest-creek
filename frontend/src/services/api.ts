@@ -149,10 +149,13 @@ export const stocksAPI = {
   getTopGainers: (limit: number = 10) =>
     axiosInstance.get(`/stocks/top-gainers`, {params: {limit}}),
 
-  getDailySnapshot: (limit: number = 10, tickers?: string[]) => {
+  getDailySnapshot: (limit: number = 10, tickers?: string[], asset_type?: string) => {
     const params: any = { limit };
     if (tickers && tickers.length > 0) {
       params.tickers = tickers.join(',');
+    }
+    if (asset_type) {
+      params.asset_type = asset_type;
     }
     return axiosInstance.get(`/stocks/daily-snapshot`, { params });
   },

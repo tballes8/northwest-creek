@@ -162,6 +162,7 @@ class DailyStockSnapshot(Base):
     close_price = Column(Numeric(precision=18, scale=2), nullable=False)
     change_percent = Column(Numeric(precision=18, scale=2), nullable=False)
     snapshot_date = Column(Date, nullable=False, index=True)
+    asset_type = Column(String(20), nullable=True, index=True)  # e.g. "CS", "ETF", "WARRANT"
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     __table_args__ = (
