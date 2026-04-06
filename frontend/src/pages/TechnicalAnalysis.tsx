@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI, technicalAPI, watchlistAPI, financialsAPI } from '../services/api';
 import { User } from '../types';
@@ -212,6 +212,14 @@ const TechnicalAnalysis: React.FC = () => {
   const [watchlistMsg, setWatchlistMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [addingToWatchlist, setAddingToWatchlist] = useState(false);
   const [usageCount, setUsageCount] = useState(0);
+
+  // Trend line drawing state (Moving Averages chart)
+  const maChartRef = useRef<any>(null);
+  const [trendDrawingMode, setTrendDrawingMode] = useState(false);
+  const [trendAwaitingSecond, setTrendAwaitingSecond] = useState(false);
+  const pendingTrendPointRef = useRef<{ xFraction: number; yValue: number } | null>(null);
+  const drawnTrendLinesRef = useRef<Array<{ x1: number; y1: number; x2: number; y2: number }>>([]);
+  const [trendLineCount, setTrendLineCount] = useState(0); // triggers chart re-draw
 
   // Financials panel state
   const [showFinancials, setShowFinancials] = useState(false);
@@ -725,6 +733,82 @@ const TechnicalAnalysis: React.FC = () => {
         },
         },
     },
+  };
+
+  // Custom Chart.js plugin that draws user-defined trend lines on the MA chart
+  const trendLinePlugin = {
+    id: 'trendLineDrawer',
+    afterDraw: (chart: any) => {
+      const ctx = chart.ctx;
+      const area = chart.chartArea;
+      if (!area) return;
+      const isDark = document.documentElement.classList.contains('dark');
+      const lineColor = isDark ? '#ffffff' : '#000000';
+      const areaWidth = area.right - area.left;
+
+      const toPixel = (pt: { xFraction: number; yValue: number }) => ({
+        px: area.left + pt.xFraction * areaWidth,
+        py: chart.scales.y.getPixelForValue(pt.yValue),
+      });
+
+      // Draw completed lines
+      drawnTrendLinesRef.current.forEach(line => {
+        const p1 = toPixel({ xFraction: line.x1, yValue: line.y1 });
+        const p2 = toPixel({ xFraction: line.x2, yValue: line.y2 });
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(p1.px, p1.py);
+        ctx.lineTo(p2.px, p2.py);
+        ctx.strokeStyle = lineColor;
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.restore();
+      });
+
+      // Draw pending first-point indicator
+      if (pendingTrendPointRef.current) {
+        const p = toPixel(pendingTrendPointRef.current);
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(p.px, p.py, 5, 0, 2 * Math.PI);
+        ctx.fillStyle = lineColor;
+        ctx.fill();
+        ctx.restore();
+      }
+    },
+  };
+
+  const handleMAChartClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!trendDrawingMode || !maChartRef.current) return;
+    const chart = maChartRef.current;
+    const area = chart.chartArea;
+    if (!area) return;
+    const canvas = e.currentTarget.querySelector('canvas');
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const pixelX = e.clientX - rect.left;
+    const pixelY = e.clientY - rect.top;
+    // Clamp to chart area
+    const clampedX = Math.max(area.left, Math.min(area.right, pixelX));
+    const clampedY = Math.max(area.top, Math.min(area.bottom, pixelY));
+    const xFraction = (clampedX - area.left) / (area.right - area.left);
+    const yValue = chart.scales.y.getValueForPixel(clampedY);
+
+    if (!pendingTrendPointRef.current) {
+      pendingTrendPointRef.current = { xFraction, yValue };
+      setTrendAwaitingSecond(true);
+      chart.update('none');
+    } else {
+      drawnTrendLinesRef.current = [
+        ...drawnTrendLinesRef.current,
+        { x1: pendingTrendPointRef.current.xFraction, y1: pendingTrendPointRef.current.yValue, x2: xFraction, y2: yValue },
+      ];
+      pendingTrendPointRef.current = null;
+      setTrendAwaitingSecond(false);
+      setTrendLineCount(c => c + 1);
+      chart.update('none');
+    }
   };
 
   const maChartOptions = {
@@ -1358,12 +1442,57 @@ const TechnicalAnalysis: React.FC = () => {
                     ⚠️ <strong>Warrant Note:</strong> MA crossovers on warrants can produce more false signals due to higher volatility. Confirm with volume and broader market context.
                   </p>
                 )}
-                <div style={{ height: '300px' }}>
-                    {getMAChartData() && (
-                    <Chart type="line" data={getMAChartData()!} options={maChartOptions} />
+                <div className="relative" style={{ height: '300px' }}>
+                  {/* Trend line controls — overlaid at top-right, flush with the legend row */}
+                  <div className="absolute top-0 right-0 z-10 flex items-center gap-2" style={{ marginTop: '2px' }}>
+                    <button
+                      onClick={() => {
+                        setTrendDrawingMode(m => !m);
+                        pendingTrendPointRef.current = null;
+                        setTrendAwaitingSecond(false);
+                        if (maChartRef.current) maChartRef.current.update('none');
+                      }}
+                      className={`px-2 py-0.5 text-xs font-medium rounded border transition-colors ${
+                        trendDrawingMode
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-500'
+                      }`}
+                    >
+                      {trendDrawingMode
+                        ? trendAwaitingSecond ? 'Click second point…' : 'Click first point…'
+                        : 'Draw Trend Line'}
+                    </button>
+                    {trendLineCount > 0 && (
+                      <button
+                        onClick={() => {
+                          drawnTrendLinesRef.current = [];
+                          pendingTrendPointRef.current = null;
+                          setTrendAwaitingSecond(false);
+                          setTrendLineCount(0);
+                          if (maChartRef.current) maChartRef.current.update('none');
+                        }}
+                        className="px-2 py-0.5 text-xs font-medium rounded border bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors"
+                      >
+                        Clear
+                      </button>
                     )}
+                  </div>
+                  <div
+                    style={{ height: '100%', cursor: trendDrawingMode ? 'crosshair' : 'default' }}
+                    onClick={handleMAChartClick}
+                  >
+                    {getMAChartData() && (
+                      <Chart
+                        ref={maChartRef}
+                        type="line"
+                        data={getMAChartData()!}
+                        options={maChartOptions}
+                        plugins={[trendLinePlugin]}
+                      />
+                    )}
+                  </div>
                 </div>
-            </div>        
+            </div>
 
             {/* RSI Chart */}
             <div id="chart-rsi" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
