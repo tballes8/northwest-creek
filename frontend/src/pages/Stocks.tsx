@@ -954,8 +954,8 @@ const Stocks: React.FC = () => {
                   })()}
                 </div>
               </div>
-              {/* Add to Watchlist */}
-              <div className="mt-4 flex items-center gap-3">
+              {/* Quick Actions */}
+              <div className="mt-4 flex items-center gap-3 flex-wrap">
                 <button
                   onClick={handleAddToWatchlist}
                   disabled={addingToWatchlist}
@@ -963,6 +963,12 @@ const Stocks: React.FC = () => {
                 >
                   {addingToWatchlist ? '⏳ Adding...' : '⭐ Add to Watchlist'}
                 </button>
+                <Link
+                  to={`/technical-analysis?ticker=${ticker}`}
+                  className="px-4 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg font-medium text-sm transition-colors"
+                >
+                  📈 Technical Analysis
+                </Link>
                 {watchlistMsg && (
                   <span className={`text-sm font-medium ${watchlistMsg.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {watchlistMsg.text}
@@ -1406,28 +1412,6 @@ const Stocks: React.FC = () => {
               )}
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex gap-4">
-              <button
-                onClick={handleAddToWatchlist}
-                disabled={addingToWatchlist}
-                className="flex-1 px-6 py-3 bg-yellow-500 hover:bg-yellow-600 dark:bg-yellow-600 dark:hover:bg-yellow-700 text-white text-center rounded-lg font-medium transition-colors disabled:opacity-50"
-              >
-                {addingToWatchlist ? '⏳ Adding...' : '⭐ Add to Watchlist'}
-              </button>
-              <Link
-                to={`/technical-analysis?ticker=${ticker}`}
-                className="flex-1 px-6 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white text-center rounded-lg font-medium transition-colors"
-              >
-                Technical Analysis
-              </Link>
-              <Link
-                to={`/dcf-valuation?ticker=${ticker}`}
-                className="flex-1 px-6 py-3 bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 text-white text-center rounded-lg font-medium transition-colors"
-              >
-                DCF Valuation
-              </Link>
-            </div>
           </div>
         )}
 
