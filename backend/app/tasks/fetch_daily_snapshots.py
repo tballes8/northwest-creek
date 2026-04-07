@@ -87,10 +87,30 @@ async def fetch_and_store_snapshots():
                 page += 1
         print(f"✅ Found {len(delisted_symbols)} delisted companies to exclude")
 
+        # Step 1b: Fetch the ETF list so we can classify tickers accurately
+        print("📈 Fetching ETF list from FMP...")
+        etf_symbols: set[str] = set()
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            try:
+                resp = await client.get(
+                    f"{FMP_BASE}/etf-list",
+                    params={"apikey": api_key},
+                )
+                resp.raise_for_status()
+                etf_list = resp.json()
+                if etf_list and isinstance(etf_list, list):
+                    for e in etf_list:
+                        sym = e.get("symbol")
+                        if sym:
+                            etf_symbols.add(sym.upper())
+                print(f"✅ Got {len(etf_symbols)} ETF symbols from FMP")
+            except Exception as etf_err:
+                print(f"⚠️ Could not fetch ETF list (will classify all as CS): {etf_err}")
+
         # Filter to US-only tickers: skip foreign symbols (contain dots like .T, .PA),
         # tickers longer than 10 chars (DB column is VARCHAR(10)), and delisted stocks
         tickers = []
-        ticker_type_map: dict[str, str] = {}  # ticker -> asset type (CS, ETF, WARRANT, etc.)
+        ticker_type_map: dict[str, str] = {}  # ticker -> asset type (ETF or CS)
         for s in stock_list:
             sym = s.get("symbol")
             if not sym or "." in sym or len(sym) > 10:
@@ -98,8 +118,7 @@ async def fetch_and_store_snapshots():
             if sym.upper() in delisted_symbols:
                 continue
             tickers.append(sym)
-            asset_type = s.get("type") or s.get("exchangeShortName") or "CS"
-            ticker_type_map[sym] = str(asset_type).upper()
+            ticker_type_map[sym] = "ETF" if sym.upper() in etf_symbols else "CS"
 
         print(f"✅ Got {len(tickers)} tickers from stock list (after filtering delisted)")
 

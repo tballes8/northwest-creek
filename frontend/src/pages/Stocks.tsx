@@ -369,10 +369,25 @@ const Stocks: React.FC = () => {
     }
   };
 
+  const KNOWN_ETF_TICKERS = [
+    'SPY','QQQ','IWM','VTI','GLD','SLV','TLT','HYG','EEM','XLF',
+    'XLK','XLE','XLV','XLI','XLU','XLP','XLB','XLC','XLRE','VNQ',
+    'AGG','LQD','BND','IEFA','VEA','VWO','EFA','DIA','MDY','IJR',
+    'ARKK','ARKG','ARKW','ARKF','ARKQ','SOXX','SMH','IBB','XBI','GDX',
+    'GDXJ','USO','UNG','UVXY','SQQQ','TQQQ','SPXS','SPXL','TNA','TZA',
+  ];
+
   const loadDailyEtfSnapshots = async () => {
     try {
+      // First try asset_type filter (works after migration + fetch re-run)
       const response = await stocksAPI.getDailySnapshot(10, undefined, 'ETF');
-      const snaps = response.data.snapshots || [];
+      let snaps = response.data.snapshots || [];
+      // Fallback: use curated ETF ticker list if asset_type column not yet populated
+      if (snaps.length === 0) {
+        const shuffled = [...KNOWN_ETF_TICKERS].sort(() => Math.random() - 0.5);
+        const fallback = await stocksAPI.getDailySnapshot(10, shuffled.slice(0, 30));
+        snaps = fallback.data.snapshots || [];
+      }
       setEtfSnapshots(snaps);
       try { sessionStorage.setItem('nwc_etf_snapshots', JSON.stringify(snaps)); } catch {}
     } catch (error) {
@@ -1519,18 +1534,18 @@ const Stocks: React.FC = () => {
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                   To start researching a different 10 stocks click the Load Different Stocks button
                 </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                <div className="flex flex-wrap justify-center gap-3">
                   {dailySnapshots.map((snap) => (
                     <button
                       key={snap.ticker}
                       onClick={() => handleTickerClick(snap.ticker)}
-                      className="p-4 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors text-left group"
+                      className="group px-4 py-2.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-primary-600 hover:text-white dark:hover:bg-primary-500 transition-all duration-200 transform hover:scale-105"
                     >
-                      <div className="font-semibold text-lg text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
-                        {snap.ticker}
-                      </div>
-                      <div className={`text-sm font-medium ${snap.change_percent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {snap.change_percent >= 0 ? '+' : ''}{snap.change_percent.toFixed(2)}%
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{snap.ticker}</span>
+                        <span className={`text-xs font-medium group-hover:text-white ${snap.change_percent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                          {snap.change_percent >= 0 ? '+' : ''}{snap.change_percent.toFixed(2)}%
+                        </span>
                       </div>
                     </button>
                   ))}
@@ -1545,36 +1560,40 @@ const Stocks: React.FC = () => {
             )}
 
             {/* Randomly Selected ETFs */}
-            {etfSnapshots.length > 0 && (
-              <div className="mt-8 border-t border-gray-200 dark:border-gray-600 pt-8">
-                <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Randomly selected ETFs from today's market</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  To start researching a different 10 ETFs click the Load Different ETFs button
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            <div className="mt-8 border-t border-gray-200 dark:border-gray-600 pt-8">
+              <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Randomly selected ETFs from today's market</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                To start researching a different 10 ETFs click the Load Different ETFs button
+              </p>
+              {etfSnapshots.length > 0 ? (
+                <div className="flex flex-wrap justify-center gap-3">
                   {etfSnapshots.map((snap) => (
                     <button
                       key={snap.ticker}
                       onClick={() => handleTickerClick(snap.ticker)}
-                      className="p-4 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors text-left group"
+                      className="group px-4 py-2.5 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-primary-600 hover:text-white dark:hover:bg-primary-500 transition-all duration-200 transform hover:scale-105"
                     >
-                      <div className="font-semibold text-lg text-gray-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
-                        {snap.ticker}
-                      </div>
-                      <div className={`text-sm font-medium ${snap.change_percent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                        {snap.change_percent >= 0 ? '+' : ''}{snap.change_percent.toFixed(2)}%
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{snap.ticker}</span>
+                        <span className={`text-xs font-medium group-hover:text-white ${snap.change_percent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                          {snap.change_percent >= 0 ? '+' : ''}{snap.change_percent.toFixed(2)}%
+                        </span>
                       </div>
                     </button>
                   ))}
                 </div>
-                <button
-                  onClick={loadDailyEtfSnapshots}
-                  className="mt-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg text-sm transition-colors font-medium"
-                >
-                  🔄 Load Different ETFs
-                </button>
-              </div>
-            )}
+              ) : (
+                <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
+                  Loading ETFs...
+                </div>
+              )}
+              <button
+                onClick={loadDailyEtfSnapshots}
+                className="mt-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white rounded-lg text-sm transition-colors font-medium"
+              >
+                🔄 Load Different ETFs
+              </button>
+            </div>
 
             {/* Top Gainers */}
             {gainersLoading ? (
