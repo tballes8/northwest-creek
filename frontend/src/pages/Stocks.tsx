@@ -987,19 +987,19 @@ const Stocks: React.FC = () => {
                         )}
                         {(forecastLoading || nwcForecast) && (
                           <div className="text-sm text-gray-500 dark:text-gray-400">
-                            NWC AI target range:{' '}
+                            <span className="text-indigo-500 dark:text-indigo-400">✦ NWC AI target price:</span>{' '}
                             {forecastLoading ? (
                               <span className="text-xs italic">calculating…</span>
                             ) : nwcForecast ? (
                               <>
                                 <span className="font-semibold text-gray-700 dark:text-gray-200">
-                                  ${nwcForecast.bear.toFixed(0)} – ${nwcForecast.bull.toFixed(0)}
+                                  ${nwcForecast.base.toFixed(2)}
                                 </span>
                                 <span className="text-xs ml-1.5 text-gray-400 dark:text-gray-500">
-                                  [bear ${nwcForecast.bear.toFixed(0)} / base ${nwcForecast.base.toFixed(0)} / bull ${nwcForecast.bull.toFixed(0)}]
+                                  (${nwcForecast.bear.toFixed(0)}–${nwcForecast.bull.toFixed(0)} range)
                                 </span>
                                 <span className="text-xs ml-1 text-gray-400 dark:text-gray-500">
-                                  ({nwcForecast.horizon})
+                                  · {nwcForecast.horizon}
                                 </span>
                               </>
                             ) : null}
