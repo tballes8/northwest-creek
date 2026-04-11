@@ -990,19 +990,25 @@ const Stocks: React.FC = () => {
                             <span className="text-indigo-500 dark:text-indigo-400">✦ NWC AI target price:</span>{' '}
                             {forecastLoading ? (
                               <span className="text-xs italic">calculating…</span>
-                            ) : nwcForecast ? (
-                              <>
-                                <span className="font-semibold text-gray-700 dark:text-gray-200">
-                                  ${nwcForecast.base.toFixed(2)}
-                                </span>
-                                <span className="text-xs ml-1.5 text-gray-400 dark:text-gray-500">
-                                  (${nwcForecast.bear.toFixed(0)}–${nwcForecast.bull.toFixed(0)} range)
-                                </span>
-                                <span className="text-xs ml-1 text-gray-400 dark:text-gray-500">
-                                  · {nwcForecast.horizon}
-                                </span>
-                              </>
-                            ) : null}
+                            ) : nwcForecast ? (() => {
+                              const aiUpside = ((nwcForecast.base - quote.price) / quote.price) * 100;
+                              return (
+                                <>
+                                  <span className="font-semibold text-gray-700 dark:text-gray-200">
+                                    ${nwcForecast.base.toFixed(2)}
+                                  </span>
+                                  <span className={`ml-1.5 text-xs font-medium ${aiUpside >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                                    {aiUpside >= 0 ? '+' : ''}{aiUpside.toFixed(1)}% from current price
+                                  </span>
+                                  <span className="text-xs ml-1.5 text-gray-400 dark:text-gray-500">
+                                    (${nwcForecast.bear.toFixed(0)}–${nwcForecast.bull.toFixed(0)} range)
+                                  </span>
+                                  <span className="text-xs ml-1 text-gray-400 dark:text-gray-500">
+                                    · {nwcForecast.horizon}
+                                  </span>
+                                </>
+                              );
+                            })() : null}
                           </div>
                         )}
                       </div>
