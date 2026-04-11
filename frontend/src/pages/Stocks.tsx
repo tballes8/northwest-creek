@@ -1003,9 +1003,6 @@ const Stocks: React.FC = () => {
                                   <span className="text-xs ml-1.5 text-gray-400 dark:text-gray-500">
                                     (${nwcForecast.bear.toFixed(0)}–${nwcForecast.bull.toFixed(0)} range)
                                   </span>
-                                  <span className="text-xs ml-1 text-gray-400 dark:text-gray-500">
-                                    · {nwcForecast.horizon}
-                                  </span>
                                 </>
                               );
                             })() : null}
