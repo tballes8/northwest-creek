@@ -184,6 +184,8 @@ export const technicalAPI = {
     axiosInstance.get(`/technical-analysis/analyze/${ticker}`),
   aiAnalysis: (ticker: string) =>
     axiosInstance.get(`/stocks/${ticker}/ai-analysis`),
+  priceForecast: (ticker: string) =>
+    axiosInstance.get(`/stocks/${ticker}/price-forecast`),
 };
 
 // Financials API

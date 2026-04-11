@@ -193,6 +193,11 @@ const Stocks: React.FC = () => {
   const [holdingsLoading, setHoldingsLoading] = useState(false);
   const [peRatio, setPeRatio] = useState<number | null>(null);
   const [analystEstimates, setAnalystEstimates] = useState<AnalystEstimates | null>(null);
+  const [nwcForecast, setNwcForecast] = useState<{
+    bear: number; base: number; bull: number;
+    horizon: string; rationale: string; generated_at: string;
+  } | null>(null);
+  const [forecastLoading, setForecastLoading] = useState(false);
 
   const detectWarrantHint = (tickerSymbol: string): boolean => {
     const upper = tickerSymbol.toUpperCase();
@@ -304,6 +309,8 @@ const Stocks: React.FC = () => {
     setEtfHoldings([]);
     setPeRatio(null);
     setAnalystEstimates(null);
+    setNwcForecast(null);
+    setForecastLoading(false);
     setError('');
     setIsWarrant(false);
     setRelatedCommonStock(null);
@@ -511,6 +518,7 @@ const Stocks: React.FC = () => {
       loadDividends(symbol);
       loadPeRatio(symbol);
       loadAnalystEstimates(symbol);
+      loadPriceForecast(symbol);
 
       // ETF holdings — non-blocking, only for fund types
       const companyType = companyResult.value.data?.type || '';
@@ -597,6 +605,19 @@ const Stocks: React.FC = () => {
       setAnalystEstimates(response.data);
     } catch {
       setAnalystEstimates(null);
+    }
+  };
+
+  const loadPriceForecast = async (symbol: string) => {
+    setForecastLoading(true);
+    try {
+      const { technicalAPI } = await import('../services/api');
+      const response = await technicalAPI.priceForecast(symbol);
+      setNwcForecast(response.data);
+    } catch {
+      setNwcForecast(null);
+    } finally {
+      setForecastLoading(false);
     }
   };
 
@@ -962,6 +983,26 @@ const Stocks: React.FC = () => {
                                 (${analystEstimates.price_target_low.toFixed(0)}–${analystEstimates.price_target_high.toFixed(0)} range)
                               </span>
                             )}
+                          </div>
+                        )}
+                        {(forecastLoading || nwcForecast) && (
+                          <div className="text-sm text-gray-500 dark:text-gray-400">
+                            NWC AI target range:{' '}
+                            {forecastLoading ? (
+                              <span className="text-xs italic">calculating…</span>
+                            ) : nwcForecast ? (
+                              <>
+                                <span className="font-semibold text-gray-700 dark:text-gray-200">
+                                  ${nwcForecast.bear.toFixed(0)} – ${nwcForecast.bull.toFixed(0)}
+                                </span>
+                                <span className="text-xs ml-1.5 text-gray-400 dark:text-gray-500">
+                                  [bear ${nwcForecast.bear.toFixed(0)} / base ${nwcForecast.base.toFixed(0)} / bull ${nwcForecast.bull.toFixed(0)}]
+                                </span>
+                                <span className="text-xs ml-1 text-gray-400 dark:text-gray-500">
+                                  ({nwcForecast.horizon})
+                                </span>
+                              </>
+                            ) : null}
                           </div>
                         )}
                       </div>
