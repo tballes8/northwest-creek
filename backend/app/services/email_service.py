@@ -70,7 +70,8 @@ class EmailService:
                 return False
             
         except Exception as e:
-            print(f"❌ Failed to send email to {to_email}: {str(e)}")
+            error_body = getattr(getattr(e, "body", None), "decode", lambda: None)() or getattr(e, "body", None) or ""
+            print(f"❌ Failed to send email to {to_email}: {str(e)}{' — ' + str(error_body) if error_body else ''}")
             return False
     
     def send_verification_email(self, to_email: str, verification_token: str, user_name: str, selected_tier: str = "beginner") -> bool:
