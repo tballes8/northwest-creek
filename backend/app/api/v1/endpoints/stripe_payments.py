@@ -815,6 +815,18 @@ async def get_subscription_status(
     current_user: User = Depends(get_current_user)
 ):
     """Get current user's subscription status including trial info and period end date."""
+    # Demo account bypass for tutorial recordings
+    DEMO_EMAILS = {"john.smith@nwc-analytics.com"}
+    if current_user.email in DEMO_EMAILS:
+        return {
+            "subscription_tier": "professional",
+            "email": current_user.email,
+            "subscription_status": "active",
+            "trial_end": None,
+            "cancel_at_period_end": False,
+            "current_period_end": None,
+        }
+
     trial_end = None
     subscription_status = None
     cancel_at_period_end = False
