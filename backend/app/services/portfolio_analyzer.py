@@ -61,6 +61,28 @@ async def analyze_portfolio(
             sign = "+" if change_pct >= 0 else ""
             index_lines += f"  - {idx['name']}: {sign}{change_pct:.2f}%\n"
 
+    # Income / dividend section
+    income_positions = sorted(
+        [p for p in positions if p.get("dividend_yield")],
+        key=lambda x: x.get("dividend_yield") or 0,
+        reverse=True,
+    )
+    total_annual_income = sum(p.get("annual_income") or 0 for p in positions)
+
+    if income_positions:
+        income_lines = "\n".join(
+            f"  - {p['ticker']}: {p['dividend_yield']:.2f}% yield, "
+            f"~${p['annual_income']:,.2f}/yr estimated income"
+            for p in income_positions
+        )
+        income_section = (
+            f"Income profile:\n"
+            f"  - Estimated total annual portfolio income: ~${total_annual_income:,.2f}\n"
+            f"{income_lines}"
+        )
+    else:
+        income_section = "Income profile:\n  - No dividend-paying positions detected"
+
     prompt = f"""Portfolio snapshot:
 - Total value: ${total_value:,.2f}
 - Total P&L: {"+" if total_pl >= 0 else ""}${total_pl:,.2f} ({"+" if total_pl_pct >= 0 else ""}{total_pl_pct:.2f}%)
@@ -72,15 +94,18 @@ Top gainers:
 Top losers:
 {loser_lines}
 
+{income_section}
+
 Broad market performance today:
 {index_lines.strip() if index_lines.strip() else "  - Market data unavailable"}
 
-Write a 3-5 sentence plain-language summary explaining what is happening in this portfolio and why."""
+Write a 3-5 sentence plain-language summary explaining what is happening in this portfolio and why. If the portfolio has meaningful dividend income, mention it."""
 
     system_prompt = (
         "You are a portfolio analysis assistant. Explain portfolio performance in plain, "
         "clear language. Identify which positions are driving gains or losses and how the "
-        "portfolio compares to broad market performance. Never give financial advice, "
+        "portfolio compares to broad market performance. When dividend income is present, "
+        "note the income-generating character of those holdings. Never give financial advice, "
         "investment recommendations, buy or sell signals, or price predictions. "
         "Keep your response to 3-5 sentences."
     )

@@ -2,6 +2,7 @@
 Portfolio AI analysis endpoint — on-demand plain-language summary of the user's portfolio.
 Available to Casual, Active, and Professional tiers.
 """
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func as sa_func
@@ -85,6 +86,19 @@ async def analyze_user_portfolio(
     tickers = [p.ticker for p in db_positions]
     quotes = await market_data_service.get_batch_quotes(tickers)
 
+    # Fetch dividend data for all tickers concurrently (best-effort)
+    dividend_data: dict = {}
+    try:
+        div_results = await asyncio.gather(
+            *[market_data_service.get_dividends(t) for t in tickers],
+            return_exceptions=True,
+        )
+        for ticker, result in zip(tickers, div_results):
+            if not isinstance(result, Exception):
+                dividend_data[ticker.upper()] = result
+    except Exception:
+        pass
+
     positions = []
     total_value = 0.0
     total_cost = 0.0
@@ -103,6 +117,19 @@ async def analyze_user_portfolio(
         total_value += tv
         total_cost += cost
 
+        # Compute dividend yield and estimated annual income
+        dividend_yield = None
+        annual_income = None
+        div_info = dividend_data.get(p.ticker.upper(), {})
+        if div_info.get("has_dividends") and div_info.get("dividends"):
+            recent = div_info["dividends"][0]
+            cash = recent.get("cash_amount")
+            freq = recent.get("frequency")
+            if cash and freq and current_price > 0:
+                annual_dps = float(cash) * int(freq)
+                dividend_yield = round(annual_dps / current_price * 100, 2)
+                annual_income = round(annual_dps * quantity, 2)
+
         positions.append({
             "ticker": p.ticker,
             "quantity": quantity,
@@ -111,6 +138,8 @@ async def analyze_user_portfolio(
             "total_value": tv,
             "profit_loss": pl,
             "profit_loss_percent": pl_pct,
+            "dividend_yield": dividend_yield,
+            "annual_income": annual_income,
         })
 
     total_pl = total_value - total_cost
