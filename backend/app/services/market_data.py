@@ -28,6 +28,7 @@ class MarketDataService:
         self.api_key = settings.MASSIVE_API_KEY
         self._quote_cache = SimpleCache(ttl_seconds=15)
         self._profile_cache = SimpleCache(ttl_seconds=3600)
+        self._dividend_cache = SimpleCache(ttl_seconds=43200)  # 12 hours — dividends change quarterly
 
     @staticmethod
     def _is_warrant_ticker(ticker: str) -> bool:
@@ -324,6 +325,11 @@ class MarketDataService:
             if not ticker:
                 raise ValueError("Ticker symbol is required")
 
+            cache_key = f"dividends:{ticker}"
+            cached = self._dividend_cache.get(cache_key)
+            if cached is not None:
+                return cached
+
             data = await self._fmp_get("dividends", {"symbol": ticker})
 
             if not data or not isinstance(data, list):
@@ -355,11 +361,13 @@ class MarketDataService:
                     "distribution_type": d.get("label") or raw_freq or "dividend",
                 })
 
-            return {
+            result = {
                 "ticker": ticker,
                 "dividends": dividends,
                 "has_dividends": len(dividends) > 0,
             }
+            self._dividend_cache.set(cache_key, result)
+            return result
 
         except Exception as e:
             print(f"Error fetching dividends for {ticker}: {e}")

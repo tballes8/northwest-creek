@@ -290,8 +290,7 @@ async def stock_price_forecast(
         if time.time() - ts < _FORECAST_TTL:
             return payload
 
-    # ── Rate limit check (only on cache miss) ────────────────────────────
-    await check_ai_analysis_access(current_user, db)
+    # No rate-limit check — the 6h per-ticker cache bounds cost sufficiently.
 
     try:
         # ── Fetch historical prices for technical analysis ────────────────
@@ -452,10 +451,6 @@ async def stock_price_forecast(
             "generated_at": datetime.now(timezone.utc).isoformat(),
         }
         _forecast_cache[sym] = (time.time(), result)
-
-        # Record usage
-        db.add(FeatureUsage(user_id=current_user.id, feature="ai_analysis"))
-        await db.commit()
 
         return result
 
