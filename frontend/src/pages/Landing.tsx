@@ -102,8 +102,8 @@ const Landing: React.FC = () => {
             <span className="block text-primary-600 dark:text-primary-400 mt-2">For Retail Investors</span>
           </h1>
           <p className="mt-6 max-w-3xl mx-auto text-xl text-gray-600 dark:text-gray-300">
-            Real-time market data, 15+ technical indicators, DCF valuation models, live portfolio tracking, 
-            and price alerts — everything you need to make informed investment decisions, all in one platform.
+            Real-time market data, 15+ technical indicators, AI generated stock price targets, DCF valuation models, live portfolio tracking, 
+            AI summarized portfolio analysis, and price alerts — everything you need to make informed investment decisions, all in one platform.
           </p>
           <div className="mt-10 flex justify-center gap-4">
             <button
