@@ -405,7 +405,7 @@ async def get_dcf_suggestions(
             discount_from_actuals = False
             if dcf_sug:
                 if dcf_sug.get("suggested_growth_rate") is not None:
-                    suggested_growth = max(0.01, min(0.30, dcf_sug["suggested_growth_rate"] / 100))
+                    suggested_growth = max(-0.10, min(0.30, dcf_sug["suggested_growth_rate"] / 100))
                     growth_reasoning = f"Based on trailing revenue growth of {dcf_sug['revenue_growth_yoy_pct']:.1f}%, conservatively adjusted" if dcf_sug.get("revenue_growth_yoy_pct") is not None else growth_reasoning
                     growth_from_actuals = True
                 if dcf_sug.get("estimated_wacc") is not None:

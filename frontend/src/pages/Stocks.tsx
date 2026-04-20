@@ -754,16 +754,50 @@ const Stocks: React.FC = () => {
     }
   };
 
+  const calcSMA = (data: number[], period: number): (number | null)[] =>
+    data.map((_, i) =>
+      i < period - 1
+        ? null
+        : data.slice(i - period + 1, i + 1).reduce((s, v) => s + v, 0) / period
+    );
+
+  const closes = historical.map((h) => h.close);
+  const sma50 = calcSMA(closes, 50);
+  const sma200 = calcSMA(closes, 200);
+
   const chartData = {
     labels: historical.map((h) => new Date(h.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
     datasets: [
       {
         label: `${ticker} Price`,
-        data: historical.map((h) => h.close),
+        data: closes,
         borderColor: 'rgb(59, 130, 246)',
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
         fill: true,
         tension: 0.4,
+        pointRadius: 0,
+      },
+      {
+        label: '50-Day MA',
+        data: sma50,
+        borderColor: 'rgb(251, 191, 36)',
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0.4,
+        pointRadius: 0,
+        borderWidth: 1.5,
+        spanGaps: false,
+      },
+      {
+        label: '200-Day MA',
+        data: sma200,
+        borderColor: 'rgb(167, 139, 250)',
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0.4,
+        pointRadius: 0,
+        borderWidth: 1.5,
+        spanGaps: false,
       },
     ],
   };
@@ -773,13 +807,23 @@ const Stocks: React.FC = () => {
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        display: false,
+        display: true,
+        position: 'top' as const,
+        align: 'end' as const,
+        labels: {
+          boxWidth: 24,
+          boxHeight: 2,
+          padding: 16,
+          color: 'rgb(156, 163, 175)',
+          font: { size: 11 },
+        },
       },
       tooltip: {
         mode: 'index' as const,
         intersect: false,
         callbacks: {
-          label: (context: any) => `$${context.parsed.y.toFixed(2)}`,
+          label: (context: any) =>
+            context.parsed.y !== null ? `${context.dataset.label}: $${context.parsed.y.toFixed(2)}` : '',
         },
       },
     },

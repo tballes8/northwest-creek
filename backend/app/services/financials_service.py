@@ -286,13 +286,30 @@ def _derive_dcf_suggestions(
     These replace generic sector defaults with company-specific values.
     """
     # ── YoY revenue growth from quarterly data ────────────────────────
-    # Compare most recent quarter to same quarter one year ago
+    # Use date-based matching — index [3] is NOT reliably same Q last year if FMP
+    # has gaps (e.g. Broadridge's seasonal data causes a ~17% sequential swing
+    # to be mistaken for YoY growth when a quarter is missing from the array).
     revenue_growth_yoy = None
-    if len(income_quarters) >= 4:
-        recent_rev = income_quarters[0].get("revenue")
-        yoy_rev = income_quarters[3].get("revenue")  # 4 quarters back = same Q last year
-        if recent_rev and yoy_rev and yoy_rev > 0:
-            revenue_growth_yoy = round(((recent_rev - yoy_rev) / yoy_rev) * 100, 2)
+    dated = [q for q in income_quarters if q.get("date") and q.get("revenue")]
+    if len(dated) >= 2:
+        dated_sorted = sorted(dated, key=lambda q: q["date"], reverse=True)
+        recent = dated_sorted[0]
+        recent_rev = recent.get("revenue")
+        try:
+            recent_date = datetime.strptime(recent["date"], "%Y-%m-%d")
+            target_date = recent_date - timedelta(days=365)
+            tolerance = timedelta(days=46)
+            yoy_quarter = next(
+                (q for q in dated_sorted[1:]
+                 if abs(datetime.strptime(q["date"], "%Y-%m-%d") - target_date) <= tolerance),
+                None
+            )
+            if yoy_quarter:
+                yoy_rev = yoy_quarter.get("revenue")
+                if recent_rev and yoy_rev and yoy_rev > 0:
+                    revenue_growth_yoy = round(((recent_rev - yoy_rev) / yoy_rev) * 100, 2)
+        except (ValueError, TypeError):
+            pass
 
     # ── Suggested growth rate: haircut trailing growth ────────────────
     # Discount actual growth by ~20% as a conservative forward projection
