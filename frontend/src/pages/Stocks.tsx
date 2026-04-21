@@ -5,7 +5,7 @@ import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import { authAPI, stocksAPI, watchlistAPI } from '../services/api';
+import { authAPI, stocksAPI, watchlistAPI, screenerAPI } from '../services/api';
 import { getTickersForSector, SECTOR_COLORS } from '../utils/sectorMap';
 import axios from 'axios';
 
@@ -129,6 +129,109 @@ interface AnalystEstimates {
   price_target_high: number | null;
   price_target_low: number | null;
   price_target_median: number | null;
+}
+
+interface ScreenerResult {
+  symbol: string;
+  name: string | null;
+  price: number | null;
+  change_percentage: number | null;
+  volume: number | null;
+  market_cap: number | null;
+  year_high: number | null;
+  year_low: number | null;
+  price_avg_50: number | null;
+  price_avg_200: number | null;
+  exchange: string | null;
+  pct_from_52wk_high: number | null;
+  pct_from_52wk_low: number | null;
+  dollar_volume: number | null;
+  last_refreshed: string | null;
+}
+
+interface ScreenerFormState {
+  priceMin: string; priceMax: string;
+  marketCapMinB: string; marketCapMaxB: string;
+  changePctMin: string; changePctMax: string;
+  dollarVolMinM: string;
+  pctFromHighMin: string; pctFromHighMax: string;
+  pctFromLowMin: string; pctFromLowMax: string;
+  goldenCross: boolean | null;
+  priceAbove50ma: boolean | null;
+  priceAbove200ma: boolean | null;
+  exchange: string[];
+}
+
+interface ScreenerPreset {
+  id: string;
+  name: string;
+  description: string;
+  criteria: Record<string, any>;
+}
+
+const defaultScreenerForm: ScreenerFormState = {
+  priceMin: '', priceMax: '',
+  marketCapMinB: '', marketCapMaxB: '',
+  changePctMin: '', changePctMax: '',
+  dollarVolMinM: '',
+  pctFromHighMin: '', pctFromHighMax: '',
+  pctFromLowMin: '', pctFromLowMax: '',
+  goldenCross: null,
+  priceAbove50ma: null,
+  priceAbove200ma: null,
+  exchange: [],
+};
+
+function fmtMarketCap(v: number | null): string {
+  if (v == null) return '—';
+  if (v >= 1e12) return `$${(v / 1e12).toFixed(2)}T`;
+  if (v >= 1e9) return `$${(v / 1e9).toFixed(1)}B`;
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
+  return `$${v.toLocaleString()}`;
+}
+
+function fmtVolume(v: number | null): string {
+  if (v == null) return '—';
+  if (v >= 1e9) return `${(v / 1e9).toFixed(1)}B`;
+  if (v >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
+  if (v >= 1e3) return `${(v / 1e3).toFixed(0)}K`;
+  return v.toLocaleString();
+}
+
+function buildScreenerCriteria(
+  form: ScreenerFormState,
+  sortBy: string,
+  sortDesc: boolean,
+  page: number,
+): object {
+  const c: Record<string, any> = { sort_by: sortBy, sort_desc: sortDesc, page, page_size: 50 };
+  const nr = (min: string, max: string) => {
+    const r: Record<string, number> = {};
+    if (min !== '') r.min = parseFloat(min);
+    if (max !== '') r.max = parseFloat(max);
+    return Object.keys(r).length ? r : undefined;
+  };
+  const p = nr(form.priceMin, form.priceMax);
+  if (p) c.price = p;
+  const mcMin = form.marketCapMinB !== '' ? parseFloat(form.marketCapMinB) * 1e9 : undefined;
+  const mcMax = form.marketCapMaxB !== '' ? parseFloat(form.marketCapMaxB) * 1e9 : undefined;
+  if (mcMin != null || mcMax != null) {
+    c.market_cap = {};
+    if (mcMin != null) c.market_cap.min = mcMin;
+    if (mcMax != null) c.market_cap.max = mcMax;
+  }
+  const ch = nr(form.changePctMin, form.changePctMax);
+  if (ch) c.change_percentage = ch;
+  if (form.dollarVolMinM !== '') c.dollar_volume = { min: parseFloat(form.dollarVolMinM) * 1e6 };
+  const ph = nr(form.pctFromHighMin, form.pctFromHighMax);
+  if (ph) c.pct_from_52wk_high = ph;
+  const pl = nr(form.pctFromLowMin, form.pctFromLowMax);
+  if (pl) c.pct_from_52wk_low = pl;
+  if (form.goldenCross !== null) c.golden_cross = form.goldenCross;
+  if (form.priceAbove50ma !== null) c.price_above_50ma = form.priceAbove50ma;
+  if (form.priceAbove200ma !== null) c.price_above_200ma = form.priceAbove200ma;
+  if (form.exchange.length) c.exchange = form.exchange;
+  return c;
 }
 
 const Stocks: React.FC = () => {
@@ -844,6 +947,89 @@ const Stocks: React.FC = () => {
     },
   };
 
+  // ── Screener state ──────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<'search' | 'screener'>('search');
+  const [screenerForm, setScreenerForm] = useState<ScreenerFormState>(defaultScreenerForm);
+  const [screenerResults, setScreenerResults] = useState<ScreenerResult[]>([]);
+  const [screenerLoading, setScreenerLoading] = useState(false);
+  const [screenerError, setScreenerError] = useState('');
+  const [screenerTotal, setScreenerTotal] = useState(0);
+  const [screenerPage, setScreenerPage] = useState(1);
+  const [screenerTotalPages, setScreenerTotalPages] = useState(0);
+  const [screenerDataAsOf, setScreenerDataAsOf] = useState<string | null>(null);
+  const [screenerSortBy, setScreenerSortBy] = useState('market_cap');
+  const [screenerSortDesc, setScreenerSortDesc] = useState(true);
+  const [presets, setPresets] = useState<ScreenerPreset[]>([]);
+  const presetsLoadedRef = useRef(false);
+
+  useEffect(() => {
+    if (activeTab === 'screener' && !presetsLoadedRef.current) {
+      presetsLoadedRef.current = true;
+      screenerAPI.getPresets()
+        .then(r => setPresets(r.data.presets))
+        .catch(() => {});
+    }
+  }, [activeTab]);
+
+  const runScreener = async (
+    page: number,
+    form: ScreenerFormState,
+    sortBy: string,
+    sortDesc: boolean,
+  ) => {
+    setScreenerLoading(true);
+    setScreenerError('');
+    try {
+      const criteria = buildScreenerCriteria(form, sortBy, sortDesc, page);
+      const resp = await screenerAPI.runScreen(criteria);
+      setScreenerResults(resp.data.results);
+      setScreenerTotal(resp.data.total);
+      setScreenerPage(resp.data.page);
+      setScreenerTotalPages(resp.data.total_pages);
+      setScreenerDataAsOf(resp.data.data_as_of);
+    } catch {
+      setScreenerError('Failed to run screener. Please try again.');
+    } finally {
+      setScreenerLoading(false);
+    }
+  };
+
+  const handleScreenerSort = (col: string) => {
+    const newDesc = col === screenerSortBy ? !screenerSortDesc : true;
+    setScreenerSortBy(col);
+    setScreenerSortDesc(newDesc);
+    runScreener(1, screenerForm, col, newDesc);
+  };
+
+  const applyPreset = (preset: ScreenerPreset) => {
+    const c = preset.criteria;
+    const form: ScreenerFormState = {
+      priceMin: c.price?.min?.toString() ?? '',
+      priceMax: c.price?.max?.toString() ?? '',
+      marketCapMinB: c.market_cap?.min != null ? (c.market_cap.min / 1e9).toString() : '',
+      marketCapMaxB: c.market_cap?.max != null ? (c.market_cap.max / 1e9).toString() : '',
+      changePctMin: c.change_percentage?.min?.toString() ?? '',
+      changePctMax: c.change_percentage?.max?.toString() ?? '',
+      dollarVolMinM: c.dollar_volume?.min != null ? (c.dollar_volume.min / 1e6).toString() : '',
+      pctFromHighMin: c.pct_from_52wk_high?.min?.toString() ?? '',
+      pctFromHighMax: c.pct_from_52wk_high?.max?.toString() ?? '',
+      pctFromLowMin: c.pct_from_52wk_low?.min?.toString() ?? '',
+      pctFromLowMax: c.pct_from_52wk_low?.max?.toString() ?? '',
+      goldenCross: c.golden_cross ?? null,
+      priceAbove50ma: c.price_above_50ma ?? null,
+      priceAbove200ma: c.price_above_200ma ?? null,
+      exchange: c.exchange ?? [],
+    };
+    const sb = c.sort_by ?? 'market_cap';
+    const sd = c.sort_desc ?? true;
+    setScreenerForm(form);
+    setScreenerSortBy(sb);
+    setScreenerSortDesc(sd);
+    runScreener(1, form, sb, sd);
+  };
+
+  const screenerInputCls = "w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500";
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white transition-colors">
       {/* Navigation */}
@@ -853,6 +1039,25 @@ const Stocks: React.FC = () => {
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">Stock Screener</h1>
 
+        {/* Tab Bar */}
+        <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 mb-6">
+          {(['search', 'screener'] as const).map(tab => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-5 py-2.5 text-sm font-medium transition-colors ${
+                activeTab === tab
+                  ? 'border-b-2 border-teal-600 text-teal-600 dark:text-teal-400 -mb-px'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+              }`}
+            >
+              {tab === 'search' ? 'Stock Search' : 'Screener'}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'search' && (
+        <>
         {/* Search Bar */}
         <div className="mb-8" ref={searchContainerRef}>
           <form onSubmit={handleSearch} className="flex gap-4">
@@ -1745,6 +1950,285 @@ const Stocks: React.FC = () => {
               </div>
             )}
           </div>
+        )}
+        </>
+        )}
+
+        {activeTab === 'screener' && (
+        <div>
+          {/* Preset bar */}
+          {presets.length > 0 && (
+            <div className="mb-5 flex flex-wrap gap-2 items-center">
+              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">Quick screens:</span>
+              {presets.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => applyPreset(p)}
+                  title={p.description}
+                  className="px-3 py-1.5 text-xs font-medium rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-teal-50 dark:hover:bg-teal-900/30 hover:text-teal-700 dark:hover:text-teal-400 transition-colors"
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Main layout */}
+          <div className="flex gap-5 items-start">
+            {/* Criteria panel */}
+            <div className="w-60 shrink-0 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+              <div className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">Filters</div>
+
+              {/* Price */}
+              <div className="mb-3">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Price ($)</div>
+                <div className="flex gap-1.5">
+                  <input type="number" placeholder="Min" value={screenerForm.priceMin}
+                    onChange={e => setScreenerForm(f => ({ ...f, priceMin: e.target.value }))}
+                    className={screenerInputCls} />
+                  <input type="number" placeholder="Max" value={screenerForm.priceMax}
+                    onChange={e => setScreenerForm(f => ({ ...f, priceMax: e.target.value }))}
+                    className={screenerInputCls} />
+                </div>
+              </div>
+
+              {/* Market Cap */}
+              <div className="mb-3">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Market Cap ($B)</div>
+                <div className="flex gap-1.5">
+                  <input type="number" placeholder="Min" value={screenerForm.marketCapMinB}
+                    onChange={e => setScreenerForm(f => ({ ...f, marketCapMinB: e.target.value }))}
+                    className={screenerInputCls} />
+                  <input type="number" placeholder="Max" value={screenerForm.marketCapMaxB}
+                    onChange={e => setScreenerForm(f => ({ ...f, marketCapMaxB: e.target.value }))}
+                    className={screenerInputCls} />
+                </div>
+              </div>
+
+              {/* Daily Change */}
+              <div className="mb-3">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Daily Change (%)</div>
+                <div className="flex gap-1.5">
+                  <input type="number" placeholder="Min" value={screenerForm.changePctMin}
+                    onChange={e => setScreenerForm(f => ({ ...f, changePctMin: e.target.value }))}
+                    className={screenerInputCls} />
+                  <input type="number" placeholder="Max" value={screenerForm.changePctMax}
+                    onChange={e => setScreenerForm(f => ({ ...f, changePctMax: e.target.value }))}
+                    className={screenerInputCls} />
+                </div>
+              </div>
+
+              {/* Dollar Volume */}
+              <div className="mb-3">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Dollar Volume ($M min)</div>
+                <input type="number" placeholder="e.g. 50" value={screenerForm.dollarVolMinM}
+                  onChange={e => setScreenerForm(f => ({ ...f, dollarVolMinM: e.target.value }))}
+                  className={screenerInputCls} />
+              </div>
+
+              {/* % from 52-Wk High */}
+              <div className="mb-3">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">% from 52-Wk High</div>
+                <div className="flex gap-1.5">
+                  <input type="number" placeholder="Min" value={screenerForm.pctFromHighMin}
+                    onChange={e => setScreenerForm(f => ({ ...f, pctFromHighMin: e.target.value }))}
+                    className={screenerInputCls} />
+                  <input type="number" placeholder="Max" value={screenerForm.pctFromHighMax}
+                    onChange={e => setScreenerForm(f => ({ ...f, pctFromHighMax: e.target.value }))}
+                    className={screenerInputCls} />
+                </div>
+              </div>
+
+              {/* Moving Averages */}
+              <div className="mb-3">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1.5">Moving Averages</div>
+                {([
+                  { key: 'goldenCross', label: 'Golden Cross (50MA > 200MA)' },
+                  { key: 'priceAbove50ma', label: 'Price > 50-Day MA' },
+                  { key: 'priceAbove200ma', label: 'Price > 200-Day MA' },
+                ] as const).map(({ key, label }) => (
+                  <label key={key} className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 mb-1.5 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={screenerForm[key] === true}
+                      onChange={e => setScreenerForm(f => ({ ...f, [key]: e.target.checked ? true : null }))}
+                      className="rounded border-gray-300 dark:border-gray-600 text-teal-600 focus:ring-teal-500"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+
+              {/* Exchange */}
+              <div className="mb-4">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1.5">Exchange</div>
+                <div className="flex gap-1.5 flex-wrap">
+                  {['NYSE', 'NASDAQ', 'AMEX'].map(ex => (
+                    <button
+                      key={ex}
+                      onClick={() => setScreenerForm(f => ({
+                        ...f,
+                        exchange: f.exchange.includes(ex)
+                          ? f.exchange.filter(e => e !== ex)
+                          : [...f.exchange, ex],
+                      }))}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
+                        screenerForm.exchange.includes(ex)
+                          ? 'border-teal-500 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-400'
+                          : 'border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-gray-400'
+                      }`}
+                    >
+                      {ex}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setScreenerForm(defaultScreenerForm); setScreenerResults([]); setScreenerTotal(0); }}
+                  className="flex-1 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={() => runScreener(1, screenerForm, screenerSortBy, screenerSortDesc)}
+                  className="flex-1 py-1.5 text-xs bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-medium"
+                >
+                  Run Screen
+                </button>
+              </div>
+            </div>
+
+            {/* Results panel */}
+            <div className="flex-1 min-w-0">
+              {screenerLoading && (
+                <div className="flex items-center justify-center h-64">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600"></div>
+                </div>
+              )}
+
+              {screenerError && !screenerLoading && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-sm text-red-600 dark:text-red-400">
+                  {screenerError}
+                </div>
+              )}
+
+              {!screenerLoading && !screenerError && screenerResults.length === 0 && (
+                <div className="flex flex-col items-center justify-center h-64 text-gray-400 dark:text-gray-500">
+                  <div className="text-5xl mb-3">📊</div>
+                  <div className="text-sm">Select a preset or set filters and click Run Screen</div>
+                </div>
+              )}
+
+              {!screenerLoading && screenerResults.length > 0 && (
+                <>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                      <span className="font-medium text-gray-900 dark:text-white">{screenerTotal.toLocaleString()}</span> results
+                      {screenerDataAsOf && (
+                        <span className="ml-2 text-xs">· data as of {new Date(screenerDataAsOf).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 dark:bg-gray-800/60">
+                        <tr>
+                          {([
+                            { key: 'symbol', label: 'Symbol' },
+                            { key: 'name', label: 'Name' },
+                            { key: 'price', label: 'Price' },
+                            { key: 'change_percentage', label: 'Chg%' },
+                            { key: 'market_cap', label: 'Mkt Cap' },
+                            { key: 'volume', label: 'Volume' },
+                          ] as const).map(col => (
+                            <th
+                              key={col.key}
+                              onClick={() => handleScreenerSort(col.key)}
+                              className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 cursor-pointer select-none hover:text-gray-700 dark:hover:text-gray-200 whitespace-nowrap"
+                            >
+                              {col.label}
+                              {screenerSortBy === col.key && (
+                                <span className="ml-1">{screenerSortDesc ? '↓' : '↑'}</span>
+                              )}
+                            </th>
+                          ))}
+                          <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">52-Wk Range</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
+                        {screenerResults.map(r => {
+                          const pos = r.year_high && r.year_low && r.price && r.year_high > r.year_low
+                            ? Math.min(100, Math.max(0, ((r.price - r.year_low) / (r.year_high - r.year_low)) * 100))
+                            : null;
+                          return (
+                            <tr
+                              key={r.symbol}
+                              onClick={() => navigate(`/stocks?ticker=${r.symbol}`)}
+                              className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
+                            >
+                              <td className="px-3 py-2.5 font-semibold text-teal-600 dark:text-teal-400 whitespace-nowrap">{r.symbol}</td>
+                              <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300 max-w-[180px] truncate">{r.name ?? '—'}</td>
+                              <td className="px-3 py-2.5 font-medium whitespace-nowrap">{r.price != null ? `$${r.price.toFixed(2)}` : '—'}</td>
+                              <td className={`px-3 py-2.5 font-medium whitespace-nowrap ${r.change_percentage == null ? '' : r.change_percentage >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                {r.change_percentage != null ? `${r.change_percentage >= 0 ? '+' : ''}${r.change_percentage.toFixed(2)}%` : '—'}
+                              </td>
+                              <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap">{fmtMarketCap(r.market_cap)}</td>
+                              <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap">{fmtVolume(r.volume)}</td>
+                              <td className="px-3 py-2.5">
+                                {pos != null ? (
+                                  <div className="flex items-center gap-1.5 min-w-[120px]">
+                                    <span className="text-xs text-gray-400 w-10 text-right tabular-nums">
+                                      {r.year_low != null ? `$${r.year_low < 10 ? r.year_low.toFixed(2) : Math.round(r.year_low)}` : ''}
+                                    </span>
+                                    <div className="relative flex-1 h-1.5 bg-gray-200 dark:bg-gray-600 rounded-full">
+                                      <div
+                                        className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-teal-500 dark:bg-teal-400 -ml-1"
+                                        style={{ left: `${pos}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-xs text-gray-400 w-10 tabular-nums">
+                                      {r.year_high != null ? `$${r.year_high < 10 ? r.year_high.toFixed(2) : Math.round(r.year_high)}` : ''}
+                                    </span>
+                                  </div>
+                                ) : '—'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {screenerTotalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4">
+                      <button
+                        disabled={screenerPage <= 1}
+                        onClick={() => runScreener(screenerPage - 1, screenerForm, screenerSortBy, screenerSortDesc)}
+                        className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        ← Previous
+                      </button>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        Page {screenerPage} of {screenerTotalPages}
+                      </span>
+                      <button
+                        disabled={screenerPage >= screenerTotalPages}
+                        onClick={() => runScreener(screenerPage + 1, screenerForm, screenerSortBy, screenerSortDesc)}
+                        className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        Next →
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
         )}
       </div>
       <BackToTop />

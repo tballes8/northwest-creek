@@ -220,12 +220,19 @@ export default axiosInstance;
 export const intradayAPI = {
   getSnapshot: (ticker: string) =>
     axiosInstance.get(`/intraday/${ticker}`),
-  
+
   getBarsWithMA: (ticker: string) =>
     axiosInstance.get(`/intraday/${ticker}/bars-with-ma`),
-  
+
   getBatch: (tickers: string[]) =>
     axiosInstance.get(`/intraday/batch`, {
       params: { tickers: tickers.join(',') }
     }),
+};
+
+export const screenerAPI = {
+  runScreen: (criteria: object) =>
+    axiosInstance.post('/screener/run', criteria),
+  getPresets: () =>
+    axiosInstance.get('/screener/presets'),
 };
