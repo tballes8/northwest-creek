@@ -15,6 +15,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.services.alert_checker import alert_checker
 from app.services.websocket_service import live_price_service
 from app.services.fmp_client import init_fmp_client, close_fmp_client
+from datetime import datetime, timezone
 from app.tasks.refresh_stock_snapshots import refresh_stock_snapshots_job
 
 
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+        next_run_time=datetime.now(timezone.utc),
     )
     _scheduler.start()
 
