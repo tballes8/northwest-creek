@@ -149,17 +149,21 @@ async def _fetch_quotes(
     return rows
 
 
+_UPSERT_CHUNK = 1_000  # asyncpg caps params at 32767; 18 cols × 1000 = 18000
+
 async def _upsert(rows: list[dict]) -> None:
     if not rows:
         return
     update_cols = [c for c in rows[0] if c != "symbol"]
     async with async_session() as session:
-        stmt = pg_insert(StockSnapshot).values(rows)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["symbol"],
-            set_={col: stmt.excluded[col] for col in update_cols},
-        )
-        await session.execute(stmt)
+        for i in range(0, len(rows), _UPSERT_CHUNK):
+            chunk = rows[i:i + _UPSERT_CHUNK]
+            stmt = pg_insert(StockSnapshot).values(chunk)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["symbol"],
+                set_={col: stmt.excluded[col] for col in update_cols},
+            )
+            await session.execute(stmt)
         await session.commit()
     logger.info(f"Upserted {len(rows)} snapshots")
 
