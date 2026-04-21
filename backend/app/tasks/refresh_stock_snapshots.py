@@ -71,6 +71,7 @@ async def _build_universe(api_key: str) -> list[tuple[str, str]]:
             continue
         tickers.append((sym, s.get("name") or ""))
 
+    print(f"📊 Universe built: {len(tickers)} US CS tickers", flush=True)
     logger.info(f"Universe built: {len(tickers)} US CS tickers")
     return tickers
 
@@ -136,6 +137,7 @@ async def _fetch_quotes(
                         "last_refreshed": now_utc,
                     })
             except Exception as e:
+                print(f"⚠️ Batch {i}–{i + QUOTE_BATCH_SIZE} failed: {e}", flush=True)
                 logger.warning(f"Batch {i}–{i + QUOTE_BATCH_SIZE} failed: {e}")
 
     return rows
@@ -163,9 +165,11 @@ async def refresh_stock_snapshots_job(api_key: str) -> None:
         if last_ts:
             age = datetime.now(timezone.utc) - last_ts
             if age < timedelta(minutes=55):
+                print("📊 Off-hours throttle: snapshot fresh, skipping", flush=True)
                 logger.debug("Off-hours throttle: snapshot fresh, skipping")
                 return
 
+    print("📊 Starting stock snapshot refresh…", flush=True)
     logger.info("Starting stock snapshot refresh…")
     try:
         async with async_session() as session:
@@ -178,6 +182,8 @@ async def refresh_stock_snapshots_job(api_key: str) -> None:
 
         rows = await _fetch_quotes(api_key, tickers)
         await _upsert(rows)
+        print(f"✅ Snapshot refresh complete — {len(rows)} symbols", flush=True)
         logger.info(f"Snapshot refresh complete — {len(rows)} symbols")
-    except Exception:
+    except Exception as exc:
+        print(f"❌ Snapshot refresh failed: {exc}", flush=True)
         logger.exception("Snapshot refresh failed")
