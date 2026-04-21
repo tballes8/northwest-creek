@@ -59,19 +59,27 @@ async def _build_universe(api_key: str) -> list[tuple[str, str]]:
         stock_list = resp.json()
 
     print(f"📊 FMP stock-list raw count: {len(stock_list) if isinstance(stock_list, list) else type(stock_list).__name__}", flush=True)
+    if isinstance(stock_list, list) and stock_list:
+        first = stock_list[0]
+        print(f"📊 Sample item: {first}", flush=True)
 
     tickers: list[tuple[str, str]] = []
     for s in (stock_list or []):
-        sym = s.get("symbol", "")
-        ex = s.get("exchangeShortName") or s.get("exchange", "")
-        asset_type = s.get("type", "")
-        if not sym or "." in sym or len(sym) > 10:
+        if not isinstance(s, dict):
             continue
-        if ex not in US_EXCHANGES:
+        sym = (s.get("symbol") or "").strip()
+        # Strip exchange suffix (e.g. AAPL.NASDAQ → AAPL)
+        base_sym = sym.split(".")[0] if sym else ""
+        if not base_sym or len(base_sym) > 10:
             continue
-        if asset_type in ("ETF", "WARRANT"):
+        ex = (s.get("exchangeShortName") or s.get("exchange") or "").upper()
+        # Accept NYSE, NASDAQ, AMEX and common FMP variant names
+        if not any(kw in ex for kw in ("NYSE", "NASDAQ", "AMEX", "NYSEMKT")):
             continue
-        tickers.append((sym, s.get("name") or ""))
+        asset_type = (s.get("type") or "").upper()
+        if asset_type in ("ETF", "WARRANT", "INDEX", "FUND"):
+            continue
+        tickers.append((base_sym, s.get("name") or ""))
 
     print(f"📊 Universe built: {len(tickers)} US CS tickers", flush=True)
     logger.info(f"Universe built: {len(tickers)} US CS tickers")
