@@ -33,6 +33,9 @@ requests==2.32.3
 pandas==2.2.3  # Only if you actually use it
 # numpy==2.2.1   # Only if you actually use it
 
+# Scheduler
+apscheduler>=3.10.0,<4.0.0
+
 # Utilities
 python-dateutil==2.9.0
 pytz==2024.2
