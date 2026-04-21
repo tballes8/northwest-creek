@@ -58,10 +58,12 @@ async def _build_universe(api_key: str) -> list[tuple[str, str]]:
         resp.raise_for_status()
         stock_list = resp.json()
 
+    print(f"📊 FMP stock-list raw count: {len(stock_list) if isinstance(stock_list, list) else type(stock_list).__name__}", flush=True)
+
     tickers: list[tuple[str, str]] = []
     for s in (stock_list or []):
         sym = s.get("symbol", "")
-        ex = s.get("exchangeShortName", "")
+        ex = s.get("exchangeShortName") or s.get("exchange", "")
         asset_type = s.get("type", "")
         if not sym or "." in sym or len(sym) > 10:
             continue
