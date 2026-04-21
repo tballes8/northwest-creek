@@ -1045,7 +1045,7 @@ const Stocks: React.FC = () => {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-5 py-2.5 text-sm font-medium transition-colors ${
+              className={`px-8 py-3.5 text-base font-semibold transition-colors ${
                 activeTab === tab
                   ? 'border-b-2 border-teal-600 text-teal-600 dark:text-teal-400 -mb-px'
                   : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
@@ -1811,15 +1811,6 @@ const Stocks: React.FC = () => {
               </div>
             )}
 
-            {!activeSector && (
-              <>
-                <div className="text-6xl mb-4">📊</div>
-                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Search for a Stock</h3>
-                <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  Enter a ticker symbol or company name above to view detailed stock information, charts, and analysis tools. Or, select from the list below.
-                </p>
-              </>
-            )}
             
             {dailySnapshots.length > 0 && (
               <div className="mt-8 border-t border-gray-200 dark:border-gray-600 pt-8">
