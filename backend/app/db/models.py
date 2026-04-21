@@ -202,6 +202,16 @@ class StockSnapshot(Base):
     )
 
 
+class SavedScreen(Base):
+    __tablename__ = "saved_screens"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    criteria = Column(JSONB, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class Tutorial(Base):
     __tablename__ = "tutorials"
 

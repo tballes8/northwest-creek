@@ -235,4 +235,10 @@ export const screenerAPI = {
     axiosInstance.post('/screener/run', criteria),
   getPresets: () =>
     axiosInstance.get('/screener/presets'),
+  getSavedScreens: () =>
+    axiosInstance.get('/screener/saved'),
+  saveScreen: (data: { name: string; criteria: object }) =>
+    axiosInstance.post('/screener/saved', data),
+  deleteSavedScreen: (id: string) =>
+    axiosInstance.delete(`/screener/saved/${id}`),
 };

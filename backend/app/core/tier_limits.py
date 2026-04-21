@@ -12,6 +12,7 @@ TIER_LIMITS = {
         "alerts": 5,
         "sms_alerts": False,
         "indicator_alerts": 0,
+        "saved_screens": 1,
         "stock_reviews": 5,           # per week
         "dcf_valuations": 5,          # per week
         "technical_analysis": 5,      # per week
@@ -26,6 +27,7 @@ TIER_LIMITS = {
         "alerts": 10,
         "sms_alerts": True,
         "indicator_alerts": 0,
+        "saved_screens": 5,
         "stock_reviews": 15,          # per week
         "dcf_valuations": 15,         # per week
         "technical_analysis": 15,     # per week
@@ -40,6 +42,7 @@ TIER_LIMITS = {
         "alerts": 20,
         "sms_alerts": True,
         "indicator_alerts": 5,
+        "saved_screens": 15,
         "stock_reviews": 20,          # per day
         "dcf_valuations": 20,         # per day
         "technical_analysis": 20,     # per day
@@ -53,6 +56,7 @@ TIER_LIMITS = {
         "alerts": 50,
         "sms_alerts": True,
         "indicator_alerts": 20,
+        "saved_screens": 50,
         "stock_reviews": 40,          # per day
         "dcf_valuations": 40,         # per day
         "technical_analysis": 40,     # per day

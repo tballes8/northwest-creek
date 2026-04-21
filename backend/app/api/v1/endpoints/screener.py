@@ -2,13 +2,14 @@ import math
 from typing import Optional
 from datetime import timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_user
-from app.db.models import StockSnapshot, User
+from app.core.tier_limits import get_tier_limit
+from app.db.models import SavedScreen, StockSnapshot, User
 from app.db.session import get_db
 
 router = APIRouter()
@@ -298,3 +299,88 @@ _PRESETS = [
 @router.get("/presets")
 async def get_presets():
     return {"presets": _PRESETS}
+
+
+class SaveScreenBody(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    criteria: dict
+
+
+@router.post("/saved", status_code=201)
+async def save_screen(
+    body: SaveScreenBody,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    tier = current_user.subscription_tier or "beginner"
+    limit = get_tier_limit(tier, "saved_screens")
+    count_result = await db.execute(
+        select(func.count(SavedScreen.id)).where(SavedScreen.user_id == current_user.id)
+    )
+    count = count_result.scalar() or 0
+    if count >= limit:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Saved screen limit reached ({limit} for {tier} plan). Upgrade to save more screens.",
+        )
+    screen = SavedScreen(
+        user_id=current_user.id,
+        name=body.name.strip(),
+        criteria=body.criteria,
+    )
+    db.add(screen)
+    await db.commit()
+    await db.refresh(screen)
+    ts = screen.created_at
+    if ts and ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return {
+        "id": str(screen.id),
+        "name": screen.name,
+        "criteria": screen.criteria,
+        "created_at": ts.isoformat() if ts else None,
+    }
+
+
+@router.get("/saved")
+async def get_saved_screens(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(SavedScreen)
+        .where(SavedScreen.user_id == current_user.id)
+        .order_by(SavedScreen.created_at.desc())
+    )
+    screens = result.scalars().all()
+    out = []
+    for s in screens:
+        ts = s.created_at
+        if ts and ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        out.append({
+            "id": str(s.id),
+            "name": s.name,
+            "criteria": s.criteria,
+            "created_at": ts.isoformat() if ts else None,
+        })
+    return {"screens": out}
+
+
+@router.delete("/saved/{screen_id}", status_code=204)
+async def delete_saved_screen(
+    screen_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(SavedScreen).where(
+            SavedScreen.id == screen_id,
+            SavedScreen.user_id == current_user.id,
+        )
+    )
+    screen = result.scalar_one_or_none()
+    if not screen:
+        raise HTTPException(status_code=404, detail="Screen not found")
+    await db.delete(screen)
+    await db.commit()

@@ -169,6 +169,13 @@ interface ScreenerPreset {
   criteria: Record<string, any>;
 }
 
+interface SavedScreenItem {
+  id: string;
+  name: string;
+  criteria: Record<string, any>;
+  created_at: string;
+}
+
 const defaultScreenerForm: ScreenerFormState = {
   priceMin: '', priceMax: '',
   marketCapMinB: '', marketCapMaxB: '',
@@ -961,14 +968,18 @@ const Stocks: React.FC = () => {
   const [screenerSortDesc, setScreenerSortDesc] = useState(true);
   const [presets, setPresets] = useState<ScreenerPreset[]>([]);
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
+  const [savedScreens, setSavedScreens] = useState<SavedScreenItem[]>([]);
+  const [showSaveForm, setShowSaveForm] = useState(false);
+  const [saveScreenName, setSaveScreenName] = useState('');
+  const [savingScreen, setSavingScreen] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const presetsLoadedRef = useRef(false);
 
   useEffect(() => {
     if (activeTab === 'screener' && !presetsLoadedRef.current) {
       presetsLoadedRef.current = true;
-      screenerAPI.getPresets()
-        .then(r => setPresets(r.data.presets))
-        .catch(() => {});
+      screenerAPI.getPresets().then(r => setPresets(r.data.presets)).catch(() => {});
+      screenerAPI.getSavedScreens().then(r => setSavedScreens(r.data.screens)).catch(() => {});
     }
   }, [activeTab]);
 
@@ -1028,6 +1039,58 @@ const Stocks: React.FC = () => {
     setScreenerSortDesc(sd);
     setActivePresetId(preset.id);
     runScreener(1, form, sb, sd);
+  };
+
+  const applySavedScreen = (screen: SavedScreenItem) => {
+    const c = screen.criteria;
+    const form: ScreenerFormState = {
+      priceMin: c.price?.min?.toString() ?? '',
+      priceMax: c.price?.max?.toString() ?? '',
+      marketCapMinB: c.market_cap?.min != null ? (c.market_cap.min / 1e9).toString() : '',
+      marketCapMaxB: c.market_cap?.max != null ? (c.market_cap.max / 1e9).toString() : '',
+      changePctMin: c.change_percentage?.min?.toString() ?? '',
+      changePctMax: c.change_percentage?.max?.toString() ?? '',
+      dollarVolMinM: c.dollar_volume?.min != null ? (c.dollar_volume.min / 1e6).toString() : '',
+      pctFromHighMin: c.pct_from_52wk_high?.min?.toString() ?? '',
+      pctFromHighMax: c.pct_from_52wk_high?.max?.toString() ?? '',
+      pctFromLowMin: c.pct_from_52wk_low?.min?.toString() ?? '',
+      pctFromLowMax: c.pct_from_52wk_low?.max?.toString() ?? '',
+      goldenCross: c.golden_cross ?? null,
+      priceAbove50ma: c.price_above_50ma ?? null,
+      priceAbove200ma: c.price_above_200ma ?? null,
+      exchange: c.exchange ?? [],
+    };
+    const sb = c.sort_by ?? 'market_cap';
+    const sd = c.sort_desc ?? true;
+    setScreenerForm(form);
+    setScreenerSortBy(sb);
+    setScreenerSortDesc(sd);
+    setActivePresetId(null);
+    runScreener(1, form, sb, sd);
+  };
+
+  const saveCurrentScreen = async () => {
+    if (!saveScreenName.trim()) return;
+    setSavingScreen(true);
+    setSaveError('');
+    try {
+      const criteria = buildScreenerCriteria(screenerForm, screenerSortBy, screenerSortDesc, screenerPage);
+      const r = await screenerAPI.saveScreen({ name: saveScreenName.trim(), criteria });
+      setSavedScreens(prev => [r.data, ...prev]);
+      setSaveScreenName('');
+      setShowSaveForm(false);
+    } catch (e: any) {
+      setSaveError(e.response?.data?.detail || 'Failed to save screen');
+    } finally {
+      setSavingScreen(false);
+    }
+  };
+
+  const deleteSavedScreen = async (id: string) => {
+    try {
+      await screenerAPI.deleteSavedScreen(id);
+      setSavedScreens(prev => prev.filter(s => s.id !== id));
+    } catch {}
   };
 
   const screenerInputCls = "w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500";
@@ -1949,10 +2012,10 @@ const Stocks: React.FC = () => {
 
         {activeTab === 'screener' && (
         <div>
-          {/* Preset bar */}
-          {presets.length > 0 && (
-            <div className="mb-5">
-              <div className="flex flex-wrap gap-2 items-center mb-2">
+          {/* Quick screens + Saved screens + Save form */}
+          <div className="mb-5 space-y-2">
+            {presets.length > 0 && (
+              <div className="flex flex-wrap gap-2 items-center">
                 <span className="text-sm font-medium text-gray-500 dark:text-gray-400 shrink-0">Quick screens:</span>
                 {presets.map(p => (
                   <button
@@ -1960,7 +2023,7 @@ const Stocks: React.FC = () => {
                     onClick={() => applyPreset(p)}
                     className={`px-4 py-2 text-sm font-medium rounded-full border transition-colors ${
                       activePresetId === p.id
-                        ? 'bg-teal-600 border-teal-600 text-white dark:bg-teal-600 dark:border-teal-600 dark:text-white'
+                        ? 'bg-teal-600 border-teal-600 text-white'
                         : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:border-teal-500 hover:text-teal-700 dark:hover:border-teal-500 dark:hover:text-teal-400'
                     }`}
                   >
@@ -1968,14 +2031,75 @@ const Stocks: React.FC = () => {
                   </button>
                 ))}
               </div>
-              {activePresetId && (() => {
-                const active = presets.find(p => p.id === activePresetId);
-                return active ? (
-                  <p className="text-xs text-gray-500 dark:text-gray-400 pl-1">{active.description}</p>
-                ) : null;
-              })()}
-            </div>
-          )}
+            )}
+
+            {savedScreens.length > 0 && (
+              <div className="flex flex-wrap gap-2 items-center">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400 shrink-0">Saved:</span>
+                {savedScreens.map(s => (
+                  <div key={s.id} className="flex items-center gap-0.5 pl-3 pr-1 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-full">
+                    <button
+                      onClick={() => applySavedScreen(s)}
+                      className="text-sm text-gray-700 dark:text-gray-300 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
+                    >
+                      {s.name}
+                    </button>
+                    <button
+                      onClick={() => deleteSavedScreen(s.id)}
+                      className="ml-1.5 text-gray-400 hover:text-red-500 transition-colors text-base leading-none pb-0.5"
+                      title="Delete saved screen"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!showSaveForm ? (
+              <div>
+                <button
+                  onClick={() => { setShowSaveForm(true); setSaveError(''); }}
+                  className="text-xs text-gray-400 dark:text-gray-500 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
+                >
+                  + Save current screen
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2 items-center">
+                <input
+                  type="text"
+                  placeholder="Screen name..."
+                  value={saveScreenName}
+                  onChange={e => setSaveScreenName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && saveCurrentScreen()}
+                  className="px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500 w-48"
+                  autoFocus
+                />
+                <button
+                  onClick={saveCurrentScreen}
+                  disabled={savingScreen || !saveScreenName.trim()}
+                  className="px-3 py-1.5 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors"
+                >
+                  {savingScreen ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  onClick={() => { setShowSaveForm(false); setSaveScreenName(''); setSaveError(''); }}
+                  className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                >
+                  Cancel
+                </button>
+                {saveError && <span className="text-xs text-red-500">{saveError}</span>}
+              </div>
+            )}
+
+            {activePresetId && (() => {
+              const active = presets.find(p => p.id === activePresetId);
+              return active ? (
+                <p className="text-xs text-gray-500 dark:text-gray-400">{active.description}</p>
+              ) : null;
+            })()}
+          </div>
 
           {/* Main layout */}
           <div className="flex gap-5 items-start">
