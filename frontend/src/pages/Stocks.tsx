@@ -1034,6 +1034,7 @@ const Stocks: React.FC = () => {
       priceAbove50ma: c.price_above_50ma ?? null,
       priceAbove200ma: c.price_above_200ma ?? null,
       exchange: c.exchange ?? [],
+      excludeEtfs: c.exclude_etfs ?? true,
     };
     const sb = c.sort_by ?? 'market_cap';
     const sd = c.sort_desc ?? true;
@@ -1062,6 +1063,7 @@ const Stocks: React.FC = () => {
       priceAbove50ma: c.price_above_50ma ?? null,
       priceAbove200ma: c.price_above_200ma ?? null,
       exchange: c.exchange ?? [],
+      excludeEtfs: c.exclude_etfs ?? true,
     };
     const sb = c.sort_by ?? 'market_cap';
     const sd = c.sort_desc ?? true;
