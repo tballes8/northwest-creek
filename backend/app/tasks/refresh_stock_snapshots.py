@@ -63,23 +63,17 @@ async def _build_universe(api_key: str) -> list[tuple[str, str]]:
         first = stock_list[0]
         print(f"📊 Sample item: {first}", flush=True)
 
+    # stock-list only has {symbol, companyName} — no exchange or type.
+    # We filter to US exchanges later in _fetch_quotes using the batch-quote response.
     tickers: list[tuple[str, str]] = []
     for s in (stock_list or []):
         if not isinstance(s, dict):
             continue
         sym = (s.get("symbol") or "").strip()
-        # Strip exchange suffix (e.g. AAPL.NASDAQ → AAPL)
-        base_sym = sym.split(".")[0] if sym else ""
-        if not base_sym or len(base_sym) > 10:
+        if not sym or "." in sym or len(sym) > 10:
             continue
-        ex = (s.get("exchangeShortName") or s.get("exchange") or "").upper()
-        # Accept NYSE, NASDAQ, AMEX and common FMP variant names
-        if not any(kw in ex for kw in ("NYSE", "NASDAQ", "AMEX", "NYSEMKT")):
-            continue
-        asset_type = (s.get("type") or "").upper()
-        if asset_type in ("ETF", "WARRANT", "INDEX", "FUND"):
-            continue
-        tickers.append((base_sym, s.get("name") or ""))
+        name = s.get("companyName") or s.get("name") or ""
+        tickers.append((sym, name))
 
     print(f"📊 Universe built: {len(tickers)} US CS tickers", flush=True)
     logger.info(f"Universe built: {len(tickers)} US CS tickers")
@@ -119,6 +113,8 @@ async def _fetch_quotes(
                 for q in quotes:
                     sym = q.get("symbol", "")
                     if not sym or "." in sym or len(sym) > 10:
+                        continue
+                    if q.get("exchange") not in US_EXCHANGES:
                         continue
                     ts_raw = q.get("timestamp")
                     fmp_ts = (
