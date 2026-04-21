@@ -960,6 +960,7 @@ const Stocks: React.FC = () => {
   const [screenerSortBy, setScreenerSortBy] = useState('market_cap');
   const [screenerSortDesc, setScreenerSortDesc] = useState(true);
   const [presets, setPresets] = useState<ScreenerPreset[]>([]);
+  const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const presetsLoadedRef = useRef(false);
 
   useEffect(() => {
@@ -1025,6 +1026,7 @@ const Stocks: React.FC = () => {
     setScreenerForm(form);
     setScreenerSortBy(sb);
     setScreenerSortDesc(sd);
+    setActivePresetId(preset.id);
     runScreener(1, form, sb, sd);
   };
 
@@ -1949,18 +1951,29 @@ const Stocks: React.FC = () => {
         <div>
           {/* Preset bar */}
           {presets.length > 0 && (
-            <div className="mb-5 flex flex-wrap gap-2 items-center">
-              <span className="text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">Quick screens:</span>
-              {presets.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => applyPreset(p)}
-                  title={p.description}
-                  className="px-3 py-1.5 text-xs font-medium rounded-full bg-gray-100 dark:bg-gray-700 hover:bg-teal-50 dark:hover:bg-teal-900/30 hover:text-teal-700 dark:hover:text-teal-400 transition-colors"
-                >
-                  {p.name}
-                </button>
-              ))}
+            <div className="mb-5">
+              <div className="flex flex-wrap gap-2 items-center mb-2">
+                <span className="text-sm font-medium text-gray-500 dark:text-gray-400 shrink-0">Quick screens:</span>
+                {presets.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => applyPreset(p)}
+                    className={`px-4 py-2 text-sm font-medium rounded-full border transition-colors ${
+                      activePresetId === p.id
+                        ? 'bg-teal-600 border-teal-600 text-white dark:bg-teal-600 dark:border-teal-600 dark:text-white'
+                        : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:border-teal-500 hover:text-teal-700 dark:hover:border-teal-500 dark:hover:text-teal-400'
+                    }`}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+              {activePresetId && (() => {
+                const active = presets.find(p => p.id === activePresetId);
+                return active ? (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 pl-1">{active.description}</p>
+                ) : null;
+              })()}
             </div>
           )}
 
@@ -2078,7 +2091,7 @@ const Stocks: React.FC = () => {
               {/* Actions */}
               <div className="flex gap-2">
                 <button
-                  onClick={() => { setScreenerForm(defaultScreenerForm); setScreenerResults([]); setScreenerTotal(0); }}
+                  onClick={() => { setScreenerForm(defaultScreenerForm); setScreenerResults([]); setScreenerTotal(0); setActivePresetId(null); }}
                   className="flex-1 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
                   Clear
