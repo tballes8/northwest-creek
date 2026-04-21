@@ -170,6 +170,38 @@ class DailyStockSnapshot(Base):
     )
 
 
+class StockSnapshot(Base):
+    """Live screener universe — upserted every 15 min from FMP batch-quote."""
+    __tablename__ = "stock_snapshots"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    symbol = Column(String(10), nullable=False, unique=True)
+    name = Column(String(255), nullable=True)
+    price = Column(Numeric(precision=18, scale=4), nullable=True)
+    change_percentage = Column(Numeric(precision=10, scale=4), nullable=True)
+    change = Column(Numeric(precision=18, scale=4), nullable=True)
+    volume = Column(Numeric(precision=20, scale=0), nullable=True)
+    day_low = Column(Numeric(precision=18, scale=4), nullable=True)
+    day_high = Column(Numeric(precision=18, scale=4), nullable=True)
+    year_high = Column(Numeric(precision=18, scale=4), nullable=True)
+    year_low = Column(Numeric(precision=18, scale=4), nullable=True)
+    market_cap = Column(Numeric(precision=24, scale=2), nullable=True)
+    price_avg_50 = Column(Numeric(precision=18, scale=4), nullable=True)
+    price_avg_200 = Column(Numeric(precision=18, scale=4), nullable=True)
+    exchange = Column(String(20), nullable=True)
+    open_price = Column(Numeric(precision=18, scale=4), nullable=True)
+    previous_close = Column(Numeric(precision=18, scale=4), nullable=True)
+    fmp_timestamp = Column(DateTime(timezone=True), nullable=True)
+    last_refreshed = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        Index('idx_ss_market_cap', 'market_cap'),
+        Index('idx_ss_price_avg_50', 'price_avg_50'),
+        Index('idx_ss_price_avg_200', 'price_avg_200'),
+        Index('idx_ss_change_pct', 'change_percentage'),
+    )
+
+
 class Tutorial(Base):
     __tablename__ = "tutorials"
 

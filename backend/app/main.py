@@ -11,12 +11,15 @@ from app.api.v1.endpoints import (
 )
 from app.api.v1.endpoints.content import router as content_router
 from app.api.v1.endpoints.waitlist import router as waitlist_router
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.services.alert_checker import alert_checker
 from app.services.websocket_service import live_price_service
 from app.services.fmp_client import init_fmp_client, close_fmp_client
+from app.tasks.refresh_stock_snapshots import refresh_stock_snapshots_job
 
 
 settings = get_settings()
+_scheduler = AsyncIOScheduler()
 
 
 @asynccontextmanager
@@ -26,14 +29,28 @@ async def lifespan(app: FastAPI):
     # Persistent HTTP client for FMP API calls
     await init_fmp_client()
 
-    # Sprint 9: Wire alert checker into price stream
+    # Wire alert checker into price stream
     alert_checker.set_broadcast_fn(live_price_service.broadcast_to_clients)
     live_price_service.on_price_update = alert_checker.on_price_update
     await alert_checker.load_alert_tickers(live_price_service)
     await live_price_service.start()
 
+    # Stock screener: refresh snapshots every 15 min (job self-throttles off-hours)
+    _scheduler.add_job(
+        refresh_stock_snapshots_job,
+        "interval",
+        minutes=15,
+        kwargs={"api_key": settings.MASSIVE_API_KEY},
+        id="refresh_stock_snapshots",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    _scheduler.start()
+
     yield
 
+    _scheduler.shutdown(wait=False)
     await live_price_service.stop()
     await close_fmp_client()
     print("👋 NWC-Analytics API shutting down...")
