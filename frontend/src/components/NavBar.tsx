@@ -44,7 +44,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     label: 'Analytics',
     children: [
-      { to: '/stocks', key: 'stocks', label: 'Stock Research', icon: '🔍' },
+      { to: '/stocks', key: 'stocks', label: 'Stock Screener', icon: '🔍' },
       { to: '/technical-analysis', key: 'technical-analysis', label: 'Technical Analysis', icon: '📈' },
       { to: '/dcf-valuation', key: 'dcf-valuation', label: 'DCF Valuation', icon: '💰' },
     ],
