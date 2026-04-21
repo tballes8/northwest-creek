@@ -52,6 +52,7 @@ class ScreenerCriteria(BaseModel):
     golden_cross: Optional[bool] = None
     price_above_50ma: Optional[bool] = None
     price_above_200ma: Optional[bool] = None
+    exclude_etfs: bool = True
 
     page: int = Field(1, ge=1)
     page_size: int = Field(50, ge=1, le=200)
@@ -101,6 +102,7 @@ def _build_row(row: StockSnapshot) -> dict:
         "pct_from_52wk_low": pct_from_low,
         "dollar_volume": dollar_vol,
         "last_refreshed": ts.isoformat() if ts else None,
+        "is_etf": row.is_etf,
     }
 
 
@@ -182,6 +184,11 @@ async def run_screener(
                 StockSnapshot.price <= StockSnapshot.price_avg_200,
                 StockSnapshot.price_avg_200.is_(None),
             )
+        )
+
+    if criteria.exclude_etfs:
+        conditions.append(
+            or_(StockSnapshot.is_etf.is_(None), StockSnapshot.is_etf == False)
         )
 
     sort_col = SORT_COL.get(criteria.sort_by, StockSnapshot.market_cap)

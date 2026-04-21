@@ -160,6 +160,7 @@ interface ScreenerFormState {
   priceAbove50ma: boolean | null;
   priceAbove200ma: boolean | null;
   exchange: string[];
+  excludeEtfs: boolean;
 }
 
 interface ScreenerPreset {
@@ -187,6 +188,7 @@ const defaultScreenerForm: ScreenerFormState = {
   priceAbove50ma: null,
   priceAbove200ma: null,
   exchange: [],
+  excludeEtfs: true,
 };
 
 function fmtMarketCap(v: number | null): string {
@@ -238,6 +240,7 @@ function buildScreenerCriteria(
   if (form.priceAbove50ma !== null) c.price_above_50ma = form.priceAbove50ma;
   if (form.priceAbove200ma !== null) c.price_above_200ma = form.priceAbove200ma;
   if (form.exchange.length) c.exchange = form.exchange;
+  c.exclude_etfs = form.excludeEtfs;
   return c;
 }
 
@@ -2210,6 +2213,19 @@ const Stocks: React.FC = () => {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Exclude ETFs */}
+              <div className="mb-4">
+                <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={screenerForm.excludeEtfs}
+                    onChange={e => setScreenerForm(f => ({ ...f, excludeEtfs: e.target.checked }))}
+                    className="rounded border-gray-300 dark:border-gray-600 text-teal-600 focus:ring-teal-500"
+                  />
+                  Exclude ETFs &amp; Funds
+                </label>
               </div>
 
               {/* Actions */}

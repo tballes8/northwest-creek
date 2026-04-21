@@ -49,22 +49,24 @@ async def _last_refresh_ts() -> datetime | None:
 
 
 async def _build_universe(api_key: str) -> list[tuple[str, str]]:
-    """Fetch /stock-list and return filtered (symbol, name) pairs."""
+    """Fetch /company-screener and return (symbol, name) pairs — US common stocks only, no ETFs/funds."""
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
-            f"{FMP_BASE}/stock-list",
-            params={"apikey": api_key},
+            f"{FMP_BASE}/company-screener",
+            params={
+                "isEtf": "false",
+                "isFund": "false",
+                "isActivelyTrading": "true",
+                "country": "US",
+                "limit": 10000,
+                "apikey": api_key,
+            },
         )
         resp.raise_for_status()
         stock_list = resp.json()
 
-    print(f"📊 FMP stock-list raw count: {len(stock_list) if isinstance(stock_list, list) else type(stock_list).__name__}", flush=True)
-    if isinstance(stock_list, list) and stock_list:
-        first = stock_list[0]
-        print(f"📊 Sample item: {first}", flush=True)
+    print(f"📊 company-screener raw count: {len(stock_list) if isinstance(stock_list, list) else type(stock_list).__name__}", flush=True)
 
-    # stock-list only has {symbol, companyName} — no exchange or type.
-    # We filter to US exchanges later in _fetch_quotes using the batch-quote response.
     tickers: list[tuple[str, str]] = []
     for s in (stock_list or []):
         if not isinstance(s, dict):
@@ -75,8 +77,8 @@ async def _build_universe(api_key: str) -> list[tuple[str, str]]:
         name = s.get("companyName") or s.get("name") or ""
         tickers.append((sym, name))
 
-    print(f"📊 Universe built: {len(tickers)} US CS tickers", flush=True)
-    logger.info(f"Universe built: {len(tickers)} US CS tickers")
+    print(f"📊 Universe built: {len(tickers)} CS tickers", flush=True)
+    logger.info(f"Universe built: {len(tickers)} CS tickers")
     return tickers
 
 
@@ -141,6 +143,7 @@ async def _fetch_quotes(
                         "previous_close": q.get("previousClose"),
                         "fmp_timestamp": fmp_ts,
                         "last_refreshed": now_utc,
+                        "is_etf": False,
                     })
             except Exception as e:
                 print(f"⚠️ Batch {i}–{i + QUOTE_BATCH_SIZE} failed: {e}", flush=True)
@@ -149,7 +152,7 @@ async def _fetch_quotes(
     return rows
 
 
-_UPSERT_CHUNK = 1_000  # asyncpg caps params at 32767; 18 cols × 1000 = 18000
+_UPSERT_CHUNK = 1_000  # asyncpg caps params at 32767; 19 cols × 1000 = 19000
 
 async def _upsert(rows: list[dict]) -> None:
     if not rows:

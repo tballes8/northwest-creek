@@ -193,6 +193,7 @@ class StockSnapshot(Base):
     previous_close = Column(Numeric(precision=18, scale=4), nullable=True)
     fmp_timestamp = Column(DateTime(timezone=True), nullable=True)
     last_refreshed = Column(DateTime(timezone=True), server_default=func.now())
+    is_etf = Column(Boolean, nullable=True)
 
     __table_args__ = (
         Index('idx_ss_market_cap', 'market_cap'),
