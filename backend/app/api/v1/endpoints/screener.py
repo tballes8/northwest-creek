@@ -48,8 +48,10 @@ class ScreenerCriteria(BaseModel):
     pct_from_52wk_high: Optional[NumericRange] = None
     pct_from_52wk_low: Optional[NumericRange] = None
     dollar_volume: Optional[NumericRange] = None
+    gap_percent: Optional[NumericRange] = None
 
     golden_cross: Optional[bool] = None
+    death_cross: Optional[bool] = None
     price_above_50ma: Optional[bool] = None
     price_above_200ma: Optional[bool] = None
     exclude_etfs: bool = True
@@ -69,6 +71,8 @@ def _build_row(row: StockSnapshot) -> dict:
     year_high = _f(row.year_high)
     year_low = _f(row.year_low)
     volume = _f(row.volume)
+    open_p = _f(row.open_price)
+    prev_c = _f(row.previous_close)
 
     pct_from_high = (
         round((price - year_high) / year_high * 100, 2)
@@ -79,6 +83,7 @@ def _build_row(row: StockSnapshot) -> dict:
         if price and year_low else None
     )
     dollar_vol = round(price * volume, 2) if price and volume else None
+    gap_pct = round((open_p - prev_c) / prev_c * 100, 2) if open_p and prev_c else None
 
     ts = row.last_refreshed
     if ts and ts.tzinfo is None:
@@ -101,6 +106,7 @@ def _build_row(row: StockSnapshot) -> dict:
         "pct_from_52wk_high": pct_from_high,
         "pct_from_52wk_low": pct_from_low,
         "dollar_volume": dollar_vol,
+        "gap_percent": gap_pct,
         "last_refreshed": ts.isoformat() if ts else None,
         "is_etf": row.is_etf,
     }
@@ -122,6 +128,7 @@ def _passes_derived(row_dict: dict, c: ScreenerCriteria) -> bool:
         check_range(row_dict["pct_from_52wk_high"], c.pct_from_52wk_high)
         and check_range(row_dict["pct_from_52wk_low"], c.pct_from_52wk_low)
         and check_range(row_dict["dollar_volume"], c.dollar_volume)
+        and check_range(row_dict["gap_percent"], c.gap_percent)
     )
 
 
@@ -164,6 +171,11 @@ async def run_screener(
             )
         )
 
+    if criteria.death_cross is True:
+        conditions.append(StockSnapshot.price_avg_50 < StockSnapshot.price_avg_200)
+        conditions.append(StockSnapshot.price_avg_50.isnot(None))
+        conditions.append(StockSnapshot.price_avg_200.isnot(None))
+
     if criteria.price_above_50ma is True:
         conditions.append(StockSnapshot.price > StockSnapshot.price_avg_50)
         conditions.append(StockSnapshot.price_avg_50.isnot(None))
@@ -198,6 +210,7 @@ async def run_screener(
         criteria.pct_from_52wk_high,
         criteria.pct_from_52wk_low,
         criteria.dollar_volume,
+        criteria.gap_percent,
     ])
 
     base_q = select(StockSnapshot)
@@ -298,6 +311,50 @@ _PRESETS = [
             "market_cap": {"min": 1_000_000_000},
             "sort_by": "market_cap",
             "sort_desc": True,
+        },
+    },
+    {
+        "id": "near_52wk_low",
+        "name": "Near 52-Week Low",
+        "description": "Stocks trading within 10% of their 52-week low — contrarian and value hunter territory",
+        "criteria": {
+            "pct_from_52wk_low": {"max": 10},
+            "market_cap": {"min": 1_000_000_000},
+            "sort_by": "market_cap",
+            "sort_desc": True,
+        },
+    },
+    {
+        "id": "death_cross",
+        "name": "Death Cross",
+        "description": "Stocks where the 50-day MA has crossed below the 200-day MA — bearish technical signal",
+        "criteria": {
+            "death_cross": True,
+            "market_cap": {"min": 500_000_000},
+            "sort_by": "market_cap",
+            "sort_desc": True,
+        },
+    },
+    {
+        "id": "gap_up",
+        "name": "Gap Up (2%+)",
+        "description": "Stocks that opened at least 2% above the prior close — momentum and catalyst plays",
+        "criteria": {
+            "gap_percent": {"min": 2},
+            "market_cap": {"min": 200_000_000},
+            "sort_by": "change_percentage",
+            "sort_desc": True,
+        },
+    },
+    {
+        "id": "gap_down",
+        "name": "Gap Down (2%+)",
+        "description": "Stocks that opened at least 2% below the prior close — potential reversals or continued selling",
+        "criteria": {
+            "gap_percent": {"max": -2},
+            "market_cap": {"min": 200_000_000},
+            "sort_by": "change_percentage",
+            "sort_desc": False,
         },
     },
 ]

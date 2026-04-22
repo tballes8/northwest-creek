@@ -176,10 +176,13 @@ interface ScreenerFormState {
   pctFromHighMin: string; pctFromHighMax: string;
   pctFromLowMin: string; pctFromLowMax: string;
   goldenCross: boolean | null;
+  deathCross: boolean | null;
   priceAbove50ma: boolean | null;
   priceAbove200ma: boolean | null;
   exchange: string[];
   excludeEtfs: boolean;
+  gapPctMin: string;
+  gapPctMax: string;
 }
 
 interface ScreenerPreset {
@@ -204,10 +207,12 @@ const defaultScreenerForm: ScreenerFormState = {
   pctFromHighMin: '', pctFromHighMax: '',
   pctFromLowMin: '', pctFromLowMax: '',
   goldenCross: null,
+  deathCross: null,
   priceAbove50ma: null,
   priceAbove200ma: null,
   exchange: [],
   excludeEtfs: true,
+  gapPctMin: '', gapPctMax: '',
 };
 
 function fmtMarketCap(v: number | null): string {
@@ -256,10 +261,13 @@ function buildScreenerCriteria(
   const pl = nr(form.pctFromLowMin, form.pctFromLowMax);
   if (pl) c.pct_from_52wk_low = pl;
   if (form.goldenCross !== null) c.golden_cross = form.goldenCross;
+  if (form.deathCross !== null) c.death_cross = form.deathCross;
   if (form.priceAbove50ma !== null) c.price_above_50ma = form.priceAbove50ma;
   if (form.priceAbove200ma !== null) c.price_above_200ma = form.priceAbove200ma;
   if (form.exchange.length) c.exchange = form.exchange;
   c.exclude_etfs = form.excludeEtfs;
+  const gp = nr(form.gapPctMin, form.gapPctMax);
+  if (gp) c.gap_percent = gp;
   return c;
 }
 
@@ -1067,10 +1075,13 @@ const Stocks: React.FC = () => {
       pctFromLowMin: c.pct_from_52wk_low?.min?.toString() ?? '',
       pctFromLowMax: c.pct_from_52wk_low?.max?.toString() ?? '',
       goldenCross: c.golden_cross ?? null,
+      deathCross: c.death_cross ?? null,
       priceAbove50ma: c.price_above_50ma ?? null,
       priceAbove200ma: c.price_above_200ma ?? null,
       exchange: c.exchange ?? [],
       excludeEtfs: c.exclude_etfs ?? true,
+      gapPctMin: c.gap_percent?.min?.toString() ?? '',
+      gapPctMax: c.gap_percent?.max?.toString() ?? '',
     };
     const sb = c.sort_by ?? 'market_cap';
     const sd = c.sort_desc ?? true;
@@ -1096,10 +1107,13 @@ const Stocks: React.FC = () => {
       pctFromLowMin: c.pct_from_52wk_low?.min?.toString() ?? '',
       pctFromLowMax: c.pct_from_52wk_low?.max?.toString() ?? '',
       goldenCross: c.golden_cross ?? null,
+      deathCross: c.death_cross ?? null,
       priceAbove50ma: c.price_above_50ma ?? null,
       priceAbove200ma: c.price_above_200ma ?? null,
       exchange: c.exchange ?? [],
       excludeEtfs: c.exclude_etfs ?? true,
+      gapPctMin: c.gap_percent?.min?.toString() ?? '',
+      gapPctMax: c.gap_percent?.max?.toString() ?? '',
     };
     const sb = c.sort_by ?? 'market_cap';
     const sd = c.sort_desc ?? true;
