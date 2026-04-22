@@ -162,6 +162,9 @@ export const stocksAPI = {
 
   getDividends: (ticker: string) =>
     axiosInstance.get(`/stocks/dividends/${ticker}`),
+
+  getOwnership: (ticker: string) =>
+    axiosInstance.get(`/stocks/ownership/${ticker}`),
 };
 
 // DCF API

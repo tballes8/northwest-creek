@@ -8,6 +8,7 @@ from sqlalchemy import select, func, Date
 from datetime import date, datetime, timedelta
 from typing import Optional
 import asyncio
+from app.api.dependencies import get_current_user
 from app.services.market_data import market_data_service
 from app.services.fmp_client import get_fmp_client, API_KEY
 from app.db.session import get_db
@@ -1161,6 +1162,59 @@ async def get_analyst_estimates(ticker: str):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching analyst estimates: {_safe_error(e)}")
+
+
+@router.get("/ownership/{ticker}")
+async def get_ownership(
+    ticker: str,
+    current_user=Depends(get_current_user),
+):
+    """
+    Fetch SEC dilution filings (S-3, 424B5) and top institutional holders for a ticker.
+    """
+    ticker = ticker.strip().upper()
+    client = get_fmp_client()
+
+    async def _get(path: str, params: dict):
+        try:
+            r = await client.get(path, params={"apikey": API_KEY, **params})
+            r.raise_for_status()
+            data = r.json()
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
+
+    s3_raw, b5_raw, inst_raw = await asyncio.gather(
+        _get("sec-filings", {"symbol": ticker, "type": "S-3", "limit": 5}),
+        _get("sec-filings", {"symbol": ticker, "type": "424B5", "limit": 5}),
+        _get("institutional-holder", {"symbol": ticker}),
+    )
+
+    def _parse_filing(f: dict) -> dict:
+        return {
+            "type": f.get("type") or f.get("formType"),
+            "date": f.get("date") or f.get("fillingDate"),
+            "link": f.get("finalLink") or f.get("link"),
+        }
+
+    filings = sorted(
+        [_parse_filing(f) for f in (s3_raw + b5_raw) if f.get("date") or f.get("fillingDate")],
+        key=lambda x: x["date"] or "",
+        reverse=True,
+    )[:6]
+
+    holders = [
+        {
+            "holder": h.get("holder") or h.get("name"),
+            "shares": h.get("shares"),
+            "date_reported": h.get("dateReported"),
+            "change": h.get("change"),
+            "weight_percent": h.get("weightPercent"),
+        }
+        for h in (inst_raw[:10] if inst_raw else [])
+    ]
+
+    return {"filings": filings, "institutional_holders": holders}
 
 
 @router.get("/{ticker}", response_model=dict)

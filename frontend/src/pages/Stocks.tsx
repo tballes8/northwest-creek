@@ -118,6 +118,25 @@ interface SearchSuggestion {
   primary_exchange?: string;
 }
 
+interface SecFiling {
+  type: string | null;
+  date: string | null;
+  link: string | null;
+}
+
+interface InstitutionalHolder {
+  holder: string | null;
+  shares: number | null;
+  date_reported: string | null;
+  change: number | null;
+  weight_percent: number | null;
+}
+
+interface OwnershipData {
+  filings: SecFiling[];
+  institutional_holders: InstitutionalHolder[];
+}
+
 interface AnalystEstimates {
   forward_eps: number | null;
   forward_eps_high: number | null;
@@ -304,6 +323,8 @@ const Stocks: React.FC = () => {
   const [dividendLoading, setDividendLoading] = useState(false);
   const [etfHoldings, setEtfHoldings] = useState<EtfHolding[]>([]);
   const [holdingsLoading, setHoldingsLoading] = useState(false);
+  const [ownershipData, setOwnershipData] = useState<OwnershipData | null>(null);
+  const [ownershipLoading, setOwnershipLoading] = useState(false);
   const [peRatio, setPeRatio] = useState<number | null>(null);
   const [analystEstimates, setAnalystEstimates] = useState<AnalystEstimates | null>(null);
   const [nwcForecast, setNwcForecast] = useState<{
@@ -420,6 +441,7 @@ const Stocks: React.FC = () => {
     setNews([]);
     setDividendInfo(null);
     setEtfHoldings([]);
+    setOwnershipData(null);
     setPeRatio(null);
     setAnalystEstimates(null);
     setNwcForecast(null);
@@ -631,6 +653,7 @@ const Stocks: React.FC = () => {
       loadDividends(symbol);
       loadPeRatio(symbol);
       loadAnalystEstimates(symbol);
+      loadOwnership(symbol);
       loadPriceForecast(symbol);
 
       // ETF holdings — non-blocking, only for fund types
@@ -697,6 +720,19 @@ const Stocks: React.FC = () => {
       setEtfHoldings([]);
     } finally {
       setHoldingsLoading(false);
+    }
+  };
+
+  const loadOwnership = async (symbol: string) => {
+    setOwnershipLoading(true);
+    try {
+      const response = await stocksAPI.getOwnership(symbol);
+      setOwnershipData(response.data);
+    } catch (err) {
+      console.error('Failed to load ownership data:', err);
+      setOwnershipData(null);
+    } finally {
+      setOwnershipLoading(false);
     }
   };
 
@@ -1521,6 +1557,75 @@ const Stocks: React.FC = () => {
                     </div>
                   )}
                 </div>
+
+                {/* Dilution Filings + Institutional Holders — only for common stocks */}
+                {!isFundType(company.type) && (
+                  <div className="border-t border-gray-200 dark:border-gray-600 pt-4 mt-4 space-y-5">
+
+                    {/* SEC Dilution Filings */}
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">Dilution Filings</h4>
+                      {ownershipLoading ? (
+                        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm py-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-teal-600"></div>
+                          Loading...
+                        </div>
+                      ) : ownershipData && ownershipData.filings.length > 0 ? (
+                        <div className="space-y-2">
+                          {ownershipData.filings.map((f, i) => (
+                            <div key={i} className="flex items-center justify-between gap-2 text-sm">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300 shrink-0">
+                                {f.type ?? '—'}
+                              </span>
+                              <span className="text-gray-500 dark:text-gray-400 shrink-0">
+                                {f.date ? new Date(f.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                              </span>
+                              {f.link ? (
+                                <a href={f.link} target="_blank" rel="noopener noreferrer" className="text-teal-600 dark:text-teal-400 hover:underline text-xs truncate">
+                                  View filing
+                                </a>
+                              ) : <span />}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-400 dark:text-gray-500">No recent S-3 or 424B5 filings</p>
+                      )}
+                    </div>
+
+                    {/* Institutional Holders */}
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">Top Institutional Holders</h4>
+                      {ownershipLoading ? (
+                        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm py-2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-teal-600"></div>
+                          Loading...
+                        </div>
+                      ) : ownershipData && ownershipData.institutional_holders.length > 0 ? (
+                        <div className="space-y-2">
+                          {ownershipData.institutional_holders.map((h, i) => (
+                            <div key={i} className="flex items-center justify-between gap-2 text-sm">
+                              <span className="text-gray-700 dark:text-gray-300 truncate flex-1">{h.holder ?? '—'}</span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                {h.weight_percent != null && (
+                                  <span className="text-gray-500 dark:text-gray-400 text-xs">{h.weight_percent.toFixed(2)}%</span>
+                                )}
+                                {h.change != null && (
+                                  <span className={`text-xs font-medium ${h.change > 0 ? 'text-green-600 dark:text-green-400' : h.change < 0 ? 'text-red-500 dark:text-red-400' : 'text-gray-400'}`}>
+                                    {h.change > 0 ? '+' : ''}{h.change >= 1e6 ? `${(h.change / 1e6).toFixed(1)}M` : h.change >= 1e3 ? `${(h.change / 1e3).toFixed(0)}K` : h.change.toLocaleString()}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-400 dark:text-gray-500">No institutional holder data available</p>
+                      )}
+                    </div>
+
+                  </div>
+                )}
 
                 {/* ETF Top Holdings — only for fund types */}
                 {isFundType(company.type) && (
