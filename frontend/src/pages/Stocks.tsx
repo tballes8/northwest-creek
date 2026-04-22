@@ -2065,7 +2065,7 @@ const Stocks: React.FC = () => {
               <div>
                 <button
                   onClick={() => { setShowSaveForm(true); setSaveError(''); }}
-                  className="text-xs text-gray-400 dark:text-gray-500 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
+                  className="text-sm font-medium text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 transition-colors"
                 >
                   + Save current screen
                 </button>
