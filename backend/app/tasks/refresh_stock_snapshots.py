@@ -14,7 +14,7 @@ from datetime import datetime, time, timedelta, timezone
 
 import httpx
 import pytz
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.models import StockSnapshot
@@ -80,6 +80,19 @@ async def _build_universe(api_key: str) -> list[tuple[str, str]]:
     print(f"📊 Universe built: {len(tickers)} CS tickers", flush=True)
     logger.info(f"Universe built: {len(tickers)} CS tickers")
     return tickers
+
+
+async def _prune_universe(tickers: list[tuple[str, str]]) -> None:
+    """Remove DB rows for symbols no longer in the filtered universe (ETFs/funds that slipped in)."""
+    current = {sym for sym, _ in tickers}
+    async with async_session() as session:
+        db_symbols = set((await session.execute(select(StockSnapshot.symbol))).scalars().all())
+        stale = db_symbols - current
+        if stale:
+            await session.execute(delete(StockSnapshot).where(StockSnapshot.symbol.in_(stale)))
+            await session.commit()
+            print(f"📊 Pruned {len(stale)} stale/excluded symbols from universe", flush=True)
+            logger.info(f"Pruned {len(stale)} stale/excluded symbols from universe")
 
 
 async def _existing_universe() -> list[tuple[str, str]]:
@@ -185,11 +198,17 @@ async def refresh_stock_snapshots_job(api_key: str) -> None:
     print("📊 Starting stock snapshot refresh…", flush=True)
     logger.info("Starting stock snapshot refresh…")
     try:
-        async with async_session() as session:
-            count = await session.scalar(select(func.count(StockSnapshot.id)))
+        last_ts = await _last_refresh_ts()
+        now_et = datetime.now(EASTERN)
+        # Rebuild universe once per trading day (first refresh of a new day) or if table is empty
+        should_rebuild = (
+            last_ts is None
+            or last_ts.astimezone(EASTERN).date() < now_et.date()
+        )
 
-        if count == 0:
+        if should_rebuild:
             tickers = await _build_universe(api_key)
+            await _prune_universe(tickers)
         else:
             tickers = await _existing_universe()
 
