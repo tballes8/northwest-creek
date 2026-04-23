@@ -402,7 +402,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Intraday Chart</span>
                 <span className="text-xs text-gray-400">
-                  {barsData?.count ?? 0} bars · 15-min
+                  {barsData?.count ?? 0} bars · 1-min
                   {liveTicks.length > 0 && (
                     <span className="text-teal-400"> + {liveTicks.length} live</span>
                   )}

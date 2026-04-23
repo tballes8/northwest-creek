@@ -325,7 +325,7 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
 
             try:
                 intraday_data = await _fmp_get(
-                    "historical-chart/15min",
+                    "historical-chart/1min",
                     {
                         "symbol": ticker_upper,
                         "from": check_date.isoformat(),
@@ -420,7 +420,7 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
             "ticker": ticker_upper,
             "bars": bars_data,
             "timespan": "minute",
-            "multiplier": 15,
+            "multiplier": 1,
             "count": len(bars_data),
             "data_date": data_date.isoformat(),
             "is_today": is_today,
