@@ -308,6 +308,37 @@ class MarketDataService:
         """Alias for get_stock_news — kept for backward compatibility."""
         return await self.get_stock_news(ticker, limit)
 
+    async def get_general_market_news(self, limit: int = 3) -> List[Dict[str, Any]]:
+        """
+        Fetch latest general financial/market news from FMP.
+        Used as a fallback when no ticker-specific news is available.
+        """
+        try:
+            data = await self._fmp_get("news/stock-latest", {
+                "limit": limit,
+            })
+
+            if not data or not isinstance(data, list):
+                return []
+
+            articles = []
+            for article in data[:limit]:
+                published_utc = article.get("publishedDate", datetime.now().isoformat())
+                articles.append({
+                    "title": article.get("title", "No title available"),
+                    "publisher": article.get("site", "Unknown"),
+                    "published_utc": published_utc,
+                    "article_url": article.get("url", ""),
+                    "summary": article.get("text"),
+                    "insights": None,
+                })
+
+            return articles
+
+        except Exception as e:
+            print(f"Error fetching general market news: {_safe_error(e)}")
+            return []
+
 # Mapping from FMP frequency strings to annual payment counts
     FREQ_STR_TO_INT = {
         "annual": 1,

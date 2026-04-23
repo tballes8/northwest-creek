@@ -287,6 +287,7 @@ const Stocks: React.FC = () => {
   const [error, setError] = useState('');
   const [historyDays, setHistoryDays] = useState(90);
   const [news, setNews] = useState<NewsArticle[]>([]);
+  const [fallbackNews, setFallbackNews] = useState<NewsArticle[]>([]);
   const [newsLoading, setNewsLoading] = useState(false);
   const [topGainers, setTopGainers] = useState<TopGainer[]>([]);
   const [gainersLoading, setGainersLoading] = useState(false);
@@ -447,6 +448,7 @@ const Stocks: React.FC = () => {
     setCompany(null);
     setHistorical([]);
     setNews([]);
+    setFallbackNews([]);
     setDividendInfo(null);
     setEtfHoldings([]);
     setOwnershipData(null);
@@ -688,10 +690,26 @@ const Stocks: React.FC = () => {
     setNewsLoading(true);
     try {
       const response = await stocksAPI.getNews(symbol, 3);
-      setNews(response.data.data || []);
+      const articles: NewsArticle[] = response.data.data || [];
+      setNews(articles);
+
+      if (articles.length === 0) {
+        try {
+          const fallbackResponse = await stocksAPI.getMarketNews(20);
+          const pool: NewsArticle[] = fallbackResponse.data.data || [];
+          const shuffled = [...pool].sort(() => Math.random() - 0.5);
+          setFallbackNews(shuffled.slice(0, 3));
+        } catch (fallbackErr) {
+          console.error('Failed to load fallback news:', fallbackErr);
+          setFallbackNews([]);
+        }
+      } else {
+        setFallbackNews([]);
+      }
     } catch (err) {
       console.error('Failed to load news:', err);
       setNews([]);
+      setFallbackNews([]);
     } finally {
       setNewsLoading(false);
     }
@@ -1903,8 +1921,40 @@ const Stocks: React.FC = () => {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-600 dark:text-gray-400">
-                  No recent news available for {ticker}
+                <div>
+                  <div className="text-teal-600 dark:text-teal-400 font-medium mb-4">
+                    No recent news available for {ticker}
+                  </div>
+                  {fallbackNews.length > 0 && (
+                    <div className="space-y-4">
+                      {fallbackNews.map((article, index) => (
+                        <div key={index} className="border-b border-gray-200 dark:border-gray-600 last:border-b-0 pb-4 last:pb-0">
+                          <a
+                            href={article.article_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-lg font-semibold text-gray-900 dark:text-white hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                          >
+                            {article.title}
+                          </a>
+                          <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                            {article.publisher} • {new Date(article.published_utc).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit'
+                            })}
+                          </div>
+                          {article.summary && (
+                            <p className="text-gray-600 dark:text-gray-400 mt-2 text-sm leading-relaxed">
+                              {article.summary}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

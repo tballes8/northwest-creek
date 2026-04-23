@@ -217,6 +217,24 @@ async def get_stock_news(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching news: {_safe_error(e)}")
     
+@router.get("/news-market/latest")
+async def get_market_news(
+    limit: int = Query(default=3, ge=1, le=20, description="Number of news articles to fetch")
+):
+    """
+    Get latest general financial/market news (not tied to a specific ticker).
+    Used as a fallback when no ticker-specific news is available.
+    """
+    try:
+        news = await market_data_service.get_general_market_news(limit)
+        return {
+            "data": news,
+            "count": len(news)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching market news: {_safe_error(e)}")
+
+
 @router.get("/treasury-rates")
 async def get_treasury_rates():
     """
@@ -768,7 +786,7 @@ async def search_tickers(q: str = Query(..., min_length=1, description="Search q
     """
     Search for stocks by ticker symbol or company name using FMP.
 
-    Calls both /stable/search (company name matching) and
+    Calls both /stable/search-name (company name matching) and
     /stable/search-symbol (ticker symbol matching) in parallel,
     then merges and deduplicates results with symbol matches first.
     """
@@ -780,7 +798,7 @@ async def search_tickers(q: str = Query(..., min_length=1, description="Search q
 
         # Fire both endpoints in parallel
         name_resp, symbol_resp = await asyncio.gather(
-            client.get("search", params=search_params),
+            client.get("search-name", params=search_params),
             client.get("search-symbol", params=search_params),
             return_exceptions=True,
         )

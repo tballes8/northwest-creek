@@ -146,6 +146,9 @@ export const stocksAPI = {
   getNews: (ticker: string, limit: number = 3) =>
     axiosInstance.get(`/stocks/news/${ticker}`, { params: { limit }}),
 
+  getMarketNews: (limit: number = 3) =>
+    axiosInstance.get(`/stocks/news-market/latest`, { params: { limit }}),
+
   getTopGainers: (limit: number = 10) =>
     axiosInstance.get(`/stocks/top-gainers`, {params: {limit}}),
 
