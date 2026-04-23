@@ -4,7 +4,7 @@ import { authAPI, portfolioAPI, stocksAPI } from '../services/api';
 import { User } from '../types';
 import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
-import IntradayModal from '../components/Intradaymodal';
+import ScreenerChartPanel from '../components/ScreenerChartPanel';
 import { useLivePriceContext } from '../contexts/LivePriceContext';
 import MarketStatusBadge from '../components/MarketStatusBadge';
 import '../styles/livePrice.css';
@@ -1017,12 +1017,14 @@ const Portfolio: React.FC = () => {
         )}
       </div>
 
-      {/* Intraday Modal */}
-      <IntradayModal
-        ticker={selectedTicker}
-        isOpen={showIntradayModal}
-        onClose={() => setShowIntradayModal(false)}
-      />
+      {/* Intraday chart panel */}
+      {showIntradayModal && (
+        <ScreenerChartPanel
+          ticker={selectedTicker}
+          onClose={() => setShowIntradayModal(false)}
+          displayMode="modal"
+        />
+      )}
       {/* Dividend Details Modal */}
       {showDividendModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">

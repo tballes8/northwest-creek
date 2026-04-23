@@ -5,7 +5,7 @@ import { User } from '../types';
 import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
 import { WatchlistItem } from '../types';
-import IntradayModal from '../components/Intradaymodal';
+import ScreenerChartPanel from '../components/ScreenerChartPanel';
 import { useLivePriceContext } from '../contexts/LivePriceContext';
 import MarketStatusBadge from '../components/MarketStatusBadge';
 import UpgradeRequired from '../components/UpgradeRequired';
@@ -312,6 +312,7 @@ const Watchlist: React.FC = () => {
     setSelectedTicker(ticker);
     setShowIntradayModal(true);
   };
+
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -702,12 +703,14 @@ const Watchlist: React.FC = () => {
         )}
       </div>
 
-      {/* Intraday Modal */}
-      <IntradayModal
-        ticker={selectedTicker}
-        isOpen={showIntradayModal}
-        onClose={() => setShowIntradayModal(false)}
-      />
+      {/* Intraday chart panel */}
+      {showIntradayModal && (
+        <ScreenerChartPanel
+          ticker={selectedTicker}
+          onClose={() => setShowIntradayModal(false)}
+          displayMode="modal"
+        />
+      )}
       <BackToTop />
     </div>
   );

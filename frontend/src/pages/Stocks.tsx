@@ -6,6 +6,7 @@ import BackToTop from '../components/BackToTop';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import { authAPI, stocksAPI, watchlistAPI, screenerAPI } from '../services/api';
+import ScreenerChartPanel from '../components/ScreenerChartPanel';
 import { getTickersForSector, SECTOR_COLORS } from '../utils/sectorMap';
 import axios from 'axios';
 
@@ -1038,6 +1039,8 @@ const Stocks: React.FC = () => {
   const [saveScreenName, setSaveScreenName] = useState('');
   const [savingScreen, setSavingScreen] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [screenerChartTicker, setScreenerChartTicker] = useState<string | null>(null);
+  const [screenerChartUpgrade, setScreenerChartUpgrade] = useState(false);
   const presetsLoadedRef = useRef(false);
 
   useEffect(() => {
@@ -2485,7 +2488,21 @@ const Stocks: React.FC = () => {
                               onClick={() => navigate(`/stocks?ticker=${r.symbol}`)}
                               className="cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
                             >
-                              <td className="px-3 py-2.5 font-semibold text-teal-600 dark:text-teal-400 whitespace-nowrap">{r.symbol}</td>
+                              <td
+                                className="px-3 py-2.5 font-semibold text-teal-600 dark:text-teal-400 whitespace-nowrap"
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  if (user?.subscription_tier === 'active' || user?.subscription_tier === 'professional') {
+                                    setScreenerChartTicker(r.symbol);
+                                    setScreenerChartUpgrade(false);
+                                  } else {
+                                    setScreenerChartUpgrade(true);
+                                    setScreenerChartTicker(null);
+                                  }
+                                }}
+                              >
+                                <span className="cursor-pointer hover:underline">{r.symbol}</span>
+                              </td>
                               <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300 max-w-[180px] truncate">{r.name ?? '—'}</td>
                               <td className="px-3 py-2.5 font-medium whitespace-nowrap">{r.price != null ? `$${r.price.toFixed(2)}` : '—'}</td>
                               <td className={`px-3 py-2.5 font-medium whitespace-nowrap ${r.change_percentage == null ? '' : r.change_percentage >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
@@ -2542,6 +2559,38 @@ const Stocks: React.FC = () => {
                 </>
               )}
             </div>
+
+            {/* Intraday chart panel — active/professional only */}
+            {screenerChartTicker && (
+              <ScreenerChartPanel
+                ticker={screenerChartTicker}
+                onClose={() => setScreenerChartTicker(null)}
+              />
+            )}
+
+            {/* Upgrade prompt for beginner/casual */}
+            {screenerChartUpgrade && !screenerChartTicker && (
+              <div className="w-80 shrink-0 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center p-6 gap-3 text-center">
+                <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
+                    Active or Professional plan required
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Live intraday charts with drawing tools are available on the Active and Professional tiers.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setScreenerChartUpgrade(false)}
+                  className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+
           </div>
         </div>
         )}
