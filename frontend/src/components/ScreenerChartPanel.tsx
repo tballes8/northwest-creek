@@ -108,9 +108,9 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
 
   // Zoom state
   const [zoomRange, setZoomRange] = useState<{ start: number; end: number } | null>(null);
-  const chartWrapperRef = useRef<HTMLDivElement>(null);
   const zoomRangeRef = useRef<{ start: number; end: number } | null>(null);
   const displayDataLenRef = useRef<number>(0);
+  const wheelCleanupRef = useRef<(() => void) | null>(null);
 
   // Tooltip hover-delay state
   const [showTooltip, setShowTooltip] = useState(false);
@@ -164,9 +164,10 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
   useEffect(() => { zoomRangeRef.current = zoomRange; }, [zoomRange]);
   useEffect(() => { displayDataLenRef.current = displayChartData.length; }, [displayChartData.length]);
 
-  // Non-passive wheel listener — React's synthetic onWheel is passive and can't preventDefault
-  useEffect(() => {
-    const el = chartWrapperRef.current;
+  // Callback ref — called the moment the chart div mounts/unmounts (not on first render like useEffect+useRef).
+  // The chart div is conditionally rendered, so useRef+useEffect([]}) would always find null.
+  const chartWrapperCallbackRef = useCallback((el: HTMLDivElement | null) => {
+    if (wheelCleanupRef.current) { wheelCleanupRef.current(); wheelCleanupRef.current = null; }
     if (!el) return;
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -186,8 +187,8 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
       }
     };
     el.addEventListener('wheel', handleWheel, { passive: false });
-    return () => el.removeEventListener('wheel', handleWheel);
-  }, []); // register once — reads live state via refs
+    wheelCleanupRef.current = () => el.removeEventListener('wheel', handleWheel);
+  }, []); // stable — reads live state through refs, no deps needed
 
   // Clear trend lines when zoom changes (SVG % coords misalign after data slice changes)
   useEffect(() => {
@@ -462,7 +463,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
               </div>
 
               {visibleChartData.length > 0 ? (
-                <div className="relative" ref={chartWrapperRef}>
+                <div className="relative" ref={chartWrapperCallbackRef}>
                   <ResponsiveContainer width="100%" height={chartHeight}>
                     <AreaChart
                       data={visibleChartData}
