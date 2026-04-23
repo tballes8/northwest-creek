@@ -258,16 +258,24 @@ class MarketDataService:
             if not ticker:
                 raise ValueError("Ticker symbol is required")
 
-            data = await self._fmp_get("news/stock-latest", {
-                "tickers": ticker,
-                "limit": limit,
+            data = await self._fmp_get("news/stock", {
+                "symbol": ticker,
+                "limit": limit * 3,
             })
 
             if not data or not isinstance(data, list):
                 return []
 
+            filtered = []
+            for article in data:
+                article_ticker = article.get("symbol", "")
+                if article_ticker.upper() == ticker:
+                    filtered.append(article)
+                    if len(filtered) >= limit:
+                        break
+
             articles = []
-            for article in data[:limit]:
+            for article in filtered[:limit]:
                 published_utc = article.get("publishedDate", datetime.now().isoformat())
 
                 article_data = {
