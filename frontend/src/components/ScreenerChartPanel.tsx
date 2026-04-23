@@ -106,6 +106,12 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
   const [trendLines, setTrendLines] = useState<TrendLine[]>([]);
   const [pendingPoint, setPendingPoint] = useState<{ x: number; y: number } | null>(null);
 
+  // Zoom state
+  const [zoomRange, setZoomRange] = useState<{ start: number; end: number } | null>(null);
+  const chartWrapperRef = useRef<HTMLDivElement>(null);
+  const zoomRangeRef = useRef<{ start: number; end: number } | null>(null);
+  const displayDataLenRef = useRef<number>(0);
+
   // Tooltip hover-delay state
   const [showTooltip, setShowTooltip] = useState(false);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -118,6 +124,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
     setTrendLines([]);
     setPendingPoint(null);
     setLiveTicks([]);
+    setZoomRange(null);
     setShowTooltip(false);
     lastHoveredIndexRef.current = null;
     loadData(ticker);
@@ -152,6 +159,41 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
   useEffect(() => () => {
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
   }, []);
+
+  // Keep refs in sync so the wheel handler reads current values without re-registering
+  useEffect(() => { zoomRangeRef.current = zoomRange; }, [zoomRange]);
+  useEffect(() => { displayDataLenRef.current = displayChartData.length; }, [displayChartData.length]);
+
+  // Non-passive wheel listener — React's synthetic onWheel is passive and can't preventDefault
+  useEffect(() => {
+    const el = chartWrapperRef.current;
+    if (!el) return;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const total = displayDataLenRef.current;
+      if (total < 2) return;
+      const curr = zoomRangeRef.current ?? { start: 0, end: total - 1 };
+      const span = curr.end - curr.start;
+      const step = Math.max(5, Math.floor(span * 0.1));
+      if (e.deltaY < 0) {
+        const newStart = curr.start + step;
+        const newEnd = curr.end - step;
+        if (newEnd - newStart >= 10) setZoomRange({ start: newStart, end: newEnd });
+      } else {
+        const newStart = Math.max(0, curr.start - step);
+        const newEnd = Math.min(total - 1, curr.end + step);
+        setZoomRange(newStart === 0 && newEnd === total - 1 ? null : { start: newStart, end: newEnd });
+      }
+    };
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, []); // register once — reads live state via refs
+
+  // Clear trend lines when zoom changes (SVG % coords misalign after data slice changes)
+  useEffect(() => {
+    setTrendLines([]);
+    setPendingPoint(null);
+  }, [zoomRange]);
 
   const loadData = async (t: string) => {
     setLoading(true);
@@ -196,6 +238,14 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
   const displayChartData = useMemo<ChartPoint[]>(
     () => [...barChartData, ...liveTicks],
     [barChartData, liveTicks],
+  );
+
+  // Sliced to zoom window when active
+  const visibleChartData = useMemo<ChartPoint[]>(
+    () => zoomRange
+      ? displayChartData.slice(zoomRange.start, zoomRange.end + 1)
+      : displayChartData,
+    [displayChartData, zoomRange],
   );
 
   const priceColor = () => {
@@ -402,18 +452,20 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Intraday Chart</span>
                 <span className="text-xs text-gray-400">
-                  {barsData?.count ?? 0} bars · 1-min
-                  {liveTicks.length > 0 && (
+                  {zoomRange
+                    ? `${zoomRange.end - zoomRange.start + 1} / ${displayChartData.length} bars`
+                    : `${barsData?.count ?? 0} bars`} · 1-min
+                  {!zoomRange && liveTicks.length > 0 && (
                     <span className="text-teal-400"> + {liveTicks.length} live</span>
                   )}
                 </span>
               </div>
 
-              {displayChartData.length > 0 ? (
-                <div className="relative">
+              {visibleChartData.length > 0 ? (
+                <div className="relative" ref={chartWrapperRef}>
                   <ResponsiveContainer width="100%" height={chartHeight}>
                     <AreaChart
-                      data={displayChartData}
+                      data={visibleChartData}
                       onMouseMove={handleChartMouseMove}
                       onMouseLeave={handleChartMouseLeave}
                     >
@@ -545,6 +597,15 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                   className="px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-red-500 hover:text-red-500 transition-colors"
                 >
                   Clear Lines
+                </button>
+              )}
+
+              {zoomRange && (
+                <button
+                  onClick={() => setZoomRange(null)}
+                  className="px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-teal-500 hover:text-teal-400 transition-colors"
+                >
+                  Reset Zoom
                 </button>
               )}
 
