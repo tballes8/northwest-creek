@@ -130,17 +130,22 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
     loadData(ticker);
   }, [ticker]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 5-second live price polling — updates snapshot AND appends a chart tick
+  // 5-second live price polling — stops automatically when market is closed
   useEffect(() => {
     if (!ticker) return;
-    const id = setInterval(async () => {
+    let intervalId: ReturnType<typeof setInterval>;
+    intervalId = setInterval(async () => {
       try {
         const res = await intradayAPI.getSnapshot(ticker);
         const snap: IntradaySnapshot = res.data;
         setSnapshot(snap);
+        if (snap.market_status === 'closed') {
+          clearInterval(intervalId);
+          return;
+        }
         if (snap.price != null) {
           setLiveTicks(prev => [
-            ...prev.slice(-180), // keep up to 15 minutes of 5s ticks
+            ...prev.slice(-180),
             {
               time: fmtNow(),
               price: snap.price,
@@ -152,7 +157,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
         }
       } catch {}
     }, 5000);
-    return () => clearInterval(id);
+    return () => clearInterval(intervalId);
   }, [ticker]);
 
   // Cleanup hover timer on unmount
@@ -175,13 +180,18 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
       const curr = zoomRangeRef.current ?? { start: 0, end: total - 1 };
       const span = curr.end - curr.start;
       const step = Math.max(5, Math.floor(span * 0.1));
+      // Distribute the zoom step proportionally to where the cursor sits over the chart
+      const rect = el.getBoundingClientRect();
+      const cursorRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      const leftStep = Math.round(step * cursorRatio);
+      const rightStep = step - leftStep;
       if (e.deltaY < 0) {
-        const newStart = curr.start + step;
-        const newEnd = curr.end - step;
+        const newStart = curr.start + leftStep;
+        const newEnd = curr.end - rightStep;
         if (newEnd - newStart >= 10) setZoomRange({ start: newStart, end: newEnd });
       } else {
-        const newStart = Math.max(0, curr.start - step);
-        const newEnd = Math.min(total - 1, curr.end + step);
+        const newStart = Math.max(0, curr.start - leftStep);
+        const newEnd = Math.min(total - 1, curr.end + rightStep);
         setZoomRange(newStart === 0 && newEnd === total - 1 ? null : { start: newStart, end: newEnd });
       }
     };
