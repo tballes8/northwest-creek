@@ -160,9 +160,8 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
   }, []);
 
-  // Keep refs in sync so the wheel handler reads current values without re-registering
+  // Keep zoomRangeRef in sync
   useEffect(() => { zoomRangeRef.current = zoomRange; }, [zoomRange]);
-  useEffect(() => { displayDataLenRef.current = displayChartData.length; }, [displayChartData.length]);
 
   // Callback ref — called the moment the chart div mounts/unmounts (not on first render like useEffect+useRef).
   // The chart div is conditionally rendered, so useRef+useEffect([]}) would always find null.
@@ -240,6 +239,8 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
     () => [...barChartData, ...liveTicks],
     [barChartData, liveTicks],
   );
+  // Keep displayDataLenRef in sync — must be after displayChartData declaration
+  useEffect(() => { displayDataLenRef.current = displayChartData.length; }, [displayChartData.length]);
 
   // Sliced to zoom window when active
   const visibleChartData = useMemo<ChartPoint[]>(
