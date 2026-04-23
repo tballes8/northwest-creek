@@ -180,18 +180,14 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
       const curr = zoomRangeRef.current ?? { start: 0, end: total - 1 };
       const span = curr.end - curr.start;
       const step = Math.max(5, Math.floor(span * 0.1));
-      // Distribute the zoom step proportionally to where the cursor sits over the chart
-      const rect = el.getBoundingClientRect();
-      const cursorRatio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      const leftStep = Math.round(step * cursorRatio);
-      const rightStep = step - leftStep;
+      // Anchor zoom to the right (most recent time) — only move the left boundary
       if (e.deltaY < 0) {
-        const newStart = curr.start + leftStep;
-        const newEnd = curr.end - rightStep;
+        const newStart = curr.start + step;
+        const newEnd = curr.end;
         if (newEnd - newStart >= 10) setZoomRange({ start: newStart, end: newEnd });
       } else {
-        const newStart = Math.max(0, curr.start - leftStep);
-        const newEnd = Math.min(total - 1, curr.end + rightStep);
+        const newStart = Math.max(0, curr.start - step);
+        const newEnd = curr.end;
         setZoomRange(newStart === 0 && newEnd === total - 1 ? null : { start: newStart, end: newEnd });
       }
     };
