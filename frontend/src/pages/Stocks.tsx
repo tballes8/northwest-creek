@@ -2565,11 +2565,12 @@ const Stocks: React.FC = () => {
         )}
       </div>
 
-      {/* Intraday chart popup — active/professional only, floats over page */}
+      {/* Intraday chart popup — active/professional only, large centered modal */}
       {screenerChartTicker && (
         <ScreenerChartPanel
           ticker={screenerChartTicker}
           onClose={() => setScreenerChartTicker(null)}
+          displayMode="modal"
         />
       )}
 
