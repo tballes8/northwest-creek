@@ -174,6 +174,7 @@ interface ScreenerFormState {
   marketCapMinB: string; marketCapMaxB: string;
   changePctMin: string; changePctMax: string;
   dollarVolMinM: string;
+  volumeMinM: string; volumeMaxM: string;
   pctFromHighMin: string; pctFromHighMax: string;
   pctFromLowMin: string; pctFromLowMax: string;
   goldenCross: boolean | null;
@@ -205,6 +206,7 @@ const defaultScreenerForm: ScreenerFormState = {
   marketCapMinB: '', marketCapMaxB: '',
   changePctMin: '', changePctMax: '',
   dollarVolMinM: '',
+  volumeMinM: '', volumeMaxM: '',
   pctFromHighMin: '', pctFromHighMax: '',
   pctFromLowMin: '', pctFromLowMax: '',
   goldenCross: null,
@@ -257,6 +259,11 @@ function buildScreenerCriteria(
   const ch = nr(form.changePctMin, form.changePctMax);
   if (ch) c.change_percentage = ch;
   if (form.dollarVolMinM !== '') c.dollar_volume = { min: parseFloat(form.dollarVolMinM) * 1e6 };
+  const vol = nr(
+    form.volumeMinM !== '' ? (parseFloat(form.volumeMinM) * 1e6).toString() : '',
+    form.volumeMaxM !== '' ? (parseFloat(form.volumeMaxM) * 1e6).toString() : '',
+  );
+  if (vol) c.volume = vol;
   const ph = nr(form.pctFromHighMin, form.pctFromHighMax);
   if (ph) c.pct_from_52wk_high = ph;
   const pl = nr(form.pctFromLowMin, form.pctFromLowMax);
@@ -1091,6 +1098,8 @@ const Stocks: React.FC = () => {
       changePctMin: c.change_percentage?.min?.toString() ?? '',
       changePctMax: c.change_percentage?.max?.toString() ?? '',
       dollarVolMinM: c.dollar_volume?.min != null ? (c.dollar_volume.min / 1e6).toString() : '',
+      volumeMinM: c.volume?.min != null ? (c.volume.min / 1e6).toString() : '',
+      volumeMaxM: c.volume?.max != null ? (c.volume.max / 1e6).toString() : '',
       pctFromHighMin: c.pct_from_52wk_high?.min?.toString() ?? '',
       pctFromHighMax: c.pct_from_52wk_high?.max?.toString() ?? '',
       pctFromLowMin: c.pct_from_52wk_low?.min?.toString() ?? '',
@@ -1123,6 +1132,8 @@ const Stocks: React.FC = () => {
       changePctMin: c.change_percentage?.min?.toString() ?? '',
       changePctMax: c.change_percentage?.max?.toString() ?? '',
       dollarVolMinM: c.dollar_volume?.min != null ? (c.dollar_volume.min / 1e6).toString() : '',
+      volumeMinM: c.volume?.min != null ? (c.volume.min / 1e6).toString() : '',
+      volumeMaxM: c.volume?.max != null ? (c.volume.max / 1e6).toString() : '',
       pctFromHighMin: c.pct_from_52wk_high?.min?.toString() ?? '',
       pctFromHighMax: c.pct_from_52wk_high?.max?.toString() ?? '',
       pctFromLowMin: c.pct_from_52wk_low?.min?.toString() ?? '',
@@ -2329,6 +2340,19 @@ const Stocks: React.FC = () => {
                 <input type="number" placeholder="e.g. 50" value={screenerForm.dollarVolMinM}
                   onChange={e => setScreenerForm(f => ({ ...f, dollarVolMinM: e.target.value }))}
                   className={screenerInputCls} />
+              </div>
+
+              {/* Trading Volume */}
+              <div className="mb-3">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Trading Volume (M shares)</div>
+                <div className="flex gap-1.5">
+                  <input type="number" placeholder="Min" value={screenerForm.volumeMinM}
+                    onChange={e => setScreenerForm(f => ({ ...f, volumeMinM: e.target.value }))}
+                    className={screenerInputCls} />
+                  <input type="number" placeholder="Max" value={screenerForm.volumeMaxM}
+                    onChange={e => setScreenerForm(f => ({ ...f, volumeMaxM: e.target.value }))}
+                    className={screenerInputCls} />
+                </div>
               </div>
 
               {/* % from 52-Wk High */}
