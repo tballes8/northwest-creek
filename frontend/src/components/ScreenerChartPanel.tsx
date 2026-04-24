@@ -106,13 +106,13 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
   const [trendLines, setTrendLines] = useState<TrendLine[]>([]);
   const [pendingPoint, setPendingPoint] = useState<{ x: number; y: number } | null>(null);
 
-  // Zoom state
+  // Zoom + pan state
   const [zoomRange, setZoomRange] = useState<{ start: number; end: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const zoomRangeRef = useRef<{ start: number; end: number } | null>(null);
   const displayDataLenRef = useRef<number>(0);
   const wheelCleanupRef = useRef<(() => void) | null>(null);
   const chartWrapperElRef = useRef<HTMLDivElement | null>(null);
-  const isDraggingRef = useRef(false);
   const dragStartXRef = useRef(0);
   const dragStartRangeRef = useRef<{ start: number; end: number }>({ start: 0, end: 0 });
 
@@ -172,21 +172,11 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
   // Keep zoomRangeRef in sync
   useEffect(() => { zoomRangeRef.current = zoomRange; }, [zoomRange]);
 
-  // Update grab cursor whenever zoom state changes
-  useEffect(() => {
-    if (chartWrapperElRef.current && !isDraggingRef.current) {
-      chartWrapperElRef.current.style.cursor = zoomRange ? 'grab' : '';
-    }
-  }, [zoomRange]);
-
-  // Callback ref — called the moment the chart div mounts/unmounts (not on first render like useEffect+useRef).
-  // The chart div is conditionally rendered, so useRef+useEffect([]) would always find null.
+  // Callback ref — wheel only (drag uses React onMouseDown so it wins over Recharts)
   const chartWrapperCallbackRef = useCallback((el: HTMLDivElement | null) => {
     if (wheelCleanupRef.current) { wheelCleanupRef.current(); wheelCleanupRef.current = null; }
     chartWrapperElRef.current = el;
     if (!el) return;
-
-    // --- Scroll to zoom (anchored to right/current time) ---
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
       const total = displayDataLenRef.current;
@@ -196,64 +186,51 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
       const step = Math.max(5, Math.floor(span * 0.1));
       if (e.deltaY < 0) {
         const newStart = curr.start + step;
-        const newEnd = curr.end;
-        if (newEnd - newStart >= 10) setZoomRange({ start: newStart, end: newEnd });
+        if (curr.end - newStart >= 10) setZoomRange({ start: newStart, end: curr.end });
       } else {
         const newStart = Math.max(0, curr.start - step);
-        const newEnd = curr.end;
-        setZoomRange(newStart === 0 && newEnd === total - 1 ? null : { start: newStart, end: newEnd });
+        setZoomRange(newStart === 0 && curr.end === total - 1 ? null : { start: newStart, end: curr.end });
       }
     };
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    wheelCleanupRef.current = () => el.removeEventListener('wheel', handleWheel);
+  }, []);
 
-    // --- Left-click drag to pan (only when zoomed) ---
-    const handleMouseDown = (e: MouseEvent) => {
-      if (e.button !== 0 || !zoomRangeRef.current) return;
-      isDraggingRef.current = true;
-      dragStartXRef.current = e.clientX;
-      dragStartRangeRef.current = { ...zoomRangeRef.current };
-      el.style.cursor = 'grabbing';
-      e.preventDefault();
-    };
+  // React drag handler — fires before Recharts synthetic events, cursor stays in sync via state
+  const handleDragStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || !zoomRangeRef.current) return;
+    e.preventDefault();
+    dragStartXRef.current = e.clientX;
+    dragStartRangeRef.current = { ...zoomRangeRef.current };
+    setIsDragging(true);
+  }, []);
 
+  // Register mousemove + mouseup on document only while dragging
+  useEffect(() => {
+    if (!isDragging) return;
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isDraggingRef.current) return;
       const total = displayDataLenRef.current;
-      if (total < 2) return;
+      const el = chartWrapperElRef.current;
+      if (total < 2 || !el) return;
       const rect = el.getBoundingClientRect();
       const curr = dragStartRangeRef.current;
       const span = curr.end - curr.start;
       const barsPerPixel = span / rect.width;
-      // Dragging right moves view toward older data (lower indices)
       const barDelta = -Math.round((e.clientX - dragStartXRef.current) * barsPerPixel);
-
       let newStart = curr.start + barDelta;
       let newEnd = curr.end + barDelta;
-      // Clamp while preserving span
       if (newStart < 0) { newEnd -= newStart; newStart = 0; }
       if (newEnd >= total) { newStart -= (newEnd - (total - 1)); newEnd = total - 1; }
-      newStart = Math.max(0, newStart);
-
-      setZoomRange({ start: newStart, end: newEnd });
+      setZoomRange({ start: Math.max(0, newStart), end: newEnd });
     };
-
-    const handleMouseUp = () => {
-      if (!isDraggingRef.current) return;
-      isDraggingRef.current = false;
-      el.style.cursor = zoomRangeRef.current ? 'grab' : '';
-    };
-
-    el.addEventListener('wheel', handleWheel, { passive: false });
-    el.addEventListener('mousedown', handleMouseDown);
+    const handleMouseUp = () => setIsDragging(false);
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-
-    wheelCleanupRef.current = () => {
-      el.removeEventListener('wheel', handleWheel);
-      el.removeEventListener('mousedown', handleMouseDown);
+    return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, []); // stable — reads live state through refs, no deps needed
+  }, [isDragging]);
 
   // Clear trend lines when zoom changes (SVG % coords misalign after data slice changes)
   useEffect(() => {
@@ -530,7 +507,12 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
               </div>
 
               {visibleChartData.length > 0 ? (
-                <div className="relative" ref={chartWrapperCallbackRef}>
+                <div
+                  className="relative select-none"
+                  ref={chartWrapperCallbackRef}
+                  onMouseDown={handleDragStart}
+                  style={{ cursor: zoomRange ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
+                >
                   <ResponsiveContainer width="100%" height={chartHeight}>
                     <AreaChart
                       data={visibleChartData}
@@ -606,7 +588,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                     style={{
                       height: chartHeight,
                       pointerEvents: drawingMode ? 'all' : 'none',
-                      cursor: drawingMode ? 'crosshair' : 'default',
+                      cursor: drawingMode ? 'crosshair' : 'inherit',
                     }}
                     viewBox="0 0 100 100"
                     preserveAspectRatio="none"
