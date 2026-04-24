@@ -1,5 +1,5 @@
 import React, { Suspense, useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
@@ -31,6 +31,17 @@ import OptionsCalculator from './pages/OptionsCalculator';
 
 
 const Payment = React.lazy(() => import('./pages/Payment'));
+
+const PageviewTracker: React.FC = () => {
+  const location = useLocation();
+  useEffect(() => {
+    const gtag = (window as any).gtag;
+    if (typeof gtag === 'function') {
+      gtag('config', 'G-69YY52Z36D', { page_path: location.pathname + location.search });
+    }
+  }, [location]);
+  return null;
+};
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -74,6 +85,7 @@ const SubscriptionGuard: React.FC<{ children: React.ReactNode }> = ({ children }
 function App() {
   return (
     <Router>
+      <PageviewTracker />
       <LivePriceProvider>
         <Suspense fallback={<div className="min-h-screen bg-gray-900 flex items-center justify-center"><div className="text-gray-400">Loading...</div></div>}>
           <Routes>
