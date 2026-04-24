@@ -349,8 +349,6 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
         </p>
         {d.high != null && <p className="text-gray-500 dark:text-gray-400">H: ${fmt2(d.high)} | L: ${fmt2(d.low)}</p>}
         {d.volume != null && <p className="text-gray-500 dark:text-gray-400">Vol: {fmtLg(d.volume)}</p>}
-        {d.ma_20 != null && <p style={{ color: 'rgb(234,179,8)' }}>20d MA: ${fmt2(d.ma_20)}</p>}
-        {d.ma_50 != null && <p style={{ color: 'rgb(168,85,247)' }}>50d MA: ${fmt2(d.ma_50)}</p>}
       </div>
     );
   };
@@ -515,18 +513,6 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                   {fmtLg(snapshot.session?.volume)}
                 </div>
               </div>
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2">
-                <div className="text-xs mb-0.5" style={{ color: 'rgb(234,179,8)' }}>20d MA</div>
-                <div className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {barsData?.moving_averages.ma_20 ? `$${fmt2(barsData.moving_averages.ma_20)}` : 'N/A'}
-                </div>
-              </div>
-              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-2">
-                <div className="text-xs mb-0.5" style={{ color: 'rgb(168,85,247)' }}>50d MA</div>
-                <div className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {barsData?.moving_averages.ma_50 ? `$${fmt2(barsData.moving_averages.ma_50)}` : 'N/A'}
-                </div>
-              </div>
             </div>
 
             {/* Chart */}
@@ -592,30 +578,6 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                         name="Price"
                         isAnimationActive={false}
                       />
-                      {barsData?.moving_averages.ma_20 && (
-                        <Line
-                          type="monotone"
-                          dataKey="ma_20"
-                          stroke="rgb(234,179,8)"
-                          strokeWidth={1.5}
-                          dot={false}
-                          name="20d MA"
-                          connectNulls
-                          isAnimationActive={false}
-                        />
-                      )}
-                      {barsData?.moving_averages.ma_50 && (
-                        <Line
-                          type="monotone"
-                          dataKey="ma_50"
-                          stroke="rgb(168,85,247)"
-                          strokeWidth={1.5}
-                          dot={false}
-                          name="50d MA"
-                          connectNulls
-                          isAnimationActive={false}
-                        />
-                      )}
                     </AreaChart>
                   </ResponsiveContainer>
 
