@@ -45,6 +45,7 @@ interface BarsResponse {
 }
 
 interface TrendLine { x1: number; y1: number; x2: number; y2: number }
+interface Channel { x1: number; y1: number; x2: number; y2: number; yOffset: number }
 
 interface ChartPoint {
   time: string;
@@ -102,9 +103,14 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
   const [liveTicks, setLiveTicks] = useState<ChartPoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [drawingMode, setDrawingMode] = useState(false);
+  const [activeTool, setActiveTool] = useState<'trend' | 'channel' | null>(null);
+  const activeToolRef = useRef<'trend' | 'channel' | null>(null);
+  const drawingMode = activeTool !== null;
   const [trendLines, setTrendLines] = useState<TrendLine[]>([]);
   const [pendingPoint, setPendingPoint] = useState<{ x: number; y: number } | null>(null);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [pendingChannel, setPendingChannel] = useState<{ x1: number; y1: number; x2: number | null; y2: number | null } | null>(null);
+  const [svgMousePos, setSvgMousePos] = useState<{ x: number; y: number } | null>(null);
 
   // Zoom + pan state
   const [zoomRange, setZoomRange] = useState<{ start: number; end: number } | null>(null);
@@ -124,9 +130,11 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
   // Initial data load when ticker changes
   useEffect(() => {
     if (!ticker) return;
-    setDrawingMode(false);
+    setActiveTool(null);
     setTrendLines([]);
+    setChannels([]);
     setPendingPoint(null);
+    setPendingChannel(null);
     setLiveTicks([]);
     setZoomRange(null);
     setShowTooltip(false);
@@ -169,8 +177,9 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
     if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
   }, []);
 
-  // Keep zoomRangeRef in sync
+  // Keep refs in sync
   useEffect(() => { zoomRangeRef.current = zoomRange; }, [zoomRange]);
+  useEffect(() => { activeToolRef.current = activeTool; }, [activeTool]);
 
   // Callback ref — wheel only (drag uses React onMouseDown so it wins over Recharts)
   const chartWrapperCallbackRef = useCallback((el: HTMLDivElement | null) => {
@@ -198,7 +207,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
 
   // React drag handler — fires before Recharts synthetic events, cursor stays in sync via state
   const handleDragStart = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.button !== 0 || !zoomRangeRef.current) return;
+    if (e.button !== 0 || !zoomRangeRef.current || activeToolRef.current) return;
     e.preventDefault();
     dragStartXRef.current = e.clientX;
     dragStartRangeRef.current = { ...zoomRangeRef.current };
@@ -235,7 +244,9 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
   // Clear trend lines when zoom changes (SVG % coords misalign after data slice changes)
   useEffect(() => {
     setTrendLines([]);
+    setChannels([]);
     setPendingPoint(null);
+    setPendingChannel(null);
   }, [zoomRange]);
 
   const loadData = async (t: string) => {
@@ -347,21 +358,47 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
   // ─── SVG drawing overlay ───────────────────────────────────────────────────
 
   const handleSvgClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    if (!drawingMode) return;
+    if (!activeTool) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
-    if (!pendingPoint) {
-      setPendingPoint({ x, y });
-    } else {
-      setTrendLines(lines => [...lines, { x1: pendingPoint.x, y1: pendingPoint.y, x2: x, y2: y }]);
-      setPendingPoint(null);
+
+    if (activeTool === 'trend') {
+      if (!pendingPoint) {
+        setPendingPoint({ x, y });
+      } else {
+        setTrendLines(lines => [...lines, { x1: pendingPoint.x, y1: pendingPoint.y, x2: x, y2: y }]);
+        setPendingPoint(null);
+      }
+    } else if (activeTool === 'channel') {
+      if (!pendingChannel) {
+        setPendingChannel({ x1: x, y1: y, x2: null, y2: null });
+      } else if (pendingChannel.x2 === null) {
+        setPendingChannel(c => c ? { ...c, x2: x, y2: y } : null);
+      } else {
+        setChannels(ch => [...ch, {
+          x1: pendingChannel.x1, y1: pendingChannel.y1,
+          x2: pendingChannel.x2!, y2: pendingChannel.y2!,
+          yOffset: y - pendingChannel.y1,
+        }]);
+        setPendingChannel(null);
+      }
     }
   };
 
-  const toggleDrawing = () => {
-    setDrawingMode(m => !m);
+  const handleSvgMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!drawingMode) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    setSvgMousePos({
+      x: ((e.clientX - rect.left) / rect.width) * 100,
+      y: ((e.clientY - rect.top) / rect.height) * 100,
+    });
+  };
+
+  const startTool = (tool: 'trend' | 'channel') => {
+    setActiveTool(t => t === tool ? null : tool);
     setPendingPoint(null);
+    setPendingChannel(null);
   };
 
   if (!ticker) return null;
@@ -593,27 +630,85 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                     viewBox="0 0 100 100"
                     preserveAspectRatio="none"
                     onClick={handleSvgClick}
+                    onMouseMove={handleSvgMouseMove}
+                    onMouseLeave={() => setSvgMousePos(null)}
                   >
+                    {/* Completed trend lines */}
                     {trendLines.map((l, i) => (
-                      <line
-                        key={i}
-                        x1={l.x1} y1={l.y1}
-                        x2={l.x2} y2={l.y2}
-                        stroke="#f59e0b"
-                        strokeWidth={2}
-                        strokeLinecap="round"
+                      <line key={`tl-${i}`}
+                        x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2}
+                        stroke="#f59e0b" strokeWidth={2} strokeLinecap="round"
                         vectorEffect="non-scaling-stroke"
                       />
                     ))}
-                    {pendingPoint && (
-                      <circle
-                        cx={pendingPoint.x}
-                        cy={pendingPoint.y}
-                        r={1.5}
-                        fill="#f59e0b"
+
+                    {/* Completed channels */}
+                    {channels.map((ch, i) => (
+                      <g key={`ch-${i}`}>
+                        <polygon
+                          points={`${ch.x1},${ch.y1} ${ch.x2},${ch.y2} ${ch.x2},${ch.y2 + ch.yOffset} ${ch.x1},${ch.y1 + ch.yOffset}`}
+                          fill="rgba(59,130,246,0.12)" stroke="none"
+                        />
+                        <line x1={ch.x1} y1={ch.y1} x2={ch.x2} y2={ch.y2}
+                          stroke="#3b82f6" strokeWidth={1.5} strokeLinecap="round"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                        <line x1={ch.x1} y1={ch.y1 + ch.yOffset} x2={ch.x2} y2={ch.y2 + ch.yOffset}
+                          stroke="#3b82f6" strokeWidth={1.5} strokeLinecap="round"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      </g>
+                    ))}
+
+                    {/* Trend line pending first point */}
+                    {activeTool === 'trend' && pendingPoint && (
+                      <circle cx={pendingPoint.x} cy={pendingPoint.y} r={1.5}
+                        fill="#f59e0b" vectorEffect="non-scaling-stroke"
+                      />
+                    )}
+                    {/* Trend line preview */}
+                    {activeTool === 'trend' && pendingPoint && svgMousePos && (
+                      <line x1={pendingPoint.x} y1={pendingPoint.y}
+                        x2={svgMousePos.x} y2={svgMousePos.y}
+                        stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 3"
                         vectorEffect="non-scaling-stroke"
                       />
                     )}
+
+                    {/* Channel: step 1→2 — drawing main line */}
+                    {activeTool === 'channel' && pendingChannel && pendingChannel.x2 === null && svgMousePos && (
+                      <>
+                        <circle cx={pendingChannel.x1} cy={pendingChannel.y1} r={1.5}
+                          fill="#3b82f6" vectorEffect="non-scaling-stroke"
+                        />
+                        <line x1={pendingChannel.x1} y1={pendingChannel.y1}
+                          x2={svgMousePos.x} y2={svgMousePos.y}
+                          stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="4 3"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      </>
+                    )}
+                    {/* Channel: step 2→3 — main line set, previewing parallel */}
+                    {activeTool === 'channel' && pendingChannel && pendingChannel.x2 !== null && svgMousePos && (() => {
+                      const { x1, y1, x2, y2 } = pendingChannel as { x1: number; y1: number; x2: number; y2: number };
+                      const yOff = svgMousePos.y - y1;
+                      return (
+                        <>
+                          <polygon
+                            points={`${x1},${y1} ${x2},${y2} ${x2},${y2 + yOff} ${x1},${y1 + yOff}`}
+                            fill="rgba(59,130,246,0.12)" stroke="none"
+                          />
+                          <line x1={x1} y1={y1} x2={x2} y2={y2}
+                            stroke="#3b82f6" strokeWidth={1.5} strokeLinecap="round"
+                            vectorEffect="non-scaling-stroke"
+                          />
+                          <line x1={x1} y1={y1 + yOff} x2={x2} y2={y2 + yOff}
+                            stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="4 3"
+                            vectorEffect="non-scaling-stroke"
+                          />
+                        </>
+                      );
+                    })()}
                   </svg>
                 </div>
               ) : (
@@ -628,25 +723,42 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
 
             {/* Drawing toolbar */}
             <div className="flex items-center gap-2 flex-wrap pb-1">
+              {/* Trend Line tool */}
               <button
-                onClick={toggleDrawing}
+                onClick={() => startTool('trend')}
                 className={`px-3 py-1.5 text-xs rounded-lg border font-medium transition-colors ${
-                  drawingMode
+                  activeTool === 'trend'
                     ? 'bg-teal-600 border-teal-600 text-white'
                     : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-teal-500 hover:text-teal-600 dark:hover:text-teal-400'
                 }`}
               >
-                {drawingMode
-                  ? pendingPoint ? 'Click 2nd point…' : 'Click 1st point…'
-                  : 'Draw Trend Line'}
+                {activeTool === 'trend'
+                  ? (pendingPoint ? 'Click 2nd point…' : 'Click 1st point…')
+                  : 'Trend Line'}
               </button>
 
-              {trendLines.length > 0 && (
+              {/* Channel tool */}
+              <button
+                onClick={() => startTool('channel')}
+                className={`px-3 py-1.5 text-xs rounded-lg border font-medium transition-colors ${
+                  activeTool === 'channel'
+                    ? 'bg-blue-600 border-blue-600 text-white'
+                    : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400'
+                }`}
+              >
+                {activeTool === 'channel'
+                  ? (!pendingChannel ? 'Click start…'
+                    : pendingChannel.x2 === null ? 'Click end of line…'
+                    : 'Click to set width…')
+                  : 'Channel'}
+              </button>
+
+              {(trendLines.length > 0 || channels.length > 0) && (
                 <button
-                  onClick={() => { setTrendLines([]); setPendingPoint(null); }}
+                  onClick={() => { setTrendLines([]); setChannels([]); setPendingPoint(null); setPendingChannel(null); }}
                   className="px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-red-500 hover:text-red-500 transition-colors"
                 >
-                  Clear Lines
+                  Clear All
                 </button>
               )}
 
@@ -661,7 +773,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
 
               {drawingMode && (
                 <button
-                  onClick={() => { setDrawingMode(false); setPendingPoint(null); }}
+                  onClick={() => { setActiveTool(null); setPendingPoint(null); setPendingChannel(null); }}
                   className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                 >
                   Cancel
