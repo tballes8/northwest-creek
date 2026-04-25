@@ -84,8 +84,6 @@ const TIER_INFO: Record<string, {
       '20 technical analyses per day',
       '20 DCF valuations per day',
       '50 price alerts',
-
-      'Ad-free experience',
     ],
   },
 };

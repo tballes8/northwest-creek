@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
+import { PRICING_TIERS, TierSlug } from '../data/pricingTiers';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 type Step = 'plan' | 'account' | 'success';
-type Tier = 'beginner' | 'casual' | 'active' | 'professional';
+type Tier = TierSlug;
 
 const RegisterWithPayment: React.FC = () => {
   const navigate = useNavigate();
@@ -73,83 +74,10 @@ const RegisterWithPayment: React.FC = () => {
     }
   };
 
-  const tierLabels: Record<Tier, string> = {
-    beginner: 'Beginner — $10/mo',
-    casual: 'Casual Investor — $20/mo',
-    active: 'Active Investor — $40/mo',
-    professional: 'Professional — $50/mo',
-  };
-
-  const pricingTiers = [
-    {
-      name: 'Beginner',
-      tier: 'beginner' as Tier,
-      price: '$10',
-      period: '/month',
-      trialBadge: '14-day free trial',
-      features: [
-        '10 watchlist stocks',
-        '10 portfolio entries',
-        '5 price alerts',
-        '5 stock reviews/week',
-        '5 DCF valuations/week',
-        'Technical Analysis',
-        'Real-time market data',
-      ],
-      highlight: false,
-    },
-    {
-      name: 'Casual Retail Investor',
-      tier: 'casual' as Tier,
-      price: '$20',
-      period: '/month',
-      trialBadge: '14-day free trial',
-      features: [
-        '20 watchlist stocks',
-        '20 portfolio entries',
-        '10 price alerts',
-        '15 stock reviews/week',
-        '15 DCF valuations/week',
-        'Technical Analysis',
-        'Priority support',
-      ],
-      highlight: true,
-    },
-    {
-      name: 'Active Retail Investor',
-      tier: 'active' as Tier,
-      price: '$40',
-      period: '/month',
-      trialBadge: null,
-      features: [
-        '45 watchlist stocks',
-        '45 portfolio entries',
-        '20 price alerts',
-        '10 stock reviews/day',
-        '10 DCF valuations/day',
-        'Advanced Technical Analysis',
-        'Priority support',
-      ],
-      highlight: false,
-    },
-    {
-      name: 'Professional Investor',
-      tier: 'professional' as Tier,
-      price: '$50',
-      period: '/month',
-      trialBadge: null,
-      features: [
-        '75 watchlist stocks',
-        '75 portfolio entries',
-        '50 price alerts',
-        '20 stock reviews/day',
-        '20 DCF valuations/day',
-        'Full Technical Analysis suite',
-        'Priority support',
-      ],
-      highlight: false,
-    },
-  ];
+  const tierLabels: Record<Tier, string> = PRICING_TIERS.reduce(
+    (acc, t) => ({ ...acc, [t.slug]: `${t.name} — ${t.price}/mo` }),
+    {} as Record<Tier, string>
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 py-12 px-4 sm:px-6 lg:px-8">
@@ -219,43 +147,49 @@ const RegisterWithPayment: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {pricingTiers.map((tier) => (
+              {PRICING_TIERS.map((tier) => (
                 <div
-                  key={tier.tier}
+                  key={tier.slug}
                   className={`bg-white dark:bg-gray-700 rounded-xl shadow-lg border p-6 transition-all ${
-                    tier.highlight 
-                      ? 'ring-2 ring-primary-500 transform scale-105' 
+                    tier.popular
+                      ? 'ring-2 ring-primary-500 transform scale-105'
                       : 'dark:border-gray-500 hover:shadow-xl'
                   }`}
                 >
-                  {tier.highlight && (
+                  {tier.popular && (
                     <div className="text-center mb-2">
                       <span className="bg-primary-600 text-white px-3 py-1 rounded-full text-xs font-semibold">
                         POPULAR
                       </span>
                     </div>
                   )}
-                  
+
                   <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
                     {tier.name}
                   </h3>
-                  
+
                   <div className="mb-4">
                     <span className="text-3xl font-extrabold text-gray-900 dark:text-white">
                       {tier.price}
                     </span>
-                    {tier.period && (
-                      <span className="text-gray-600 dark:text-gray-400 text-sm">
-                        {tier.period}
-                      </span>
-                    )}
-                    {tier.trialBadge && (
+                    <span className="text-gray-600 dark:text-gray-400 text-sm">
+                      {tier.period}
+                    </span>
+                    {tier.hasTrial && tier.trialBadge && (
                       <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium mt-1">{tier.trialBadge}</p>
                     )}
                   </div>
 
                   <ul className="space-y-2 mb-6">
-                    {tier.features.map((feature, idx) => (
+                    {tier.highlightedBullet && (
+                      <li className="flex items-start text-sm">
+                        <svg className="h-5 w-5 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className="font-bold text-gray-900 dark:text-white">{tier.highlightedBullet}</span>
+                      </li>
+                    )}
+                    {tier.bullets.map((feature, idx) => (
                       <li key={idx} className="flex items-start text-sm">
                         <svg className="h-5 w-5 text-green-500 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
@@ -266,14 +200,14 @@ const RegisterWithPayment: React.FC = () => {
                   </ul>
 
                   <button
-                    onClick={() => handlePlanSelect(tier.tier)}
+                    onClick={() => handlePlanSelect(tier.slug)}
                     className={`w-full py-3 px-4 rounded-lg font-semibold transition-colors ${
-                      tier.highlight
+                      tier.popular
                         ? 'bg-primary-600 hover:bg-primary-700 text-white'
                         : 'bg-gray-900 hover:bg-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 text-white'
                     }`}
                   >
-                    {tier.tier === 'beginner' ? 'Start Free Trial' : `Choose ${tier.name}`}
+                    {tier.ctaLabel}
                   </button>
                 </div>
               ))}

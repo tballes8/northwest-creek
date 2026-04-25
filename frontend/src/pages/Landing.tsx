@@ -300,7 +300,7 @@ const Landing: React.FC = () => {
               'Technical filters: golden cross, death cross, 50/200-day MA position',
               '52-week high/low proximity, gap %, volume spikes',
               'Daily snapshot covers all common stocks and ETFs',
-              'Save screens (1 on Beginner → 50 on Professional)',
+              'Save your screens (Active and Professional)',
             ]}
             screenshotFile="screener.png"
             screenshotDescription="Stocks page (screener view) with filters applied — ideally a technical filter like golden cross or 52-week range."

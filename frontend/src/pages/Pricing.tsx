@@ -4,6 +4,7 @@ import { authAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import BackToTop from '../components/BackToTop';
+import { PRICING_TIERS } from '../data/pricingTiers';
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -70,109 +71,16 @@ const Pricing: React.FC = () => {
     );
   };
 
-  const pricingTiers = [
-    {
-      name: 'Beginner',
-      tierSlug: 'beginner',
-      price: '$10',
-      period: 'per month',
-      description: 'Perfect for getting started — 14-day free trial',
-      features: [
-        { text: '10 watchlist stocks', included: true },
-        { text: '10 portfolio entries', included: true },
-        { text: '5 price alerts', included: true },
-        { text: '5 stock reviews per week', included: true },
-        { text: '5 DCF valuations per week', included: true },
-        { text: 'Technical Analysis', included: true },
-        { text: 'Real-time market data', included: true },
-        { text: 'Advanced charts', included: false },
-        { text: 'Email Alerts', included: false },
-        { text: 'Customizable Alerts', included: false },
-      ],
-      buttonText: user?.subscription_tier === 'beginner' ? 'Current Plan' : 'Start Free Trial',
-      buttonLink: '/registerwithpayment?tier=beginner',
-      priceId: 'beginner',
-      current: user?.subscription_tier === 'beginner',
-      highlight: false,
-    },
-    {
-      name: 'Casual Retail Investor',
-      tierSlug: 'casual',
-      price: '$20',
-      period: 'per month',
-      description: 'For investors tracking a moderate portfolio — 14-day free trial',
-      features: [
-        { text: '20 watchlist stocks', included: true },
-        { text: '20 portfolio entries', included: true },
-        { text: '10 price alerts', included: true },
-        { text: '15 stock reviews per week', included: true },
-        { text: '15 DCF valuations per week', included: true },
-        { text: 'Technical Analysis', included: true },
-        { text: 'Real-time market data', included: true },
-        { text: 'Advanced charts', included: true },
-        { text: 'Email Alerts', included: true },
-        { text: 'Priority support', included: true },
-      ],
-      buttonText: user?.subscription_tier === 'casual' ? 'Current Plan' : 'Start Free Trial',
-      buttonLink: '/registerwithpayments',
-      priceId: 'casual',
-      current: user?.subscription_tier === 'casual',
-      highlight: true,
-    },
-    {
-      name: 'Active Retail Investor',
-      tierSlug: 'active',
-      price: '$40',
-      period: 'per month',
-      description: 'For active traders with larger portfolios',
-      features: [
-        { text: '45 watchlist stocks', included: true },
-        { text: '45 portfolio entries', included: true },
-        { text: '20 price alerts', included: true },
-        { text: '10 stock reviews per day', included: true },
-        { text: '10 DCF valuations per day', included: true },
-        { text: 'Advanced Technical Analysis', included: true },
-        { text: 'Real-time market data', included: true },
-        { text: 'Premium charting tools', included: true },
-        { text: 'Email Alerts', included: true },
-        { text: 'Customizable Alerts', included: true },
-        { text: 'Options Calculator', included: true },
-        { text: 'Priority support', included: true },
-      ],
-      buttonText: user?.subscription_tier === 'active' ? 'Current Plan' : 'Upgrade to Active',
-      buttonLink: '/registerwithpayments',
-      priceId: 'active',
-      current: user?.subscription_tier === 'active',
-      highlight: false,
-    },
-    {
-      name: 'Professional Investor',
-      tierSlug: 'professional',
-      price: '$50',
-      period: 'per month',
-      description: 'Ultimate tools for professional traders',
-      features: [
-        { text: '75 watchlist stocks', included: true },
-        { text: '75 portfolio entries', included: true },
-        { text: '20 stock reviews daily', included: true },
-        { text: '20 DCF valuations daily', included: true },
-        { text: 'Real-time market data', included: true },
-        { text: 'Advanced Technical Analysis', included: true },
-        { text: 'Professional charting suite', included: true },
-        { text: 'Historical data - 20 Stocks daily', included: true },
-        { text: 'Priority chat support', included: true },
-        { text: 'Custom integrations', included: true },
-        { text: 'Email Alerts', included: true },
-        { text: 'Customizable Alerts', included: true },
-        { text: 'Options Calculator', included: true },
-      ],
-      buttonText: user?.subscription_tier === 'professional' ? 'Current Plan' : 'Upgrade to Professional',
-      buttonLink: '/registerwithpayments',
-      priceId: 'professional',
-      current: user?.subscription_tier === 'professional',
-      highlight: false,
-    },
-  ];
+  const pricingTiers = PRICING_TIERS.map((tier) => ({
+    ...tier,
+    current: user?.subscription_tier === tier.slug,
+    buttonText:
+      user?.subscription_tier === tier.slug
+        ? 'Current Plan'
+        : tier.hasTrial
+        ? 'Start Free Trial'
+        : `Upgrade to ${tier.shortName}`,
+  }));
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
@@ -237,17 +145,17 @@ const Pricing: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {pricingTiers.map((tier) => (
             <div
-              key={tier.tierSlug}
+              key={tier.slug}
               className={`relative bg-white dark:bg-gray-700 rounded-xl shadow-xl dark:shadow-gray-200/20 overflow-hidden transition-transform hover:scale-105 ${
-                tier.highlight ? 'ring-4 ring-primary-500 dark:ring-primary-400' : 'border dark:border-gray-500'
+                tier.popular ? 'ring-4 ring-primary-500 dark:ring-primary-400' : 'border dark:border-gray-500'
               }`}
             >
-              {tier.highlight && (
+              {tier.popular && (
                 <div className="absolute top-0 right-0 bg-primary-600 text-white px-4 py-1 rounded-bl-lg text-sm font-semibold">
                   POPULAR
                 </div>
               )}
-              
+
               {tier.current && (
                 <div className="absolute top-0 left-0 bg-green-600 text-white px-4 py-1 rounded-br-lg text-sm font-semibold">
                   CURRENT
@@ -262,10 +170,13 @@ const Pricing: React.FC = () => {
                   <span className="text-4xl font-extrabold text-gray-900 dark:text-white">
                     {tier.price}
                   </span>
-                  {tier.period && (
-                    <span className="text-gray-600 dark:text-gray-400 ml-2 text-sm">
-                      {tier.period}
-                    </span>
+                  <span className="text-gray-600 dark:text-gray-400 text-sm">
+                    {tier.period}
+                  </span>
+                  {tier.hasTrial && tier.trialBadge && (
+                    <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium mt-1">
+                      {tier.trialBadge}
+                    </p>
                   )}
                 </div>
                 <p className="text-gray-600 dark:text-gray-400 text-sm mb-6">
@@ -274,52 +185,43 @@ const Pricing: React.FC = () => {
 
                 {/* Features List */}
                 <ul className="space-y-2 mb-6">
-                  {tier.features.map((feature, index) => (
+                  {tier.highlightedBullet && (
+                    <li className="flex items-start text-sm">
+                      <svg className="h-5 w-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="font-bold text-gray-900 dark:text-white">{tier.highlightedBullet}</span>
+                    </li>
+                  )}
+                  {tier.bullets.map((bullet, index) => (
                     <li key={index} className="flex items-start text-sm">
-                      {feature.included ? (
-                        <svg className="h-5 w-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                        </svg>
-                      ) : (
-                        <svg className="h-5 w-5 text-gray-400 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      )}
-                      <span className={feature.included ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-500'}>
-                        {feature.text}
-                      </span>
+                      <svg className="h-5 w-5 text-green-500 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-gray-900 dark:text-white">{bullet}</span>
                     </li>
                   ))}
                 </ul>
 
                 {/* CTA Button */}
                 {tier.current ? (
-                <button
+                  <button
                     disabled
                     className="w-full px-6 py-3 bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-400 font-semibold rounded-lg cursor-not-allowed"
-                >
+                  >
                     Current Plan
-                </button>
-                ) : tier.priceId ? (
-                <button
-                    onClick={() => handleUpgrade(tier.tierSlug, 
-                    tier.priceId === 'pro' ? stripeConfig?.pro_price_id : stripeConfig?.professional_price_id
-                    )}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleUpgrade(tier.slug, tier.slug)}
                     className={`w-full px-6 py-3 font-semibold rounded-lg transition-colors ${
-                    tier.highlight
+                      tier.popular
                         ? 'bg-primary-600 hover:bg-primary-700 text-white'
                         : 'bg-gray-900 hover:bg-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 text-white'
                     }`}
-                >
+                  >
                     {tier.buttonText}
-                </button>
-                ) : (
-                <Link
-                    to="/register"
-                    className="block w-full px-6 py-3 text-center bg-gray-900 hover:bg-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 text-white font-semibold rounded-lg transition-colors"
-                >
-                    Get Started
-                </Link>
+                  </button>
                 )}
               </div>
             </div>

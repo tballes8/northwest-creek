@@ -12,7 +12,7 @@ TIER_LIMITS = {
         "alerts": 5,
         "sms_alerts": False,
         "indicator_alerts": 0,
-        "saved_screens": 1,
+        "saved_screens": 0,
         "stock_reviews": 5,           # per week
         "dcf_valuations": 5,          # per week
         "technical_analysis": 5,      # per week
@@ -27,7 +27,7 @@ TIER_LIMITS = {
         "alerts": 10,
         "sms_alerts": True,
         "indicator_alerts": 0,
-        "saved_screens": 5,
+        "saved_screens": 0,
         "stock_reviews": 15,          # per week
         "dcf_valuations": 15,         # per week
         "technical_analysis": 15,     # per week

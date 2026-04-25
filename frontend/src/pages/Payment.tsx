@@ -10,10 +10,11 @@ import {
   useElements,
 } from '@stripe/react-stripe-js';
 import axios from 'axios';
+import { PRICING_TIERS, TierSlug } from '../data/pricingTiers';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
-type Tier = 'beginner' | 'casual' | 'active' | 'professional';
+type Tier = TierSlug;
 
 interface TierInfo {
   name: string;
@@ -23,71 +24,23 @@ interface TierInfo {
   features: string[];
 }
 
-const TIER_INFO: Record<Tier, TierInfo> = {
-  beginner: {
-    name: 'Beginner',
-    price: '$10',
-    priceNum: 10,
-    period: '/month',
-    features: [
-      '10 watchlist stocks',
-      '10 portfolio entries',
-      '5 price alerts',
-      '5 stock reviews/week',
-      '5 DCF valuations/week',
-      'Technical Analysis',
-      'Real-time market data',
-    ],
-  },
-  casual: {
-    name: 'Casual Investor',
-    price: '$20',
-    priceNum: 20,
-    period: '/month',
-    features: [
-      '20 watchlist stocks',
-      '20 portfolio entries',
-      '10 price alerts',
-      '15 stock reviews/week',
-      '15 DCF valuations/week',
-      'Technical Analysis',
-      'Email price alerts',
-      'Priority support',
-    ],
-  },
-  active: {
-    name: 'Active Investor',
-    price: '$40',
-    priceNum: 40,
-    period: '/month',
-    features: [
-      '45 watchlist stocks',
-      '45 portfolio entries',
-      '20 price alerts',
-      '10 stock reviews/day',
-      '10 DCF valuations/day',
-      'Advanced Technical Analysis',
-      'Email price alerts',
-      'Priority support',
-    ],
-  },
-  professional: {
-    name: 'Professional',
-    price: '$50',
-    priceNum: 50,
-    period: '/month',
-    features: [
-      '75 watchlist stocks',
-      '75 portfolio entries',
-      '50 price alerts',
-      '20 stock reviews/day',
-      '20 DCF valuations/day',
-      'Full Technical Analysis suite',
-      'Email & indicator alerts',
-      'Priority support',
-    ],
-  },
+const PRICE_NUMS: Record<Tier, number> = {
+  beginner: 10,
+  casual: 20,
+  active: 40,
+  professional: 50,
 };
+
+const TIER_INFO: Record<Tier, TierInfo> = PRICING_TIERS.reduce((acc, t) => {
+  acc[t.slug] = {
+    name: t.name,
+    price: t.price,
+    priceNum: PRICE_NUMS[t.slug],
+    period: t.period,
+    features: t.highlightedBullet ? [t.highlightedBullet, ...t.bullets] : t.bullets,
+  };
+  return acc;
+}, {} as Record<Tier, TierInfo>);
 
 // Stripe Element styling for dark theme
 const CARD_ELEMENT_OPTIONS = {
