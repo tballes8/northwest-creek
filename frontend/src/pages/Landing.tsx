@@ -94,7 +94,7 @@ const Landing: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
         {/* 1. Hero */}
-        <HeroSection onChoosePlanClick={scrollToPricing} />
+        <HeroSection onChoosePlanClick={scrollToPricing} imageSrc="/landing/dashboard-hero.png" />
 
         {/* 2. Trusted-by strip */}
         <div className="mt-8 mb-20 text-center">
@@ -158,6 +158,7 @@ const Landing: React.FC = () => {
             ]}
             screenshotFile="dashboard-livefeed.png"
             screenshotDescription="Dashboard or Watchlist showing live prices flashing green/red, with at least one ticker showing a PM or AH badge."
+            imageSrc="/landing/dashboard-livefeed.png"
           />
 
           {/* 4. AI Stock & Portfolio Analysis */}
@@ -181,6 +182,7 @@ const Landing: React.FC = () => {
             ]}
             screenshotFile="ai-analysis.png"
             screenshotDescription="Stock detail or Dashboard showing the AI-generated analysis text panel for a real ticker."
+            imageSrc="/landing/ai-analysis.png"
             reverse
           />
 
@@ -204,6 +206,7 @@ const Landing: React.FC = () => {
             ]}
             screenshotFile="tech-analysis.png"
             screenshotDescription="TechnicalAnalysis page showing candlestick chart with RSI + MACD subpanels for a real ticker."
+            imageSrc="/landing/tech-analysis.png"
           />
 
           <FeatureSection
@@ -226,6 +229,7 @@ const Landing: React.FC = () => {
             ]}
             screenshotFile="intraday-drawing.png"
             screenshotDescription="Intraday chart with channel drawing visible, MA overlays on, zoomed in. Capture mid-draw if possible."
+            imageSrc="/landing/intraday-drawing.png"
             reverse
           />
 
@@ -250,6 +254,7 @@ const Landing: React.FC = () => {
             ]}
             screenshotFile="dcf-suggestions.png"
             screenshotDescription="DCF page for a recognizable ticker (e.g. MSFT or AAPL) showing the suggestion panel and the resulting Buy/Hold/Overvalued recommendation."
+            imageSrc="/landing/dcf-suggestions.png"
           />
 
           {/* 7. Smart Alerts */}
@@ -274,6 +279,7 @@ const Landing: React.FC = () => {
             ]}
             screenshotFile="alerts-page.png"
             screenshotDescription="Alerts page showing both a price alert and at least one technical alert configured."
+            imageSrc="/landing/alerts-page.png"
             reverse
           />
 
@@ -298,6 +304,7 @@ const Landing: React.FC = () => {
             ]}
             screenshotFile="screener.png"
             screenshotDescription="Stocks page (screener view) with filters applied — ideally a technical filter like golden cross or 52-week range."
+            imageSrc="/landing/screener.png"
           />
 
           {/* Options Calculator — condensed feature card */}
