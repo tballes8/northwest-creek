@@ -344,46 +344,35 @@ const Pricing: React.FC = () => {
         </div>
       </div>
 
-      {/* Contact Section */}
-      <div className="bg-gradient-to-r from-primary-600 to-purple-600 py-16">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl font-bold text-white mb-4">
-            Need Help Choosing a Plan?
-          </h2>
-          <p className="text-primary-100 mb-8 text-lg">
-            Our team is here to help you find the perfect plan for your needs.
-          </p>
-          <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <a
-              href="mailto:sales@nwc-analytics.com"
-              className="px-8 py-3 bg-white text-primary-600 font-semibold rounded-lg hover:bg-gray-100 transition-colors"
-            >
-              Email Us
-            </a>
-            <Link
-              to="/dashboard"
-              className="px-8 py-3 bg-transparent border-2 border-white text-white font-semibold rounded-lg hover:bg-white hover:text-primary-600 transition-colors"
-            >
-              Back to Dashboard
-            </Link>
-          </div>
-        </div>
-      </div>
-
       {/* Footer */}
-      <footer className="bg-gray-800 dark:bg-gray-900 py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-gray-400">
-            © 2026 NWC-Analytics, LLC. All rights reserved.
-          </p>
-          <div className="mt-4 space-x-6">
-            <a href="#" className="text-gray-400 hover:text-white text-sm">Terms of Service</a>
-            <a href="#" className="text-gray-400 hover:text-white text-sm">Privacy Policy</a>
-            <a href="mailto:support@nwc-analytics.com" className="text-gray-400 hover:text-white text-sm">Support</a>
+      <footer className="bg-forest-800 dark:bg-gray-950 text-gray-300 dark:text-gray-400 py-12 mt-32">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            <div className="flex items-center mb-4 md:mb-0">
+              <img
+                src="/images/logo.png"
+                alt="NWC-Analytics, LLC"
+                className="h-12 w-12 mr-3"
+              />
+              <div>
+                <p className="text-xl font-bold text-white">NWC-Analytics</p>
+                <p className="text-sm">Professional stock analysis for retail investors</p>
+              </div>
+            </div>
+            <div className="text-center md:text-right">
+              <p className="text-sm">© 2026 NWC-Analytics, LLC. All rights reserved.</p>
+              <p className="text-sm mt-1">Post Falls, Idaho</p>
+            </div>
+          </div>
+          <div className="mt-6 flex justify-center flex-wrap gap-x-6 gap-y-2 text-sm">
+            <Link to="/terms" className="hover:text-white transition-colors">Terms</Link>
+            <Link to="/privacy" className="hover:text-white transition-colors">Privacy</Link>
+            <Link to="/faq" className="hover:text-white transition-colors">FAQ</Link>
+            <a href="mailto:support@nwc-analytics.com" className="hover:text-white transition-colors">Support</a>
           </div>
         </div>
+        <BackToTop />
       </footer>
-      <BackToTop />
     </div>
   );
 };

@@ -343,21 +343,6 @@ const Landing: React.FC = () => {
           <PricingTiers />
         </div>
 
-        {/* CTA Section */}
-        <div className="mt-32 bg-primary-600 dark:bg-primary-700 rounded-2xl p-12 text-center">
-          <h2 className="text-3xl font-bold text-white mb-4">
-            Ready to Take Control of Your Investments?
-          </h2>
-          <p className="text-xl text-primary-100 dark:text-primary-200 mb-8">
-            Join investors making smarter, data-driven decisions every day.
-          </p>
-          <button
-            onClick={scrollToPricing}
-            className="inline-block px-8 py-4 bg-white hover:bg-gray-100 text-primary-600 text-lg font-semibold rounded-lg shadow-lg transition-colors cursor-pointer"
-          >
-            Choose Your Plan
-          </button>
-        </div>
       </div>
 
       {/* Footer */}
@@ -379,6 +364,12 @@ const Landing: React.FC = () => {
               <p className="text-sm">© 2026 NWC-Analytics, LLC. All rights reserved.</p>
               <p className="text-sm mt-1">Post Falls, Idaho</p>
             </div>
+          </div>
+          <div className="mt-6 flex justify-center flex-wrap gap-x-6 gap-y-2 text-sm">
+            <Link to="/terms" className="hover:text-white transition-colors">Terms</Link>
+            <Link to="/privacy" className="hover:text-white transition-colors">Privacy</Link>
+            <Link to="/faq" className="hover:text-white transition-colors">FAQ</Link>
+            <a href="mailto:support@nwc-analytics.com" className="hover:text-white transition-colors">Support</a>
           </div>
         </div>
         <BackToTop />
