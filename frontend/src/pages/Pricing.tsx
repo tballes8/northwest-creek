@@ -257,102 +257,43 @@ const Pricing: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-700 divide-y divide-gray-200 dark:divide-gray-600">
-                <tr>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
-                    Watchlist Stocks
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">10</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">20</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">45</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">75</td>
-                </tr>
-                <tr className="bg-gray-50 dark:bg-gray-800">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
-                    Portfolio Entries
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">10</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">20</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">45</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">75</td>
-                </tr>
-                <tr>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
-                    Price Alerts
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">10</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">20</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">50</td>
-                </tr>
-                <tr className="bg-gray-50 dark:bg-gray-800">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
-                    Stock Reviews
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5/week</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">15/week</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">10/day</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">20/day</td>
-                </tr>
-                <tr>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
-                    DCF Valuations
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">5/week</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">15/week</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-gray-600 dark:text-gray-400">10/day</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center text-green-600 dark:text-green-400 font-semibold">20/day</td>
-                </tr>
-                <tr className="bg-gray-50 dark:bg-gray-800">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
-                    Technical Analysis
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                    <span className="text-green-500">✓</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                    <span className="text-green-500">✓</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                    <span className="text-green-500">✓</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                    <span className="text-green-500">✓</span>
-                  </td>
-                </tr>
-                <tr>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
-                    Email Alerts
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                    <span className="text-gray-400">—</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                    <span className="text-green-500">✓</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                    <span className="text-green-500">✓</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                    <span className="text-green-500">✓</span>
-                  </td>
-                </tr>
-                <tr className="bg-gray-50 dark:bg-gray-800">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
-                    14-Day Free Trial
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                    <span className="text-green-500">✓</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                    <span className="text-green-500">✓</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                    <span className="text-gray-400">—</span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                    <span className="text-gray-400">—</span>
-                  </td>
-                </tr>
+                {[
+                  { label: 'Watchlist Stocks',         values: ['10', '20', '45', '75'] },
+                  { label: 'Portfolio Entries',        values: ['10', '20', '45', '75'] },
+                  { label: 'Price Alerts',             values: ['5', '10', '20', '50'] },
+                  { label: 'Stock Reviews',            values: ['5/week', '15/week', '20/day', '40/day'] },
+                  { label: 'DCF Valuations',           values: ['5/week', '15/week', '20/day', '40/day'] },
+                  { label: 'Technical Analysis',       values: ['5/week', '15/week', '20/day', '40/day'] },
+                  { label: 'AI Stock & Portfolio Analysis', values: ['—', '5/week', '10/day', '25/day'] },
+                  { label: 'Smart Technical Alerts',   values: ['—', '—', '5/day', '20/day'] },
+                  { label: 'Saved Screens',            values: ['—', '—', '15', '50'] },
+                  { label: 'Options Calculator',       values: ['—', '—', '✓', '✓'] },
+                  { label: 'Email Alerts',             values: ['✓', '✓', '✓', '✓'] },
+                  { label: '14-Day Free Trial',        values: ['✓', '✓', '—', '—'] },
+                ].map((row, rowIdx) => (
+                  <tr key={row.label} className={rowIdx % 2 === 1 ? 'bg-gray-50 dark:bg-gray-800' : ''}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
+                      {row.label}
+                    </td>
+                    {row.values.map((value, colIdx) => {
+                      const isLast = colIdx === row.values.length - 1;
+                      const isDash = value === '—';
+                      const isCheck = value === '✓';
+                      const cls = isDash
+                        ? 'text-gray-400'
+                        : isCheck
+                        ? 'text-green-500'
+                        : isLast
+                        ? 'text-green-600 dark:text-green-400 font-semibold'
+                        : 'text-gray-600 dark:text-gray-400';
+                      return (
+                        <td key={colIdx} className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                          <span className={cls}>{value}</span>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
