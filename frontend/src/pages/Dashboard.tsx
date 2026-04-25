@@ -1245,7 +1245,7 @@ return (
             Upgrade to Casual Investor to unlock more features
           </h3>
           <p className="text-primary-100 dark:text-primary-200 mb-6">
-            Track 20 stocks, 20 positions, SMS alerts, and 15 reviews per week. Only $20/month.
+            Track 20 stocks, 20 positions, AI analysis, and 15 reviews per week. Only $20/month.
           </p>
           <button className="bg-white text-primary-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors">
             Upgrade to Casual Investor

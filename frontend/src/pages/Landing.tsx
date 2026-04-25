@@ -2,6 +2,9 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import ThemeToggle from '../components/ThemeToggle';
 import BackToTop from '../components/BackToTop';
+import HeroSection from '../components/landing/HeroSection';
+import FeatureSection from '../components/landing/FeatureSection';
+import PricingTiers from '../components/landing/PricingTiers';
 
 const Landing: React.FC = () => {
 
@@ -13,22 +16,15 @@ const Landing: React.FC = () => {
     }
   };
 
-  // Reusable checkmark icon
-  const Check = () => (
-    <svg className="w-5 h-5 text-emerald-500 dark:text-emerald-400 mr-2 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-    </svg>
-  );
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       {/* SEO — React 19 hoists these to <head> automatically */}
       <title>NWC-Analytics — Professional Stock Analysis for Retail Investors</title>
-      <meta name="description" content="Real-time market data, 15+ technical indicators, DCF valuation models, live portfolio tracking, and price alerts — institutional-grade stock analysis built for retail investors." />
+      <meta name="description" content="Real-time prices, AI-powered stock & portfolio analysis, 15+ technical indicators, DCF valuation, and smart alerts — built for retail investors who do their own homework." />
       <link rel="canonical" href="https://nwc-analytics.com" />
       <meta property="og:type" content="website" />
       <meta property="og:title" content="NWC-Analytics — Professional Stock Analysis for Retail Investors" />
-      <meta property="og:description" content="Real-time market data, technical indicators, DCF valuations, portfolio tracking, and price alerts for retail investors." />
+      <meta property="og:description" content="Real-time prices, AI analysis, technical alerts, DCF modeling — for retail investors who do their own homework." />
       <meta property="og:url" content="https://nwc-analytics.com" />
       <meta property="og:image" content="https://nwc-analytics.com/images/og-default.png" />
       <meta property="og:site_name" content="NWC-Analytics" />
@@ -58,19 +54,20 @@ const Landing: React.FC = () => {
             "@type": "WebSite",
             "name": "NWC-Analytics",
             "url": "https://nwc-analytics.com",
-            "description": "Real-time market data, technical indicators, DCF valuations, and portfolio tracking for retail investors.",
+            "description": "Real-time market data, AI analysis, technical indicators, DCF valuations, and smart alerts for retail investors.",
             "publisher": { "@type": "Organization", "name": "NWC-Analytics, LLC" }
           }
         ]
       }) }} />
+
       {/* Navbar */}
       <nav className="bg-gray-800 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <img 
-                src="/images/logo.png" 
-                alt="NWC-Analytics, LLC" 
+              <img
+                src="/images/logo.png"
+                alt="NWC-Analytics, LLC"
                 className="h-12 w-12 mr-3"
               />
               <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.8rem', fontStyle: 'italic' }}>NWC-Analytics</span>
@@ -94,35 +91,20 @@ const Landing: React.FC = () => {
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-16">
-        <div className="text-center">
-          <h1 className="text-5xl font-extrabold text-gray-900 dark:text-white sm:text-6xl">
-            <span className="block">Professional Stock Analysis</span>
-            <span className="block text-primary-600 dark:text-primary-400 mt-2">For Retail Investors</span>
-          </h1>
-          <p className="mt-6 max-w-3xl mx-auto text-xl text-gray-600 dark:text-gray-300">
-            Real-time market data, 15+ technical indicators, AI generated stock price targets, DCF valuation models, live portfolio tracking, 
-            AI summarized portfolio analysis, and price alerts — everything you need to make informed investment decisions, all in one platform.
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+
+        {/* 1. Hero */}
+        <HeroSection onChoosePlanClick={scrollToPricing} />
+
+        {/* 2. Trusted-by strip */}
+        <div className="mt-8 mb-20 text-center">
+          <p className="text-sm uppercase tracking-widest text-gray-500 dark:text-gray-400 font-medium">
+            Built in Post Falls, Idaho · Powered by Anthropic · FMP · Stripe · SendGrid
           </p>
-          <div className="mt-10 flex justify-center gap-4">
-            <button
-              onClick={scrollToPricing}
-              className="px-8 py-4 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white text-lg font-semibold rounded-lg shadow-lg transition-colors cursor-pointer"
-            >
-              Choose a Plan
-            </button>
-            <Link
-              to="/login"
-              className="px-8 py-4 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-primary-600 dark:text-primary-400 text-lg font-semibold rounded-lg shadow-lg border-2 border-primary-600 dark:border-primary-500 transition-colors"
-            >
-              Sign In
-            </Link>
-          </div>
         </div>
 
-        {/* Platform Highlights */}
-        <div className="mt-20">
+        {/* Platform Highlights — quick stats strip */}
+        <div className="mb-32">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto text-center">
             <div>
               <div className="text-3xl font-extrabold text-primary-600 dark:text-primary-400">15+</div>
@@ -130,534 +112,228 @@ const Landing: React.FC = () => {
             </div>
             <div>
               <div className="text-3xl font-extrabold text-primary-600 dark:text-primary-400">Live</div>
-              <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">WebSocket Market Data</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">WebSocket Prices</div>
+            </div>
+            <div>
+              <div className="text-3xl font-extrabold text-primary-600 dark:text-primary-400">AI</div>
+              <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Stock & Portfolio Analysis</div>
             </div>
             <div>
               <div className="text-3xl font-extrabold text-primary-600 dark:text-primary-400">DCF</div>
               <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Valuation Models</div>
             </div>
-            <div>
-              <div className="text-3xl font-extrabold text-primary-600 dark:text-primary-400">24/7</div>
-              <div className="text-sm text-gray-600 dark:text-gray-400 mt-1">Price Alerts</div>
-            </div>
           </div>
         </div>
 
-        {/* Core Features Grid */}
-        <div className="mt-32">
-          <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-4">
+        {/* Section heading for deep-dives */}
+        <div className="text-center mb-16">
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
             Everything You Need to Succeed
           </h2>
-          <p className="text-center text-gray-600 dark:text-gray-400 mb-16 max-w-2xl mx-auto">
+          <p className="text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
             Institutional-grade analysis tools designed for retail investors — no Bloomberg terminal required.
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {/* Feature 1 — Technical Analysis */}
-            <div className="bg-white dark:bg-gray-600 p-8 rounded-xl shadow-lg dark:shadow-gray-200/50 hover:shadow-xl transition-shadow border dark:border-gray-300">
-              <div className="w-12 h-12 bg-primary-100 dark:bg-primary-900/30 rounded-lg flex items-center justify-center mb-4">
-                <svg className="w-6 h-6 text-primary-600 dark:text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Technical Analysis</h3>
-              <p className="text-gray-600 dark:text-gray-300">
-                15+ professional indicators including RSI, MACD, Bollinger Bands, Stochastic Oscillator, 
-                ADX, Ichimoku Cloud, VWAP, and more — with clear buy/sell signals and educational descriptions 
-                for every indicator.
-              </p>
-            </div>
-
-            {/* Feature 2 — Portfolio Tracking */}
-            <div className="bg-white dark:bg-gray-600 p-8 rounded-xl shadow-lg dark:shadow-gray-200/50 hover:shadow-xl transition-shadow border dark:border-gray-300">
-              <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg flex items-center justify-center mb-4">
-                <svg className="w-6 h-6 text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Portfolio Tracking</h3>
-              <p className="text-gray-600 dark:text-gray-300">
-                Track multiple purchase lots per stock, monitor real-time P&L, and view your sector 
-                diversification with interactive charts. See your total portfolio value update live 
-                via WebSocket connections.
-              </p>
-            </div>
-
-            {/* Feature 3 — Price Alerts */}
-            <div className="bg-white dark:bg-gray-600 p-8 rounded-xl shadow-lg dark:shadow-gray-200/50 hover:shadow-xl transition-shadow border dark:border-gray-300">
-              <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center mb-4">
-                <svg className="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Price Alerts</h3>
-              <p className="text-gray-600 dark:text-gray-300">
-                Set custom price targets and get notified instantly when stocks hit your levels.
-                Never miss a breakout or buying opportunity — alerts work 24/7 so you're always
-                in the loop.
-              </p>
-            </div>
-
-            {/* Feature 4 — Options Calculator */}
-            <div className="bg-white dark:bg-gray-600 p-8 rounded-xl shadow-lg dark:shadow-gray-200/50 hover:shadow-xl transition-shadow border dark:border-gray-300">
-              <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center mb-4">
-                <svg className="w-6 h-6 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Options Calculator</h3>
-              <p className="text-gray-600 dark:text-gray-300">
-                Price options with Black-Scholes and Binomial models, visualize P&L at expiration,
-                and calculate Greeks for any strategy — from single legs to multi-leg spreads.
-              </p>
-            </div>
-          </div>
         </div>
 
-        {/* Detailed Feature Sections */}
-        <div className="mt-32 space-y-24">
-          
-          {/* Live Market Data Section */}
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div>
-              <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 mb-4">
-                🟢 LIVE
+        {/* 3. Live Dashboard & Real-Time Prices */}
+        <div className="space-y-24">
+          <FeatureSection
+            eyebrow="🟢 LIVE"
+            eyebrowColor="green"
+            title="Live Dashboard & Real-Time Prices"
+            body={
+              <>
+                See prices update the moment the market moves. Your watchlist, portfolio, and dashboard
+                stream live via WebSocket — no refreshing required. Pre-market and after-hours quotes are
+                tracked separately so you know exactly what's happening before the bell.
+              </>
+            }
+            bullets={[
+              'Live WebSocket price streaming for your entire watchlist',
+              'Pre-market and after-hours badges with separate % change',
+              'Real-time portfolio value with automatic P&L calculations',
+              'Sector breakdown and diversification charts',
+              'Market status badges — open, closed, or extended hours',
+              'Daily top gainers and sector-based stock discovery',
+            ]}
+            screenshotFile="dashboard-livefeed.png"
+            screenshotDescription="Dashboard or Watchlist showing live prices flashing green/red, with at least one ticker showing a PM or AH badge."
+          />
+
+          {/* 4. AI Stock & Portfolio Analysis */}
+          <FeatureSection
+            eyebrow="✨ AI-POWERED"
+            eyebrowColor="purple"
+            title="AI Stock & Portfolio Analysis"
+            body={
+              <>
+                Get plain-language analysis of any stock or your entire portfolio, powered by Anthropic's
+                Claude. Skip the jargon — understand what's actually happening with your investments and
+                what to watch for next. Available on Casual, Active, and Professional tiers.
+              </>
+            }
+            bullets={[
+              'Plain-language stock breakdowns — fundamentals, technicals, sentiment',
+              'Portfolio-level summaries: concentration, sector tilt, risk highlights',
+              'AI-generated price forecasts cached for 6 hours',
+              'Usage scales with tier: 5/week (Casual) → 25/day (Professional)',
+              'Built on Anthropic Claude — no hallucinated tickers or made-up financials',
+            ]}
+            screenshotFile="ai-analysis.png"
+            screenshotDescription="Stock detail or Dashboard showing the AI-generated analysis text panel for a real ticker."
+            reverse
+          />
+
+          {/* 5. Pro Technical Analysis + Intraday Charting */}
+          <FeatureSection
+            eyebrow="📈 15+ INDICATORS"
+            eyebrowColor="primary"
+            title="Pro Technical Analysis"
+            body={
+              <>
+                Go beyond basic charts with the full suite of indicators professional traders use. Each
+                comes with clear explanations so you understand exactly what the data is telling you.
+              </>
+            }
+            bullets={[
+              'RSI, MACD, Bollinger Bands, Stochastic, ADX, ATR',
+              'Moving Averages (SMA/EMA), VWAP, OBV, A/D Line',
+              'Ichimoku Cloud, Keltner & Donchian Channels, Parabolic SAR',
+              'CCI and Rate of Change momentum indicators',
+              'Watchlist batch analysis with preset filters (oversold, overbought, uptrend)',
+            ]}
+            screenshotFile="tech-analysis.png"
+            screenshotDescription="TechnicalAnalysis page showing candlestick chart with RSI + MACD subpanels for a real ticker."
+          />
+
+          <FeatureSection
+            eyebrow="🕯️ 1-MINUTE BARS"
+            eyebrowColor="amber"
+            title="Intraday Charting with Drawing Tools"
+            body={
+              <>
+                Zoom from 1-minute bars out to multi-day views, draw channels and trendlines directly on
+                the chart, and overlay moving averages — all without leaving the page.
+              </>
+            }
+            bullets={[
+              '1-minute intraday bars (recently upgraded from 15-minute)',
+              'Channel and trendline drawing tools',
+              'Cursor-draw mode for free-form annotation',
+              'Zoom levels 1× through 5× for detail-level analysis',
+              '50-day and 200-day moving average overlays on price history',
+              'Pre-market and after-hours bars included',
+            ]}
+            screenshotFile="intraday-drawing.png"
+            screenshotDescription="Intraday chart with channel drawing visible, MA overlays on, zoomed in. Capture mid-draw if possible."
+            reverse
+          />
+
+          {/* 6. DCF Valuation */}
+          <FeatureSection
+            eyebrow="💰 VALUATION"
+            eyebrowColor="purple"
+            title="DCF Valuation with Auto-Suggested Inputs"
+            body={
+              <>
+                Run Discounted Cash Flow analyses on any stock to estimate intrinsic value. The system
+                auto-suggests growth rates, discount rates, and projection periods based on the company's
+                sector, size, and financial profile — or override every assumption yourself.
+              </>
+            }
+            bullets={[
+              'AI-suggested growth rate (with conservative 20% haircut by default)',
+              'Auto-derived WACC, terminal growth, and projection horizon',
+              'Year-by-year projected cash flows and present values',
+              'Intrinsic value per share with margin of safety',
+              'Clear Buy / Hold / Overvalued recommendation',
+            ]}
+            screenshotFile="dcf-suggestions.png"
+            screenshotDescription="DCF page for a recognizable ticker (e.g. MSFT or AAPL) showing the suggestion panel and the resulting Buy/Hold/Overvalued recommendation."
+          />
+
+          {/* 7. Smart Alerts */}
+          <FeatureSection
+            eyebrow="🔔 SMART ALERTS"
+            eyebrowColor="rose"
+            title="Price + Technical Alerts"
+            body={
+              <>
+                Never stare at charts again. Set price alerts for crossings, or wire up technical alerts
+                that fire on indicator events — RSI extremes, moving-average crossovers, MACD crosses,
+                Bollinger band breaches, sentiment shifts, and Rule-of-40 changes. Delivered to your
+                inbox the moment they fire.
+              </>
+            }
+            bullets={[
+              'Price alerts: above / below thresholds, 24/7 monitoring',
+              'Technical alerts: RSI extreme, MA crossover, MACD cross',
+              'Technical alerts: Bollinger breach, sentiment shift, Rule of 40',
+              'Email delivery on every plan',
+              'Up to 50 price alerts and 20 technical alerts on Professional',
+            ]}
+            screenshotFile="alerts-page.png"
+            screenshotDescription="Alerts page showing both a price alert and at least one technical alert configured."
+            reverse
+          />
+
+          {/* 8. Stock Screener */}
+          <FeatureSection
+            eyebrow="🔍 DISCOVERY"
+            eyebrowColor="blue"
+            title="Stock Screener with Technical Filters"
+            body={
+              <>
+                Find the next setup before the crowd. Filter the market by price, market cap, volume,
+                technical patterns, and 52-week range. Spot golden crosses and death crosses, gap-up
+                breakouts, and volume spikes — without scrolling through thousands of tickers.
+              </>
+            }
+            bullets={[
+              'Filter by price, market cap, volume, and sector',
+              'Technical filters: golden cross, death cross, 50/200-day MA position',
+              '52-week high/low proximity, gap %, volume spikes',
+              'Daily snapshot covers all common stocks and ETFs',
+              'Save screens (1 on Beginner → 50 on Professional)',
+            ]}
+            screenshotFile="screener.png"
+            screenshotDescription="Stocks page (screener view) with filters applied — ideally a technical filter like golden cross or 52-week range."
+          />
+
+          {/* Options Calculator — condensed feature card */}
+          <div className="bg-white dark:bg-gray-600 rounded-xl shadow-lg dark:shadow-gray-200/50 border dark:border-gray-300 p-8">
+            <div className="grid md:grid-cols-3 gap-6 items-center">
+              <div className="md:col-span-2">
+                <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 mb-3">
+                  🧮 Options Calculator
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                  Black-Scholes & Binomial Pricing
+                </h3>
+                <p className="text-gray-600 dark:text-gray-300">
+                  Price single-leg and multi-leg strategies, visualize P&L at expiration, and calculate
+                  full Greeks (Delta, Gamma, Theta, Vega, Rho). Implied volatility solver included.
+                  Available on Active and Professional tiers.
+                </p>
               </div>
-              <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-                Real-Time Market Data
-              </h3>
-              <p className="text-lg text-gray-600 dark:text-gray-300 mb-6">
-                See prices update in real-time with WebSocket connections — no refreshing required. 
-                Your watchlist and portfolio values update the moment the market moves.
-              </p>
-              <ul className="space-y-3">
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Live price streaming via WebSocket for your entire watchlist</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Real-time portfolio value with automatic P&L calculations</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Pre-market and after-hours price badges with % change</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Market status badges — know when markets are open, closed, or in extended hours</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Daily top gainers and sector-based stock discovery</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Company news feed with sentiment analysis</span></li>
-              </ul>
-            </div>
-            <div className="bg-gray-900 rounded-xl p-6 shadow-2xl border border-gray-700">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                <span className="text-gray-400 text-sm ml-2">My Watchlist</span>
-                <span className="ml-auto text-xs bg-green-900/50 text-green-400 px-2 py-0.5 rounded-full">● LIVE</span>
-              </div>
-              <div className="space-y-3">
-                {[
-                  { ticker: 'AAPL', price: '$242.58', change: '+1.24%', up: true, badge: null },
-                  { ticker: 'TSLA', price: '$338.12', change: '+3.87%', up: true, badge: { label: 'PM', pct: '+1.42%', up: true } },
-                  { ticker: 'MSFT', price: '$428.90', change: '-0.42%', up: false, badge: null },
-                  { ticker: 'NVDA', price: '$142.67', change: '+5.21%', up: true, badge: { label: 'AH', pct: '-0.38%', up: false } },
-                  { ticker: 'AMZN', price: '$219.44', change: '+0.98%', up: true, badge: null },
-                ].map(s => (
-                  <div key={s.ticker} className="flex justify-between items-center py-2 border-b border-gray-700/50">
-                    <span className="text-primary-400 font-mono font-bold">{s.ticker}</span>
-                    <div className="text-right">
-                      <span className="text-white font-medium">{s.price}</span>
-                      {s.badge && (
-                        <span className={`ml-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[0.6rem] font-semibold ${
-                          s.badge.up ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400'
-                        }`}>
-                          <span className="opacity-60">{s.badge.label}</span>{s.badge.pct}
-                        </span>
-                      )}
-                    </div>
-                    <span className={`font-medium ${s.up ? 'text-green-400' : 'text-red-400'}`}>{s.change}</span>
-                  </div>
+              <div className="flex flex-wrap gap-2 justify-start md:justify-end">
+                {['Delta', 'Gamma', 'Theta', 'Vega', 'Rho'].map((g) => (
+                  <span
+                    key={g}
+                    className="px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-full text-sm font-medium"
+                  >
+                    {g}
+                  </span>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Technical Analysis Detail Section */}
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div className="order-2 md:order-1 bg-gray-900 rounded-xl p-6 shadow-2xl border border-gray-700">
-              <div className="text-gray-400 text-sm mb-3">Technical Analysis — AAPL</div>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-white font-medium">Overall Outlook</span>
-                  <span className="bg-green-900/50 text-green-400 px-3 py-1 rounded-full text-sm font-bold">🟢 BULLISH</span>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { name: 'RSI (14)', val: '58.3', signal: 'Neutral' },
-                    { name: 'MACD', val: '+2.14', signal: 'Bullish' },
-                    { name: 'Stochastic', val: '72.1', signal: 'Neutral' },
-                    { name: 'ADX', val: '31.5', signal: 'Trending' },
-                    { name: 'Bollinger', val: 'Mid-Band', signal: 'Neutral' },
-                    { name: 'Ichimoku', val: 'Above Cloud', signal: 'Bullish' },
-                  ].map(i => (
-                    <div key={i.name} className="bg-gray-800 rounded-lg p-3">
-                      <div className="text-gray-400 text-xs">{i.name}</div>
-                      <div className="text-white font-bold text-sm">{i.val}</div>
-                      <div className={`text-xs font-medium ${i.signal === 'Bullish' || i.signal === 'Trending' ? 'text-green-400' : 'text-gray-400'}`}>{i.signal}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="order-1 md:order-2">
-              <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-primary-100 dark:bg-primary-900/30 text-primary-800 dark:text-primary-300 mb-4">
-                📈 15+ Indicators
-              </div>
-              <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-                Professional Technical Analysis
-              </h3>
-              <p className="text-lg text-gray-600 dark:text-gray-300 mb-6">
-                Go beyond basic charts with a full suite of technical indicators used by professional traders. 
-                Each indicator comes with clear explanations so you understand exactly what the data is telling you.
-              </p>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-                {[
-                  'RSI (Relative Strength Index)',
-                  'MACD & Signal Line',
-                  'Bollinger Bands',
-                  'Moving Averages (SMA/EMA)',
-                  'VWAP',
-                  'Stochastic Oscillator',
-                  'ADX (Trend Strength)',
-                  'CCI & Rate of Change',
-                  'ATR (Volatility)',
-                  'Keltner Channels',
-                  'Parabolic SAR',
-                  'Ichimoku Cloud',
-                  'Donchian Channels',
-                  'OBV & A/D Line',
-                ].map(ind => (
-                  <div key={ind} className="flex items-center py-1">
-                    <Check />
-                    <span className="text-sm text-gray-700 dark:text-gray-300">{ind}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* DCF Valuation Section */}
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div>
-              <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300 mb-4">
-                💰 Valuation
-              </div>
-              <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-                DCF Valuation Models
-              </h3>
-              <p className="text-lg text-gray-600 dark:text-gray-300 mb-6">
-                Run Discounted Cash Flow analyses on any stock to estimate intrinsic value. 
-                The system auto-suggests growth rates, discount rates, and projection periods based 
-                on the company's sector, size, and financial profile — or customize every assumption yourself.
-              </p>
-              <ul className="space-y-3">
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">AI-suggested assumptions based on sector and company size</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Intrinsic value per share with margin of safety</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Year-by-year projected cash flows and present values</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Clear Buy / Hold / Overvalued recommendations</span></li>
-              </ul>
-            </div>
-            <div className="bg-gray-900 rounded-xl p-6 shadow-2xl border border-gray-700">
-              <div className="text-gray-400 text-sm mb-3">DCF Valuation — MSFT</div>
-              <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="text-center">
-                    <div className="text-gray-400 text-xs">Current Price</div>
-                    <div className="text-white font-bold text-lg">$428.90</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-gray-400 text-xs">Intrinsic Value</div>
-                    <div className="text-primary-400 font-bold text-lg">$502.14</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-gray-400 text-xs">Margin of Safety</div>
-                    <div className="text-green-400 font-bold text-lg">+17.1%</div>
-                  </div>
-                </div>
-                <div className="bg-green-900/30 border border-green-700 rounded-lg p-3 text-center">
-                  <span className="text-green-400 font-bold">✅ Potentially Undervalued</span>
-                </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="bg-gray-800 rounded p-2"><span className="text-gray-400">Growth Rate:</span> <span className="text-white">12.5%</span></div>
-                  <div className="bg-gray-800 rounded p-2"><span className="text-gray-400">Discount Rate:</span> <span className="text-white">9.0%</span></div>
-                  <div className="bg-gray-800 rounded p-2"><span className="text-gray-400">Terminal Growth:</span> <span className="text-white">2.5%</span></div>
-                  <div className="bg-gray-800 rounded p-2"><span className="text-gray-400">Projection:</span> <span className="text-white">10 Years</span></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Options Calculator Section */}
-          <div className="grid md:grid-cols-2 gap-12 items-center">
-            <div>
-              <div className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 mb-4">
-                🧮 Options Pricing
-              </div>
-              <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
-                Options Calculator
-              </h3>
-              <p className="text-lg text-gray-600 dark:text-gray-300 mb-6">
-                Institutional-grade options pricing powered by Black-Scholes and Binomial models.
-                Visualize profit & loss at expiration, calculate net Greeks across multi-leg positions,
-                and evaluate spreads before you trade.
-              </p>
-              <ul className="space-y-3">
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">P&L charts with breakeven analysis at expiration and current theoretical value</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Full Greeks suite — Delta, Gamma, Theta, Vega, and Rho</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Multi-leg strategies: bull call, bear put, iron condor, straddle</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Implied volatility solver and sensitivity analysis</span></li>
-              </ul>
-            </div>
-            {/* Static mockup — P&L graph + Greeks */}
-            <div className="bg-gray-900 rounded-xl p-6 shadow-2xl border border-gray-700">
-              <div className="text-gray-400 text-sm mb-3">Bull Call Spread — $146 / $155</div>
-              {/* P&L Chart Mockup */}
-              <div className="relative bg-gray-800 rounded-lg p-4 mb-4" style={{ height: 200 }}>
-                <div className="absolute top-2 left-0 right-0 flex justify-center gap-6 text-xs text-gray-400">
-                  <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-cyan-400 rounded"></span> At Expiration</span>
-                  <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 bg-green-400 rounded"></span> Current (theoretical)</span>
-                </div>
-                {/* SVG P&L curve */}
-                <svg viewBox="0 0 400 160" className="w-full h-full" preserveAspectRatio="none">
-                  {/* Zero line */}
-                  <line x1="0" y1="80" x2="400" y2="80" stroke="#6b7280" strokeWidth="1" strokeDasharray="6,4" />
-                  {/* Breakeven label */}
-                  <line x1="200" y1="20" x2="200" y2="140" stroke="#6b7280" strokeWidth="0.5" strokeDasharray="4,4" />
-                  <text x="200" y="16" textAnchor="middle" fill="#2dd4bf" fontSize="10" fontWeight="600">BE=$149.84</text>
-                  {/* At Expiration line (cyan) */}
-                  <polyline
-                    points="0,110 80,110 100,110 180,110 200,80 220,40 240,30 400,30"
-                    fill="none" stroke="#22d3ee" strokeWidth="2.5" strokeLinejoin="round"
-                  />
-                  {/* Profit fill */}
-                  <polygon
-                    points="200,80 220,40 240,30 400,30 400,80"
-                    fill="#22d3ee" opacity="0.15"
-                  />
-                  {/* Loss fill */}
-                  <polygon
-                    points="0,110 80,110 100,110 180,110 200,80 0,80"
-                    fill="#ef4444" opacity="0.08"
-                  />
-                  {/* Current theoretical line (green) */}
-                  <polyline
-                    points="0,105 60,102 120,95 160,85 200,70 240,55 280,45 320,38 400,34"
-                    fill="none" stroke="#4ade80" strokeWidth="1.5" strokeLinejoin="round"
-                  />
-                  {/* Axis labels */}
-                  <text x="4" y="32" fill="#9ca3af" fontSize="9">$5</text>
-                  <text x="4" y="78" fill="#9ca3af" fontSize="9">$0</text>
-                  <text x="4" y="118" fill="#9ca3af" fontSize="9">-$5</text>
-                  <text x="60" y="155" fill="#9ca3af" fontSize="8">$146</text>
-                  <text x="240" y="155" fill="#9ca3af" fontSize="8">$155</text>
-                </svg>
-              </div>
-              {/* Key Metrics */}
-              <div className="grid grid-cols-4 gap-2 mb-4">
-                <div className="bg-gray-800 rounded-lg p-2 text-center">
-                  <div className="text-gray-500 text-[10px] uppercase tracking-wider">Net Premium</div>
-                  <div className="text-red-400 font-bold text-sm">-$4.34</div>
-                </div>
-                <div className="bg-gray-800 rounded-lg p-2 text-center">
-                  <div className="text-gray-500 text-[10px] uppercase tracking-wider">Max Profit</div>
-                  <div className="text-white font-bold text-sm">$4.66</div>
-                </div>
-                <div className="bg-gray-800 rounded-lg p-2 text-center">
-                  <div className="text-gray-500 text-[10px] uppercase tracking-wider">Max Loss</div>
-                  <div className="text-white font-bold text-sm">-$4.34</div>
-                </div>
-                <div className="bg-primary-900/40 rounded-lg p-2 text-center border border-primary-700/50">
-                  <div className="text-gray-500 text-[10px] uppercase tracking-wider">Breakeven</div>
-                  <div className="text-primary-400 font-bold text-sm">$149.84</div>
-                </div>
-              </div>
-              {/* Net Greeks */}
-              <div className="text-gray-500 text-[10px] uppercase tracking-wider mb-2">Net Greeks</div>
-              <div className="grid grid-cols-5 gap-2">
-                {[
-                  { symbol: '\u0394', label: 'Delta', value: '0.3920', color: 'text-blue-400' },
-                  { symbol: '\u0393', label: 'Gamma', value: '-0.0028', color: 'text-purple-400' },
-                  { symbol: '\u0398', label: 'Theta', value: '-0.0020', color: 'text-yellow-400' },
-                  { symbol: '\u03BD', label: 'Vega', value: '-0.0130', color: 'text-cyan-400' },
-                  { symbol: '\u03C1', label: 'Rho', value: '0.0448', color: 'text-green-400' },
-                ].map(g => (
-                  <div key={g.label} className="bg-gray-800 rounded-lg p-2 text-center">
-                    <div className={`text-lg font-bold ${g.color}`}>{g.symbol}</div>
-                    <div className="text-white font-bold text-xs">{g.value}</div>
-                    <div className="text-gray-500 text-[10px]">{g.label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Additional Features */}
-          <div>
-            <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-12">
-              And Much More
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {[
-                {
-                  icon: '📈',
-                  title: 'Trend Indicators',
-                  desc: 'Parabolic SAR, Ichimoku Cloud, and Donchian Channels — identify trend direction, reversals, and breakout setups all in one view.'
-                },
-                {
-                  icon: '🌊',
-                  title: 'Volatility & Risk',
-                  desc: 'ATR-based stop-loss guidance, Keltner Channel squeeze detection, and position sizing context — manage risk like a pro.'
-                },
-                {
-                  icon: '📄',
-                  title: 'Financial Summary',
-                  desc: 'SEC-sourced income statements, balance sheets, cash flows, and key ratios pulled from live 10-K and 10-Q filings.'
-                },
-                {
-                  icon: '🔥',
-                  title: 'Momentum Indicators',
-                  desc: 'Understand what drives a trend, how long it lasts, and the key indicators every momentum trader should know.'
-                },
-                {
-                  icon: '💰',
-                  title: 'DCF Valuation',
-                  desc: "Automatically pull a company's current SEC filings to calculate intrinsic value with AI-suggested assumptions."
-                },
-                {
-                  icon: '🔍',
-                  title: 'Stock Discovery Engine',
-                  desc: "Go beyond gainers and losers. Explore randomly surfaced stocks by sector or on demand — uncover opportunities the crowd hasn't found yet."
-                },
-              ].map(f => (
-                <div key={f.title} className="bg-white dark:bg-gray-600 p-6 rounded-xl shadow-lg dark:shadow-gray-200/50 border dark:border-gray-300 text-center hover:shadow-xl transition-shadow">
-                  <div className="text-3xl mb-3">{f.icon}</div>
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">{f.title}</h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{f.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
 
-        {/* Pricing Section */}
-        <div className="mt-32 scroll-mt-20" id="pricing">
-          <h2 className="text-3xl font-bold text-center text-gray-900 dark:text-white mb-4">
-            Simple, Transparent Pricing
-          </h2>
-          <p className="text-center text-gray-600 dark:text-gray-400 mb-16">
-            Every plan starts with a 14-day free trial — no credit card required
-          </p>
-          
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 max-w-25xl mx-auto">
-            {/* Beginner Tier */}
-            <div className="bg-white dark:bg-gray-600 p-8 rounded-xl shadow-lg dark:shadow-gray-200/50 hover:shadow-xl transition-shadow border dark:border-gray-300">
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Beginner</h3>
-              <div className="mb-2">
-                <span className="text-4xl font-bold text-gray-900 dark:text-white">$10</span>
-                <span className="text-gray-600 dark:text-gray-400">/month</span>
-              </div>
-              <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium mb-6">14-day free trial</p>
-              <ul className="space-y-3 mb-8">
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">10 watchlist stocks</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">10 portfolio entries</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">5 price alerts</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">5 stock reviews per week</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">5 DCF valuations per week</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Technical Analysis</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Real-time market data</span></li>
-              </ul>
-              <Link
-                to="/registerwithpayment?tier=beginner"
-                className="block w-full text-center bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold py-3 rounded-lg transition-colors"
-              >
-                Start Free Trial
-              </Link>
-            </div>
-
-            {/* Casual Investor Tier */}
-            <div className="bg-white dark:bg-gray-600 p-8 rounded-xl shadow-lg dark:shadow-gray-200/50 hover:shadow-xl transition-shadow border dark:border-gray-300 relative transform scale-105">
-              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                <span className="bg-primary-600 dark:bg-primary-500 text-white text-sm font-bold px-4 py-1 rounded-full">
-                  POPULAR
-                </span>
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Casual Investor</h3>
-              <div className="mb-2">
-                <span className="text-4xl font-bold text-gray-900 dark:text-white">$20</span>
-                <span className="text-gray-600 dark:text-gray-400">/month</span>
-              </div>
-              <p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium mb-6">14-day free trial</p>
-              <ul className="space-y-3 mb-8">
-                <li className="flex items-start"><Check /><span className="font-bold text-gray-900 dark:text-white">✦ AI Analysis (Portfolio & Stock) — 5/week</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">20 watchlist stocks</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">20 portfolio entries</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">10 price alerts</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">15 stock reviews per week</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">15 DCF valuations per week</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Technical Analysis</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Email price alerts</span></li>
-              </ul>
-              <Link
-                to="/registerwithpayment?tier=casual"
-                className="block w-full text-center bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold py-3 rounded-lg transition-colors"
-              >
-                Start Free Trial
-              </Link>
-            </div>
-
-            {/* Active Investor Tier */}
-            <div className="bg-white dark:bg-gray-600 p-8 rounded-xl shadow-lg dark:shadow-gray-200/50 hover:shadow-xl transition-shadow border dark:border-gray-300">
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Active Investor</h3>
-              <div className="mb-6">
-                <span className="text-4xl font-bold text-gray-900 dark:text-white">$40</span>
-                <span className="text-gray-600 dark:text-gray-400">/month</span>
-              </div>
-              <ul className="space-y-3 mb-8">
-                <li className="flex items-start"><Check /><span className="font-bold text-gray-900 dark:text-white">✦ AI Analysis (Portfolio & Stock) — 10/day</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">45 watchlist stocks</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">45 portfolio entries</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">20 price alerts</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">10 stock reviews per day</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">10 DCF valuations per day</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Advanced Technical Analysis</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Email price alerts</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Options Calculator</span></li>
-              </ul>              
-              <Link
-                to="/registerwithpayment?tier=active"
-                className="block w-full text-center bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold py-3 rounded-lg transition-colors"
-              >
-                Get Active
-              </Link>
-            </div>
-
-            {/* Professional Investor Tier */}
-            <div className="bg-white dark:bg-gray-600 p-8 rounded-xl shadow-lg dark:shadow-gray-200/50 hover:shadow-xl transition-shadow border dark:border-gray-300">
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Professional</h3>
-              <div className="mb-6">
-                <span className="text-4xl font-bold text-gray-900 dark:text-white">$50</span>
-                <span className="text-gray-600 dark:text-gray-400">/month</span>
-              </div>
-              <ul className="space-y-3 mb-8">
-                <li className="flex items-start"><Check /><span className="font-bold text-gray-900 dark:text-white">✦ AI Analysis (Portfolio & Stock) — 25/day</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">75 watchlist stocks</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">75 portfolio entries</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">50 price alerts</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">20 stock reviews per day</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">20 DCF valuations per day</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Full Technical Analysis suite</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Email & indicator alerts</span></li>
-                <li className="flex items-start"><Check /><span className="text-gray-700 dark:text-gray-300">Options Calculator</span></li>
-              </ul>              
-              <Link
-                to="/registerwithpayment?tier=professional"
-                className="block w-full text-center bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold py-3 rounded-lg transition-colors"
-              >
-                Go Professional
-              </Link>
-            </div>
-          </div>
+        {/* 9. Pricing */}
+        <div className="mt-32">
+          <PricingTiers />
         </div>
 
         {/* CTA Section */}
@@ -682,9 +358,9 @@ const Landing: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center mb-4 md:mb-0">
-              <img 
-                src="/images/logo.png" 
-                alt="NWC-Analytics, LLC" 
+              <img
+                src="/images/logo.png"
+                alt="NWC-Analytics, LLC"
                 className="h-12 w-12 mr-3"
               />
               <div>

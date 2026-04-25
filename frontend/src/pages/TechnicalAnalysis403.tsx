@@ -256,23 +256,6 @@ const TechnicalAnalysis403: React.FC<TechnicalAnalysis403Props> = ({ user, onLog
                       <span className="text-gray-700 dark:text-gray-300">50</span>
                     </td>
                   </tr>
-                  <tr className="bg-gray-50 dark:bg-gray-800">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
-                      SMS Alerts
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                      <span className="text-gray-400">—</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                      <span className="text-green-500">✓</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                      <span className="text-green-500">✓</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                      <span className="text-green-500">✓</span>
-                    </td>
-                  </tr>
                 </tbody>
               </table>
             </div>
