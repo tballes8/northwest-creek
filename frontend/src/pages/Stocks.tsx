@@ -201,6 +201,11 @@ interface SavedScreenItem {
   created_at: string;
 }
 
+type DrawPoint = { xi: number; price: number };
+type DrawingShape =
+  | { type: 'trendline'; p1: DrawPoint; p2: DrawPoint }
+  | { type: 'channel'; p1: DrawPoint; p2: DrawPoint; p3: DrawPoint };
+
 const defaultScreenerForm: ScreenerFormState = {
   priceMin: '', priceMax: '',
   marketCapMinB: '', marketCapMaxB: '',
@@ -349,6 +354,13 @@ const Stocks: React.FC = () => {
     horizon: string; rationale: string; generated_at: string;
   } | null>(null);
   const [forecastLoading, setForecastLoading] = useState(false);
+  const chartRef = useRef<ChartJS<'line', (number | null)[], string> | null>(null);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
+  const [drawTool, setDrawTool] = useState<'trendline' | 'channel' | null>(null);
+  const [pendingPoints, setPendingPoints] = useState<DrawPoint[]>([]);
+  const [drawings, setDrawings] = useState<DrawingShape[]>([]);
+  const mousePixelRef = useRef<{ x: number; y: number } | null>(null);
+  const rafRef = useRef<number>(0);
 
   const detectWarrantHint = (tickerSymbol: string): boolean => {
     const upper = tickerSymbol.toUpperCase();
@@ -1027,6 +1039,185 @@ const Stocks: React.FC = () => {
     },
   };
 
+  // ── Drawing tools ────────────────────────────────────────────────────────────
+
+  const redrawOverlay = useCallback(() => {
+    const chart = chartRef.current;
+    const canvas = overlayRef.current;
+    if (!chart || !canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const cssW = Math.round(rect.width);
+    const cssH = Math.round(rect.height);
+    if (canvas.width !== cssW || canvas.height !== cssH) {
+      canvas.width = cssW;
+      canvas.height = cssH;
+    }
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, cssW, cssH);
+    const xScale = chart.scales['x'];
+    const yScale = chart.scales['y'];
+    if (!xScale || !yScale) return;
+    const ca = chart.chartArea;
+
+    const toPixel = (xi: number, price: number) => ({
+      x: xScale.getPixelForValue(xi),
+      y: yScale.getPixelForValue(price),
+    });
+
+    const extendLine = (
+      a: { x: number; y: number },
+      b: { x: number; y: number }
+    ): [{ x: number; y: number }, { x: number; y: number }] => {
+      const dx = b.x - a.x;
+      if (Math.abs(dx) < 0.001) {
+        return [{ x: a.x, y: ca.top }, { x: a.x, y: ca.bottom }];
+      }
+      const slope = (b.y - a.y) / dx;
+      return [
+        { x: ca.left, y: a.y + slope * (ca.left - a.x) },
+        { x: ca.right, y: a.y + slope * (ca.right - a.x) },
+      ];
+    };
+
+    const strokeLine = (
+      p1: DrawPoint, p2: DrawPoint,
+      color: string, width: number, dash: number[] = []
+    ) => {
+      const [s, e] = extendLine(toPixel(p1.xi, p1.price), toPixel(p2.xi, p2.price));
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(ca.left, ca.top, ca.right - ca.left, ca.bottom - ca.top);
+      ctx.clip();
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(e.x, e.y);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.setLineDash(dash);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    };
+
+    const dot = (p: DrawPoint, color: string) => {
+      const px = toPixel(p.xi, p.price);
+      ctx.beginPath();
+      ctx.arc(px.x, px.y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    };
+
+    for (const d of drawings) {
+      if (d.type === 'trendline') {
+        strokeLine(d.p1, d.p2, 'rgba(251,191,36,0.9)', 1.5);
+        dot(d.p1, 'rgba(251,191,36,0.9)');
+        dot(d.p2, 'rgba(251,191,36,0.9)');
+      } else {
+        const slope = d.p2.xi !== d.p1.xi
+          ? (d.p2.price - d.p1.price) / (d.p2.xi - d.p1.xi) : 0;
+        const offset = d.p3.price - (d.p1.price + slope * (d.p3.xi - d.p1.xi));
+        const sp1: DrawPoint = { xi: d.p1.xi, price: d.p1.price + offset };
+        const sp2: DrawPoint = { xi: d.p2.xi, price: d.p2.price + offset };
+        // Fill between lines
+        const [s1, e1] = extendLine(toPixel(d.p1.xi, d.p1.price), toPixel(d.p2.xi, d.p2.price));
+        const [s2, e2] = extendLine(toPixel(sp1.xi, sp1.price), toPixel(sp2.xi, sp2.price));
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(ca.left, ca.top, ca.right - ca.left, ca.bottom - ca.top);
+        ctx.clip();
+        ctx.beginPath();
+        ctx.moveTo(s1.x, s1.y);
+        ctx.lineTo(e1.x, e1.y);
+        ctx.lineTo(e2.x, e2.y);
+        ctx.lineTo(s2.x, s2.y);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(129,140,248,0.06)';
+        ctx.fill();
+        ctx.restore();
+        strokeLine(d.p1, d.p2, 'rgba(129,140,248,0.9)', 1.5);
+        strokeLine(sp1, sp2, 'rgba(129,140,248,0.9)', 1.5);
+        dot(d.p1, 'rgba(129,140,248,0.9)');
+        dot(d.p2, 'rgba(129,140,248,0.9)');
+        dot(d.p3, 'rgba(129,140,248,0.9)');
+      }
+    }
+
+    // Rubber-band while drawing
+    const mp = mousePixelRef.current;
+    if (pendingPoints.length >= 1 && mp) {
+      const mpData: DrawPoint = {
+        xi: xScale.getValueForPixel(mp.x) ?? 0,
+        price: yScale.getValueForPixel(mp.y) ?? 0,
+      };
+      if (pendingPoints.length === 1) {
+        strokeLine(pendingPoints[0], mpData, 'rgba(255,255,255,0.35)', 1, [5, 5]);
+        dot(pendingPoints[0], 'rgba(255,255,255,0.6)');
+      } else if (pendingPoints.length === 2 && drawTool === 'channel') {
+        strokeLine(pendingPoints[0], pendingPoints[1], 'rgba(129,140,248,0.7)', 1.5);
+        const slope = pendingPoints[1].xi !== pendingPoints[0].xi
+          ? (pendingPoints[1].price - pendingPoints[0].price) / (pendingPoints[1].xi - pendingPoints[0].xi) : 0;
+        const offset = mpData.price - (pendingPoints[0].price + slope * (mpData.xi - pendingPoints[0].xi));
+        strokeLine(
+          { xi: pendingPoints[0].xi, price: pendingPoints[0].price + offset },
+          { xi: pendingPoints[1].xi, price: pendingPoints[1].price + offset },
+          'rgba(129,140,248,0.4)', 1, [5, 5]
+        );
+        dot(pendingPoints[0], 'rgba(129,140,248,0.9)');
+        dot(pendingPoints[1], 'rgba(129,140,248,0.9)');
+      }
+    }
+  }, [drawings, pendingPoints, drawTool]);
+
+  useEffect(() => { redrawOverlay(); }, [redrawOverlay]);
+
+  useEffect(() => {
+    const onResize = () => redrawOverlay();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [redrawOverlay]);
+
+  useEffect(() => {
+    setDrawings([]);
+    setPendingPoints([]);
+  }, [ticker, historyDays]);
+
+  const handleOverlayClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!drawTool || !chartRef.current) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    const chart = chartRef.current;
+    const xi = chart.scales['x'].getValueForPixel(px) ?? 0;
+    const price = chart.scales['y'].getValueForPixel(py) ?? 0;
+    const pt: DrawPoint = { xi, price };
+    setPendingPoints(prev => {
+      const next = [...prev, pt];
+      if (drawTool === 'trendline' && next.length === 2) {
+        setDrawings(d => [...d, { type: 'trendline', p1: next[0], p2: next[1] }]);
+        return [];
+      }
+      if (drawTool === 'channel' && next.length === 3) {
+        setDrawings(d => [...d, { type: 'channel', p1: next[0], p2: next[1], p3: next[2] }]);
+        return [];
+      }
+      return next;
+    });
+  }, [drawTool]);
+
+  const handleOverlayMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    mousePixelRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = requestAnimationFrame(redrawOverlay);
+  }, [redrawOverlay]);
+
+  const handleOverlayMouseLeave = useCallback(() => {
+    mousePixelRef.current = null;
+    redrawOverlay();
+  }, [redrawOverlay]);
+
   // ── Screener state ──────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<'search' | 'screener'>('search');
   const [screenerForm, setScreenerForm] = useState<ScreenerFormState>(defaultScreenerForm);
@@ -1048,6 +1239,7 @@ const Stocks: React.FC = () => {
   const [saveError, setSaveError] = useState('');
   const [screenerChartTicker, setScreenerChartTicker] = useState<string | null>(null);
   const [screenerChartUpgrade, setScreenerChartUpgrade] = useState(false);
+  const lastScreenerTickerRef = useRef<string | null>(null);
   const presetsLoadedRef = useRef(false);
 
   useEffect(() => {
@@ -1196,7 +1388,14 @@ const Stocks: React.FC = () => {
           {(['search', 'screener'] as const).map(tab => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => {
+                if (tab === 'search' && lastScreenerTickerRef.current) {
+                  const t = lastScreenerTickerRef.current;
+                  setSearchInput(t);
+                  loadStockData(t);
+                }
+                setActiveTab(tab);
+              }}
               className={`px-8 py-3.5 text-base font-semibold transition-colors ${
                 activeTab === tab
                   ? 'border-b-2 border-teal-600 text-teal-600 dark:text-teal-400 -mb-px'
@@ -1484,8 +1683,76 @@ const Stocks: React.FC = () => {
                     ))}
                   </div>
                 </div>
-                <div style={{ height: '400px' }}>
-                  <Line data={chartData} options={chartOptions} />
+                {/* Drawing toolbar */}
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  <span className="text-xs text-gray-500 dark:text-gray-400 select-none">Draw:</span>
+                  <button
+                    onClick={() => { setDrawTool(t => t === 'trendline' ? null : 'trendline'); setPendingPoints([]); }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                      drawTool === 'trendline'
+                        ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/50'
+                        : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                    }`}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <line x1="1" y1="13" x2="13" y2="1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                    Trend Line
+                  </button>
+                  <button
+                    onClick={() => { setDrawTool(t => t === 'channel' ? null : 'channel'); setPendingPoints([]); }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                      drawTool === 'channel'
+                        ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/50'
+                        : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                    }`}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <line x1="1" y1="10" x2="13" y2="3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                      <line x1="1" y1="13" x2="13" y2="6" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeDasharray="2 1.5"/>
+                    </svg>
+                    Channel
+                  </button>
+                  <div className="ml-auto flex items-center gap-2">
+                    {drawTool && (
+                      <span className="text-xs text-gray-400 dark:text-gray-500">
+                        {drawTool === 'trendline'
+                          ? pendingPoints.length === 0 ? 'Click to set start point' : 'Click to set end point'
+                          : pendingPoints.length === 0 ? 'Click to set start point'
+                          : pendingPoints.length === 1 ? 'Click to set end point'
+                          : 'Click to set channel width'}
+                      </span>
+                    )}
+                    {drawings.length > 0 && (
+                      <button
+                        onClick={() => { setDrawings([]); setPendingPoints([]); }}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20 transition-colors"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                          <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                        </svg>
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div style={{ height: '400px', position: 'relative' }}>
+                  <Line ref={chartRef} data={chartData} options={chartOptions} />
+                  <canvas
+                    ref={overlayRef}
+                    onMouseMove={handleOverlayMouseMove}
+                    onClick={drawTool ? handleOverlayClick : undefined}
+                    onMouseLeave={handleOverlayMouseLeave}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      cursor: drawTool ? 'crosshair' : 'default',
+                      pointerEvents: drawTool ? 'auto' : 'none',
+                      zIndex: 10,
+                    }}
+                  />
                 </div>
               </div>
             ) : (
@@ -2517,6 +2784,7 @@ const Stocks: React.FC = () => {
                                 onClick={e => {
                                   e.stopPropagation();
                                   if (user?.subscription_tier === 'active' || user?.subscription_tier === 'professional') {
+                                    lastScreenerTickerRef.current = r.symbol;
                                     setScreenerChartTicker(r.symbol);
                                     setScreenerChartUpgrade(false);
                                   } else {
