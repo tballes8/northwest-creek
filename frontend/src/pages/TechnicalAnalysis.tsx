@@ -264,7 +264,7 @@ const TrueVwapModal: React.FC<{ ticker: string; onClose: () => void }> = ({ tick
                     width={55}
                   />
                   <RTooltip
-                    formatter={(value: any, name?: string) => [fmt2(value as number), name === 'price' ? 'Price' : 'VWAP']}
+                    formatter={(value: any) => [fmt2(value as number)]}
                     contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#f9fafb' }}
                     labelStyle={{ color: '#9ca3af', marginBottom: 4 }}
                   />
