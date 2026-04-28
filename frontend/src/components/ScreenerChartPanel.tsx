@@ -559,7 +559,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                         stroke="#9ca3af"
                         domain={['auto', 'auto']}
                         style={{ fontSize: '10px' }}
-                        tickFormatter={v => `$${v.toFixed(0)}`}
+                        tickFormatter={v => `$${v < 10 ? v.toFixed(2) : v < 100 ? v.toFixed(1) : v.toFixed(0)}`}
                         width={45}
                       />
                       {/* 3-second delay tooltip */}
