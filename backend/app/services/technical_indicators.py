@@ -137,7 +137,7 @@ class TechnicalIndicators:
         return {
             "value": round(history[-1], 4),
             "signal": "bullish" if cp > history[-1] else "bearish",
-            "description": f"VWAP ${history[-1]:.2f} — Price {'above' if cp > history[-1] else 'below'}",
+            "description": f"MVWAP ${history[-1]:.2f} — Price {'above' if cp > history[-1] else 'below'} (multi-day cumulative)",
             "history": history
         }
 

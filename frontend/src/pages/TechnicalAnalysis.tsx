@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { authAPI, technicalAPI, watchlistAPI, financialsAPI } from '../services/api';
+import { authAPI, technicalAPI, watchlistAPI, financialsAPI, intradayAPI } from '../services/api';
 import { User } from '../types';
 import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
@@ -19,6 +19,7 @@ import {
   Filler
 } from 'chart.js';
 import { Line, Chart } from 'react-chartjs-2';
+import { AreaChart, Area, Line as RLine, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend as RLegend, ResponsiveContainer } from 'recharts';
 
 
 // Register Chart.js components
@@ -145,6 +146,178 @@ interface TechnicalAnalysisData {
   };
 }
 
+// ─── True Intraday VWAP Modal ────────────────────────────────────────────────
+
+interface TrueVwapBar {
+  timestamp: string;
+  high: number | null;
+  low: number | null;
+  close: number | null;
+  volume: number | null;
+}
+
+const TrueVwapModal: React.FC<{ ticker: string; onClose: () => void }> = ({ ticker, onClose }) => {
+  const [barsData, setBarsData] = useState<{ bars: TrueVwapBar[]; data_date: string; is_today: boolean; count: number } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setFetchError(null);
+    intradayAPI.getBarsWithMA(ticker)
+      .then(res => setBarsData(res.data))
+      .catch(err => setFetchError(err.response?.data?.detail || 'Failed to load intraday data'))
+      .finally(() => setLoading(false));
+  }, [ticker]);
+
+  const chartData = useMemo(() => {
+    if (!barsData?.bars?.length) return [];
+    let cumTpVol = 0;
+    let cumVol = 0;
+    return barsData.bars.map(bar => {
+      const h = bar.high ?? 0;
+      const l = bar.low ?? 0;
+      const c = bar.close ?? 0;
+      const v = bar.volume ?? 0;
+      const tp = (h + l + c) / 3;
+      cumTpVol += tp * v;
+      cumVol += v;
+      const vwap = cumVol > 0 ? cumTpVol / cumVol : tp;
+      return {
+        time: new Date(bar.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        price: c || null,
+        vwap: Math.round(vwap * 10000) / 10000,
+      };
+    });
+  }, [barsData]);
+
+  const lastPoint = chartData[chartData.length - 1];
+  const currentVwap = lastPoint?.vwap ?? null;
+  const currentPrice = lastPoint?.price ?? null;
+  const isAbove = currentPrice != null && currentVwap != null && currentPrice > currentVwap;
+
+  const fmtDyn = (v: number | null) =>
+    v == null ? 'N/A' : `$${v < 10 ? v.toFixed(2) : v < 100 ? v.toFixed(1) : v.toFixed(0)}`;
+  const fmt2 = (v: number | null) => v == null ? 'N/A' : `$${v.toFixed(2)}`;
+
+  const dateLabel = barsData?.data_date
+    ? new Date(barsData.data_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : '';
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden"
+        style={{ maxHeight: '75vh' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+              True Intraday VWAP — {ticker}
+            </h2>
+            {dateLabel && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {barsData?.is_today ? 'Today' : dateLabel}
+              </span>
+            )}
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {loading && (
+            <div className="flex items-center justify-center h-48">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-600" />
+            </div>
+          )}
+          {fetchError && !loading && (
+            <div className="text-center text-red-400 py-12">{fetchError}</div>
+          )}
+          {!loading && !fetchError && chartData.length > 0 && (
+            <>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Session VWAP resets at market open and accumulates throughout the day. Price above VWAP = institutional buy pressure; below = sell pressure.
+                Calculated from <strong>{barsData?.count ?? chartData.length}</strong> bars (1-min intervals).
+              </p>
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="tvwapPriceFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={isAbove ? 'rgb(16,185,129)' : 'rgb(239,68,68)'} stopOpacity={0.5} />
+                      <stop offset="95%" stopColor={isAbove ? 'rgb(16,185,129)' : 'rgb(239,68,68)'} stopOpacity={0.03} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
+                  <XAxis dataKey="time" stroke="#9ca3af" style={{ fontSize: '11px' }} interval="preserveStartEnd" />
+                  <YAxis
+                    stroke="#9ca3af"
+                    domain={['auto', 'auto']}
+                    style={{ fontSize: '11px' }}
+                    tickFormatter={fmtDyn}
+                    width={55}
+                  />
+                  <RTooltip
+                    formatter={(value: any, name?: string) => [fmt2(value as number), name === 'price' ? 'Price' : 'VWAP']}
+                    contentStyle={{ background: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#f9fafb' }}
+                    labelStyle={{ color: '#9ca3af', marginBottom: 4 }}
+                  />
+                  <RLegend wrapperStyle={{ fontSize: '12px' }} />
+                  <Area
+                    type="monotone"
+                    dataKey="price"
+                    name="Price"
+                    stroke={isAbove ? 'rgb(16,185,129)' : 'rgb(239,68,68)'}
+                    strokeWidth={2}
+                    fill="url(#tvwapPriceFill)"
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                  <RLine
+                    type="monotone"
+                    dataKey="vwap"
+                    name="VWAP"
+                    stroke="rgb(245, 158, 11)"
+                    strokeWidth={2}
+                    strokeDasharray="6 3"
+                    dot={false}
+                    isAnimationActive={false}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </>
+          )}
+        </div>
+
+        {/* Footer stats */}
+        {!loading && !fetchError && currentVwap != null && (
+          <div className="flex items-center gap-6 px-6 py-3 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 shrink-0">
+            <div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Session VWAP</div>
+              <div className="text-base font-bold text-amber-500">{fmt2(currentVwap)}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">Last Price</div>
+              <div className={`text-base font-bold ${isAbove ? 'text-green-500' : 'text-red-400'}`}>{fmt2(currentPrice)}</div>
+            </div>
+            <span className={`px-2 py-1 text-xs font-bold rounded ${isAbove ? 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300' : 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300'}`}>
+              {isAbove ? 'ABOVE VWAP' : 'BELOW VWAP'}
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 const TechnicalAnalysis: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -223,6 +396,7 @@ const TechnicalAnalysis: React.FC = () => {
 
   // Financials panel state
   const [showFinancials, setShowFinancials] = useState(false);
+  const [showTrueVwap, setShowTrueVwap] = useState(false);
   const [financialsData, setFinancialsData] = useState<any>(null);
   const [financialsLoading, setFinancialsLoading] = useState(false);
   const [financialsError, setFinancialsError] = useState<string | null>(null);
@@ -1644,24 +1818,40 @@ const TechnicalAnalysis: React.FC = () => {
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">📊 Volume Indicators</h3>
                 {/* VWAP Chart */}
                 <div id="chart-vwap" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">VWAP (Volume Weighted Average Price)</h4>
+                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">MVWAP (Multi-Day VWAP)</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    VWAP calculates the average price weighted by volume throughout the day. Institutional traders use it as a benchmark — price above VWAP suggests buyers are in control and the stock has bullish momentum, while price below VWAP indicates selling pressure. It helps identify fair value and is one of the most widely used indicators by professional traders.
+                    MVWAP (Multi-Day VWAP) accumulates cumulative (price × volume) from the start of the selected date range, giving the volume-weighted average cost basis over the entire period. This is useful for identifying long-term fair value and trend direction. For the true intraday VWAP — which resets each session and is used by institutional traders as a daily benchmark — click the MVWAP card below.
                   </p>
                   <div style={{ height: '300px' }}>
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
                       datasets: [
                         { label: 'Price', data: analysisData.chart_data.map(d => d.close), borderColor: 'rgb(59, 130, 246)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: false },
-                        { label: 'VWAP', data: analysisData.chart_data.map(d => d.vwap), borderColor: 'rgb(245, 158, 11)', borderWidth: 2, pointRadius: 0, tension: 0.1, borderDash: [5,5], fill: false },
+                        { label: 'MVWAP', data: analysisData.chart_data.map(d => d.vwap), borderColor: 'rgb(245, 158, 11)', borderWidth: 2, pointRadius: 0, tension: 0.1, borderDash: [5,5], fill: false },
                       ]
                     }} options={chartOptions} />
                   </div>
                 </div>
-                {/* OBV + A/D Line summary cards */}
+                {/* Volume indicator summary cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* MVWAP card — clickable to open true intraday VWAP */}
+                  <div
+                    className="bg-white dark:bg-gray-700 rounded-lg shadow dark:shadow-gray-200/20 p-4 border dark:border-gray-500 cursor-pointer hover:ring-2 hover:ring-teal-500 transition-all"
+                    onClick={() => setShowTrueVwap(true)}
+                  >
+                    <h4 className="font-bold text-gray-900 dark:text-white mb-2">MVWAP</h4>
+                    {analysisData.indicators.vwap ? (
+                      <>
+                        <p className={`text-sm font-semibold ${analysisData.indicators.vwap.signal === 'bullish' ? 'text-green-500' : 'text-red-500'}`}>
+                          {analysisData.indicators.vwap.signal?.toUpperCase()}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{analysisData.indicators.vwap.description}</p>
+                      </>
+                    ) : <p className="text-xs text-gray-400">N/A</p>}
+                    <p className="text-xs text-teal-500 dark:text-teal-400 mt-2 font-medium">View Session VWAP →</p>
+                  </div>
+                  {/* OBV + A/D Line cards */}
                   {[
-                    { label: 'VWAP', data: analysisData.indicators.vwap },
                     { label: 'OBV', data: analysisData.indicators.obv },
                     { label: 'A/D Line', data: analysisData.indicators.ad_line },
                   ].map(item => (
@@ -1955,7 +2145,7 @@ const TechnicalAnalysis: React.FC = () => {
                   After running an analysis, toggle these category panels for deeper insights:
                 </p>
                 <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-gray-400">
-                  <div><strong>Volume:</strong> VWAP, OBV, A/D Line</div>
+                  <div><strong>Volume:</strong> MVWAP, OBV, A/D Line</div>
                   <div><strong>Momentum:</strong> Stochastic, ADX, CCI, ROC</div>
                   <div><strong>Volatility:</strong> ATR, Keltner Channels, Std Dev</div>
                   <div><strong>Trend:</strong> Parabolic SAR, Ichimoku Cloud, Donchian</div>
@@ -1989,6 +2179,9 @@ const TechnicalAnalysis: React.FC = () => {
           </div>
         )}
       </div>
+      {showTrueVwap && ticker && (
+        <TrueVwapModal ticker={ticker} onClose={() => setShowTrueVwap(false)} />
+      )}
       <BackToTop />
     </div>
   );
