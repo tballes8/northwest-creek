@@ -425,8 +425,9 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
     <div className="flex flex-col h-full">
 
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0">
-        <div className="min-w-0">
+      <div className="flex items-center px-4 py-3 border-b border-gray-200 dark:border-gray-700 shrink-0 gap-3">
+        {/* Left: ticker + company name */}
+        <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-base font-bold text-gray-900 dark:text-white truncate">
               {snapshot?.ticker ?? ticker}
@@ -442,7 +443,54 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
           )}
         </div>
 
-        <div className="flex items-center gap-3 shrink-0 ml-3">
+        {/* Center: drawing tools */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => startTool('trend')}
+            className={`px-3 py-1.5 text-xs rounded-lg border font-medium transition-colors ${
+              activeTool === 'trend'
+                ? 'bg-teal-600 border-teal-600 text-white'
+                : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-teal-500 hover:text-teal-600 dark:hover:text-teal-400'
+            }`}
+          >
+            {activeTool === 'trend'
+              ? (pendingPoint ? 'Click 2nd point…' : 'Click 1st point…')
+              : 'Trend Line'}
+          </button>
+          <button
+            onClick={() => startTool('channel')}
+            className={`px-3 py-1.5 text-xs rounded-lg border font-medium transition-colors ${
+              activeTool === 'channel'
+                ? 'bg-blue-600 border-blue-600 text-white'
+                : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400'
+            }`}
+          >
+            {activeTool === 'channel'
+              ? (!pendingChannel ? 'Click start…'
+                : pendingChannel.x2 === null ? 'Click end of line…'
+                : 'Click to set width…')
+              : 'Channel'}
+          </button>
+          {(trendLines.length > 0 || channels.length > 0) && (
+            <button
+              onClick={() => { setTrendLines([]); setChannels([]); setPendingPoint(null); setPendingChannel(null); }}
+              className="px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-red-500 hover:text-red-500 transition-colors"
+            >
+              Clear All
+            </button>
+          )}
+          {drawingMode && (
+            <button
+              onClick={() => { setActiveTool(null); setPendingPoint(null); setPendingChannel(null); }}
+              className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+
+        {/* Right: price + close */}
+        <div className="flex items-center gap-3 flex-1 justify-end shrink-0">
           {snapshot?.price != null && (
             <div className="text-right">
               <div className="text-base font-bold text-gray-900 dark:text-white">
@@ -683,47 +731,8 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
               )}
             </div>
 
-            {/* Drawing toolbar */}
-            <div className="flex items-center gap-2 flex-wrap pb-1">
-              {/* Trend Line tool */}
-              <button
-                onClick={() => startTool('trend')}
-                className={`px-3 py-1.5 text-xs rounded-lg border font-medium transition-colors ${
-                  activeTool === 'trend'
-                    ? 'bg-teal-600 border-teal-600 text-white'
-                    : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-teal-500 hover:text-teal-600 dark:hover:text-teal-400'
-                }`}
-              >
-                {activeTool === 'trend'
-                  ? (pendingPoint ? 'Click 2nd point…' : 'Click 1st point…')
-                  : 'Trend Line'}
-              </button>
-
-              {/* Channel tool */}
-              <button
-                onClick={() => startTool('channel')}
-                className={`px-3 py-1.5 text-xs rounded-lg border font-medium transition-colors ${
-                  activeTool === 'channel'
-                    ? 'bg-blue-600 border-blue-600 text-white'
-                    : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400'
-                }`}
-              >
-                {activeTool === 'channel'
-                  ? (!pendingChannel ? 'Click start…'
-                    : pendingChannel.x2 === null ? 'Click end of line…'
-                    : 'Click to set width…')
-                  : 'Channel'}
-              </button>
-
-              {(trendLines.length > 0 || channels.length > 0) && (
-                <button
-                  onClick={() => { setTrendLines([]); setChannels([]); setPendingPoint(null); setPendingChannel(null); }}
-                  className="px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-red-500 hover:text-red-500 transition-colors"
-                >
-                  Clear All
-                </button>
-              )}
-
+            {/* Bottom toolbar: zoom + live indicator */}
+            <div className="flex items-center gap-2 pb-1">
               {zoomRange && (
                 <button
                   onClick={() => setZoomRange(null)}
@@ -732,16 +741,6 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                   Reset Zoom
                 </button>
               )}
-
-              {drawingMode && (
-                <button
-                  onClick={() => { setActiveTool(null); setPendingPoint(null); setPendingChannel(null); }}
-                  className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-                >
-                  Cancel
-                </button>
-              )}
-
               <div className="ml-auto flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse inline-block" />
                 <span className="text-xs text-gray-400">Live · 5s</span>
