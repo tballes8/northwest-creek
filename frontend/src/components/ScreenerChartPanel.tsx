@@ -762,7 +762,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
         onClick={onClose}
       >
         <div
-          className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden"
+          className="bg-white dark:bg-gray-800 rounded-lg shadow-2xl w-full max-w-7xl h-[65vh] flex flex-col overflow-hidden"
           onClick={e => e.stopPropagation()}
         >
           {content}
