@@ -604,11 +604,12 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                         interval="preserveStartEnd"
                       />
                       <YAxis
+                        orientation="right"
                         stroke="#9ca3af"
                         domain={['auto', 'auto']}
                         style={{ fontSize: '10px' }}
                         tickFormatter={v => `$${v < 10 ? v.toFixed(2) : v < 100 ? v.toFixed(1) : v.toFixed(0)}`}
-                        width={45}
+                        width={55}
                       />
                       {/* 3-second delay tooltip */}
                       <Tooltip content={<ChartTooltip />} />
