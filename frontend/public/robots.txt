@@ -26,4 +26,4 @@ Disallow: /verify-email
 Disallow: /reset-password
 Disallow: /registerwithpayment
 
-Sitemap: https://nwc-analytics.com/sitemap.xml
+Sitemap: https://api.nwc-analytics.com/sitemap.xml

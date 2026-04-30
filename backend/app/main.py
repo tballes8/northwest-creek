@@ -11,6 +11,7 @@ from app.api.v1.endpoints import (
 )
 from app.api.v1.endpoints.content import router as content_router
 from app.api.v1.endpoints.waitlist import router as waitlist_router
+from app.api.v1.endpoints.sitemap import router as sitemap_router
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.services.alert_checker import alert_checker
 from app.services.websocket_service import live_price_service
@@ -120,3 +121,4 @@ app.include_router(technical_alerts.router, prefix="/api/v1/technical-alerts", t
 app.include_router(portfolio_analysis.router, prefix="/api/v1/portfolio", tags=["Portfolio Analysis"])
 app.include_router(stock_analysis.router, prefix="/api/v1", tags=["Stock Analysis"])
 app.include_router(screener.router, prefix="/api/v1/screener", tags=["Screener"])
+app.include_router(sitemap_router, tags=["sitemap"])
