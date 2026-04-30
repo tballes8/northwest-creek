@@ -257,6 +257,7 @@ const TrueVwapModal: React.FC<{ ticker: string; onClose: () => void }> = ({ tick
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                   <XAxis dataKey="time" stroke="#9ca3af" style={{ fontSize: '11px' }} interval="preserveStartEnd" />
                   <YAxis
+                    orientation="right"
                     stroke="#9ca3af"
                     domain={['auto', 'auto']}
                     style={{ fontSize: '11px' }}
@@ -847,6 +848,7 @@ const TechnicalAnalysis: React.FC = () => {
         },
       },
       y: {
+        position: 'right' as const,
         ticks: {
           color: '#9CA3AF',
         },
@@ -888,7 +890,7 @@ const TechnicalAnalysis: React.FC = () => {
         },
         y: {
         type: 'linear' as const,
-        position: 'left' as const,
+        position: 'right' as const,
         ticks: {
             color: '#9CA3AF',
         },
@@ -898,7 +900,7 @@ const TechnicalAnalysis: React.FC = () => {
         },
         y1: {
         type: 'linear' as const,
-        position: 'right' as const,
+        position: 'left' as const,
         ticks: {
             color: '#9CA3AF',
         },
@@ -1016,7 +1018,7 @@ const TechnicalAnalysis: React.FC = () => {
         },
         y: {
         type: 'linear' as const,
-        position: 'left' as const,
+        position: 'right' as const,
         ticks: {
             color: '#9CA3AF',
         },
