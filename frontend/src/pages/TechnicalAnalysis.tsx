@@ -893,7 +893,7 @@ const TechnicalAnalysis: React.FC = () => {
         position: 'right' as const,
         ticks: {
             color: '#9CA3AF',
-            callback: (v: number) => `$${v.toFixed(2)}`,
+            callback: (v: number | string) => `$${Number(v).toFixed(2)}`,
         },
         grid: {
             color: 'rgba(156, 163, 175, 0.1)',
@@ -1022,7 +1022,7 @@ const TechnicalAnalysis: React.FC = () => {
         position: 'right' as const,
         ticks: {
             color: '#9CA3AF',
-            callback: (v: number) => `$${v.toFixed(2)}`,
+            callback: (v: number | string) => `$${Number(v).toFixed(2)}`,
         },
         grid: {
             color: 'rgba(156, 163, 175, 0.1)',
