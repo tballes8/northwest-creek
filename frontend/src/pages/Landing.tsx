@@ -168,6 +168,28 @@ const Landing: React.FC = () => {
           </div>
         </div>
         */}
+        {/* ── How it works ──────────────────────────────────── */}
+        <div className="text-center mb-10">
+          <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight">
+            How it works
+          </h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {STEPS.map((s) => (
+            <div
+              key={s.n}
+              className="rounded-2xl p-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800"
+            >
+              <div className="w-10 h-10 rounded-full bg-primary-600 text-white font-bold flex items-center justify-center mb-4">
+                {s.n}
+              </div>
+              <h3 className="font-bold text-lg mb-1">{s.title}</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+                {s.desc}
+              </p>
+            </div>
+          ))}
+        </div>       
 
         {/* Section heading for deep-dives */}
         <div className="text-center mb-16">
