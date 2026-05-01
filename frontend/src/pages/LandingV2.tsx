@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion, useReducedMotion } from 'framer-motion';
 import ThemeToggle from '../components/ThemeToggle';
 import TickerTape from '../components/landing/TickerTape';
 import HeroDemoCard from '../components/landing/HeroDemoCard';
@@ -42,19 +41,26 @@ const STEPS = [
 ];
 
 const LandingV2: React.FC = () => {
-  const reduceMotion = useReducedMotion();
   const [billing, setBilling] = useState<'monthly' | 'annual'>('monthly');
-
-  const fadeUp = reduceMotion
-    ? { initial: {}, animate: {}, transition: {} }
-    : {
-        initial: { opacity: 0, y: 20 },
-        animate: { opacity: 1, y: 0 },
-        transition: { duration: 0.5 },
-      };
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-white">
+      <style>{`
+        @keyframes nwc-fade-up {
+          from { opacity: 0; transform: translateY(16px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .nwc-fade-up { animation: nwc-fade-up 0.5s ease-out both; }
+        .nwc-fade-up-1 { animation-delay: 0.05s; }
+        .nwc-fade-up-2 { animation-delay: 0.15s; }
+        .nwc-fade-up-3 { animation-delay: 0.25s; }
+        @media (prefers-reduced-motion: reduce) {
+          .nwc-fade-up, .nwc-fade-up-1, .nwc-fade-up-2, .nwc-fade-up-3 {
+            animation: none;
+          }
+        }
+      `}</style>
+
       {/* ── Navbar ─────────────────────────────────────────── */}
       <nav className="sticky top-0 z-50 backdrop-blur bg-white/80 dark:bg-gray-950/80 border-b border-gray-200 dark:border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
@@ -96,28 +102,17 @@ const LandingV2: React.FC = () => {
         />
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-16 md:py-24 grid md:grid-cols-2 gap-10 items-center">
           <div>
-            <motion.h1
-              {...fadeUp}
-              className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.05]"
-            >
+            <h1 className="nwc-fade-up text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.05]">
               Wall Street's research tools.
               <span className="block text-primary-600 dark:text-primary-400">
                 Built for the rest of us.
               </span>
-            </motion.h1>
-            <motion.p
-              {...fadeUp}
-              transition={{ ...fadeUp.transition, delay: reduceMotion ? 0 : 0.1 }}
-              className="mt-5 text-lg text-gray-600 dark:text-gray-300 max-w-xl"
-            >
+            </h1>
+            <p className="nwc-fade-up nwc-fade-up-1 mt-5 text-lg text-gray-600 dark:text-gray-300 max-w-xl">
               Real-time prices, technical indicators, DCF valuation, and AI-generated
               analysis on every US stock — without paying a Bloomberg terminal price.
-            </motion.p>
-            <motion.div
-              {...fadeUp}
-              transition={{ ...fadeUp.transition, delay: reduceMotion ? 0 : 0.2 }}
-              className="mt-7 flex flex-wrap gap-3"
-            >
+            </p>
+            <div className="nwc-fade-up nwc-fade-up-2 mt-7 flex flex-wrap gap-3">
               <Link
                 to="/register"
                 className="px-6 py-3 rounded-lg font-semibold bg-primary-600 hover:bg-primary-700 text-white transition-colors shadow-lg shadow-primary-500/30"
@@ -130,7 +125,7 @@ const LandingV2: React.FC = () => {
               >
                 See Sample Analysis
               </Link>
-            </motion.div>
+            </div>
           </div>
           <div className="md:pl-6">
             <HeroDemoCard />
@@ -149,13 +144,9 @@ const LandingV2: React.FC = () => {
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-          {PILLARS.map((p, i) => (
-            <motion.div
+          {PILLARS.map((p) => (
+            <div
               key={p.title}
-              initial={reduceMotion ? false : { opacity: 0, y: 20 }}
-              whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: '-50px' }}
-              transition={{ duration: 0.4, delay: i * 0.08 }}
               className="rounded-2xl p-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-primary-500 dark:hover:border-primary-500 hover:shadow-lg hover:shadow-primary-500/10 transition-all"
             >
               <div className="text-3xl mb-3">{p.icon}</div>
@@ -169,7 +160,7 @@ const LandingV2: React.FC = () => {
               >
                 Learn more →
               </Link>
-            </motion.div>
+            </div>
           ))}
         </div>
       </section>
@@ -303,13 +294,7 @@ const LandingV2: React.FC = () => {
 
       {/* ── Final CTA ─────────────────────────────────────── */}
       <section className="bg-gray-950 text-white">
-        <motion.div
-          initial={reduceMotion ? false : { opacity: 0, y: 20 }}
-          whileInView={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-100px' }}
-          transition={{ duration: 0.5 }}
-          className="max-w-4xl mx-auto px-4 sm:px-6 py-20 md:py-28 text-center"
-        >
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-20 md:py-28 text-center">
           <h2 className="text-3xl md:text-5xl font-extrabold tracking-tight">
             Ready to see what the numbers actually say?
           </h2>
@@ -322,7 +307,7 @@ const LandingV2: React.FC = () => {
           >
             Start Free →
           </Link>
-        </motion.div>
+        </div>
       </section>
 
       {/* ── Footer ────────────────────────────────────────── */}

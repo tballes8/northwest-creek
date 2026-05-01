@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useReducedMotion } from 'framer-motion';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -22,8 +21,12 @@ const MOCK_PRICES = [
   193.0, 192.4, 191.2, 192.8, 193.9, 192.5, 191.0, 192.3, 193.2, 192.1,
 ];
 
+const prefersReducedMotion = (): boolean =>
+  typeof window !== 'undefined' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 const HeroDemoCard: React.FC = () => {
-  const reduceMotion = useReducedMotion();
+  const [reduceMotion] = useState<boolean>(prefersReducedMotion);
   const [typed, setTyped] = useState(reduceMotion ? SUMMARY : '');
   const indexRef = useRef(0);
 
