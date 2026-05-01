@@ -146,7 +146,7 @@ const Landing: React.FC = () => {
           </p>
         </div>
 
-        {/* Platform Highlights — quick stats strip */}
+        {/* Platform Highlights — quick stats strip 
         <div className="mb-32">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto text-center">
             <div>
@@ -167,6 +167,7 @@ const Landing: React.FC = () => {
             </div>
           </div>
         </div>
+        */}
 
         {/* Section heading for deep-dives */}
         <div className="text-center mb-16">
