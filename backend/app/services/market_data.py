@@ -259,7 +259,7 @@ class MarketDataService:
                 raise ValueError("Ticker symbol is required")
 
             data = await self._fmp_get("news/stock", {
-                "symbol": ticker,
+                "symbols": ticker,
                 "limit": limit * 3,
             })
 
