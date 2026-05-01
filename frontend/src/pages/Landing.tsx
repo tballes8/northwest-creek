@@ -7,6 +7,12 @@ import PricingTiers from '../components/landing/PricingTiers';
 import TickerTape from '../components/landing/TickerTape';
 import HeroDemoCard from '../components/landing/HeroDemoCard';
 
+const STEPS = [
+  { n: '1', title: 'Sign Up Free', desc: '14-day trial on paid tiers, no card required to browse.' },
+  { n: '2', title: 'Search Any Ticker', desc: 'US stocks, ETFs, and indexes — all in one place.' },
+  { n: '3', title: 'Get Institutional-Grade Analysis', desc: 'Charts, indicators, DCF, and AI commentary in seconds.' },
+];
+
 const Landing: React.FC = () => {
 
   const scrollToPricing = (e: React.MouseEvent) => {
