@@ -2,6 +2,7 @@ import React, { Suspense, useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import Landing from './pages/Landing';
+import LandingV2 from './pages/LandingV2';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
@@ -90,6 +91,7 @@ function App() {
         <Suspense fallback={<div className="min-h-screen bg-gray-900 flex items-center justify-center"><div className="text-gray-400">Loading...</div></div>}>
           <Routes>
             <Route path="/" element={<Landing />} />
+            <Route path="/landing-v2" element={<LandingV2 />} />
             <Route path="/waitlist" element={<WaitlistLanding />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />

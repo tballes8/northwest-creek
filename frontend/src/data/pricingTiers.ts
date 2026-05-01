@@ -6,6 +6,8 @@ export interface PricingTier {
   shortName: string;
   price: string;
   period: string;
+  monthlyPriceNum: number;
+  annualPriceNum: number;
   hasTrial: boolean;
   trialBadge?: string;
   popular?: boolean;
@@ -22,6 +24,8 @@ export const PRICING_TIERS: PricingTier[] = [
     shortName: 'Beginner',
     price: '$10',
     period: '/month',
+    monthlyPriceNum: 10,
+    annualPriceNum: 96,
     hasTrial: true,
     trialBadge: '14-day free trial',
     description: 'Perfect for getting started — 14-day free trial',
@@ -42,6 +46,8 @@ export const PRICING_TIERS: PricingTier[] = [
     shortName: 'Casual',
     price: '$20',
     period: '/month',
+    monthlyPriceNum: 20,
+    annualPriceNum: 192,
     hasTrial: true,
     trialBadge: '14-day free trial',
     description: 'For investors tracking a moderate portfolio — 14-day free trial',
@@ -63,6 +69,8 @@ export const PRICING_TIERS: PricingTier[] = [
     shortName: 'Active',
     price: '$40',
     period: '/month',
+    monthlyPriceNum: 40,
+    annualPriceNum: 384,
     hasTrial: false,
     popular: true,
     description: 'For active traders with larger portfolios',
@@ -87,6 +95,8 @@ export const PRICING_TIERS: PricingTier[] = [
     shortName: 'Professional',
     price: '$50',
     period: '/month',
+    monthlyPriceNum: 50,
+    annualPriceNum: 480,
     hasTrial: false,
     description: 'Ultimate tools for professional traders',
     highlightedBullet: '✦ AI Stock & Portfolio Analysis — 25/day',

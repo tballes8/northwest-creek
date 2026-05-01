@@ -248,3 +248,7 @@ export const screenerAPI = {
   deleteSavedScreen: (id: string) =>
     axiosInstance.delete(`/screener/saved/${id}`),
 };
+
+export const marketAPI = {
+  getTickerTape: () => axiosInstance.get('/market/ticker-tape'),
+};
