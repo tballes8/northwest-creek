@@ -17,26 +17,42 @@ def _safe_error(e: Exception) -> str:
 
 router = APIRouter()
 
-TICKER_TAPE_SYMBOLS = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA",
-    "META", "TSLA", "SPY", "QQQ", "DIA",
-]
+TICKER_TAPE_LIMIT = 15
 
 _ticker_tape_cache = SimpleCache(ttl_seconds=60)
 
 
 @router.get("/ticker-tape")
 async def get_ticker_tape():
-    """Cached batch quotes for the public landing page ticker tape."""
+    """Most-active US tickers (sorted by volume) for the public landing tape."""
     cached = _ticker_tape_cache.get("tape")
     if cached is not None:
         return cached
 
     try:
-        quotes = await market_data_service.get_batch_quotes(TICKER_TAPE_SYMBOLS)
-        payload = {
-            "data": [quotes[t] for t in TICKER_TAPE_SYMBOLS if t in quotes],
-        }
+        # FMP /stable/most-actives returns symbols sorted by volume.
+        raw = await market_data_service._fmp_get("most-actives")
+        if not isinstance(raw, list):
+            raw = []
+
+        items = []
+        for item in raw:
+            ticker = item.get("symbol", "")
+            if not ticker or market_data_service._is_warrant_ticker(ticker):
+                continue
+            price = item.get("price")
+            change_pct = item.get("changesPercentage")
+            if price is None or change_pct is None:
+                continue
+            items.append({
+                "ticker": ticker,
+                "price": float(price),
+                "change_percent": round(float(change_pct), 2),
+            })
+            if len(items) >= TICKER_TAPE_LIMIT:
+                break
+
+        payload = {"data": items}
         _ticker_tape_cache.set("tape", payload)
         return payload
     except Exception as e:

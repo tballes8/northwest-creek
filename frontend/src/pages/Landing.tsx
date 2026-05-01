@@ -2,9 +2,10 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import ThemeToggle from '../components/ThemeToggle';
 import BackToTop from '../components/BackToTop';
-import HeroSection from '../components/landing/HeroSection';
 import FeatureSection from '../components/landing/FeatureSection';
 import PricingTiers from '../components/landing/PricingTiers';
+import TickerTape from '../components/landing/TickerTape';
+import HeroDemoCard from '../components/landing/HeroDemoCard';
 
 const Landing: React.FC = () => {
 
@@ -91,12 +92,54 @@ const Landing: React.FC = () => {
         </div>
       </nav>
 
+      {/* Live ticker tape (volume-sorted most-actives) */}
+      <TickerTape />
+
+      {/* Hero */}
+      <section className="relative overflow-hidden">
+        <div
+          className="absolute inset-0 -z-10 opacity-40 dark:opacity-30"
+          style={{
+            background:
+              'radial-gradient(60% 50% at 30% 20%, rgba(13,148,136,0.25) 0%, transparent 60%), radial-gradient(40% 40% at 80% 70%, rgba(13,148,136,0.18) 0%, transparent 60%)',
+          }}
+        />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24 grid md:grid-cols-2 gap-10 items-center">
+          <div>
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.05] text-gray-900 dark:text-white">
+              Wall Street's research tools.
+              <span className="block text-primary-600 dark:text-primary-400">
+                Built for the rest of us.
+              </span>
+            </h1>
+            <p className="mt-5 text-lg text-gray-600 dark:text-gray-300 max-w-xl">
+              Real-time prices, technical indicators, DCF valuation, and AI-generated
+              analysis on every US stock — without paying a Bloomberg terminal price.
+            </p>
+            <div className="mt-7 flex flex-wrap gap-3">
+              <Link
+                to="/register"
+                className="px-6 py-3 rounded-lg font-semibold bg-primary-600 hover:bg-primary-700 text-white transition-colors shadow-lg shadow-primary-500/30"
+              >
+                Start Free →
+              </Link>
+              <button
+                onClick={scrollToPricing}
+                className="px-6 py-3 rounded-lg font-semibold border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-primary-500 dark:hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+              >
+                See Pricing
+              </button>
+            </div>
+          </div>
+          <div className="md:pl-6">
+            <HeroDemoCard />
+          </div>
+        </div>
+      </section>
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
-        {/* 1. Hero */}
-        <HeroSection onChoosePlanClick={scrollToPricing} imageSrc="/landing/dashboard-hero.png" />
-
-        {/* 2. Trusted-by strip */}
+        {/* Trusted-by strip */}
         <div className="mt-8 mb-20 text-center">
           <p className="text-sm uppercase tracking-widest text-gray-500 dark:text-gray-400 font-medium">
             Built in Post Falls, Idaho · Powered by Anthropic · FMP · Stripe · SendGrid
