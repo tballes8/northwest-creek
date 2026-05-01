@@ -401,7 +401,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
 
   if (!ticker) return null;
 
-  const chartHeight = displayMode === 'modal' ? 480 : 240;
+  const chartHeight = displayMode === 'modal' ? 360 : 240;
 
   // Custom dot: show a small dot only on live ticks, hidden on 15-min bars
   const renderDot = (props: any) => {
