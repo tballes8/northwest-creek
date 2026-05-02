@@ -235,6 +235,7 @@ const Landing: React.FC = () => {
             screenshotDescription="Stock detail or Dashboard showing the AI-generated analysis text panel for a real ticker."
             imageSrc="/landing/ai_portfolio_analysis.gif"
             reverse
+            withChrome
           />
 
           {/* 5. Pro Technical Analysis + Intraday Charting */}

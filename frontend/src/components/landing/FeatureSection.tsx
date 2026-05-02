@@ -11,6 +11,7 @@ export interface FeatureSectionProps {
   screenshotDescription?: string;
   imageSrc?: string;
   reverse?: boolean;
+  withChrome?: boolean;
 }
 
 const eyebrowStyles: Record<NonNullable<FeatureSectionProps['eyebrowColor']>, string> = {
@@ -43,6 +44,7 @@ const FeatureSection: React.FC<FeatureSectionProps> = ({
   screenshotDescription,
   imageSrc,
   reverse = false,
+  withChrome = false,
 }) => {
   const copy = (
     <div className={reverse ? 'order-1 md:order-2' : ''}>
@@ -75,6 +77,7 @@ const FeatureSection: React.FC<FeatureSectionProps> = ({
         description={screenshotDescription}
         imageSrc={imageSrc}
         imageAlt={title}
+        withChrome={withChrome}
       />
     </div>
   );

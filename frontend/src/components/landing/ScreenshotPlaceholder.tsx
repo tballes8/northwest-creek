@@ -6,7 +6,24 @@ interface Props {
   aspect?: '16/10' | '16/9' | '4/3';
   imageSrc?: string;
   imageAlt?: string;
+  withChrome?: boolean;
 }
+
+const BrowserChrome: React.FC = () => (
+  <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+    <div className="flex items-center gap-1.5">
+      <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
+      <span className="w-2.5 h-2.5 rounded-full bg-yellow-400" />
+      <span className="w-2.5 h-2.5 rounded-full bg-green-400" />
+    </div>
+    <div className="flex-1 flex justify-center">
+      <div className="px-3 py-0.5 rounded-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-[11px] text-gray-500 dark:text-gray-400 font-mono max-w-[60%] truncate">
+        nwc-analytics.com
+      </div>
+    </div>
+    <div className="w-12" />
+  </div>
+);
 
 const ScreenshotPlaceholder: React.FC<Props> = ({
   fileName,
@@ -14,16 +31,26 @@ const ScreenshotPlaceholder: React.FC<Props> = ({
   aspect = '16/10',
   imageSrc,
   imageAlt,
+  withChrome = false,
 }) => {
   if (imageSrc) {
     return (
-      <div className="rounded-xl shadow-2xl border border-gray-700 overflow-hidden bg-gray-900">
-        <img
-          src={imageSrc}
-          alt={imageAlt || fileName}
-          className="w-full h-auto block"
-          loading="lazy"
-        />
+      <div className="relative">
+        {withChrome && (
+          <div
+            aria-hidden
+            className="absolute -inset-6 -z-10 rounded-3xl bg-primary-500/15 dark:bg-primary-500/20 blur-3xl"
+          />
+        )}
+        <div className="relative rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden bg-white dark:bg-gray-900">
+          {withChrome && <BrowserChrome />}
+          <img
+            src={imageSrc}
+            alt={imageAlt || fileName}
+            className="w-full h-auto block"
+            loading="lazy"
+          />
+        </div>
       </div>
     );
   }
