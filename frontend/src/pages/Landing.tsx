@@ -231,9 +231,9 @@ const Landing: React.FC = () => {
               'Usage scales with tier: 5/week (Casual) → 25/day (Professional)',
               'Built on Anthropic Claude — no hallucinated tickers or made-up financials',
             ]}
-            screenshotFile="ai-analysis.png"
+            screenshotFile="ai_portfolio_analysis.gif"
             screenshotDescription="Stock detail or Dashboard showing the AI-generated analysis text panel for a real ticker."
-            imageSrc="/landing/ai-analysis.png"
+            imageSrc="/landing/ai_portfolio_analysis.gif"
             reverse
           />
 
