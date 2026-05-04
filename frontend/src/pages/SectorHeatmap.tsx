@@ -100,7 +100,7 @@ const TreemapTile = (props: any) => {
             x={x + width / 2}
             y={y + height / 2 - (showSubLabel ? 12 : 0)}
             textAnchor="middle"
-            fill="#ffffff"
+            fill="#000000"
             fontSize={showSubLabel ? 18 : 14}
             fontWeight={700}
             pointerEvents="none"
@@ -113,9 +113,8 @@ const TreemapTile = (props: any) => {
                 x={x + width / 2}
                 y={y + height / 2 + 6}
                 textAnchor="middle"
-                fill="#ffffff"
+                fill="#000000"
                 fontSize={11}
-                opacity={0.9}
                 pointerEvents="none"
               >
                 {name}
@@ -124,7 +123,7 @@ const TreemapTile = (props: any) => {
                 x={x + width / 2}
                 y={y + height / 2 + 24}
                 textAnchor="middle"
-                fill="#ffffff"
+                fill="#000000"
                 fontSize={13}
                 fontWeight={600}
                 pointerEvents="none"
