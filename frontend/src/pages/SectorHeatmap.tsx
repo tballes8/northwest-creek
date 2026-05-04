@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Treemap, ResponsiveContainer, Tooltip as RTooltip } from 'recharts';
+import { Treemap, ResponsiveContainer } from 'recharts';
 import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
 import { authAPI, sectorRotationAPI } from '../services/api';
@@ -62,9 +62,24 @@ const colorFor = (vsSpy: number | null): string => {
   return `rgb(${r}, ${g}, ${b})`;
 };
 
+const fmtPct = (v: unknown): string =>
+  typeof v === 'number' && !isNaN(v) ? `${v >= 0 ? '+' : ''}${v.toFixed(2)}%` : '—';
+
 const TreemapTile = (props: any) => {
-  const { x, y, width, height, ticker, name, return_pct, vs_spy_pct } = props;
-  if (width <= 0 || height <= 0) return null;
+  const { x, y, width, height } = props;
+  // Recharts 3.x exposes custom data fields under props.payload, not on props directly.
+  const ticker: string = props.payload?.ticker ?? props.ticker ?? '';
+  const name: string = props.payload?.name ?? props.name ?? '';
+  const return_pct: number | null =
+    typeof props.payload?.return_pct === 'number' ? props.payload.return_pct
+    : typeof props.return_pct === 'number' ? props.return_pct
+    : null;
+  const vs_spy_pct: number | null =
+    typeof props.payload?.vs_spy_pct === 'number' ? props.payload.vs_spy_pct
+    : typeof props.vs_spy_pct === 'number' ? props.vs_spy_pct
+    : null;
+
+  if (typeof width !== 'number' || typeof height !== 'number' || width <= 0 || height <= 0) return null;
   const fill = colorFor(vs_spy_pct);
   const showLabel = width > 70 && height > 50;
   const showSubLabel = width > 110 && height > 70;
@@ -77,6 +92,8 @@ const TreemapTile = (props: any) => {
         height={height}
         style={{ fill, stroke: '#1f2937', strokeWidth: 2 }}
       />
+      {/* Native SVG tooltip — works in every browser without Recharts magic */}
+      <title>{`${ticker} — ${name}\nReturn: ${fmtPct(return_pct)}\nvs SPY: ${fmtPct(vs_spy_pct)}`}</title>
       {showLabel && (
         <>
           <text
@@ -86,6 +103,7 @@ const TreemapTile = (props: any) => {
             fill="#ffffff"
             fontSize={showSubLabel ? 18 : 14}
             fontWeight={700}
+            pointerEvents="none"
           >
             {ticker}
           </text>
@@ -98,6 +116,7 @@ const TreemapTile = (props: any) => {
                 fill="#ffffff"
                 fontSize={11}
                 opacity={0.9}
+                pointerEvents="none"
               >
                 {name}
               </text>
@@ -108,34 +127,15 @@ const TreemapTile = (props: any) => {
                 fill="#ffffff"
                 fontSize={13}
                 fontWeight={600}
+                pointerEvents="none"
               >
-                {return_pct !== null ? `${return_pct >= 0 ? '+' : ''}${return_pct.toFixed(2)}%` : '—'}
+                {fmtPct(return_pct)}
               </text>
             </>
           )}
         </>
       )}
     </g>
-  );
-};
-
-const HeatmapTooltip = ({ active, payload }: any) => {
-  if (!active || !payload || !payload.length) return null;
-  const d = payload[0].payload;
-  return (
-    <div className="bg-gray-900 border border-gray-600 rounded-lg p-3 text-sm shadow-xl">
-      <div className="font-semibold text-white">{d.ticker} — {d.name}</div>
-      <div className="text-gray-300 mt-1">
-        Return: <span className={d.return_pct >= 0 ? 'text-green-400' : 'text-red-400'}>
-          {d.return_pct !== null ? `${d.return_pct >= 0 ? '+' : ''}${d.return_pct.toFixed(2)}%` : '—'}
-        </span>
-      </div>
-      <div className="text-gray-300">
-        vs SPY: <span className={d.vs_spy_pct >= 0 ? 'text-teal-400' : 'text-red-400'}>
-          {d.vs_spy_pct !== null ? `${d.vs_spy_pct >= 0 ? '+' : ''}${d.vs_spy_pct.toFixed(2)}%` : '—'}
-        </span>
-      </div>
-    </div>
   );
 };
 
@@ -355,9 +355,7 @@ const SectorHeatmap: React.FC = () => {
                   stroke="#1f2937"
                   content={<TreemapTile />}
                   isAnimationActive={false}
-                >
-                  <RTooltip content={<HeatmapTooltip />} />
-                </Treemap>
+                />
               </ResponsiveContainer>
             </div>
           )}
