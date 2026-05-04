@@ -11,6 +11,7 @@ type PageKey =
   | 'stocks'
   | 'technical-analysis'
   | 'dcf-valuation'
+  | 'sector-heatmap'
   | 'options-calculator'
   | 'tutorials'
   | 'blogs'
@@ -47,6 +48,7 @@ const NAV_ITEMS: NavItem[] = [
       { to: '/stocks', key: 'stocks', label: 'Stock Screener', icon: '🔍' },
       { to: '/technical-analysis', key: 'technical-analysis', label: 'Technical Analysis', icon: '📈' },
       { to: '/dcf-valuation', key: 'dcf-valuation', label: 'DCF Valuation', icon: '💰' },
+      { to: '/sector-heatmap', key: 'sector-heatmap', label: 'Sector Heatmap', icon: '🗺' },
     ],
   },
   { to: '/options-calculator', key: 'options-calculator', label: 'Options Calc' },

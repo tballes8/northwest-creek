@@ -168,6 +168,14 @@ export const stocksAPI = {
 
   getOwnership: (ticker: string) =>
     axiosInstance.get(`/stocks/ownership/${ticker}`),
+
+  getVolumeSurge: (params?: {
+    min_ratio?: number;
+    max_price_change_pct?: number;
+    min_volume?: number;
+    limit?: number;
+  }) =>
+    axiosInstance.get(`/stocks/volume-surge`, { params }),
 };
 
 // DCF API
@@ -192,6 +200,15 @@ export const technicalAPI = {
     axiosInstance.get(`/stocks/${ticker}/ai-analysis`),
   priceForecast: (ticker: string) =>
     axiosInstance.get(`/stocks/${ticker}/price-forecast`),
+};
+
+// Sector Rotation API
+export const sectorRotationAPI = {
+  getHeatmap: (params?: { window?: string; end_date?: string }) =>
+    axiosInstance.get(`/sector-rotation/heatmap`, { params }),
+
+  getTimelapse: (params?: { window?: string; end_date?: string; step_days?: number }) =>
+    axiosInstance.get(`/sector-rotation/timelapse`, { params }),
 };
 
 // Financials API

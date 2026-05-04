@@ -169,6 +169,18 @@ interface ScreenerResult {
   last_refreshed: string | null;
 }
 
+interface VolumeSurgeRow {
+  symbol: string;
+  name: string | null;
+  price: number | null;
+  change_percentage: number | null;
+  volume: number | null;
+  avg_volume: number | null;
+  volume_ratio: number | null;
+  market_cap: number | null;
+  exchange: string | null;
+}
+
 interface ScreenerFormState {
   priceMin: string; priceMax: string;
   marketCapMinB: string; marketCapMaxB: string;
@@ -332,6 +344,10 @@ const Stocks: React.FC = () => {
   });
   const [sectorLoading, setSectorLoading] = useState(false);
   const [activeSector, setActiveSector] = useState(resolvedSector);
+  const [volumeSurges, setVolumeSurges] = useState<VolumeSurgeRow[]>([]);
+  const [volumeSurgesLoading, setVolumeSurgesLoading] = useState(false);
+  const [volumeSurgesError, setVolumeSurgesError] = useState<string>('');
+  const [showVolumeSurges, setShowVolumeSurges] = useState(false);
   const [isWarrant, setIsWarrant] = useState(false);
   const [relatedCommonStock, setRelatedCommonStock] = useState<string | null>(null);
   const [watchlistMsg, setWatchlistMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -538,6 +554,30 @@ const Stocks: React.FC = () => {
       try { sessionStorage.setItem('nwc_daily_snapshots', JSON.stringify(snaps)); } catch {}
     } catch (error) {
       console.error('Failed to load daily snapshots:', error);
+    }
+  };
+
+  const loadVolumeSurges = async () => {
+    setVolumeSurgesLoading(true);
+    setVolumeSurgesError('');
+    try {
+      const response = await stocksAPI.getVolumeSurge({
+        min_ratio: 2.5,
+        max_price_change_pct: 2.0,
+        min_volume: 500_000,
+        limit: 25,
+      });
+      setVolumeSurges(response.data.results || []);
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 402) {
+        setVolumeSurgesError(err.response?.data?.detail || 'Volume Surge scanner requires Active or Professional tier.');
+      } else {
+        setVolumeSurgesError('Failed to load volume surge candidates.');
+      }
+      setVolumeSurges([]);
+    } finally {
+      setVolumeSurgesLoading(false);
     }
   };
 
@@ -2335,7 +2375,113 @@ const Stocks: React.FC = () => {
               </div>
             )}
 
-            
+
+            {(user?.subscription_tier === 'active' || user?.subscription_tier === 'professional') && (
+              <div className="mt-8 border-t border-gray-200 dark:border-gray-600 pt-8 text-left">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !showVolumeSurges;
+                    setShowVolumeSurges(next);
+                    if (next && volumeSurges.length === 0 && !volumeSurgesError) {
+                      loadVolumeSurges();
+                    }
+                  }}
+                  className="w-full flex items-center justify-between gap-3 text-left"
+                >
+                  <div>
+                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                      📊 Volume Surge — Accumulation Candidates
+                    </h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                      Stocks trading flat (±2%) on 2.5×+ their average volume — possible quiet institutional accumulation.
+                    </p>
+                  </div>
+                  <span className="text-2xl text-gray-400 dark:text-gray-500">
+                    {showVolumeSurges ? '−' : '+'}
+                  </span>
+                </button>
+
+                {showVolumeSurges && (
+                  <div className="mt-4">
+                    <div className="flex items-center gap-3 mb-3">
+                      <button
+                        onClick={loadVolumeSurges}
+                        disabled={volumeSurgesLoading}
+                        className="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 disabled:opacity-50 text-white rounded-lg text-sm transition-colors font-medium"
+                      >
+                        {volumeSurgesLoading ? 'Scanning...' : '🔄 Refresh Scan'}
+                      </button>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        Filters: ratio ≥ 2.5×, |Δ%| ≤ 2.0, volume ≥ 500K
+                      </span>
+                    </div>
+
+                    {volumeSurgesError && (
+                      <div className="text-sm text-red-600 dark:text-red-400 mb-3">{volumeSurgesError}</div>
+                    )}
+
+                    {!volumeSurgesError && volumeSurges.length === 0 && !volumeSurgesLoading && (
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        No accumulation candidates match the current filters. Wait for the next 15-min refresh and try again.
+                      </p>
+                    )}
+
+                    {volumeSurges.length > 0 && (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 text-xs uppercase">
+                              <th className="px-3 py-2 text-left">Symbol</th>
+                              <th className="px-3 py-2 text-left">Name</th>
+                              <th className="px-3 py-2 text-right">Price</th>
+                              <th className="px-3 py-2 text-right">Δ%</th>
+                              <th className="px-3 py-2 text-right">Volume</th>
+                              <th className="px-3 py-2 text-right">Avg Vol</th>
+                              <th className="px-3 py-2 text-right">Ratio</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {volumeSurges.map((row) => (
+                              <tr
+                                key={row.symbol}
+                                onClick={() => handleTickerClick(row.symbol)}
+                                className="border-b border-gray-100 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 cursor-pointer"
+                              >
+                                <td className="px-3 py-2 font-semibold text-primary-600 dark:text-primary-400">{row.symbol}</td>
+                                <td className="px-3 py-2 text-gray-700 dark:text-gray-300 max-w-xs truncate">{row.name || '—'}</td>
+                                <td className="px-3 py-2 text-right text-gray-900 dark:text-white">
+                                  {row.price !== null ? `$${row.price.toFixed(2)}` : '—'}
+                                </td>
+                                <td className={`px-3 py-2 text-right font-medium ${
+                                  row.change_percentage !== null && row.change_percentage >= 0
+                                    ? 'text-green-600 dark:text-green-400'
+                                    : 'text-red-600 dark:text-red-400'
+                                }`}>
+                                  {row.change_percentage !== null
+                                    ? `${row.change_percentage >= 0 ? '+' : ''}${row.change_percentage.toFixed(2)}%`
+                                    : '—'}
+                                </td>
+                                <td className="px-3 py-2 text-right text-gray-700 dark:text-gray-300">
+                                  {row.volume !== null ? row.volume.toLocaleString() : '—'}
+                                </td>
+                                <td className="px-3 py-2 text-right text-gray-500 dark:text-gray-400">
+                                  {row.avg_volume !== null ? row.avg_volume.toLocaleString() : '—'}
+                                </td>
+                                <td className="px-3 py-2 text-right font-semibold text-teal-600 dark:text-teal-400">
+                                  {row.volume_ratio !== null ? `${row.volume_ratio.toFixed(2)}×` : '—'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {dailySnapshots.length > 0 && (
               <div className="mt-8 border-t border-gray-200 dark:border-gray-600 pt-8">
                 <h3 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Randomly selected stocks from today's market</h3>

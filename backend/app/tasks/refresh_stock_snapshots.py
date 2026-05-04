@@ -144,6 +144,7 @@ async def _fetch_quotes(
                         "change_percentage": q.get("changePercentage"),
                         "change": q.get("change"),
                         "volume": q.get("volume"),
+                        "avg_volume": q.get("avgVolume"),
                         "day_low": q.get("dayLow"),
                         "day_high": q.get("dayHigh"),
                         "year_high": q.get("yearHigh"),

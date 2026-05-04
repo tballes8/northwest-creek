@@ -29,6 +29,7 @@ import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsConditions from './pages/TermsConditions';
 import FAQ from './pages/FAQ';
 import OptionsCalculator from './pages/OptionsCalculator';
+import SectorHeatmap from './pages/SectorHeatmap';
 
 
 const Payment = React.lazy(() => import('./pages/Payment'));
@@ -118,6 +119,7 @@ function App() {
             <Route path="/terms" element={<TermsConditions />} />
             <Route path="/faq" element={<FAQ />} />
             <Route path="/options-calculator" element={<SubscriptionGuard><OptionsCalculator /></SubscriptionGuard>} />
+            <Route path="/sector-heatmap" element={<SubscriptionGuard><SectorHeatmap /></SubscriptionGuard>} />
           </Routes>
         </Suspense>
       </LivePriceProvider>

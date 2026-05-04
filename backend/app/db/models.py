@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Numeric, Date, Index, Integer
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Numeric, Date, Index, Integer, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -181,6 +181,7 @@ class StockSnapshot(Base):
     change_percentage = Column(Numeric(precision=10, scale=4), nullable=True)
     change = Column(Numeric(precision=18, scale=4), nullable=True)
     volume = Column(Numeric(precision=20, scale=0), nullable=True)
+    avg_volume = Column(Numeric(precision=20, scale=0), nullable=True)
     day_low = Column(Numeric(precision=18, scale=4), nullable=True)
     day_high = Column(Numeric(precision=18, scale=4), nullable=True)
     year_high = Column(Numeric(precision=18, scale=4), nullable=True)
@@ -200,6 +201,23 @@ class StockSnapshot(Base):
         Index('idx_ss_price_avg_50', 'price_avg_50'),
         Index('idx_ss_price_avg_200', 'price_avg_200'),
         Index('idx_ss_change_pct', 'change_percentage'),
+    )
+
+
+class SectorEtfDailyClose(Base):
+    """Daily close prices for the 11 GICS sector ETFs + SPY benchmark.
+    Backfilled once on deploy, appended daily by fetch_daily_snapshots cron."""
+    __tablename__ = "sector_etf_daily_closes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ticker = Column(String(10), nullable=False, index=True)
+    close_date = Column(Date, nullable=False, index=True)
+    close_price = Column(Numeric(precision=18, scale=4), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (
+        UniqueConstraint('ticker', 'close_date', name='uq_sector_etf_ticker_date'),
+        Index('idx_sector_etf_close_date', 'close_date'),
     )
 
 
