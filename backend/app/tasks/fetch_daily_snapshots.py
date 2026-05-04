@@ -206,6 +206,15 @@ async def fetch_and_store_snapshots():
                 print(f"❌ Database error: {db_error}")
                 raise
 
+        # Append today's sector ETF closes for the rotation heatmap.
+        # Failure here should not abort the main snapshot job — it's a separate dataset.
+        try:
+            from app.services.sector_rotation import append_today_closes
+            written = await append_today_closes()
+            print(f"📊 Sector rotation: appended {written} ETF close rows")
+        except Exception as sector_err:
+            print(f"⚠️  Sector rotation append failed (non-fatal): {sector_err}")
+
         print("🔒 Database connection closed")
 
     except Exception as e:
