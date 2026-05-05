@@ -221,6 +221,19 @@ class SectorEtfDailyClose(Base):
     )
 
 
+class MacroIndicator(Base):
+    """Latest observation per FRED macro series (yield curve, Fed funds, CPI, unemployment, GDP).
+    Refreshed daily by fetch_macro_indicators cron — only the most recent observation per
+    series_id is retained (upsert on series_id key)."""
+    __tablename__ = "macro_indicators"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    series_id = Column(String(40), nullable=False, unique=True, index=True)
+    observation_date = Column(Date, nullable=False)
+    value = Column(Numeric(precision=18, scale=6), nullable=False)
+    fetched_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class SavedScreen(Base):
     __tablename__ = "saved_screens"
 

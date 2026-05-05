@@ -33,6 +33,31 @@ interface TimelapsePayload {
   frames: TimelapseFrame[];
 }
 
+interface CyclePhaseSignal {
+  label: string;
+  value: string;
+  interpretation: string;
+}
+
+interface CyclePhasePayload {
+  phase: string;
+  confidence: string;
+  summary: string;
+  supporting_signals: CyclePhaseSignal[];
+  sector_alignment: string;
+  as_of: string;
+  disclaimer: string;
+}
+
+const phaseAccent = (phase: string): { bar: string; chip: string } => {
+  const p = phase.toLowerCase();
+  if (p.includes('recovery')) return { bar: 'bg-blue-500', chip: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200' };
+  if (p.includes('expansion')) return { bar: 'bg-green-500', chip: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200' };
+  if (p.includes('peak')) return { bar: 'bg-amber-500', chip: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' };
+  if (p.includes('contraction')) return { bar: 'bg-red-500', chip: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200' };
+  return { bar: 'bg-gray-400', chip: 'bg-gray-100 text-gray-800 dark:bg-gray-600 dark:text-gray-200' };
+};
+
 const WINDOWS: { value: string; label: string }[] = [
   { value: '1D', label: '1 Day' },
   { value: '1W', label: '1 Week' },
@@ -153,6 +178,10 @@ const SectorHeatmap: React.FC = () => {
   const [playing, setPlaying] = useState(false);
   const playIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const [cyclePhase, setCyclePhase] = useState<CyclePhasePayload | null>(null);
+  const [cyclePhaseLoading, setCyclePhaseLoading] = useState(false);
+  const [cyclePhaseFailed, setCyclePhaseFailed] = useState(false);
+
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     navigate('/');
@@ -190,6 +219,29 @@ const SectorHeatmap: React.FC = () => {
     setPlaying(false);
     return () => { cancelled = true; };
   }, [selectedWindow, endDate]);
+
+  // Cycle phase synthesis — fetched once on mount; backend caches system-wide for 24h.
+  // Independent of the window/date selectors above.
+  useEffect(() => {
+    let cancelled = false;
+    const loadCyclePhase = async () => {
+      setCyclePhaseLoading(true);
+      setCyclePhaseFailed(false);
+      try {
+        const res = await sectorRotationAPI.getCyclePhase();
+        if (!cancelled) setCyclePhase(res.data);
+      } catch {
+        if (!cancelled) {
+          setCyclePhase(null);
+          setCyclePhaseFailed(true);
+        }
+      } finally {
+        if (!cancelled) setCyclePhaseLoading(false);
+      }
+    };
+    loadCyclePhase();
+    return () => { cancelled = true; };
+  }, []);
 
   const loadTimelapse = async () => {
     setTimelapseLoading(true);
@@ -330,6 +382,80 @@ const SectorHeatmap: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Economic cycle phase — AI synthesis. Hidden silently if the endpoint fails
+            so a missing card never sits above the actual heatmap. */}
+        {!cyclePhaseFailed && (cyclePhaseLoading || cyclePhase) && (
+          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 border dark:border-gray-500 p-5 mb-6">
+            {cyclePhaseLoading && !cyclePhase ? (
+              <div className="flex items-center py-6">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+                <span className="ml-3 text-sm text-gray-500 dark:text-gray-400">
+                  Reading the macro tape…
+                </span>
+              </div>
+            ) : cyclePhase ? (
+              <>
+                <div className="flex items-start gap-3 mb-3">
+                  <div className={`w-1 self-stretch rounded-full ${phaseAccent(cyclePhase.phase).bar}`} />
+                  <div className="flex-1">
+                    <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+                      Where we are in the cycle
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`inline-block text-sm font-semibold px-2.5 py-0.5 rounded ${phaseAccent(cyclePhase.phase).chip}`}>
+                        {cyclePhase.phase}
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        confidence: {cyclePhase.confidence}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
+                  {cyclePhase.summary}
+                </p>
+
+                {cyclePhase.supporting_signals.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
+                    {cyclePhase.supporting_signals.map((s, i) => (
+                      <div key={i} className="bg-gray-50 dark:bg-gray-800/60 rounded px-3 py-2">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{s.label}</span>
+                          <span className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{s.value}</span>
+                        </div>
+                        <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">{s.interpretation}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {cyclePhase.sector_alignment && (
+                  <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed border-t border-gray-200 dark:border-gray-600 pt-3 mb-3">
+                    <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1">
+                      Sector alignment
+                    </span>
+                    {cyclePhase.sector_alignment}
+                  </div>
+                )}
+
+                <div className="text-xs text-gray-500 dark:text-gray-400 italic">
+                  {cyclePhase.disclaimer}
+                  {' '}
+                  <a
+                    href="https://nwc-analytics.com/blogs"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="not-italic text-primary-600 dark:text-primary-400 hover:underline"
+                  >
+                    Read the full sector rotation framework →
+                  </a>
+                </div>
+              </>
+            ) : null}
+          </div>
+        )}
 
         {/* Heatmap */}
         <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 border dark:border-gray-500 p-5">

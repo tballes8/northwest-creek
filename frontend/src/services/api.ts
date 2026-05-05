@@ -209,6 +209,9 @@ export const sectorRotationAPI = {
 
   getTimelapse: (params?: { window?: string; end_date?: string; step_days?: number }) =>
     axiosInstance.get(`/sector-rotation/timelapse`, { params }),
+
+  getCyclePhase: () =>
+    axiosInstance.get(`/sector-rotation/cycle-phase`),
 };
 
 // Financials API

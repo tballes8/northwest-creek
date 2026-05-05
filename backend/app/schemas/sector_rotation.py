@@ -28,3 +28,19 @@ class TimelapseResponse(BaseModel):
     step_days: int
     end_date: str
     frames: list[TimelapseFrame]
+
+
+class CyclePhaseSignal(BaseModel):
+    label: str
+    value: str
+    interpretation: str
+
+
+class CyclePhaseResponse(BaseModel):
+    phase: str
+    confidence: str
+    summary: str
+    supporting_signals: list[CyclePhaseSignal]
+    sector_alignment: str
+    as_of: str
+    disclaimer: str

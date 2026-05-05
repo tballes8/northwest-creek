@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     # Anthropic AI
     ANTHROPIC_API_KEY: str = Field(default="", env="ANTHROPIC_API_KEY")
 
+    # FRED (Federal Reserve Economic Data) API — optional. When unset, the FRED
+    # client falls back to the unauthenticated fredgraph CSV endpoint.
+    FRED_API_KEY: str = Field(default="", env="FRED_API_KEY")
+
     # Stripe Settings
     STRIPE_SECRET_KEY: str = Field(default="", env="STRIPE_SECRET_KEY")
     STRIPE_PUBLISHABLE_KEY: str = Field(default="", env="STRIPE_PUBLISHABLE_KEY")

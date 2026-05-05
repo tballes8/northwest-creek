@@ -19,6 +19,7 @@ from app.services.websocket_service import live_price_service
 from app.services.fmp_client import init_fmp_client, close_fmp_client
 from datetime import datetime, timezone
 from app.tasks.refresh_stock_snapshots import refresh_stock_snapshots_job
+from app.tasks.fetch_macro_indicators import macro_indicators_job
 
 
 settings = get_settings()
@@ -50,6 +51,20 @@ async def lifespan(app: FastAPI):
         coalesce=True,
         next_run_time=datetime.now(timezone.utc),
     )
+
+    # Macro indicators (FRED): refresh daily — most series only update monthly,
+    # so this is mostly a no-op upsert. One run on startup populates the table.
+    _scheduler.add_job(
+        macro_indicators_job,
+        "interval",
+        hours=24,
+        id="macro_indicators",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        next_run_time=datetime.now(timezone.utc),
+    )
+
     _scheduler.start()
 
     yield
