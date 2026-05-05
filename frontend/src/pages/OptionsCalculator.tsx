@@ -163,7 +163,7 @@ const pillBtn = (active) => ({
 });
 
 // ─── Input Panel (shared) ───
-function InputPanel({ params, setParams }) {
+function InputPanel({ params, setParams, page }) {
   const set = (k) => (e) => setParams(p => ({ ...p, [k]: e.target.value }));
   const [tickerInput, setTickerInput] = useState(params.ticker || "");
   const [lookupLoading, setLookupLoading] = useState(false);
@@ -249,15 +249,21 @@ function InputPanel({ params, setParams }) {
         )}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: page === "spreads" ? "1fr 1fr 1fr 1fr" : "1fr 1fr 1fr",
+        gap: 12,
+      }}>
         <div style={inputGroup}>
           <span style={labelStyle()}>Stock Price ($)</span>
           <input style={inputStyle()} type="number" step="0.01" value={params.S} onChange={set("S")} />
         </div>
-        <div style={inputGroup}>
-          <span style={labelStyle()}>Strike Price ($)</span>
-          <input style={inputStyle()} type="number" step="0.01" value={params.K} onChange={set("K")} />
-        </div>
+        {page !== "spreads" && (
+          <div style={inputGroup}>
+            <span style={labelStyle()}>Strike Price ($)</span>
+            <input style={inputStyle()} type="number" step="0.01" value={params.K} onChange={set("K")} />
+          </div>
+        )}
         <div style={inputGroup}>
           <span style={labelStyle()}>Days to Expiry</span>
           <input style={inputStyle()} type="number" step="1" value={params.days} onChange={set("days")} />
@@ -270,13 +276,15 @@ function InputPanel({ params, setParams }) {
           <span style={labelStyle()}>Volatility (%)</span>
           <input style={inputStyle()} type="number" step="0.1" value={params.sigma} onChange={set("sigma")} />
         </div>
-        <div style={inputGroup}>
-          <span style={labelStyle()}>Option Type</span>
-          <select style={selectStyle()} value={params.type} onChange={set("type")}>
-            <option value="call">Call</option>
-            <option value="put">Put</option>
-          </select>
-        </div>
+        {page !== "spreads" && (
+          <div style={inputGroup}>
+            <span style={labelStyle()}>Option Type</span>
+            <select style={selectStyle()} value={params.type} onChange={set("type")}>
+              <option value="call">Call</option>
+              <option value="put">Put</option>
+            </select>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -914,7 +922,7 @@ export default function OptionsCalculator() {
             </div>
           )}
         </div>
-        <InputPanel params={params} setParams={setParams} />
+        <InputPanel params={params} setParams={setParams} page={page} />
         {page === "pricing" && <PricingPage params={params} />}
         {page === "greeks" && <GreeksPage params={params} />}
         {page === "payoff" && <PayoffPage params={params} />}
