@@ -356,31 +356,6 @@ const SectorHeatmap: React.FC = () => {
               </div>
             )}
           </div>
-
-          {/* Time-lapse slider */}
-          {timelapse && timelapse.frames.length > 0 && (
-            <div className="mt-5 pt-5 border-t border-gray-200 dark:border-gray-600">
-              <div className="flex items-center gap-3 mb-2">
-                <button
-                  onClick={() => setPlaying(p => !p)}
-                  className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded text-sm font-medium"
-                >
-                  {playing ? '⏸ Pause' : '▶ Play'}
-                </button>
-                <span className="text-sm text-gray-600 dark:text-gray-300">
-                  Frame {frameIdx + 1} / {timelapse.frames.length} — {timelapse.frames[frameIdx]?.date}
-                </span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={timelapse.frames.length - 1}
-                value={frameIdx}
-                onChange={e => setFrameIdx(Number(e.target.value))}
-                className="w-full"
-              />
-            </div>
-          )}
         </div>
 
         {/* Economic cycle phase — AI synthesis. Hidden silently if the endpoint fails
@@ -459,6 +434,31 @@ const SectorHeatmap: React.FC = () => {
 
         {/* Heatmap */}
         <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 border dark:border-gray-500 p-5">
+          {/* Time-lapse slider — sits with the heatmap so the slider and what it scrubs stay grouped */}
+          {timelapse && timelapse.frames.length > 0 && (
+            <div className="mb-5 pb-5 border-b border-gray-200 dark:border-gray-600">
+              <div className="flex items-center gap-3 mb-2">
+                <button
+                  onClick={() => setPlaying(p => !p)}
+                  className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded text-sm font-medium"
+                >
+                  {playing ? '⏸ Pause' : '▶ Play'}
+                </button>
+                <span className="text-sm text-gray-600 dark:text-gray-300">
+                  Frame {frameIdx + 1} / {timelapse.frames.length} — {timelapse.frames[frameIdx]?.date}
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={timelapse.frames.length - 1}
+                value={frameIdx}
+                onChange={e => setFrameIdx(Number(e.target.value))}
+                className="w-full"
+              />
+            </div>
+          )}
+
           {error && (
             <div className="text-sm text-red-600 dark:text-red-400 mb-3">{error}</div>
           )}
