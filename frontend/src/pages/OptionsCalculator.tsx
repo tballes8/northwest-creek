@@ -572,47 +572,48 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
         <span style={{ flexBasis: "100%", fontSize: 11, color: C.textMuted, marginTop: 2 }}>{strat.desc}</span>
       </div>
 
-      {/* Strike inputs — Days/Vol intentionally not duplicated; they live in the top input panel. */}
-      <div style={{ ...cardBox(), padding: 12, display: "grid", gridTemplateColumns: `repeat(${strat.strikes.length}, 1fr)`, gap: 12 }}>
-        {strat.strikes.map(k => (
-          <div key={k} style={inputGroup}>
-            <span style={labelStyle()}>{strat.strikeLabels[k]}</span>
-            <input style={inputStyle()} type="number" step="0.50" value={strikes[k] || ""} onChange={setStrike(k)} />
-          </div>
-        ))}
-      </div>
-
-      {/* Leg breakdown */}
-      <div style={{ ...cardBox(), padding: 12 }}>
-        <div style={{ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Leg Breakdown</div>
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 8, fontSize: 12 }}>
-          <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>LEG</div>
-          <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, textAlign: "right" }}>STRIKE</div>
-          <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, textAlign: "right" }}>PRICE</div>
-          <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, textAlign: "right" }}>DELTA</div>
-          {legDetails.map((l, i) => (
-            <div key={i} style={{ display: "contents" }}>
-              <div style={{ color: l.dir > 0 ? C.greenText : C.redText, padding: "4px 0" }}>
-                {l.dir > 0 ? "+" : "−"} {l.label} ({l.type})
-              </div>
-              <div style={{ color: C.textSec, textAlign: "right", padding: "4px 0" }}>${l.K.toFixed(2)}</div>
-              <div style={{ color: l.dir > 0 ? C.redText : C.greenText, textAlign: "right", padding: "4px 0" }}>
-                {l.dir > 0 ? "−" : "+"}${l.price.toFixed(2)}
-              </div>
-              <div style={{ color: C.textSec, textAlign: "right", padding: "4px 0" }}>{(l.dir * l.greeks.delta).toFixed(4)}</div>
+      {/* Strike inputs (left, stacked) + Leg breakdown (right) — separate cards on the same row */}
+      <div style={{ display: "flex", gap: 10, alignItems: "stretch", flexWrap: "wrap" }}>
+        <div style={{ ...cardBox(), padding: 12, flex: "0 0 240px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {strat.strikes.map(k => (
+            <div key={k} style={inputGroup}>
+              <span style={labelStyle()}>{strat.strikeLabels[k]}</span>
+              <input style={inputStyle()} type="number" step="0.50" value={strikes[k] || ""} onChange={setStrike(k)} />
             </div>
           ))}
-          <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 6, fontWeight: 700, color: C.text }}>Net</div>
-          <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 6 }} />
-          <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 6, textAlign: "right", fontWeight: 700, color: netPremium < 0 ? C.greenText : C.redText, fontFamily: "monospace" }}>
-            {netPremium < 0 ? "+" : "−"}${Math.abs(netPremium).toFixed(2)}
-          </div>
-          <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 6, textAlign: "right", fontWeight: 700, color: C.text, fontFamily: "monospace" }}>
-            {netGreeks.delta.toFixed(4)}
-          </div>
         </div>
-        <div style={{ marginTop: 8, fontSize: 11, color: C.textMuted }}>
-          {netPremium > 0 ? `Net debit: $${netPremium.toFixed(2)} paid` : `Net credit: $${Math.abs(netPremium).toFixed(2)} received`}
+
+        <div style={{ ...cardBox(), padding: 12, flex: "1 1 420px", minWidth: 0 }}>
+          <div style={{ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Leg Breakdown</div>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 8, fontSize: 12 }}>
+            <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>LEG</div>
+            <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, textAlign: "right" }}>STRIKE</div>
+            <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, textAlign: "right" }}>PRICE</div>
+            <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, textAlign: "right" }}>DELTA</div>
+            {legDetails.map((l, i) => (
+              <div key={i} style={{ display: "contents" }}>
+                <div style={{ color: l.dir > 0 ? C.greenText : C.redText, padding: "4px 0" }}>
+                  {l.dir > 0 ? "+" : "−"} {l.label} ({l.type})
+                </div>
+                <div style={{ color: C.textSec, textAlign: "right", padding: "4px 0" }}>${l.K.toFixed(2)}</div>
+                <div style={{ color: l.dir > 0 ? C.redText : C.greenText, textAlign: "right", padding: "4px 0" }}>
+                  {l.dir > 0 ? "−" : "+"}${l.price.toFixed(2)}
+                </div>
+                <div style={{ color: C.textSec, textAlign: "right", padding: "4px 0" }}>{(l.dir * l.greeks.delta).toFixed(4)}</div>
+              </div>
+            ))}
+            <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 6, fontWeight: 700, color: C.text }}>Net</div>
+            <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 6 }} />
+            <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 6, textAlign: "right", fontWeight: 700, color: netPremium < 0 ? C.greenText : C.redText, fontFamily: "monospace" }}>
+              {netPremium < 0 ? "+" : "−"}${Math.abs(netPremium).toFixed(2)}
+            </div>
+            <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 6, textAlign: "right", fontWeight: 700, color: C.text, fontFamily: "monospace" }}>
+              {netGreeks.delta.toFixed(4)}
+            </div>
+          </div>
+          <div style={{ marginTop: 8, fontSize: 11, color: C.textMuted }}>
+            {netPremium > 0 ? `Net debit: $${netPremium.toFixed(2)} paid` : `Net credit: $${Math.abs(netPremium).toFixed(2)} received`}
+          </div>
         </div>
       </div>
 
