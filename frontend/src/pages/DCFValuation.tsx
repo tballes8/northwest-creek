@@ -49,6 +49,7 @@ interface TradeSuggestion {
   probProfit: number;
   contracts: number;
   days: number;
+  expectedMove: number;
 }
 
 function suggestStrategy(
@@ -65,6 +66,10 @@ function suggestStrategy(
   const T = days / 365;
   const sigma = 0.30;
   const r = 0.05;
+  // 1σ expected move of the underlying by expiration. This is what bounds where the
+  // short strike can realistically end up — DCF intrinsic value is a multi-year
+  // estimate and is not a near-term price target.
+  const expectedMove = currentPrice * sigma * Math.sqrt(T);
   let K1: number, K2: number, strategyType: string, strategyName: string;
 
   if (isBullish) {
@@ -72,13 +77,13 @@ function suggestStrategy(
     strategyName = "Bull Call Spread";
     if (confidence === "high") {
       K1 = _roundStrike(currentPrice);
-      K2 = _roundStrike(Math.min(targetPrice, currentPrice * 1.15));
+      K2 = _roundStrike(Math.min(targetPrice, currentPrice + 2.0 * expectedMove));
     } else if (confidence === "medium") {
       K1 = _roundStrike(currentPrice);
-      K2 = _roundStrike(currentPrice + (targetPrice - currentPrice) * 0.5);
+      K2 = _roundStrike(Math.min(targetPrice, currentPrice + 1.0 * expectedMove));
     } else {
-      K1 = _roundStrike(currentPrice * 0.97);
-      K2 = _roundStrike(currentPrice * 1.03);
+      K1 = _roundStrike(currentPrice + 0.25 * expectedMove);
+      K2 = _roundStrike(currentPrice + 0.75 * expectedMove);
     }
     const minGap = currentPrice >= 50 ? 5 : currentPrice >= 25 ? 2.5 : 1;
     if (K2 <= K1) K2 = K1 + minGap;
@@ -86,14 +91,14 @@ function suggestStrategy(
     strategyType = "bearPut";
     strategyName = "Bear Put Spread";
     if (confidence === "high") {
-      K1 = _roundStrike(Math.max(targetPrice, currentPrice * 0.85));
+      K1 = _roundStrike(Math.max(targetPrice, currentPrice - 2.0 * expectedMove));
       K2 = _roundStrike(currentPrice);
     } else if (confidence === "medium") {
-      K1 = _roundStrike(currentPrice - (currentPrice - targetPrice) * 0.5);
+      K1 = _roundStrike(Math.max(targetPrice, currentPrice - 1.0 * expectedMove));
       K2 = _roundStrike(currentPrice);
     } else {
-      K1 = _roundStrike(currentPrice * 0.97);
-      K2 = _roundStrike(currentPrice * 1.03);
+      K1 = _roundStrike(currentPrice - 0.75 * expectedMove);
+      K2 = _roundStrike(currentPrice - 0.25 * expectedMove);
     }
     const minGap = currentPrice >= 50 ? 5 : currentPrice >= 25 ? 2.5 : 1;
     if (K1 >= K2) K1 = K2 - minGap;
@@ -121,6 +126,7 @@ function suggestStrategy(
   return {
     strategyType, strategyName, direction: isBullish ? "bullish" : "bearish",
     K1, K2, spreadCost, maxProfit, maxLoss, breakeven, probProfit, contracts, days,
+    expectedMove,
   };
 }
 
@@ -1624,6 +1630,9 @@ const DCFValuation: React.FC = () => {
                           <div className="font-bold text-gray-900 dark:text-white">{suggestion.contracts}</div>
                         </div>
                       </div>
+                      <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-3 leading-snug">
+                        Strikes are sized to the expected move at expiration (~±${suggestion.expectedMove.toFixed(2)} for {suggestion.days} days at 30% IV), not the multi-year DCF target. A long-horizon DCF estimate is rarely reachable in a single options expiration cycle.
+                      </p>
                     </div>
 
                     <button
