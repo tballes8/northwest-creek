@@ -532,7 +532,7 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
   const yMin = minPnl - pad, yMax = maxPnl + pad;
 
   // SVG chart
-  const W = 640, H = 300, mx = 55, my = 30;
+  const W = 640, H = 220, mx = 55, my = 24;
   const toX = (v) => mx + (v - lo) / (hi - lo) * (W - 2 * mx);
   const toY = (v) => my + (1 - (v - yMin) / (yMax - yMin)) * (H - 2 * my);
   const pathExp = pts.map((p, i) => `${i === 0 ? "M" : "L"}${toX(p.st).toFixed(1)},${toY(p.pnlExp).toFixed(1)}`).join("");
@@ -560,41 +560,31 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      {/* Strategy selector */}
-      <div style={{ ...cardBox(), display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {/* Strategy selector + description (merged) */}
+      <div style={{ ...cardBox(), padding: 12, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
         <span style={{ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginRight: 4 }}>Strategy:</span>
         {Object.entries(STRATEGIES).map(([key, s]) => (
           <button key={key} style={pillBtn(strategy === key)} onClick={() => handleStrategyChange(key)}>
             {s.label}
           </button>
         ))}
+        <span style={{ flexBasis: "100%", fontSize: 11, color: C.textMuted, marginTop: 2 }}>{strat.desc}</span>
       </div>
 
-      {/* Strategy description */}
-      <div style={{ fontSize: 12, color: C.textDim, padding: "0 2px" }}>{strat.desc}</div>
-
-      {/* Strike inputs */}
-      <div style={{ ...cardBox(), display: "grid", gridTemplateColumns: `repeat(${Math.min(strat.strikes.length + 2, 4)}, 1fr)`, gap: 12 }}>
+      {/* Strike inputs — Days/Vol intentionally not duplicated; they live in the top input panel. */}
+      <div style={{ ...cardBox(), padding: 12, display: "grid", gridTemplateColumns: `repeat(${strat.strikes.length}, 1fr)`, gap: 12 }}>
         {strat.strikes.map(k => (
           <div key={k} style={inputGroup}>
             <span style={labelStyle()}>{strat.strikeLabels[k]}</span>
             <input style={inputStyle()} type="number" step="0.50" value={strikes[k] || ""} onChange={setStrike(k)} />
           </div>
         ))}
-        <div style={inputGroup}>
-          <span style={labelStyle()}>Days to Expiry</span>
-          <input style={{ ...inputStyle(), background: C.card, color: C.textDim }} type="number" value={params.days} disabled />
-        </div>
-        <div style={inputGroup}>
-          <span style={labelStyle()}>Volatility (%)</span>
-          <input style={{ ...inputStyle(), background: C.card, color: C.textDim }} type="number" value={params.sigma} disabled />
-        </div>
       </div>
 
       {/* Leg breakdown */}
-      <div style={cardBox()}>
-        <div style={{ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Leg Breakdown</div>
+      <div style={{ ...cardBox(), padding: 12 }}>
+        <div style={{ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Leg Breakdown</div>
         <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 8, fontSize: 12 }}>
           <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>LEG</div>
           <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, textAlign: "right" }}>STRIKE</div>
@@ -627,8 +617,8 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
       </div>
 
       {/* P&L Chart */}
-      <div style={cardBox()}>
-        <div style={{ display: "flex", gap: 16, marginBottom: 12, justifyContent: "center" }}>
+      <div style={{ ...cardBox(), padding: 12 }}>
+        <div style={{ display: "flex", gap: 16, marginBottom: 6, justifyContent: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
             <div style={{ width: 16, height: 3, background: C.accent, borderRadius: 2 }} />
             <span style={{ color: C.textDim }}>At Expiration</span>
@@ -677,25 +667,22 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
         </svg>
       </div>
 
-      {/* Summary stats */}
-      <div style={{ display: "flex", gap: 12 }}>
-        {[
-          { label: "NET PREMIUM", val: `${netPremium > 0 ? "−" : "+"}$${Math.abs(netPremium).toFixed(2)}`, color: netPremium > 0 ? C.redText : C.greenText, bg: netPremium > 0 ? "rgba(239,68,68,0.08)" : "rgba(34,197,94,0.08)" },
-          { label: "MAX PROFIT", val: maxProfit > 50000 ? "Unlimited" : `$${maxProfit.toFixed(2)}`, color: C.greenText, bg: "rgba(34,197,94,0.08)" },
-          { label: "MAX LOSS", val: maxLoss < -50000 ? "Unlimited" : `$${maxLoss.toFixed(2)}`, color: C.redText, bg: "rgba(239,68,68,0.08)" },
-          { label: breakevens.length > 1 ? "BREAKEVENS" : "BREAKEVEN", val: breakevens.length ? breakevens.map(b => `$${b.toFixed(2)}`).join(" / ") : "N/A", color: C.accent, bg: C.accentGlow },
-        ].map(s => (
-          <div key={s.label} style={{ flex: 1, textAlign: "center", padding: 10, borderRadius: 8, background: s.bg }}>
-            <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 2 }}>{s.label}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: s.color, fontFamily: "monospace" }}>{s.val}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Net Greeks */}
-      <div style={cardBox()}>
-        <div style={{ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Net Greeks</div>
-        <div style={{ display: "flex", gap: 12 }}>
+      {/* Combined: summary stats (top row) + net greeks (bottom row) in one card */}
+      <div style={{ ...cardBox(), padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          {[
+            { label: "NET PREMIUM", val: `${netPremium > 0 ? "−" : "+"}$${Math.abs(netPremium).toFixed(2)}`, color: netPremium > 0 ? C.redText : C.greenText, bg: netPremium > 0 ? "rgba(239,68,68,0.08)" : "rgba(34,197,94,0.08)" },
+            { label: "MAX PROFIT", val: maxProfit > 50000 ? "Unlimited" : `$${maxProfit.toFixed(2)}`, color: C.greenText, bg: "rgba(34,197,94,0.08)" },
+            { label: "MAX LOSS", val: maxLoss < -50000 ? "Unlimited" : `$${maxLoss.toFixed(2)}`, color: C.redText, bg: "rgba(239,68,68,0.08)" },
+            { label: breakevens.length > 1 ? "BREAKEVENS" : "BREAKEVEN", val: breakevens.length ? breakevens.map(b => `$${b.toFixed(2)}`).join(" / ") : "N/A", color: C.accent, bg: C.accentGlow },
+          ].map(s => (
+            <div key={s.label} style={{ flex: 1, textAlign: "center", padding: "6px 8px", borderRadius: 6, background: s.bg }}>
+              <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 2, letterSpacing: "0.04em" }}>{s.label}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: s.color, fontFamily: "monospace" }}>{s.val}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
           {[
             { name: "Delta", sym: "Δ", val: netGreeks.delta, color: C.accent },
             { name: "Gamma", sym: "Γ", val: netGreeks.gamma, color: C.purple },
@@ -703,10 +690,10 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
             { name: "Vega", sym: "ν", val: netGreeks.vega, color: C.yellow },
             { name: "Rho", sym: "ρ", val: netGreeks.rho, color: C.accentHover },
           ].map(g => (
-            <div key={g.name} style={{ flex: 1, textAlign: "center", padding: "8px 4px", borderRadius: 8, background: C.cardAlt }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: g.color, fontFamily: "serif" }}>{g.sym}</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: "monospace", marginTop: 2 }}>{g.val.toFixed(4)}</div>
-              <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{g.name}</div>
+            <div key={g.name} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "6px 8px", borderRadius: 6, background: C.cardAlt }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: g.color, fontFamily: "serif" }}>{g.sym}</span>
+              <span style={{ fontSize: 9, color: C.textMuted }}>{g.name}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: "monospace", marginLeft: "auto" }}>{g.val.toFixed(4)}</span>
             </div>
           ))}
         </div>
