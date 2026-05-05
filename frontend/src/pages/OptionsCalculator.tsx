@@ -561,20 +561,21 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {/* Strategy selector + description (merged) */}
-      <div style={{ ...cardBox(), padding: 12, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-        <span style={{ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginRight: 4 }}>Strategy:</span>
-        {Object.entries(STRATEGIES).map(([key, s]) => (
-          <button key={key} style={pillBtn(strategy === key)} onClick={() => handleStrategyChange(key)}>
-            {s.label}
-          </button>
-        ))}
-        <span style={{ flexBasis: "100%", fontSize: 11, color: C.textMuted, marginTop: 2 }}>{strat.desc}</span>
-      </div>
-
-      {/* Strike inputs (left, stacked) + Leg breakdown (right) — separate cards on the same row */}
+      {/* Three-up: Strategy selector (left) + Strike inputs (middle) + Leg breakdown (right) */}
       <div style={{ display: "flex", gap: 10, alignItems: "stretch", flexWrap: "wrap" }}>
-        <div style={{ ...cardBox(), padding: 12, flex: "0 0 240px", display: "flex", flexDirection: "column", gap: 10 }}>
+        {/* Strategy selector — pills stacked vertically */}
+        <div style={{ ...cardBox(), padding: 12, flex: "0 0 180px", display: "flex", flexDirection: "column", gap: 6 }}>
+          <span style={{ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 2 }}>Strategy</span>
+          {Object.entries(STRATEGIES).map(([key, s]) => (
+            <button key={key} style={{ ...pillBtn(strategy === key), textAlign: "left", width: "100%" }} onClick={() => handleStrategyChange(key)}>
+              {s.label}
+            </button>
+          ))}
+          <span style={{ fontSize: 10, color: C.textMuted, marginTop: 4, lineHeight: 1.4 }}>{strat.desc}</span>
+        </div>
+
+        {/* Strike inputs — stacked vertically */}
+        <div style={{ ...cardBox(), padding: 12, flex: "0 0 200px", display: "flex", flexDirection: "column", gap: 10 }}>
           {strat.strikes.map(k => (
             <div key={k} style={inputGroup}>
               <span style={labelStyle()}>{strat.strikeLabels[k]}</span>
@@ -583,9 +584,10 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
           ))}
         </div>
 
-        <div style={{ ...cardBox(), padding: 12, flex: "1 1 420px", minWidth: 0 }}>
+        {/* Leg breakdown — fills remaining width */}
+        <div style={{ ...cardBox(), padding: 12, flex: "1 1 360px", minWidth: 0 }}>
           <div style={{ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Leg Breakdown</div>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 8, fontSize: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 6, fontSize: 12 }}>
             <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>LEG</div>
             <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, textAlign: "right" }}>STRIKE</div>
             <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4, textAlign: "right" }}>PRICE</div>
