@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { authAPI } from "../services/api";
+import { authAPI, stocksAPI } from "../services/api";
 import NavBar from "../components/NavBar";
 import { useTheme } from "../contexts/ThemeContext";
 import UpgradeRequiredPage from "../pages/UpgradeRequired";
@@ -165,34 +165,118 @@ const pillBtn = (active) => ({
 // ─── Input Panel (shared) ───
 function InputPanel({ params, setParams }) {
   const set = (k) => (e) => setParams(p => ({ ...p, [k]: e.target.value }));
+  const [tickerInput, setTickerInput] = useState(params.ticker || "");
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupStatus, setLookupStatus] = useState<{ ok: boolean; msg: string; source?: string } | null>(null);
+
+  // Sync ticker prefill when URL params populate it post-mount
+  useEffect(() => {
+    if (params.ticker && params.ticker !== tickerInput) {
+      setTickerInput(params.ticker);
+    }
+  }, [params.ticker]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const runLookup = async () => {
+    const sym = tickerInput.trim().toUpperCase();
+    if (!sym) return;
+    setLookupLoading(true);
+    setLookupStatus(null);
+    try {
+      const [quoteRes, ivRes] = await Promise.all([
+        stocksAPI.getQuote(sym).catch(() => null),
+        stocksAPI.getImpliedVolatility(sym, 30).catch(() => null),
+      ]);
+      const newPrice = quoteRes?.data?.price;
+      const ivVal = ivRes?.data?.value;
+      const ivSource = ivRes?.data?.source;
+      if (newPrice == null && ivVal == null) {
+        setLookupStatus({ ok: false, msg: `No data for ${sym}` });
+        return;
+      }
+      setParams(p => ({
+        ...p,
+        ticker: sym,
+        ...(newPrice != null ? { S: Number(newPrice).toFixed(2) } : {}),
+        ...(ivVal != null ? { sigma: (Number(ivVal) * 100).toFixed(1) } : {}),
+      }));
+      const priceMsg = newPrice != null ? `$${Number(newPrice).toFixed(2)}` : "price n/a";
+      const ivMsg = ivVal != null ? `${(Number(ivVal) * 100).toFixed(1)}% vol (${ivSource === "realized" ? "30D realized" : "default"})` : "vol n/a";
+      setLookupStatus({ ok: true, msg: `${sym} · ${priceMsg} · ${ivMsg}`, source: ivSource });
+    } catch {
+      setLookupStatus({ ok: false, msg: `Lookup failed for ${sym}` });
+    } finally {
+      setLookupLoading(false);
+    }
+  };
+
   return (
-    <div style={{ ...cardBox(), display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-      <div style={inputGroup}>
-        <span style={labelStyle()}>Stock Price ($)</span>
-        <input style={inputStyle()} type="number" step="0.01" value={params.S} onChange={set("S")} />
+    <div style={{ ...cardBox(), display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* Ticker lookup — fetches current price + 30-day realized volatility */}
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ ...inputGroup, flex: "0 0 160px" }}>
+          <span style={labelStyle()}>Ticker (optional)</span>
+          <input
+            style={inputStyle()}
+            type="text"
+            value={tickerInput}
+            placeholder="e.g. CRCL"
+            onChange={e => setTickerInput(e.target.value.toUpperCase())}
+            onBlur={runLookup}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); runLookup(); } }}
+          />
+        </div>
+        <button
+          onClick={runLookup}
+          disabled={lookupLoading || !tickerInput.trim()}
+          style={{
+            ...pillBtn(false),
+            padding: "8px 16px",
+            cursor: lookupLoading || !tickerInput.trim() ? "not-allowed" : "pointer",
+            opacity: lookupLoading || !tickerInput.trim() ? 0.5 : 1,
+          }}
+        >
+          {lookupLoading ? "Loading…" : "Fetch price + vol"}
+        </button>
+        {lookupStatus && (
+          <span style={{ fontSize: 12, color: lookupStatus.ok ? C.greenText : C.redText, alignSelf: "center" }}>
+            {lookupStatus.msg}
+            {lookupStatus.ok && lookupStatus.source === "default" && (
+              <span style={{ color: C.textMuted, marginLeft: 6, fontStyle: "italic" }}>
+                — couldn't compute realized vol, using 30% default
+              </span>
+            )}
+          </span>
+        )}
       </div>
-      <div style={inputGroup}>
-        <span style={labelStyle()}>Strike Price ($)</span>
-        <input style={inputStyle()} type="number" step="0.01" value={params.K} onChange={set("K")} />
-      </div>
-      <div style={inputGroup}>
-        <span style={labelStyle()}>Days to Expiry</span>
-        <input style={inputStyle()} type="number" step="1" value={params.days} onChange={set("days")} />
-      </div>
-      <div style={inputGroup}>
-        <span style={labelStyle()}>Risk-Free Rate (%)</span>
-        <input style={inputStyle()} type="number" step="0.1" value={params.r} onChange={set("r")} />
-      </div>
-      <div style={inputGroup}>
-        <span style={labelStyle()}>Volatility (%)</span>
-        <input style={inputStyle()} type="number" step="0.1" value={params.sigma} onChange={set("sigma")} />
-      </div>
-      <div style={inputGroup}>
-        <span style={labelStyle()}>Option Type</span>
-        <select style={selectStyle()} value={params.type} onChange={set("type")}>
-          <option value="call">Call</option>
-          <option value="put">Put</option>
-        </select>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+        <div style={inputGroup}>
+          <span style={labelStyle()}>Stock Price ($)</span>
+          <input style={inputStyle()} type="number" step="0.01" value={params.S} onChange={set("S")} />
+        </div>
+        <div style={inputGroup}>
+          <span style={labelStyle()}>Strike Price ($)</span>
+          <input style={inputStyle()} type="number" step="0.01" value={params.K} onChange={set("K")} />
+        </div>
+        <div style={inputGroup}>
+          <span style={labelStyle()}>Days to Expiry</span>
+          <input style={inputStyle()} type="number" step="1" value={params.days} onChange={set("days")} />
+        </div>
+        <div style={inputGroup}>
+          <span style={labelStyle()}>Risk-Free Rate (%)</span>
+          <input style={inputStyle()} type="number" step="0.1" value={params.r} onChange={set("r")} />
+        </div>
+        <div style={inputGroup}>
+          <span style={labelStyle()}>Volatility (%)</span>
+          <input style={inputStyle()} type="number" step="0.1" value={params.sigma} onChange={set("sigma")} />
+        </div>
+        <div style={inputGroup}>
+          <span style={labelStyle()}>Option Type</span>
+          <select style={selectStyle()} value={params.type} onChange={set("type")}>
+            <option value="call">Call</option>
+            <option value="put">Put</option>
+          </select>
+        </div>
       </div>
     </div>
   );
@@ -731,6 +815,7 @@ export default function OptionsCalculator() {
     r: searchParams.get("r") || "5.0",
     sigma: searchParams.get("sigma") || "25.0",
     type: searchParams.get("type") || "call",
+    ticker: searchParams.get("ticker") || "",
   });
 
   // Pre-fill spread strikes from URL (used by "Trade This" → "Open in Options Calculator")

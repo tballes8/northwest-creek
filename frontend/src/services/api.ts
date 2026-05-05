@@ -176,6 +176,9 @@ export const stocksAPI = {
     limit?: number;
   }) =>
     axiosInstance.get(`/stocks/volume-surge`, { params }),
+
+  getImpliedVolatility: (ticker: string, lookback_days: number = 30) =>
+    axiosInstance.get(`/stocks/${ticker}/implied-volatility`, { params: { lookback_days } }),
 };
 
 // DCF API

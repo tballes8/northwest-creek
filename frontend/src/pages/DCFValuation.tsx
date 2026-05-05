@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { authAPI, dcfAPI, watchlistAPI } from '../services/api';
+import { authAPI, dcfAPI, stocksAPI, watchlistAPI } from '../services/api';
 import { User } from '../types';
 import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
@@ -58,13 +58,14 @@ function suggestStrategy(
   confidence: "low" | "medium" | "high",
   days: number,
   maxCapital: number,
+  sigmaOverride?: number,
 ): TradeSuggestion | null {
   const isBullish = targetPrice > currentPrice * 1.02;
   const isBearish = targetPrice < currentPrice * 0.98;
   if (!isBullish && !isBearish) return null;
 
   const T = days / 365;
-  const sigma = 0.30;
+  const sigma = sigmaOverride && sigmaOverride > 0 ? sigmaOverride : 0.30;
   const r = 0.05;
   // 1σ expected move of the underlying by expiration. This is what bounds where the
   // short strike can realistically end up — DCF intrinsic value is a multi-year
@@ -299,6 +300,9 @@ const DCFValuation: React.FC = () => {
   const [tradeTimeframe, setTradeTimeframe] = useState<"14" | "30" | "90">("30");
   const [tradeConfidence, setTradeConfidence] = useState<"low" | "medium" | "high">("medium");
   const [tradeMaxCapital, setTradeMaxCapital] = useState("1000");
+  // Volatility fetched on demand when the Trade This modal opens. value is decimal (0.87 = 87%).
+  const [tradeIv, setTradeIv] = useState<{ value: number; source: "realized" | "default"; lookbackDays: number | null } | null>(null);
+  const [tradeIvLoading, setTradeIvLoading] = useState(false);
 
   // Warrant detection is now API-driven using Polygon's `type` field (CS, WARRANT, ETF, etc.)
   // These helpers are only used as a pre-fetch hint for explicit separator patterns
@@ -386,6 +390,30 @@ const DCFValuation: React.FC = () => {
   useEffect(() => {
     loadUser();
   }, [loadUser]);
+
+  // Fetch realized volatility when the Trade This modal opens for the current ticker.
+  // Cached server-side for 15 min, so reopening the modal hits the cache.
+  useEffect(() => {
+    if (!showTradeModal || !dcfData?.ticker) return;
+    let cancelled = false;
+    setTradeIvLoading(true);
+    setTradeIv(null);
+    stocksAPI.getImpliedVolatility(dcfData.ticker, 30)
+      .then(res => {
+        if (cancelled) return;
+        const v = typeof res.data?.value === "number" ? res.data.value : 0.30;
+        const src = res.data?.source === "realized" ? "realized" : "default";
+        setTradeIv({ value: v, source: src as "realized" | "default", lookbackDays: res.data?.lookback_days ?? null });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setTradeIv({ value: 0.30, source: "default", lookbackDays: null });
+      })
+      .finally(() => {
+        if (!cancelled) setTradeIvLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [showTradeModal, dcfData?.ticker]);
 
   // Separate useEffect for handling URL ticker parameter
   useEffect(() => {
@@ -1520,12 +1548,14 @@ const DCFValuation: React.FC = () => {
 
       {/* Trade This Modal */}
       {showTradeModal && dcfData && (() => {
+        const sigmaToUse = tradeIv?.value && tradeIv.value > 0 ? tradeIv.value : 0.30;
         const suggestion = suggestStrategy(
           dcfData.current_price,
           dcfData.valuation.intrinsic_value_per_share,
           tradeConfidence,
           parseInt(tradeTimeframe),
           parseFloat(tradeMaxCapital) || 0,
+          sigmaToUse,
         );
 
         return (
@@ -1585,6 +1615,28 @@ const DCFValuation: React.FC = () => {
 
               {/* Strategy Result */}
               <div className="px-6 pb-4">
+                {/* IV source badge — tells user whether strikes/pricing use realized vol or default */}
+                <div className="mb-3 flex items-center gap-2 text-[11px]">
+                  {tradeIvLoading ? (
+                    <span className="text-gray-500 dark:text-gray-400">Estimating volatility…</span>
+                  ) : tradeIv ? (
+                    <>
+                      <span className="font-medium text-gray-600 dark:text-gray-300">
+                        Volatility used: <span className="font-bold text-gray-900 dark:text-white tabular-nums">{(tradeIv.value * 100).toFixed(1)}%</span>
+                      </span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${
+                        tradeIv.source === "realized"
+                          ? "bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200"
+                          : "bg-gray-200 text-gray-700 dark:bg-gray-600 dark:text-gray-200"
+                      }`}>
+                        {tradeIv.source === "realized" ? `${tradeIv.lookbackDays ?? 30}D realized` : "default"}
+                      </span>
+                      {tradeIv.source === "realized" && (
+                        <span className="text-gray-500 dark:text-gray-400 italic">— realized typically 60–80% of true IV; verify with broker for high-IV names</span>
+                      )}
+                    </>
+                  ) : null}
+                </div>
                 {suggestion ? (
                   <div className="space-y-3">
                     <div className={`rounded-lg p-4 border ${
@@ -1631,21 +1683,23 @@ const DCFValuation: React.FC = () => {
                         </div>
                       </div>
                       <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-3 leading-snug">
-                        Strikes are sized to the expected move at expiration (~±${suggestion.expectedMove.toFixed(2)} for {suggestion.days} days at 30% IV), not the multi-year DCF target. A long-horizon DCF estimate is rarely reachable in a single options expiration cycle.
+                        Strikes are sized to the expected move at expiration (~±${suggestion.expectedMove.toFixed(2)} for {suggestion.days} days at {(sigmaToUse * 100).toFixed(0)}% volatility), not the multi-year DCF target. A long-horizon DCF estimate is rarely reachable in a single options expiration cycle.
                       </p>
                     </div>
 
                     <button
                       onClick={() => {
+                        const sigmaPct = (sigmaToUse * 100).toFixed(1);
                         const params = new URLSearchParams({
                           page: 'spreads',
                           S: dcfData.current_price.toFixed(2),
                           days: suggestion.days.toString(),
-                          sigma: '30.0',
+                          sigma: sigmaPct,
                           r: '5.0',
                           strategy: suggestion.strategyType,
                           K1: suggestion.K1.toFixed(2),
                           K2: suggestion.K2.toFixed(2),
+                          ticker: dcfData.ticker,
                         });
                         navigate(`/options-calculator?${params.toString()}`);
                       }}
@@ -1666,7 +1720,7 @@ const DCFValuation: React.FC = () => {
                 )}
 
                 <p className="text-[10px] text-gray-400 dark:text-gray-500 text-center leading-tight mt-2">
-                  Educational only — estimates use 30% implied volatility and 5% risk-free rate. Verify strikes, pricing, and liquidity with your broker before trading.
+                  Educational only — estimates use {(sigmaToUse * 100).toFixed(0)}% volatility ({tradeIv?.source === "realized" ? "30-day realized" : "default"}) and 5% risk-free rate. Verify strikes, pricing, and liquidity with your broker before trading.
                 </p>
               </div>
             </div>

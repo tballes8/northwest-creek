@@ -124,6 +124,25 @@ async def get_top_losers(limit: int = 10):
     except Exception as e:
         raise HTTPException(status_code=500, detail=_safe_error(e))
     
+@router.get("/{ticker}/implied-volatility")
+async def get_implied_volatility(
+    ticker: str,
+    lookback_days: int = Query(default=30, ge=5, le=180, description="Trading days of returns to use"),
+):
+    """Annualized volatility estimate for a ticker.
+
+    Computed from historical realized volatility (stdev of daily log returns)
+    since the FMP plan does not include options-chain data. Returns a payload
+    with `value`, `source` ("realized" or "default"), and `lookback_days` so the
+    UI can label the source.
+    """
+    from app.services.volatility_service import get_volatility_estimate
+    try:
+        return await get_volatility_estimate(ticker, lookback_days)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error estimating volatility: {_safe_error(e)}")
+
+
 @router.get("/quote/{ticker}", response_model=StockQuote)
 async def get_stock_quote(ticker: str):
     """
