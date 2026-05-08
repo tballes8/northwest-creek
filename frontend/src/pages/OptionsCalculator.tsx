@@ -656,7 +656,7 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
       {/* Three-up: Strategy selector (left) + Strike inputs (middle) + Leg breakdown (right) */}
       <div style={{ display: "flex", gap: 10, alignItems: "stretch", flexWrap: "wrap" }}>
         {/* Strategy selector — pills stacked vertically */}
-        <div style={{ ...cardBox(), padding: 12, flex: "0 0 180px", display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ ...cardBox(), padding: 12, flex: "1 1 0", minWidth: 200, display: "flex", flexDirection: "column", gap: 6 }}>
           <span style={{ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 2 }}>Strategy</span>
           {Object.entries(STRATEGIES).map(([key, s]) => (
             <button key={key} style={{ ...pillBtn(strategy === key), textAlign: "left", width: "100%" }} onClick={() => handleStrategyChange(key)}>
@@ -667,7 +667,7 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
         </div>
 
         {/* Strike inputs — stacked vertically */}
-        <div style={{ ...cardBox(), padding: 12, flex: "0 0 200px", display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ ...cardBox(), padding: 12, flex: "1 1 0", minWidth: 200, display: "flex", flexDirection: "column", gap: 10 }}>
           {strat.strikes.map(k => (
             <div key={k} style={inputGroup}>
               <span style={labelStyle()}>{strat.strikeLabels[k]}</span>
@@ -677,7 +677,7 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
         </div>
 
         {/* Leg breakdown — fills remaining width */}
-        <div style={{ ...cardBox(), padding: 12, flex: "1 1 360px", minWidth: 0 }}>
+        <div style={{ ...cardBox(), padding: 12, flex: "1 1 0", minWidth: 200 }}>
           <div style={{ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Leg Breakdown</div>
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 6, fontSize: 12 }}>
             <div style={{ color: C.textMuted, fontWeight: 600, borderBottom: `1px solid ${C.border}`, paddingBottom: 4 }}>LEG</div>
