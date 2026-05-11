@@ -9,7 +9,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.db.session import get_async_engine, AsyncSessionLocal
+from app.db.session import async_session
 from app.db.models import StockSnapshot
 from app.services.market_data import market_data_service
 from app.services.fmp_client import get_fmp_client
@@ -74,7 +74,7 @@ async def batch_fetch_profiles(tickers: List[str], batch_size: int = 10) -> List
 
 async def update_stock_profiles():
     """Main function to update all stock profiles"""
-    async with AsyncSessionLocal() as db:
+    async with async_session() as db:
         try:
             # Get all stocks from the database
             result = await db.execute(
@@ -116,7 +116,7 @@ async def update_stock_profiles():
 
 async def verify_update():
     """Verify that profiles were updated correctly"""
-    async with AsyncSessionLocal() as db:
+    async with async_session() as db:
         # Check how many stocks have sector information
         result = await db.execute(
             select(StockSnapshot).where(StockSnapshot.sector.isnot(None))
