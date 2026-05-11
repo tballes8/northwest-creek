@@ -196,6 +196,11 @@ class StockSnapshot(Base):
     last_refreshed = Column(DateTime(timezone=True), server_default=func.now())
     is_etf = Column(Boolean, nullable=True)
 
+    # Company profile fields for keyword search
+    sector = Column(String(100), nullable=True)
+    industry = Column(String(200), nullable=True)
+    description = Column(Text, nullable=True)
+
     __table_args__ = (
         Index('idx_ss_market_cap', 'market_cap'),
         Index('idx_ss_price_avg_50', 'price_avg_50'),

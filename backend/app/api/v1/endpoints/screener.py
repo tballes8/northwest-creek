@@ -56,6 +56,11 @@ class ScreenerCriteria(BaseModel):
     price_above_200ma: Optional[bool] = None
     exclude_etfs: bool = True
 
+    # Industry and sector filters
+    sector: Optional[list[str]] = None
+    industry: Optional[list[str]] = None
+    keywords: Optional[str] = None  # Keywords to search in description
+
     page: int = Field(1, ge=1)
     page_size: int = Field(50, ge=1, le=200)
     sort_by: str = "market_cap"
@@ -157,6 +162,26 @@ async def run_screener(
 
     if criteria.exchange:
         conditions.append(StockSnapshot.exchange.in_(criteria.exchange))
+
+    # Add sector filter
+    if criteria.sector:
+        conditions.append(StockSnapshot.sector.in_(criteria.sector))
+
+    # Add industry filter
+    if criteria.industry:
+        conditions.append(StockSnapshot.industry.in_(criteria.industry))
+
+    # Add keyword search in description
+    if criteria.keywords:
+        # Use ILIKE for simple keyword matching
+        keyword_pattern = f"%{criteria.keywords}%"
+        conditions.append(
+            or_(
+                StockSnapshot.description.ilike(keyword_pattern),
+                StockSnapshot.industry.ilike(keyword_pattern),
+                StockSnapshot.sector.ilike(keyword_pattern),
+            )
+        )
 
     if criteria.golden_cross is True:
         conditions.append(StockSnapshot.price_avg_50 > StockSnapshot.price_avg_200)

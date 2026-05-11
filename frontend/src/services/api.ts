@@ -179,6 +179,13 @@ export const stocksAPI = {
 
   getImpliedVolatility: (ticker: string, lookback_days: number = 30) =>
     axiosInstance.get(`/stocks/${ticker}/implied-volatility`, { params: { lookback_days } }),
+
+  // Search endpoints
+  search: (query: string) =>
+    axiosInstance.get(`/stocks/search`, { params: { q: query } }),
+
+  searchByKeywords: (keywords: string, limit: number = 20) =>
+    axiosInstance.get(`/stocks/search-by-keywords`, { params: { keywords, limit } }),
 };
 
 // DCF API

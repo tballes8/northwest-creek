@@ -19,6 +19,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.models import StockSnapshot
 from app.db.session import async_session
+from app.services.market_data import market_data_service
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +186,57 @@ async def _upsert(rows: list[dict]) -> None:
     logger.info(f"Upserted {len(rows)} snapshots")
 
 
+async def _update_company_profiles(symbols: list[str], limit: int = 100) -> None:
+    """
+    Update company profiles (sector, industry, description) for a subset of stocks.
+    This runs less frequently than price updates since profiles rarely change.
+    """
+    try:
+        # Randomly select stocks to update profiles for (to spread the load)
+        import random
+        symbols_to_update = random.sample(symbols, min(limit, len(symbols)))
+
+        print(f"📊 Updating company profiles for {len(symbols_to_update)} symbols", flush=True)
+
+        profile_data = []
+        for symbol in symbols_to_update:
+            try:
+                info = await market_data_service.get_company_info(symbol)
+                profile_data.append({
+                    "symbol": symbol,
+                    "sector": info.get("sector"),
+                    "industry": info.get("industry"),
+                    "description": info.get("description"),
+                })
+            except Exception as e:
+                logger.debug(f"Failed to fetch profile for {symbol}: {e}")
+                continue
+
+        if profile_data:
+            # Update only the profile fields for these stocks
+            async with async_session() as session:
+                for profile in profile_data:
+                    await session.execute(
+                        select(StockSnapshot)
+                        .where(StockSnapshot.symbol == profile["symbol"])
+                        .execution_options(synchronize_session="fetch")
+                    )
+                    stmt = pg_insert(StockSnapshot).values(profile)
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=["symbol"],
+                        set_={
+                            "sector": stmt.excluded.sector,
+                            "industry": stmt.excluded.industry,
+                            "description": stmt.excluded.description,
+                        },
+                    )
+                    await session.execute(stmt)
+                await session.commit()
+            logger.info(f"Updated {len(profile_data)} company profiles")
+    except Exception as e:
+        logger.warning(f"Failed to update company profiles: {e}")
+
+
 async def refresh_stock_snapshots_job(api_key: str) -> None:
     """Entry point called by APScheduler every 15 minutes."""
     if not _is_market_hours():
@@ -215,6 +267,13 @@ async def refresh_stock_snapshots_job(api_key: str) -> None:
 
         rows = await _fetch_quotes(api_key, tickers)
         await _upsert(rows)
+
+        # Update company profiles periodically (once per day or on rebuild)
+        if should_rebuild:
+            # Update profiles for a subset of stocks to avoid rate limits
+            symbols = [sym for sym, _ in tickers]
+            await _update_company_profiles(symbols, limit=200)
+
         print(f"✅ Snapshot refresh complete — {len(rows)} symbols", flush=True)
         logger.info(f"Snapshot refresh complete — {len(rows)} symbols")
     except Exception as exc:

@@ -305,6 +305,9 @@ const Stocks: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [ticker, setTicker] = useState(initialTicker);
   const [searchInput, setSearchInput] = useState(initialTicker);
+  const [searchMode, setSearchMode] = useState<'ticker' | 'keywords'>('ticker'); // New state for search mode
+  const [keywordResults, setKeywordResults] = useState<any[]>([]); // Results from keyword search
+  const [showKeywordResults, setShowKeywordResults] = useState(false);
   const [quote, setQuote] = useState<StockQuote | null>(null);
   const [company, setCompany] = useState<CompanyInfo | null>(null);
   const [historical, setHistorical] = useState<HistoricalPrice[]>([]);
@@ -429,6 +432,7 @@ const Stocks: React.FC = () => {
     const handleClickOutside = (e: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
         setShowSuggestions(false);
+        setShowKeywordResults(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -441,14 +445,10 @@ const Stocks: React.FC = () => {
       setShowSuggestions(false);
       return;
     }
-    
+
     setSuggestionsLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await axios.get(
-        `${API_URL}/api/v1/stocks/search?q=${encodeURIComponent(query)}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await stocksAPI.search(query);
       const results = response.data.results || [];
       setSuggestions(results);
       setShowSuggestions(results.length > 0);
@@ -460,9 +460,30 @@ const Stocks: React.FC = () => {
     }
   }, []);
 
+  const searchByKeywords = useCallback(async (keywords: string) => {
+    if (keywords.length < 2) {
+      setKeywordResults([]);
+      setShowKeywordResults(false);
+      return;
+    }
+
+    setSuggestionsLoading(true);
+    try {
+      const response = await stocksAPI.searchByKeywords(keywords);
+      const results = response.data.results || [];
+      setKeywordResults(results);
+      setShowKeywordResults(results.length > 0);
+    } catch (err) {
+      console.error('Keyword search error:', err);
+      setKeywordResults([]);
+    } finally {
+      setSuggestionsLoading(false);
+    }
+  }, []);
+
   const handleSearchInputChange = (value: string) => {
     setSearchInput(value);
-    
+
     if (!value.trim()) {
       resetToEmptyState();
       return;
@@ -471,9 +492,13 @@ const Stocks: React.FC = () => {
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
-    
+
     debounceRef.current = setTimeout(() => {
-      searchTickers(value);
+      if (searchMode === 'ticker') {
+        searchTickers(value);
+      } else {
+        searchByKeywords(value);
+      }
     }, 300);
   };
 
@@ -497,6 +522,8 @@ const Stocks: React.FC = () => {
     setRelatedCommonStock(null);
     setSuggestions([]);
     setShowSuggestions(false);
+    setKeywordResults([]);
+    setShowKeywordResults(false);
     setWatchlistMsg(null);
     if (activeSector) {
       navigate(`/stocks?sector=${encodeURIComponent(activeSector)}`, { replace: true });
@@ -1451,14 +1478,92 @@ const Stocks: React.FC = () => {
         <>
         {/* Search Bar */}
         <div className="mb-8" ref={searchContainerRef}>
+          {/* Search Mode Toggle */}
+          <div className="flex gap-2 mb-3">
+            <button
+              type="button"
+              onClick={() => {
+                setSearchMode('ticker');
+                setSearchInput('');
+                setKeywordResults([]);
+                setShowKeywordResults(false);
+              }}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                searchMode === 'ticker'
+                  ? 'bg-teal-500 text-white'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              }`}
+            >
+              Company/Ticker Search
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSearchMode('keywords');
+                setSearchInput('');
+                setSuggestions([]);
+                setShowSuggestions(false);
+              }}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                searchMode === 'keywords'
+                  ? 'bg-teal-500 text-white'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              }`}
+            >
+              Industry/Keyword Search
+            </button>
+          </div>
+
+          {/* Industry Quick Filters - Only show in keyword mode */}
+          {searchMode === 'keywords' && (
+            <div className="mb-4">
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">Popular searches:</div>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  'Semiconductors',
+                  'Artificial Intelligence',
+                  'Electric Vehicles',
+                  'Copper Mining',
+                  'Memory Chips',
+                  'Biotechnology',
+                  'Cloud Computing',
+                  'Renewable Energy',
+                  'Gold Mining',
+                  'Lithium',
+                  'Cannabis',
+                  'Cybersecurity',
+                ].map((keyword) => (
+                  <button
+                    key={keyword}
+                    type="button"
+                    onClick={() => {
+                      setSearchInput(keyword);
+                      searchByKeywords(keyword);
+                    }}
+                    className="px-3 py-1.5 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-teal-100 dark:hover:bg-teal-900/30 text-gray-700 dark:text-gray-300 hover:text-teal-700 dark:hover:text-teal-300 rounded-full transition-colors"
+                  >
+                    {keyword}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleSearch} className="flex gap-4">
             <div className="flex-1 relative">
               <input
                 type="text"
                 value={searchInput}
                 onChange={(e) => handleSearchInputChange(e.target.value)}
-                onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
-                placeholder="Search by ticker symbol or company name (e.g., AAPL or Apple)"
+                onFocus={() => {
+                  if (searchMode === 'ticker' && suggestions.length > 0) setShowSuggestions(true);
+                  if (searchMode === 'keywords' && keywordResults.length > 0) setShowKeywordResults(true);
+                }}
+                placeholder={
+                  searchMode === 'ticker'
+                    ? "Search by ticker symbol or company name (e.g., AAPL or Apple)"
+                    : "Search by industry or keywords (e.g., 'memory chips', 'copper mining', 'AI')"
+                }
                 className="w-full px-4 py-3 pr-10 border border-gray-300 dark:border-gray-500 rounded-lg focus:ring-2 focus:ring-primary-500 dark:focus:ring-primary-400 focus:border-transparent dark:bg-gray-600 dark:text-white"
                 autoComplete="off"
               />
@@ -1503,6 +1608,56 @@ const Stocks: React.FC = () => {
                           <span className="text-xs text-gray-400 dark:text-gray-500 ml-2 shrink-0">
                             {s.type === 'CS' ? 'Stock' : FUND_TYPES.has(s.type || '') ? 'ETF' : s.type === 'ADRC' ? 'ADR' : s.type}
                           </span>
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {/* Keyword Search Results Dropdown */}
+              {showKeywordResults && (
+                <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-500 rounded-lg shadow-xl max-h-96 overflow-y-auto">
+                  {suggestionsLoading ? (
+                    <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
+                      Searching...
+                    </div>
+                  ) : (
+                    keywordResults.map((result, i) => (
+                      <button
+                        key={`${result.ticker}-${i}`}
+                        type="button"
+                        onClick={() => handleTickerClick(result.ticker)}
+                        className="w-full px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors border-b border-gray-100 dark:border-gray-600 last:border-b-0"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <div>
+                            <span className="font-bold text-primary-600 dark:text-primary-400">
+                              {result.ticker}
+                            </span>
+                            <span className="text-sm text-gray-700 dark:text-gray-300 ml-2">
+                              {result.name}
+                            </span>
+                          </div>
+                          {result.price && (
+                            <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                              ${result.price.toFixed(2)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                          <span className="inline-block bg-gray-100 dark:bg-gray-600 px-2 py-1 rounded mr-2">
+                            {result.sector || 'N/A'}
+                          </span>
+                          <span className="inline-block bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-2 py-1 rounded">
+                            {result.match_reason}
+                          </span>
+                        </div>
+                        {result.description_snippet && (
+                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
+                            {result.description_snippet}
+                          </div>
                         )}
                       </button>
                     ))

@@ -4,7 +4,7 @@ Stock API Endpoints
 import re
 from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, Date, Float, cast
+from sqlalchemy import select, func, Date, Float, cast, or_
 from datetime import date, datetime, timedelta
 from typing import Optional
 import asyncio
@@ -860,6 +860,144 @@ async def search_tickers(q: str = Query(..., min_length=1, description="Search q
     except Exception as e:
         print(f"Ticker search error: {e}")
         return {"results": []}
+
+
+@router.get("/search-by-keywords")
+async def search_by_keywords(
+    keywords: str = Query(..., min_length=1, description="Keywords to search in company sector, industry, or description"),
+    limit: int = Query(default=20, ge=1, le=100, description="Maximum number of results"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Search for companies by keywords in their sector, industry, or description.
+
+    This endpoint uses PostgreSQL full-text search to find companies that match
+    the provided keywords. It searches across:
+    - Company sector (e.g., "Technology", "Healthcare")
+    - Company industry (e.g., "Semiconductors", "Copper Mining")
+    - Company description (business activities and operations)
+
+    **Parameters:**
+    - **keywords**: Search terms (e.g., "memory chips", "copper mining", "artificial intelligence")
+    - **limit**: Maximum number of results to return (1-100)
+
+    **Returns:**
+    - Array of matching companies with relevance ranking
+    """
+    from sqlalchemy import func, text
+
+    # Clean and prepare search query
+    search_query = keywords.strip()
+
+    try:
+        # Use PostgreSQL full-text search with ts_rank for relevance scoring
+        # This query searches across name, sector, industry, and description
+        query = text("""
+            SELECT
+                symbol,
+                name,
+                sector,
+                industry,
+                description,
+                market_cap,
+                price,
+                ts_rank(
+                    to_tsvector('english',
+                        COALESCE(name, '') || ' ' ||
+                        COALESCE(sector, '') || ' ' ||
+                        COALESCE(industry, '') || ' ' ||
+                        COALESCE(description, '')
+                    ),
+                    plainto_tsquery('english', :search_query)
+                ) AS rank,
+                -- Highlight matching terms
+                ts_headline('english',
+                    COALESCE(industry, '') || ' - ' || COALESCE(description, ''),
+                    plainto_tsquery('english', :search_query),
+                    'MaxWords=50, MinWords=20, HighlightAll=false'
+                ) AS match_snippet
+            FROM stock_snapshots
+            WHERE
+                to_tsvector('english',
+                    COALESCE(name, '') || ' ' ||
+                    COALESCE(sector, '') || ' ' ||
+                    COALESCE(industry, '') || ' ' ||
+                    COALESCE(description, '')
+                ) @@ plainto_tsquery('english', :search_query)
+            ORDER BY rank DESC, market_cap DESC NULLS LAST
+            LIMIT :limit
+        """)
+
+        result = await db.execute(query, {"search_query": search_query, "limit": limit})
+        rows = result.fetchall()
+
+        results = []
+        for row in rows:
+            # Determine why this company matched
+            match_reason = ""
+            if row.industry and search_query.lower() in row.industry.lower():
+                match_reason = f"Industry: {row.industry}"
+            elif row.sector and search_query.lower() in row.sector.lower():
+                match_reason = f"Sector: {row.sector}"
+            else:
+                match_reason = "Description matches keywords"
+
+            results.append({
+                "ticker": row.symbol,
+                "name": row.name,
+                "sector": row.sector,
+                "industry": row.industry,
+                "match_reason": match_reason,
+                "description_snippet": row.match_snippet if row.match_snippet else row.description[:200] if row.description else None,
+                "market_cap": float(row.market_cap) if row.market_cap else None,
+                "price": float(row.price) if row.price else None,
+                "relevance_score": float(row.rank) if row.rank else 0,
+            })
+
+        # Also search for exact matches in sector/industry (case-insensitive)
+        if not results:
+            # Fallback to simpler ILIKE search if full-text search returns nothing
+            fallback_query = select(StockSnapshot).where(
+                or_(
+                    StockSnapshot.sector.ilike(f"%{search_query}%"),
+                    StockSnapshot.industry.ilike(f"%{search_query}%"),
+                    StockSnapshot.description.ilike(f"%{search_query}%"),
+                )
+            ).order_by(StockSnapshot.market_cap.desc().nulls_last()).limit(limit)
+
+            fallback_result = await db.execute(fallback_query)
+            fallback_rows = fallback_result.scalars().all()
+
+            for row in fallback_rows:
+                match_reason = ""
+                if row.industry and search_query.lower() in row.industry.lower():
+                    match_reason = f"Industry: {row.industry}"
+                elif row.sector and search_query.lower() in row.sector.lower():
+                    match_reason = f"Sector: {row.sector}"
+                else:
+                    match_reason = "Description matches keywords"
+
+                results.append({
+                    "ticker": row.symbol,
+                    "name": row.name,
+                    "sector": row.sector,
+                    "industry": row.industry,
+                    "match_reason": match_reason,
+                    "description_snippet": row.description[:200] if row.description else None,
+                    "market_cap": float(row.market_cap) if row.market_cap else None,
+                    "price": float(row.price) if row.price else None,
+                    "relevance_score": 0,
+                })
+
+        return {
+            "results": results,
+            "total": len(results),
+            "keywords_searched": search_query.split(),
+        }
+
+    except Exception as e:
+        print(f"Keyword search error: {e}")
+        raise HTTPException(status_code=500, detail=f"Search failed: {_safe_error(e)}")
 
 
 @router.get("/earnings-calendar")
