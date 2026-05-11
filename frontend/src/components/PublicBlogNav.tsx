@@ -25,7 +25,7 @@ const PublicBlogNav: React.FC = () => {
 
         {/* CTA buttons */}
         <div className="flex items-center gap-3">
-          <Link to="/#pricing"
+          <Link to="/pricing"
             className="px-4 py-2 text-sm font-medium text-primary-400 border border-primary-500 rounded-lg hover:bg-primary-500/10 transition-colors whitespace-nowrap"
           >
             
