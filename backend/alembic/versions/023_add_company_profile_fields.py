@@ -1,7 +1,7 @@
 """Add company profile fields to stock_snapshots
 
 Revision ID: 023_add_company_profile_fields
-Revises: 022_add_macro_indicators
+Revises: 022
 Create Date: 2025-01-11
 
 """
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = '023_add_company_profile_fields'
-down_revision = '022_add_macro_indicators'
+revision = '023'
+down_revision = '022'
 branch_labels = None
 depends_on = None
 
