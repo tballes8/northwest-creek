@@ -1664,7 +1664,7 @@ const Stocks: React.FC = () => {
                         </div>
                         {result.description_snippet && (
                           <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">
-                            {result.description_snippet}
+                            {result.description_snippet.replace(/<\/?b>/g, '')}
                           </div>
                         )}
                       </button>
