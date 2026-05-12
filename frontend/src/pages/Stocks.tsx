@@ -1628,7 +1628,11 @@ const Stocks: React.FC = () => {
                       <button
                         key={`${result.ticker}-${i}`}
                         type="button"
-                        onClick={() => handleTickerClick(result.ticker)}
+                        onClick={() => {
+                          setShowKeywordResults(false);
+                          setKeywordResults([]);
+                          handleTickerClick(result.ticker);
+                        }}
                         className="w-full px-4 py-3 text-left hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors border-b border-gray-100 dark:border-gray-600 last:border-b-0"
                       >
                         <div className="flex items-center justify-between mb-1">
