@@ -2160,15 +2160,16 @@ const Stocks: React.FC = () => {
                       (() => {
                         const CHART_COLORS = [
                           '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
+                          '#EC4899', '#14B8A6', '#F97316', '#6366F1', '#84CC16',
                         ];
                         const OTHER_COLOR = '#6B7280';
 
-                        const top5 = etfHoldings.slice(0, 5);
-                        const top5Total = top5.reduce((sum, h) => sum + (h.weight || 0), 0);
-                        const otherWeight = Math.max(0, 100 - top5Total);
+                        const topN = etfHoldings.slice(0, 10);
+                        const topNTotal = topN.reduce((sum, h) => sum + (h.weight || 0), 0);
+                        const otherWeight = Math.max(0, 100 - topNTotal);
 
                         const slices = [
-                          ...top5.map((h, i) => ({
+                          ...topN.map((h, i) => ({
                             label: h.ticker || h.name,
                             weight: h.weight || 0,
                             color: CHART_COLORS[i],
@@ -2210,7 +2211,7 @@ const Stocks: React.FC = () => {
                           <div className="flex items-start gap-4">
                             {/* Donut Chart */}
                             <div className="flex-shrink-0">
-                              <svg width="100" height="100" viewBox="-1.15 -1.15 2.3 2.3">
+                              <svg width="160" height="160" viewBox="-1.15 -1.15 2.3 2.3">
                                 {paths.map((p, i) => (
                                   <path key={i} d={p.d} fill={p.color} stroke="white" strokeWidth="0.02" className="dark:stroke-gray-700" />
                                 ))}
