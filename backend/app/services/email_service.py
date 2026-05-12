@@ -295,7 +295,7 @@ class EmailService:
             "casual": "per week", "active": "per day", "professional": "per day"
         }.get(tier, "per week")
         
-        price = {"casual": "$20", "active": "$40", "professional": "$100"}.get(tier, "")
+        price = {"beginner": "$10", "casual": "$20", "active": "$40", "professional": "$50"}.get(tier, "")
         
         features_html = f'<li>✅ Track up to {limits.get("watchlist_stocks", 20)} stocks in your watchlist</li>\n'
         features_html += f'                            <li>✅ Monitor {limits.get("portfolio_entries", 20)} portfolio positions</li>\n'

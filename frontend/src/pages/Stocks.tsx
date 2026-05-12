@@ -468,11 +468,11 @@ const Stocks: React.FC = () => {
     }
 
     setSuggestionsLoading(true);
+    setShowKeywordResults(true);
     try {
       const response = await stocksAPI.searchByKeywords(keywords);
       const results = response.data.results || [];
       setKeywordResults(results);
-      setShowKeywordResults(results.length > 0);
     } catch (err) {
       console.error('Keyword search error:', err);
       setKeywordResults([]);
@@ -1622,6 +1622,10 @@ const Stocks: React.FC = () => {
                     <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
                       Searching...
+                    </div>
+                  ) : keywordResults.length === 0 ? (
+                    <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                      No matching companies found for "{searchInput}". Try a different keyword.
                     </div>
                   ) : (
                     keywordResults.map((result, i) => (

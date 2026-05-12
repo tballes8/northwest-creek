@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from app.db.session import async_session
 from app.db.models import StockSnapshot
 from app.services.market_data import market_data_service
-from app.services.fmp_client import get_fmp_client
+from app.services.fmp_client import get_fmp_client, init_fmp_client, close_fmp_client
 from app.config import get_settings
 from sqlalchemy import select
 import logging
@@ -156,11 +156,12 @@ async def main():
     """Main entry point"""
     logger.info("Starting company profile population script")
 
-    # First, update all profiles
-    await update_stock_profiles()
-
-    # Then verify the update
-    await verify_update()
+    await init_fmp_client()
+    try:
+        await update_stock_profiles()
+        await verify_update()
+    finally:
+        await close_fmp_client()
 
     logger.info("Script completed successfully")
 
