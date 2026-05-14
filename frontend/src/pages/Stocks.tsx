@@ -216,7 +216,8 @@ interface SavedScreenItem {
 type DrawPoint = { xi: number; price: number };
 type DrawingShape =
   | { type: 'trendline'; p1: DrawPoint; p2: DrawPoint }
-  | { type: 'channel'; p1: DrawPoint; p2: DrawPoint; p3: DrawPoint };
+  | { type: 'channel'; p1: DrawPoint; p2: DrawPoint; p3: DrawPoint }
+  | { type: 'fibonacci'; p1: DrawPoint; p2: DrawPoint };
 
 const defaultScreenerForm: ScreenerFormState = {
   priceMin: '', priceMax: '',
@@ -313,7 +314,7 @@ const Stocks: React.FC = () => {
   const [historical, setHistorical] = useState<HistoricalPrice[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [historyDays, setHistoryDays] = useState(90);
+  const [historyDays, setHistoryDays] = useState(365);
   const [news, setNews] = useState<NewsArticle[]>([]);
   const [fallbackNews, setFallbackNews] = useState<NewsArticle[]>([]);
   const [newsLoading, setNewsLoading] = useState(false);
@@ -375,7 +376,7 @@ const Stocks: React.FC = () => {
   const [forecastLoading, setForecastLoading] = useState(false);
   const chartRef = useRef<ChartJS<'line', (number | null)[], string> | null>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
-  const [drawTool, setDrawTool] = useState<'trendline' | 'channel' | null>(null);
+  const [drawTool, setDrawTool] = useState<'trendline' | 'channel' | 'fibonacci' | null>(null);
   const [pendingPoints, setPendingPoints] = useState<DrawPoint[]>([]);
   const [drawings, setDrawings] = useState<DrawingShape[]>([]);
   const mousePixelRef = useRef<{ x: number; y: number } | null>(null);
@@ -1176,11 +1177,51 @@ const Stocks: React.FC = () => {
       ctx.fill();
     };
 
+    const FIB_COLOR = 'rgba(167,139,250,0.9)';
+    const FIB_RETRACEMENTS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
+    const FIB_EXTENSIONS = [1.272, 1.618, 2.618];
+
+    const drawFibLevel = (price: number, ratio: number, dashed: boolean) => {
+      const y = yScale.getPixelForValue(price);
+      if (y < ca.top - 1 || y > ca.bottom + 1) return;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(ca.left, ca.top, ca.right - ca.left, ca.bottom - ca.top);
+      ctx.clip();
+      ctx.beginPath();
+      ctx.moveTo(ca.left, y);
+      ctx.lineTo(ca.right, y);
+      ctx.strokeStyle = FIB_COLOR;
+      ctx.lineWidth = 1;
+      ctx.setLineDash(dashed ? [4, 3] : []);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+      ctx.save();
+      ctx.fillStyle = FIB_COLOR;
+      ctx.font = '10px system-ui, -apple-system, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'bottom';
+      const label = `${(ratio * 100).toFixed(1)}%  ${price.toFixed(2)}`;
+      ctx.fillText(label, ca.right - 4, y - 2);
+      ctx.restore();
+    };
+
     for (const d of drawings) {
       if (d.type === 'trendline') {
         strokeLine(d.p1, d.p2, 'rgba(251,191,36,0.9)', 1.5);
         dot(d.p1, 'rgba(251,191,36,0.9)');
         dot(d.p2, 'rgba(251,191,36,0.9)');
+      } else if (d.type === 'fibonacci') {
+        const range = d.p2.price - d.p1.price;
+        for (const r of FIB_RETRACEMENTS) {
+          drawFibLevel(d.p1.price + range * r, r, false);
+        }
+        for (const r of FIB_EXTENSIONS) {
+          drawFibLevel(d.p1.price + range * r, r, true);
+        }
+        dot(d.p1, FIB_COLOR);
+        dot(d.p2, FIB_COLOR);
       } else {
         const slope = d.p2.xi !== d.p1.xi
           ? (d.p2.price - d.p1.price) / (d.p2.xi - d.p1.xi) : 0;
@@ -1219,8 +1260,29 @@ const Stocks: React.FC = () => {
         price: yScale.getValueForPixel(mp.y) ?? 0,
       };
       if (pendingPoints.length === 1) {
-        strokeLine(pendingPoints[0], mpData, 'rgba(255,255,255,0.35)', 1, [5, 5]);
-        dot(pendingPoints[0], 'rgba(255,255,255,0.6)');
+        if (drawTool === 'fibonacci') {
+          const y0 = yScale.getPixelForValue(pendingPoints[0].price);
+          const y1 = yScale.getPixelForValue(mpData.price);
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(ca.left, ca.top, ca.right - ca.left, ca.bottom - ca.top);
+          ctx.clip();
+          ctx.beginPath();
+          ctx.moveTo(ca.left, y0);
+          ctx.lineTo(ca.right, y0);
+          ctx.moveTo(ca.left, y1);
+          ctx.lineTo(ca.right, y1);
+          ctx.strokeStyle = 'rgba(167,139,250,0.5)';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([5, 5]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.restore();
+          dot(pendingPoints[0], 'rgba(167,139,250,0.9)');
+        } else {
+          strokeLine(pendingPoints[0], mpData, 'rgba(255,255,255,0.35)', 1, [5, 5]);
+          dot(pendingPoints[0], 'rgba(255,255,255,0.6)');
+        }
       } else if (pendingPoints.length === 2 && drawTool === 'channel') {
         strokeLine(pendingPoints[0], pendingPoints[1], 'rgba(249,115,22,0.7)', 1.5);
         const slope = pendingPoints[1].xi !== pendingPoints[0].xi
@@ -1267,6 +1329,10 @@ const Stocks: React.FC = () => {
       }
       if (drawTool === 'channel' && next.length === 3) {
         setDrawings(d => [...d, { type: 'channel', p1: next[0], p2: next[1], p3: next[2] }]);
+        return [];
+      }
+      if (drawTool === 'fibonacci' && next.length === 2) {
+        setDrawings(d => [...d, { type: 'fibonacci', p1: next[0], p2: next[1] }]);
         return [];
       }
       return next;
@@ -1917,6 +1983,22 @@ const Stocks: React.FC = () => {
                       </svg>
                       Channel
                     </button>
+                    <button
+                      onClick={() => { setDrawTool(t => t === 'fibonacci' ? null : 'fibonacci'); setPendingPoints([]); }}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+                        drawTool === 'fibonacci'
+                          ? 'bg-violet-500/20 text-violet-500 border border-violet-500/50'
+                          : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                      }`}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <line x1="1" y1="2" x2="13" y2="2" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
+                        <line x1="1" y1="5" x2="13" y2="5" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
+                        <line x1="1" y1="8" x2="13" y2="8" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
+                        <line x1="1" y1="11" x2="13" y2="11" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeDasharray="2 1.5"/>
+                      </svg>
+                      Fibonacci
+                    </button>
                   </div>
                   {(drawings.length > 0 || drawTool) && (
                     <div className="flex items-center gap-3">
@@ -1935,6 +2017,8 @@ const Stocks: React.FC = () => {
                         <span className="text-xs text-gray-400 dark:text-gray-500">
                           {drawTool === 'trendline'
                             ? pendingPoints.length === 0 ? 'Click to set start point' : 'Click to set end point'
+                            : drawTool === 'fibonacci'
+                            ? pendingPoints.length === 0 ? 'Click swing high or low' : 'Click the opposite swing point'
                             : pendingPoints.length === 0 ? 'Click to set start point'
                             : pendingPoints.length === 1 ? 'Click to set end point'
                             : 'Click to set channel width'}
