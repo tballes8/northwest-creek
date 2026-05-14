@@ -1177,7 +1177,7 @@ const Stocks: React.FC = () => {
       ctx.fill();
     };
 
-    const FIB_COLOR = 'rgba(167,139,250,0.9)';
+    const FIB_COLOR = '#ffffff';
     const FIB_RETRACEMENTS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
     const FIB_EXTENSIONS = [1.272, 1.618, 2.618];
 
@@ -1193,17 +1193,23 @@ const Stocks: React.FC = () => {
       ctx.lineTo(ca.right, y);
       ctx.strokeStyle = FIB_COLOR;
       ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.9;
       ctx.setLineDash(dashed ? [4, 3] : []);
       ctx.stroke();
       ctx.setLineDash([]);
       ctx.restore();
       ctx.save();
-      ctx.fillStyle = FIB_COLOR;
-      ctx.font = '10px system-ui, -apple-system, sans-serif';
-      ctx.textAlign = 'right';
+      ctx.font = '600 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+      ctx.textAlign = 'left';
       ctx.textBaseline = 'bottom';
-      const label = `${(ratio * 100).toFixed(1)}%  ${price.toFixed(2)}`;
-      ctx.fillText(label, ca.right - 4, y - 2);
+      const label = `${(ratio * 100).toFixed(1)}%  $${price.toFixed(2)}`;
+      // Dark stroke first (text-shadow equivalent), then white fill
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+      ctx.lineJoin = 'round';
+      ctx.strokeText(label, ca.left + 8, y - 2);
+      ctx.fillStyle = FIB_COLOR;
+      ctx.fillText(label, ca.left + 8, y - 2);
       ctx.restore();
     };
 
@@ -1272,13 +1278,13 @@ const Stocks: React.FC = () => {
           ctx.lineTo(ca.right, y0);
           ctx.moveTo(ca.left, y1);
           ctx.lineTo(ca.right, y1);
-          ctx.strokeStyle = 'rgba(167,139,250,0.5)';
+          ctx.strokeStyle = 'rgba(255,255,255,0.6)';
           ctx.lineWidth = 1;
           ctx.setLineDash([5, 5]);
           ctx.stroke();
           ctx.setLineDash([]);
           ctx.restore();
-          dot(pendingPoints[0], 'rgba(167,139,250,0.9)');
+          dot(pendingPoints[0], 'rgba(255,255,255,0.9)');
         } else {
           strokeLine(pendingPoints[0], mpData, 'rgba(255,255,255,0.35)', 1, [5, 5]);
           dot(pendingPoints[0], 'rgba(255,255,255,0.6)');
