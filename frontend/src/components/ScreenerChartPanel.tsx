@@ -307,7 +307,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
   const yDomain = useMemo<[number, number]>(() => {
     const vals: number[] = [];
     for (const d of visibleChartData) {
-      for (const v of [d.price, d.high, d.low, d.ma_20, d.ma_50]) {
+      for (const v of [d.price, d.high, d.low]) {
         if (v != null && Number.isFinite(v)) vals.push(v as number);
       }
     }
