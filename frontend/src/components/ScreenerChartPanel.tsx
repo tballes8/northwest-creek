@@ -44,8 +44,10 @@ interface BarsResponse {
   note?: string;
 }
 
-interface TrendLine { x1: number; y1: number; x2: number; y2: number }
-interface Channel { x1: number; y1: number; x2: number; y2: number; yOffset: number }
+interface DrawPoint { time: string; price: number }
+interface TrendLine { p1: DrawPoint; p2: DrawPoint }
+interface Channel { p1: DrawPoint; p2: DrawPoint; yOffsetPrice: number }
+interface Fibonacci { p1: DrawPoint; p2: DrawPoint }
 
 interface ChartPoint {
   time: string;
@@ -103,13 +105,15 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
   const [liveTicks, setLiveTicks] = useState<ChartPoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTool, setActiveTool] = useState<'trend' | 'channel' | null>(null);
-  const activeToolRef = useRef<'trend' | 'channel' | null>(null);
+  const [activeTool, setActiveTool] = useState<'trend' | 'channel' | 'fib' | null>(null);
+  const activeToolRef = useRef<'trend' | 'channel' | 'fib' | null>(null);
   const drawingMode = activeTool !== null;
   const [trendLines, setTrendLines] = useState<TrendLine[]>([]);
-  const [pendingPoint, setPendingPoint] = useState<{ x: number; y: number } | null>(null);
+  const [pendingPoint, setPendingPoint] = useState<DrawPoint | null>(null);
   const [channels, setChannels] = useState<Channel[]>([]);
-  const [pendingChannel, setPendingChannel] = useState<{ x1: number; y1: number; x2: number | null; y2: number | null } | null>(null);
+  const [pendingChannel, setPendingChannel] = useState<{ p1: DrawPoint; p2: DrawPoint | null } | null>(null);
+  const [fibonaccis, setFibonaccis] = useState<Fibonacci[]>([]);
+  const [pendingFib, setPendingFib] = useState<DrawPoint | null>(null);
   const [svgMousePos, setSvgMousePos] = useState<{ x: number; y: number } | null>(null);
 
   // Zoom + pan state
@@ -133,8 +137,10 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
     setActiveTool(null);
     setTrendLines([]);
     setChannels([]);
+    setFibonaccis([]);
     setPendingPoint(null);
     setPendingChannel(null);
+    setPendingFib(null);
     setLiveTicks([]);
     setZoomRange(null);
     setShowTooltip(false);
@@ -241,14 +247,6 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
     };
   }, [isDragging]);
 
-  // Clear trend lines when zoom changes (SVG % coords misalign after data slice changes)
-  useEffect(() => {
-    setTrendLines([]);
-    setChannels([]);
-    setPendingPoint(null);
-    setPendingChannel(null);
-  }, [zoomRange]);
-
   const loadData = async (t: string) => {
     setLoading(true);
     setError(null);
@@ -302,6 +300,58 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
       ? displayChartData.slice(zoomRange.start, zoomRange.end + 1)
       : displayChartData,
     [displayChartData, zoomRange],
+  );
+
+  // ─── Coordinate helpers (data ↔ SVG-%) ────────────────────────────────────
+  // yDomain mirrors what Recharts renders so our SVG overlay stays in sync.
+  const yDomain = useMemo<[number, number]>(() => {
+    const vals: number[] = [];
+    for (const d of visibleChartData) {
+      for (const v of [d.price, d.high, d.low, d.ma_20, d.ma_50]) {
+        if (v != null && Number.isFinite(v)) vals.push(v as number);
+      }
+    }
+    if (!vals.length) return [0, 1];
+    const lo = Math.min(...vals);
+    const hi = Math.max(...vals);
+    const pad = (hi - lo) * 0.05 || 0.5;
+    return [lo - pad, hi + pad];
+  }, [visibleChartData]);
+
+  const priceToSvgY = useCallback(
+    (price: number) => ((yDomain[1] - price) / (yDomain[1] - yDomain[0])) * 100,
+    [yDomain],
+  );
+  const svgYToPrice = useCallback(
+    (svgY: number) => yDomain[1] - (svgY / 100) * (yDomain[1] - yDomain[0]),
+    [yDomain],
+  );
+
+  const timeToIdx = useCallback(
+    (time: string) => visibleChartData.findIndex(d => d.time === time),
+    [visibleChartData],
+  );
+  const idxToSvgX = useCallback(
+    (idx: number) =>
+      visibleChartData.length <= 1 ? 0 : (idx / (visibleChartData.length - 1)) * 100,
+    [visibleChartData.length],
+  );
+  const svgXToNearestTime = useCallback(
+    (svgX: number): string | null => {
+      if (!visibleChartData.length) return null;
+      const raw = Math.round((svgX / 100) * (visibleChartData.length - 1));
+      const i = Math.max(0, Math.min(visibleChartData.length - 1, raw));
+      return visibleChartData[i].time;
+    },
+    [visibleChartData],
+  );
+  const toSvgPoint = useCallback(
+    (p: DrawPoint): { x: number; y: number } | null => {
+      const i = timeToIdx(p.time);
+      if (i < 0) return null;
+      return { x: idxToSvgX(i), y: priceToSvgY(p.price) };
+    },
+    [timeToIdx, idxToSvgX, priceToSvgY],
   );
 
   const priceColor = () => {
@@ -361,25 +411,39 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
 
+    const time = svgXToNearestTime(x);
+    if (time == null) return;
+    const pt: DrawPoint = { time, price: svgYToPrice(y) };
+
     if (activeTool === 'trend') {
       if (!pendingPoint) {
-        setPendingPoint({ x, y });
+        setPendingPoint(pt);
       } else {
-        setTrendLines(lines => [...lines, { x1: pendingPoint.x, y1: pendingPoint.y, x2: x, y2: y }]);
+        setTrendLines(lines => [...lines, { p1: pendingPoint, p2: pt }]);
         setPendingPoint(null);
       }
     } else if (activeTool === 'channel') {
       if (!pendingChannel) {
-        setPendingChannel({ x1: x, y1: y, x2: null, y2: null });
-      } else if (pendingChannel.x2 === null) {
-        setPendingChannel(c => c ? { ...c, x2: x, y2: y } : null);
+        setPendingChannel({ p1: pt, p2: null });
+      } else if (pendingChannel.p2 === null) {
+        setPendingChannel(c => (c ? { ...c, p2: pt } : null));
       } else {
-        setChannels(ch => [...ch, {
-          x1: pendingChannel.x1, y1: pendingChannel.y1,
-          x2: pendingChannel.x2!, y2: pendingChannel.y2!,
-          yOffset: y - pendingChannel.y1,
-        }]);
+        const { p1, p2 } = pendingChannel as { p1: DrawPoint; p2: DrawPoint };
+        const i1 = timeToIdx(p1.time);
+        const i2 = timeToIdx(p2.time);
+        const iC = timeToIdx(pt.time);
+        const slope = i2 !== i1 ? (p2.price - p1.price) / (i2 - i1) : 0;
+        const onLine = p1.price + slope * (iC - i1);
+        const yOffsetPrice = pt.price - onLine;
+        setChannels(ch => [...ch, { p1, p2, yOffsetPrice }]);
         setPendingChannel(null);
+      }
+    } else if (activeTool === 'fib') {
+      if (!pendingFib) {
+        setPendingFib(pt);
+      } else {
+        setFibonaccis(fs => [...fs, { p1: pendingFib, p2: pt }]);
+        setPendingFib(null);
       }
     }
   };
@@ -393,10 +457,11 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
     });
   };
 
-  const startTool = (tool: 'trend' | 'channel') => {
+  const startTool = (tool: 'trend' | 'channel' | 'fib') => {
     setActiveTool(t => t === tool ? null : tool);
     setPendingPoint(null);
     setPendingChannel(null);
+    setPendingFib(null);
   };
 
   if (!ticker) return null;
@@ -467,13 +532,28 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
           >
             {activeTool === 'channel'
               ? (!pendingChannel ? 'Click start…'
-                : pendingChannel.x2 === null ? 'Click end of line…'
+                : pendingChannel.p2 === null ? 'Click end of line…'
                 : 'Click to set width…')
               : 'Channel'}
           </button>
-          {(trendLines.length > 0 || channels.length > 0) && (
+          <button
+            onClick={() => startTool('fib')}
+            className={`px-3 py-1.5 text-xs rounded-lg border font-medium transition-colors ${
+              activeTool === 'fib'
+                ? 'bg-violet-600 border-violet-600 text-white'
+                : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:border-violet-500 hover:text-violet-600 dark:hover:text-violet-400'
+            }`}
+          >
+            {activeTool === 'fib'
+              ? (pendingFib == null ? 'Click swing high/low…' : 'Click opposite swing…')
+              : 'Fibonacci'}
+          </button>
+          {(trendLines.length > 0 || channels.length > 0 || fibonaccis.length > 0) && (
             <button
-              onClick={() => { setTrendLines([]); setChannels([]); setPendingPoint(null); setPendingChannel(null); }}
+              onClick={() => {
+                setTrendLines([]); setChannels([]); setFibonaccis([]);
+                setPendingPoint(null); setPendingChannel(null); setPendingFib(null);
+              }}
               className="px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:border-red-500 hover:text-red-500 transition-colors"
             >
               Clear All
@@ -481,7 +561,10 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
           )}
           {drawingMode && (
             <button
-              onClick={() => { setActiveTool(null); setPendingPoint(null); setPendingChannel(null); }}
+              onClick={() => {
+                setActiveTool(null);
+                setPendingPoint(null); setPendingChannel(null); setPendingFib(null);
+              }}
               className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
             >
               Cancel
@@ -606,7 +689,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                       <YAxis
                         orientation="right"
                         stroke="#9ca3af"
-                        domain={['auto', 'auto']}
+                        domain={yDomain}
                         style={{ fontSize: '10px' }}
                         tickFormatter={v => `$${v < 10 ? v.toFixed(2) : v < 100 ? v.toFixed(1) : v.toFixed(0)}`}
                         width={55}
@@ -645,77 +728,156 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                     onMouseLeave={() => setSvgMousePos(null)}
                   >
                     {/* Completed trend lines */}
-                    {trendLines.map((l, i) => (
-                      <line key={`tl-${i}`}
-                        x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2}
-                        stroke="#f59e0b" strokeWidth={2} strokeLinecap="round"
-                        vectorEffect="non-scaling-stroke"
-                      />
-                    ))}
+                    {trendLines.map((l, i) => {
+                      const a = toSvgPoint(l.p1);
+                      const b = toSvgPoint(l.p2);
+                      if (!a || !b) return null;
+                      return (
+                        <line key={`tl-${i}`}
+                          x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                          stroke="#f59e0b" strokeWidth={2} strokeLinecap="round"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      );
+                    })}
 
                     {/* Completed channels */}
-                    {channels.map((ch, i) => (
-                      <g key={`ch-${i}`}>
-                        <polygon
-                          points={`${ch.x1},${ch.y1} ${ch.x2},${ch.y2} ${ch.x2},${ch.y2 + ch.yOffset} ${ch.x1},${ch.y1 + ch.yOffset}`}
-                          fill="rgba(59,130,246,0.12)" stroke="none"
-                        />
-                        <line x1={ch.x1} y1={ch.y1} x2={ch.x2} y2={ch.y2}
-                          stroke="#3b82f6" strokeWidth={1.5} strokeLinecap="round"
-                          vectorEffect="non-scaling-stroke"
-                        />
-                        <line x1={ch.x1} y1={ch.y1 + ch.yOffset} x2={ch.x2} y2={ch.y2 + ch.yOffset}
-                          stroke="#3b82f6" strokeWidth={1.5} strokeLinecap="round"
-                          vectorEffect="non-scaling-stroke"
-                        />
-                      </g>
-                    ))}
-
-                    {/* Trend line pending first point */}
-                    {activeTool === 'trend' && pendingPoint && (
-                      <circle cx={pendingPoint.x} cy={pendingPoint.y} r={1.5}
-                        fill="#f59e0b" vectorEffect="non-scaling-stroke"
-                      />
-                    )}
-                    {/* Trend line preview */}
-                    {activeTool === 'trend' && pendingPoint && svgMousePos && (
-                      <line x1={pendingPoint.x} y1={pendingPoint.y}
-                        x2={svgMousePos.x} y2={svgMousePos.y}
-                        stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 3"
-                        vectorEffect="non-scaling-stroke"
-                      />
-                    )}
-
-                    {/* Channel: step 1→2 — drawing main line */}
-                    {activeTool === 'channel' && pendingChannel && pendingChannel.x2 === null && svgMousePos && (
-                      <>
-                        <circle cx={pendingChannel.x1} cy={pendingChannel.y1} r={1.5}
-                          fill="#3b82f6" vectorEffect="non-scaling-stroke"
-                        />
-                        <line x1={pendingChannel.x1} y1={pendingChannel.y1}
-                          x2={svgMousePos.x} y2={svgMousePos.y}
-                          stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="4 3"
-                          vectorEffect="non-scaling-stroke"
-                        />
-                      </>
-                    )}
-                    {/* Channel: step 2→3 — main line set, previewing parallel */}
-                    {activeTool === 'channel' && pendingChannel && pendingChannel.x2 !== null && svgMousePos && (() => {
-                      const { x1, y1, x2, y2 } = pendingChannel as { x1: number; y1: number; x2: number; y2: number };
-                      const yOff = svgMousePos.y - y1;
+                    {channels.map((ch, i) => {
+                      const a = toSvgPoint(ch.p1);
+                      const b = toSvgPoint(ch.p2);
+                      if (!a || !b) return null;
+                      const aOff = { x: a.x, y: priceToSvgY(ch.p1.price + ch.yOffsetPrice) };
+                      const bOff = { x: b.x, y: priceToSvgY(ch.p2.price + ch.yOffsetPrice) };
                       return (
-                        <>
+                        <g key={`ch-${i}`}>
                           <polygon
-                            points={`${x1},${y1} ${x2},${y2} ${x2},${y2 + yOff} ${x1},${y1 + yOff}`}
+                            points={`${a.x},${a.y} ${b.x},${b.y} ${bOff.x},${bOff.y} ${aOff.x},${aOff.y}`}
                             fill="rgba(59,130,246,0.12)" stroke="none"
                           />
-                          <line x1={x1} y1={y1} x2={x2} y2={y2}
+                          <line x1={a.x} y1={a.y} x2={b.x} y2={b.y}
                             stroke="#3b82f6" strokeWidth={1.5} strokeLinecap="round"
                             vectorEffect="non-scaling-stroke"
                           />
-                          <line x1={x1} y1={y1 + yOff} x2={x2} y2={y2 + yOff}
+                          <line x1={aOff.x} y1={aOff.y} x2={bOff.x} y2={bOff.y}
+                            stroke="#3b82f6" strokeWidth={1.5} strokeLinecap="round"
+                            vectorEffect="non-scaling-stroke"
+                          />
+                        </g>
+                      );
+                    })}
+
+                    {/* Completed fibonacci levels */}
+                    {fibonaccis.map((fib, i) => {
+                      const range = fib.p2.price - fib.p1.price;
+                      const levels = [
+                        ...[0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0].map(r => ({ r, dashed: false })),
+                        ...[1.272, 1.618, 2.618].map(r => ({ r, dashed: true })),
+                      ];
+                      return (
+                        <g key={`fib-${i}`}>
+                          {levels.map(({ r, dashed }) => {
+                            const price = fib.p1.price + range * r;
+                            const yPct = priceToSvgY(price);
+                            if (yPct < -2 || yPct > 102) return null;
+                            return (
+                              <g key={r}>
+                                <line
+                                  x1={0} y1={yPct} x2={100} y2={yPct}
+                                  stroke="#a78bfa" strokeWidth={1}
+                                  strokeDasharray={dashed ? '2 1.5' : undefined}
+                                  vectorEffect="non-scaling-stroke" opacity={0.85}
+                                />
+                                <text
+                                  x={99} y={yPct - 0.6}
+                                  fontSize={2.2} fill="#a78bfa" textAnchor="end"
+                                  style={{ pointerEvents: 'none' }}
+                                >
+                                  {`${(r * 100).toFixed(1)}%  $${price.toFixed(2)}`}
+                                </text>
+                              </g>
+                            );
+                          })}
+                        </g>
+                      );
+                    })}
+
+                    {/* Trend line pending first point */}
+                    {activeTool === 'trend' && pendingPoint && (() => {
+                      const a = toSvgPoint(pendingPoint);
+                      if (!a) return null;
+                      return (
+                        <circle cx={a.x} cy={a.y} r={1.5}
+                          fill="#f59e0b" vectorEffect="non-scaling-stroke"
+                        />
+                      );
+                    })()}
+                    {/* Trend line preview */}
+                    {activeTool === 'trend' && pendingPoint && svgMousePos && (() => {
+                      const a = toSvgPoint(pendingPoint);
+                      if (!a) return null;
+                      return (
+                        <line x1={a.x} y1={a.y}
+                          x2={svgMousePos.x} y2={svgMousePos.y}
+                          stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 3"
+                          vectorEffect="non-scaling-stroke"
+                        />
+                      );
+                    })()}
+
+                    {/* Channel: step 1→2 — drawing main line */}
+                    {activeTool === 'channel' && pendingChannel && pendingChannel.p2 === null && svgMousePos && (() => {
+                      const a = toSvgPoint(pendingChannel.p1);
+                      if (!a) return null;
+                      return (
+                        <>
+                          <circle cx={a.x} cy={a.y} r={1.5}
+                            fill="#3b82f6" vectorEffect="non-scaling-stroke"
+                          />
+                          <line x1={a.x} y1={a.y}
+                            x2={svgMousePos.x} y2={svgMousePos.y}
                             stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="4 3"
                             vectorEffect="non-scaling-stroke"
+                          />
+                        </>
+                      );
+                    })()}
+                    {/* Channel: step 2→3 — main line set, previewing parallel */}
+                    {activeTool === 'channel' && pendingChannel && pendingChannel.p2 !== null && svgMousePos && (() => {
+                      const a = toSvgPoint(pendingChannel.p1);
+                      const b = toSvgPoint(pendingChannel.p2);
+                      if (!a || !b) return null;
+                      const yOff = svgMousePos.y - a.y;
+                      return (
+                        <>
+                          <polygon
+                            points={`${a.x},${a.y} ${b.x},${b.y} ${b.x},${b.y + yOff} ${a.x},${a.y + yOff}`}
+                            fill="rgba(59,130,246,0.12)" stroke="none"
+                          />
+                          <line x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                            stroke="#3b82f6" strokeWidth={1.5} strokeLinecap="round"
+                            vectorEffect="non-scaling-stroke"
+                          />
+                          <line x1={a.x} y1={a.y + yOff} x2={b.x} y2={b.y + yOff}
+                            stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="4 3"
+                            vectorEffect="non-scaling-stroke"
+                          />
+                        </>
+                      );
+                    })()}
+
+                    {/* Fibonacci preview: dashed lines at first-click price and current mouse-y */}
+                    {activeTool === 'fib' && pendingFib && svgMousePos && (() => {
+                      const y1 = priceToSvgY(pendingFib.price);
+                      const y2 = svgMousePos.y;
+                      return (
+                        <>
+                          <line x1={0} y1={y1} x2={100} y2={y1}
+                            stroke="#a78bfa" strokeWidth={1} strokeDasharray="4 3"
+                            vectorEffect="non-scaling-stroke" opacity={0.5}
+                          />
+                          <line x1={0} y1={y2} x2={100} y2={y2}
+                            stroke="#a78bfa" strokeWidth={1} strokeDasharray="4 3"
+                            vectorEffect="non-scaling-stroke" opacity={0.5}
                           />
                         </>
                       );
