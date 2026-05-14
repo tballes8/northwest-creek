@@ -894,7 +894,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                               className="absolute font-mono"
                               style={{
                                 top: `${yPct}%`,
-                                right: 60,
+                                left: 8,
                                 transform: 'translateY(-100%)',
                                 color: '#ffffff',
                                 fontSize: '11px',
