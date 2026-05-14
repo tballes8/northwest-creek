@@ -766,7 +766,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                       );
                     })}
 
-                    {/* Completed fibonacci levels */}
+                    {/* Completed fibonacci levels (lines only — labels rendered as HTML below) */}
                     {fibonaccis.map((fib, i) => {
                       const range = fib.p2.price - fib.p1.price;
                       const levels = [
@@ -780,21 +780,12 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                             const yPct = priceToSvgY(price);
                             if (yPct < -2 || yPct > 102) return null;
                             return (
-                              <g key={r}>
-                                <line
-                                  x1={0} y1={yPct} x2={100} y2={yPct}
-                                  stroke="#a78bfa" strokeWidth={1}
-                                  strokeDasharray={dashed ? '2 1.5' : undefined}
-                                  vectorEffect="non-scaling-stroke" opacity={0.85}
-                                />
-                                <text
-                                  x={99} y={yPct - 0.6}
-                                  fontSize={2.2} fill="#a78bfa" textAnchor="end"
-                                  style={{ pointerEvents: 'none' }}
-                                >
-                                  {`${(r * 100).toFixed(1)}%  $${price.toFixed(2)}`}
-                                </text>
-                              </g>
+                              <line key={r}
+                                x1={0} y1={yPct} x2={100} y2={yPct}
+                                stroke="#ffffff" strokeWidth={1}
+                                strokeDasharray={dashed ? '2 1.5' : undefined}
+                                vectorEffect="non-scaling-stroke" opacity={0.9}
+                              />
                             );
                           })}
                         </g>
@@ -872,17 +863,54 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                       return (
                         <>
                           <line x1={0} y1={y1} x2={100} y2={y1}
-                            stroke="#a78bfa" strokeWidth={1} strokeDasharray="4 3"
-                            vectorEffect="non-scaling-stroke" opacity={0.5}
+                            stroke="#ffffff" strokeWidth={1} strokeDasharray="4 3"
+                            vectorEffect="non-scaling-stroke" opacity={0.6}
                           />
                           <line x1={0} y1={y2} x2={100} y2={y2}
-                            stroke="#a78bfa" strokeWidth={1} strokeDasharray="4 3"
-                            vectorEffect="non-scaling-stroke" opacity={0.5}
+                            stroke="#ffffff" strokeWidth={1} strokeDasharray="4 3"
+                            vectorEffect="non-scaling-stroke" opacity={0.6}
                           />
                         </>
                       );
                     })()}
                   </svg>
+
+                  {/* Fibonacci labels (HTML overlay — real px font size, no SVG stretch) */}
+                  {fibonaccis.length > 0 && (
+                    <div
+                      className="absolute inset-0 pointer-events-none"
+                      style={{ height: chartHeight }}
+                    >
+                      {fibonaccis.flatMap((fib, fi) => {
+                        const range = fib.p2.price - fib.p1.price;
+                        const ratios = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0, 1.272, 1.618, 2.618];
+                        return ratios.map(r => {
+                          const price = fib.p1.price + range * r;
+                          const yPct = priceToSvgY(price);
+                          if (yPct < 0 || yPct > 100) return null;
+                          return (
+                            <div
+                              key={`fib-lbl-${fi}-${r}`}
+                              className="absolute font-mono"
+                              style={{
+                                top: `${yPct}%`,
+                                right: 60,
+                                transform: 'translateY(-100%)',
+                                color: '#ffffff',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                lineHeight: 1,
+                                textShadow: '0 0 3px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.9)',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {`${(r * 100).toFixed(1)}%  $${price.toFixed(2)}`}
+                            </div>
+                          );
+                        });
+                      })}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div
