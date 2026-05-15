@@ -1532,6 +1532,7 @@ const Stocks: React.FC = () => {
                   const t = lastScreenerTickerRef.current;
                   setSearchInput(t);
                   loadStockData(t);
+                  loadNews(t);
                 }
                 setActiveTab(tab);
               }}
