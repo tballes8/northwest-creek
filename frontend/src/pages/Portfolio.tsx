@@ -131,6 +131,68 @@ const Portfolio: React.FC = () => {
       .finally(() => setDividendsLoading(false));
   }, [tickerList]);
 
+  const exportDividendsCSV = () => {
+    const csvEscape = (v: string | number | null | undefined): string => {
+      const s = v == null ? '' : String(v);
+      if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+      return s;
+    };
+
+    const rows: Array<{
+      ticker: string; shares: number; exDate: string; payDate: string;
+      divPerShare: number; total: number; type: string;
+    }> = [];
+
+    for (const pos of portfolio) {
+      const divInfo = dividendMap[pos.ticker];
+      if (!divInfo?.has_dividends || !divInfo.annual_dividend) continue;
+      for (const d of (divInfo.dividends || [])) {
+        const exDate = d.ex_dividend_date || '';
+        const payDate = d.pay_date || '';
+        if (!exDate && !payDate) continue;
+        const divPerShare = Number(d.cash_amount) || 0;
+        rows.push({
+          ticker: pos.ticker,
+          shares: pos.quantity,
+          exDate, payDate, divPerShare,
+          total: divPerShare * pos.quantity,
+          type: d.distribution_type || '',
+        });
+      }
+    }
+
+    rows.sort((a, b) => {
+      const da = a.payDate || a.exDate;
+      const db = b.payDate || b.exDate;
+      return db.localeCompare(da);
+    });
+
+    const header = ['Ticker', 'Shares Held', 'Ex-Date', 'Pay Date', 'Dividend Per Share', 'Total Payment', 'Distribution Type'];
+    const lines = [header.join(',')];
+    for (const r of rows) {
+      lines.push([
+        csvEscape(r.ticker),
+        csvEscape(r.shares),
+        csvEscape(r.exDate),
+        csvEscape(r.payDate),
+        csvEscape(r.divPerShare.toFixed(4)),
+        csvEscape(r.total.toFixed(2)),
+        csvEscape(r.type),
+      ].join(','));
+    }
+    const csv = lines.join('\r\n');
+
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `portfolio_dividends_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   useEffect(() => {
     if (prices.size === 0) return;
     
@@ -1031,21 +1093,41 @@ const Portfolio: React.FC = () => {
           <div className="fixed inset-0 bg-black/60" onClick={() => setShowDividendModal(false)} />
           <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl border dark:border-gray-600 w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
-              <div>
-                <h2 className="text-lg font-bold text-gray-900 dark:text-white">Dividend Income</h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  Projected annual income: <span className="text-green-600 dark:text-green-400 font-semibold">${totals.totalAnnualDividends.toFixed(2)}</span>
-                  {' · '}Portfolio yield: <span className="text-green-600 dark:text-green-400 font-semibold">{totals.portfolioDividendYield.toFixed(2)}%</span>
-                </p>
-              </div>
-              <button
-                onClick={() => setShowDividendModal(false)}
-                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
+            {(() => {
+              const hasAnyPayments = portfolio.some(
+                pos => (dividendMap[pos.ticker]?.dividends?.length ?? 0) > 0
+              );
+              return (
+                <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">Dividend Income</h2>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Projected annual income: <span className="text-green-600 dark:text-green-400 font-semibold">${totals.totalAnnualDividends.toFixed(2)}</span>
+                      {' · '}Portfolio yield: <span className="text-green-600 dark:text-green-400 font-semibold">{totals.portfolioDividendYield.toFixed(2)}%</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={exportDividendsCSV}
+                      disabled={!hasAnyPayments}
+                      title={hasAnyPayments ? 'Download payment history as CSV' : 'No payment history available'}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-teal-500/50 text-teal-600 dark:text-teal-400 hover:bg-teal-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path d="M7 1v8m-3-3l3 3 3-3M1 11h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Export CSV
+                    </button>
+                    <button
+                      onClick={() => setShowDividendModal(false)}
+                      className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
             {/* Body */}
             <div className="overflow-y-auto px-6 py-4 flex-1">
               {(() => {
