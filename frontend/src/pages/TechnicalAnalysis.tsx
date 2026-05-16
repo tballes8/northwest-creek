@@ -1820,22 +1820,6 @@ const TechnicalAnalysis: React.FC = () => {
             {showVolume && (
               <div className="space-y-4">
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">📊 Volume Indicators</h3>
-                {/* VWAP Chart */}
-                <div id="chart-vwap" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">MVWAP (Multi-Day VWAP)</h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    MVWAP (Multi-Day VWAP) accumulates cumulative (price × volume) from the start of the selected date range, giving the volume-weighted average cost basis over the entire period. This is useful for identifying long-term fair value and trend direction. For the true intraday VWAP — which resets each session and is used by institutional traders as a daily benchmark — click the MVWAP card below.
-                  </p>
-                  <div style={{ height: '300px' }}>
-                    <Line data={{
-                      labels: analysisData.chart_data.map(d => d.date),
-                      datasets: [
-                        { label: 'Price', data: analysisData.chart_data.map(d => d.close), borderColor: 'rgb(59, 130, 246)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: false },
-                        { label: 'MVWAP', data: analysisData.chart_data.map(d => d.vwap), borderColor: 'rgb(245, 158, 11)', borderWidth: 2, pointRadius: 0, tension: 0.1, borderDash: [5,5], fill: false },
-                      ]
-                    }} options={chartOptions} />
-                  </div>
-                </div>
                 {/* Volume indicator summary cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* MVWAP card — clickable to open true intraday VWAP */}
@@ -1872,6 +1856,22 @@ const TechnicalAnalysis: React.FC = () => {
                     </div>
                   ))}
                 </div>
+                {/* VWAP Chart */}
+                <div id="chart-vwap" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">MVWAP (Multi-Day VWAP)</h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                    MVWAP (Multi-Day VWAP) accumulates cumulative (price × volume) from the start of the selected date range, giving the volume-weighted average cost basis over the entire period. This is useful for identifying long-term fair value and trend direction. For the true intraday VWAP — which resets each session and is used by institutional traders as a daily benchmark — click the MVWAP card below.
+                  </p>
+                  <div style={{ height: '300px' }}>
+                    <Line data={{
+                      labels: analysisData.chart_data.map(d => d.date),
+                      datasets: [
+                        { label: 'Price', data: analysisData.chart_data.map(d => d.close), borderColor: 'rgb(59, 130, 246)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: false },
+                        { label: 'MVWAP', data: analysisData.chart_data.map(d => d.vwap), borderColor: 'rgb(245, 158, 11)', borderWidth: 2, pointRadius: 0, tension: 0.1, borderDash: [5,5], fill: false },
+                      ]
+                    }} options={chartOptions} />
+                  </div>
+                </div>
                 {/* OBV Chart */}
                 <div id="chart-obv" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">On-Balance Volume (OBV)</h4>
@@ -1892,6 +1892,27 @@ const TechnicalAnalysis: React.FC = () => {
             {showMomentum && (
               <div className="space-y-4">
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">⚡ Momentum Indicators</h3>
+                {/* Momentum summary cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Stochastic', data: analysisData.indicators.stochastic, val: analysisData.indicators.stochastic ? `%K: ${analysisData.indicators.stochastic.k}` : 'N/A' },
+                    { label: 'ADX', data: analysisData.indicators.adx, val: analysisData.indicators.adx ? `${analysisData.indicators.adx.adx}` : 'N/A' },
+                    { label: 'CCI', data: analysisData.indicators.cci, val: analysisData.indicators.cci?.value?.toFixed(0) || 'N/A' },
+                    { label: 'ROC', data: analysisData.indicators.roc, val: analysisData.indicators.roc?.value ? `${analysisData.indicators.roc.value > 0 ? '+' : ''}${analysisData.indicators.roc.value.toFixed(1)}%` : 'N/A' },
+                  ].map(item => (
+                    <div key={item.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-center">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{item.label}</p>
+                      <p className="text-lg font-bold text-gray-900 dark:text-white">{item.val}</p>
+                      <p className={`text-xs font-semibold ${
+                        (item.data as any)?.signal === 'bullish' || (item.data as any)?.signal === 'oversold' || (item.data as any)?.direction === 'bullish' ? 'text-green-500'
+                        : (item.data as any)?.signal === 'bearish' || (item.data as any)?.signal === 'overbought' || (item.data as any)?.direction === 'bearish' ? 'text-red-500'
+                        : 'text-gray-400'
+                      }`}>
+                        {(item.data as any)?.signal || (item.data as any)?.strength || ''}
+                      </p>
+                    </div>
+                  ))}
+                </div>
                 {/* Stochastic Oscillator */}
                 <div id="chart-stochastic" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Stochastic Oscillator</h4>
@@ -1958,27 +1979,6 @@ const TechnicalAnalysis: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                {/* Momentum summary cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {[
-                    { label: 'Stochastic', data: analysisData.indicators.stochastic, val: analysisData.indicators.stochastic ? `%K: ${analysisData.indicators.stochastic.k}` : 'N/A' },
-                    { label: 'ADX', data: analysisData.indicators.adx, val: analysisData.indicators.adx ? `${analysisData.indicators.adx.adx}` : 'N/A' },
-                    { label: 'CCI', data: analysisData.indicators.cci, val: analysisData.indicators.cci?.value?.toFixed(0) || 'N/A' },
-                    { label: 'ROC', data: analysisData.indicators.roc, val: analysisData.indicators.roc?.value ? `${analysisData.indicators.roc.value > 0 ? '+' : ''}${analysisData.indicators.roc.value.toFixed(1)}%` : 'N/A' },
-                  ].map(item => (
-                    <div key={item.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-center">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{item.label}</p>
-                      <p className="text-lg font-bold text-gray-900 dark:text-white">{item.val}</p>
-                      <p className={`text-xs font-semibold ${
-                        (item.data as any)?.signal === 'bullish' || (item.data as any)?.signal === 'oversold' || (item.data as any)?.direction === 'bullish' ? 'text-green-500' 
-                        : (item.data as any)?.signal === 'bearish' || (item.data as any)?.signal === 'overbought' || (item.data as any)?.direction === 'bearish' ? 'text-red-500' 
-                        : 'text-gray-400'
-                      }`}>
-                        {(item.data as any)?.signal || (item.data as any)?.strength || ''}
-                      </p>
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
 
@@ -1986,6 +1986,20 @@ const TechnicalAnalysis: React.FC = () => {
             {showVolatility && (
               <div className="space-y-4">
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">🌊 Volatility Indicators</h3>
+                {/* Volatility summary */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[
+                    { label: 'ATR', desc: analysisData.indicators.atr?.description, badge: analysisData.indicators.atr?.volatility },
+                    { label: 'Keltner', desc: analysisData.indicators.keltner?.description, badge: analysisData.indicators.keltner?.position?.replace('_', ' ') },
+                    { label: 'Std Dev', desc: analysisData.indicators.std_dev?.description, badge: analysisData.indicators.std_dev?.percent ? `${analysisData.indicators.std_dev.percent}%` : 'N/A' },
+                  ].map(item => (
+                    <div key={item.label} className="bg-white dark:bg-gray-700 rounded-lg shadow dark:shadow-gray-200/20 p-4 border dark:border-gray-500">
+                      <h4 className="font-bold text-gray-900 dark:text-white mb-1">{item.label}</h4>
+                      <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 mb-2">{item.badge || 'N/A'}</span>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{item.desc || 'N/A'}</p>
+                    </div>
+                  ))}
+                </div>
                 {/* ATR Chart */}
                 <div id="chart-atr" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ATR (Average True Range)</h4>
@@ -2015,20 +2029,6 @@ const TechnicalAnalysis: React.FC = () => {
                     }} options={chartOptions} />
                   </div>
                 </div>
-                {/* Volatility summary */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {[
-                    { label: 'ATR', desc: analysisData.indicators.atr?.description, badge: analysisData.indicators.atr?.volatility },
-                    { label: 'Keltner', desc: analysisData.indicators.keltner?.description, badge: analysisData.indicators.keltner?.position?.replace('_', ' ') },
-                    { label: 'Std Dev', desc: analysisData.indicators.std_dev?.description, badge: analysisData.indicators.std_dev?.percent ? `${analysisData.indicators.std_dev.percent}%` : 'N/A' },
-                  ].map(item => (
-                    <div key={item.label} className="bg-white dark:bg-gray-700 rounded-lg shadow dark:shadow-gray-200/20 p-4 border dark:border-gray-500">
-                      <h4 className="font-bold text-gray-900 dark:text-white mb-1">{item.label}</h4>
-                      <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 mb-2">{item.badge || 'N/A'}</span>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{item.desc || 'N/A'}</p>
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
 
@@ -2036,6 +2036,24 @@ const TechnicalAnalysis: React.FC = () => {
             {showTrend && (
               <div className="space-y-4">
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">📈 Trend Indicators</h3>
+                {/* Trend summary cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[
+                    { label: 'Parabolic SAR', data: analysisData.indicators.parabolic_sar, badge: analysisData.indicators.parabolic_sar?.trend, color: analysisData.indicators.parabolic_sar?.trend === 'uptrend' ? 'green' : 'red' },
+                    { label: 'Ichimoku Cloud', data: analysisData.indicators.ichimoku, badge: analysisData.indicators.ichimoku?.signal, color: analysisData.indicators.ichimoku?.signal === 'bullish' ? 'green' : analysisData.indicators.ichimoku?.signal === 'bearish' ? 'red' : 'gray' },
+                    { label: 'Donchian', data: analysisData.indicators.donchian, badge: analysisData.indicators.donchian ? `$${analysisData.indicators.donchian.upper} / $${analysisData.indicators.donchian.lower}` : 'N/A', color: 'gray' },
+                  ].map(item => (
+                    <div key={item.label} className="bg-white dark:bg-gray-700 rounded-lg shadow dark:shadow-gray-200/20 p-4 border dark:border-gray-500">
+                      <h4 className="font-bold text-gray-900 dark:text-white mb-1">{item.label}</h4>
+                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold mb-2 ${
+                        item.color === 'green' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                        : item.color === 'red' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                        : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+                      }`}>{item.badge || 'N/A'}</span>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{item.data?.description || 'N/A'}</p>
+                    </div>
+                  ))}
+                </div>
                 {/* Parabolic SAR (dots on price chart) */}
                 <div id="chart-parabolic-sar" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Parabolic SAR</h4>
@@ -2084,24 +2102,6 @@ const TechnicalAnalysis: React.FC = () => {
                       ]
                     }} options={chartOptions} />
                   </div>
-                </div>
-                {/* Trend summary cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {[
-                    { label: 'Parabolic SAR', data: analysisData.indicators.parabolic_sar, badge: analysisData.indicators.parabolic_sar?.trend, color: analysisData.indicators.parabolic_sar?.trend === 'uptrend' ? 'green' : 'red' },
-                    { label: 'Ichimoku Cloud', data: analysisData.indicators.ichimoku, badge: analysisData.indicators.ichimoku?.signal, color: analysisData.indicators.ichimoku?.signal === 'bullish' ? 'green' : analysisData.indicators.ichimoku?.signal === 'bearish' ? 'red' : 'gray' },
-                    { label: 'Donchian', data: analysisData.indicators.donchian, badge: analysisData.indicators.donchian ? `$${analysisData.indicators.donchian.upper} / $${analysisData.indicators.donchian.lower}` : 'N/A', color: 'gray' },
-                  ].map(item => (
-                    <div key={item.label} className="bg-white dark:bg-gray-700 rounded-lg shadow dark:shadow-gray-200/20 p-4 border dark:border-gray-500">
-                      <h4 className="font-bold text-gray-900 dark:text-white mb-1">{item.label}</h4>
-                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold mb-2 ${
-                        item.color === 'green' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                        : item.color === 'red' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
-                        : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
-                      }`}>{item.badge || 'N/A'}</span>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{item.data?.description || 'N/A'}</p>
-                    </div>
-                  ))}
                 </div>
               </div>
             )}
