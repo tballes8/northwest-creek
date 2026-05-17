@@ -442,7 +442,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
       if (!pendingFib) {
         setPendingFib(pt);
       } else {
-        setFibonaccis(fs => [...fs, { p1: pendingFib, p2: pt }]);
+        setFibonaccis(fs => [...fs, { p1: pt, p2: pendingFib }]);
         setPendingFib(null);
       }
     }
@@ -545,7 +545,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
             }`}
           >
             {activeTool === 'fib'
-              ? (pendingFib == null ? 'Click swing high/low…' : 'Click opposite swing…')
+              ? (pendingFib == null ? 'Click start of move…' : 'Click end / 0%…')
               : 'Fibonacci'}
           </button>
           {(trendLines.length > 0 || channels.length > 0 || fibonaccis.length > 0) && (

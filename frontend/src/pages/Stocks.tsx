@@ -1338,7 +1338,7 @@ const Stocks: React.FC = () => {
         return [];
       }
       if (drawTool === 'fibonacci' && next.length === 2) {
-        setDrawings(d => [...d, { type: 'fibonacci', p1: next[0], p2: next[1] }]);
+        setDrawings(d => [...d, { type: 'fibonacci', p1: next[1], p2: next[0] }]);
         return [];
       }
       return next;
@@ -2025,7 +2025,7 @@ const Stocks: React.FC = () => {
                           {drawTool === 'trendline'
                             ? pendingPoints.length === 0 ? 'Click to set start point' : 'Click to set end point'
                             : drawTool === 'fibonacci'
-                            ? pendingPoints.length === 0 ? 'Click swing high or low' : 'Click the opposite swing point'
+                            ? pendingPoints.length === 0 ? 'Click start of move' : 'Click end of move (0%)'
                             : pendingPoints.length === 0 ? 'Click to set start point'
                             : pendingPoints.length === 1 ? 'Click to set end point'
                             : 'Click to set channel width'}
