@@ -1893,23 +1893,23 @@ const TechnicalAnalysis: React.FC = () => {
               <div className="space-y-4">
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">⚡ Momentum Indicators</h3>
                 {/* Momentum summary cards */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[
                     { label: 'Stochastic', data: analysisData.indicators.stochastic, val: analysisData.indicators.stochastic ? `%K: ${analysisData.indicators.stochastic.k}` : 'N/A' },
                     { label: 'ADX', data: analysisData.indicators.adx, val: analysisData.indicators.adx ? `${analysisData.indicators.adx.adx}` : 'N/A' },
                     { label: 'CCI', data: analysisData.indicators.cci, val: analysisData.indicators.cci?.value?.toFixed(0) || 'N/A' },
                     { label: 'ROC', data: analysisData.indicators.roc, val: analysisData.indicators.roc?.value ? `${analysisData.indicators.roc.value > 0 ? '+' : ''}${analysisData.indicators.roc.value.toFixed(1)}%` : 'N/A' },
                   ].map(item => (
-                    <div key={item.label} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 text-center">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{item.label}</p>
-                      <p className="text-lg font-bold text-gray-900 dark:text-white">{item.val}</p>
-                      <p className={`text-xs font-semibold ${
-                        (item.data as any)?.signal === 'bullish' || (item.data as any)?.signal === 'oversold' || (item.data as any)?.direction === 'bullish' ? 'text-green-500'
-                        : (item.data as any)?.signal === 'bearish' || (item.data as any)?.signal === 'overbought' || (item.data as any)?.direction === 'bearish' ? 'text-red-500'
-                        : 'text-gray-400'
-                      }`}>
-                        {(item.data as any)?.signal || (item.data as any)?.strength || ''}
-                      </p>
+                    <div key={item.label} className="bg-white dark:bg-gray-700 rounded-lg shadow dark:shadow-gray-200/20 p-4 border dark:border-gray-500">
+                      <h4 className="font-bold text-gray-900 dark:text-white mb-1">{item.label}</h4>
+                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold mb-2 ${
+                        (item.data as any)?.signal === 'bullish' || (item.data as any)?.signal === 'oversold' || (item.data as any)?.direction === 'bullish'
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                          : (item.data as any)?.signal === 'bearish' || (item.data as any)?.signal === 'overbought' || (item.data as any)?.direction === 'bearish'
+                          ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                          : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
+                      }`}>{item.val}</span>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">{(item.data as any)?.description || (item.data as any)?.signal?.toUpperCase() || 'N/A'}</p>
                     </div>
                   ))}
                 </div>
