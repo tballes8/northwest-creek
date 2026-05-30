@@ -444,6 +444,17 @@ const SectorHeatmap: React.FC = () => {
                 >
                   {playing ? '⏸ Pause' : '▶ Play'}
                 </button>
+                <button
+                  onClick={() => {
+                    setPlaying(false);
+                    setFrameIdx(prev => Math.min(prev + 1, timelapse.frames.length - 1));
+                  }}
+                  disabled={frameIdx >= timelapse.frames.length - 1}
+                  title="Step to next interval"
+                  className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded text-sm font-medium"
+                >
+                  ⏭ Step
+                </button>
                 <span className="text-sm text-gray-600 dark:text-gray-300">
                   Frame {frameIdx + 1} / {timelapse.frames.length} — {timelapse.frames[frameIdx]?.date}
                 </span>
