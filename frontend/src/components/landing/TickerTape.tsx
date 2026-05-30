@@ -20,34 +20,72 @@ const FALLBACK: TapeQuote[] = [
   { ticker: 'DIA', price: 0, change_percent: 0 },
 ];
 
-const TickerTape: React.FC = () => {
+interface TickerTapeProps {
+  /** When true, render dark-consistent styling that blends into the (always-dark) NavBar. */
+  embedded?: boolean;
+}
+
+const POLL_MS = 60_000;
+
+const TickerTape: React.FC<TickerTapeProps> = ({ embedded = false }) => {
   const [quotes, setQuotes] = useState<TapeQuote[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    marketAPI
-      .getTickerTape()
-      .then((res) => {
-        if (cancelled) return;
-        const data: TapeQuote[] = res.data?.data || [];
-        setQuotes(data.length > 0 ? data : FALLBACK);
-      })
-      .catch(() => {
-        if (!cancelled) setQuotes(FALLBACK);
-      });
+    const load = () => {
+      marketAPI
+        .getTickerTape()
+        .then((res) => {
+          if (cancelled) return;
+          const data: TapeQuote[] = res.data?.data || [];
+          // Keep showing whatever we have on an empty/failed refresh; only fall
+          // back to the hardcoded list when we have nothing yet.
+          setQuotes((prev) =>
+            data.length > 0 ? data : prev.length > 0 ? prev : FALLBACK
+          );
+        })
+        .catch(() => {
+          if (!cancelled) setQuotes((prev) => (prev.length > 0 ? prev : FALLBACK));
+        });
+    };
+    load();
+    const id = setInterval(load, POLL_MS);
     return () => {
       cancelled = true;
+      clearInterval(id);
     };
   }, []);
 
+  // Styling differs between the landing pages (theme-aware) and the embedded
+  // NavBar strip (always dark, since the nav is always gray-900).
+  const containerCls = embedded
+    ? 'relative overflow-hidden bg-gray-900 border-b border-gray-700 group'
+    : 'relative overflow-hidden border-y border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 group';
+  const tickerCls = embedded
+    ? 'font-bold text-white tracking-tight'
+    : 'font-bold text-gray-900 dark:text-white tracking-tight';
+  const priceCls = embedded
+    ? 'text-gray-300 tabular-nums'
+    : 'text-gray-700 dark:text-gray-300 tabular-nums';
+  const upCls = embedded ? 'text-green-400' : 'text-green-500 dark:text-green-400';
+  const downCls = embedded ? 'text-red-400' : 'text-red-500 dark:text-red-400';
+
   if (quotes.length === 0) {
-    return <div className="h-12 border-y border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900" />;
+    return (
+      <div
+        className={
+          embedded
+            ? 'h-12 border-b border-gray-700 bg-gray-900'
+            : 'h-12 border-y border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900'
+        }
+      />
+    );
   }
 
   const loop = [...quotes, ...quotes];
 
   return (
-    <div className="relative overflow-hidden border-y border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 group">
+    <div className={containerCls}>
       <style>{`
         @keyframes nwc-ticker-scroll {
           0% { transform: translateX(0); }
@@ -72,16 +110,14 @@ const TickerTape: React.FC = () => {
                 key={`${q.ticker}-${i}`}
                 className="flex items-center gap-2 px-6 text-sm shrink-0"
               >
-                <span className="font-bold text-gray-900 dark:text-white tracking-tight">
+                <span className={tickerCls}>
                   {q.ticker}
                 </span>
-                <span className="text-gray-700 dark:text-gray-300 tabular-nums">
+                <span className={priceCls}>
                   ${q.price.toFixed(2)}
                 </span>
                 <span
-                  className={`font-semibold tabular-nums ${
-                    up ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'
-                  }`}
+                  className={`font-semibold tabular-nums ${up ? upCls : downCls}`}
                 >
                   {up ? '+' : ''}
                   {q.change_percent.toFixed(2)}%

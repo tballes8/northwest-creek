@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import ThemeToggle from './ThemeToggle';
+import TickerTape from './landing/TickerTape';
 import { User } from '../types';
 
 type PageKey =
@@ -98,6 +99,8 @@ const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
 
   return (
     <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
+      {/* Market ticker tape — top strip, above the nav row. Renders on every page that uses NavBar. */}
+      <TickerTape embedded />
       <div className="flex items-center h-16">
         {/* Logo — outside the constrained container */}
         <Link to="/dashboard" className="flex items-center pl-4 sm:pl-6 lg:pl-8 pr-6 shrink-0">
