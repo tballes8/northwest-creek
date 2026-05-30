@@ -14,12 +14,14 @@ from app.api.v1.endpoints.content import router as content_router
 from app.api.v1.endpoints.waitlist import router as waitlist_router
 from app.api.v1.endpoints.sitemap import router as sitemap_router
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from app.services.alert_checker import alert_checker
 from app.services.websocket_service import live_price_service
 from app.services.fmp_client import init_fmp_client, close_fmp_client
 from datetime import datetime, timezone
 from app.tasks.refresh_stock_snapshots import refresh_stock_snapshots_job
 from app.tasks.fetch_macro_indicators import macro_indicators_job
+from app.services.sector_rotation import append_today_closes
 
 
 settings = get_settings()
@@ -63,6 +65,19 @@ async def lifespan(app: FastAPI):
         max_instances=1,
         coalesce=True,
         next_run_time=datetime.now(timezone.utc),
+    )
+
+    # Sector heatmap: append each day's sector ETF closes after market close.
+    # Own job (not folded into the screener refresh) so a screener change can't
+    # orphan it again — this is what broke the heatmap on 2026-05-11.
+    # 06:00 UTC matches the legacy fetch_daily_snapshots cron that previously fed it.
+    _scheduler.add_job(
+        append_today_closes,
+        CronTrigger(hour=6, minute=0, timezone=timezone.utc),
+        id="sector_rotation_append",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
     )
 
     _scheduler.start()

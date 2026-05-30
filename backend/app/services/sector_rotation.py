@@ -15,7 +15,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.models import SectorEtfDailyClose
@@ -156,6 +156,15 @@ async def _closes_in_range(start_date: date, end_date: date) -> dict[str, list[t
     return grouped
 
 
+async def _latest_close_date() -> date | None:
+    """Most recent close_date present in the table across the tracked tickers."""
+    async with async_session() as session:
+        stmt = select(func.max(SectorEtfDailyClose.close_date)).where(
+            SectorEtfDailyClose.ticker.in_(ALL_TICKERS)
+        )
+        return await session.scalar(stmt)
+
+
 async def compute_relative_returns(end_date: date, window: str) -> dict[str, Any]:
     """
     Compute window returns for each sector ETF and the SPY benchmark.
@@ -171,6 +180,11 @@ async def compute_relative_returns(end_date: date, window: str) -> dict[str, Any
         }
     """
     days = _window_to_days(window)
+    # Anchor on the latest real close so a stale/lapsed feed degrades to "data
+    # through <latest date>" rather than a window full of null tiles.
+    latest = await _latest_close_date()
+    if latest and latest < end_date:
+        end_date = latest
     start_date = end_date - timedelta(days=days)
     grouped = await _closes_in_range(start_date, end_date)
 
@@ -214,6 +228,11 @@ async def compute_timelapse_frames(end_date: date, window: str, step_days: int =
     if step_days < 1:
         step_days = 1
     days = _window_to_days(window)
+    # Cap the timeline at the latest real close so frames never trail past
+    # available data into a wall of gray "—" tiles when the feed lapses.
+    latest = await _latest_close_date()
+    if latest and latest < end_date:
+        end_date = latest
     series_start = end_date - timedelta(days=days)
     # Pull enough history to cover the trailing window for the earliest frame
     history_start = series_start - timedelta(days=days)
