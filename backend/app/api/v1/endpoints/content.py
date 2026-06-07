@@ -14,11 +14,13 @@ from typing import List, Optional
 from uuid import UUID
 
 from app.db.session import get_db
-from app.db.models import Tutorial, BlogPost, User
+from app.db.models import Tutorial, BlogPost, User, MaintenanceReport
 from app.schemas.content import (
     TutorialCreate, TutorialUpdate, TutorialResponse,
     BlogPostCreate, BlogPostUpdate, BlogPostResponse, BlogPostListItem,
+    ChangelogReviewRequest, MaintenanceReportResponse, MaintenanceReportListItem,
 )
+from app.services.changelog_review import assess_changelog
 
 # ── Auth dependencies ──────────────────────────────────────
 # Adjust these imports to match your existing auth setup
@@ -309,3 +311,58 @@ async def delete_blog_post(
 
     await db.delete(post)
     await db.commit()
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  MAINTENANCE — Vendor (FMP) changelog review (admin only)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+@router.post("/admin/maintenance/changelog/review", response_model=MaintenanceReportResponse)
+async def review_changelog(
+    data: ChangelogReviewRequest,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Run Claude over a pasted vendor changelog + the NWC FMP endpoint registry,
+    persist the markdown assessment, and return it."""
+    try:
+        markdown = await assess_changelog(data.changelog_text)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"AI review failed: {e}")
+
+    report = MaintenanceReport(
+        vendor=data.vendor or "FMP",
+        source_text=data.changelog_text,
+        report_markdown=markdown,
+        created_by=admin.id,
+    )
+    db.add(report)
+    await db.commit()
+    await db.refresh(report)
+    return report
+
+
+@router.get("/admin/maintenance/reports", response_model=List[MaintenanceReportListItem])
+async def list_maintenance_reports(
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List past changelog reviews (newest first), without the heavy text bodies."""
+    result = await db.execute(
+        select(MaintenanceReport).order_by(MaintenanceReport.created_at.desc())
+    )
+    return result.scalars().all()
+
+
+@router.get("/admin/maintenance/reports/{report_id}", response_model=MaintenanceReportResponse)
+async def get_maintenance_report(
+    report_id: UUID,
+    admin: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get a single changelog review with its full markdown."""
+    result = await db.execute(select(MaintenanceReport).where(MaintenanceReport.id == report_id))
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return report

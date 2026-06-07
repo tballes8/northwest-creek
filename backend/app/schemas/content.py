@@ -98,3 +98,30 @@ class BlogPostListItem(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ── Maintenance: vendor changelog review ───────────────────
+
+class ChangelogReviewRequest(BaseModel):
+    changelog_text: str = Field(..., min_length=1)
+    vendor: str = "FMP"
+
+
+class MaintenanceReportResponse(BaseModel):
+    id: UUID
+    vendor: str
+    report_markdown: str
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class MaintenanceReportListItem(BaseModel):
+    """Listing model — omits the full source text / markdown body."""
+    id: UUID
+    vendor: str
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

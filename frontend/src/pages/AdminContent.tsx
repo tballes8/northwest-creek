@@ -46,7 +46,7 @@ interface BlogPostItem {
 const AdminContent: React.FC = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
-  const [activeTab, setActiveTab] = useState<'tutorials' | 'blogs'>('tutorials');
+  const [activeTab, setActiveTab] = useState<'tutorials' | 'blogs' | 'maintenance'>('tutorials');
   const [loading, setLoading] = useState(true);
 
   // Tutorials state
@@ -72,6 +72,12 @@ const AdminContent: React.FC = () => {
   // Feedback
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Maintenance: vendor changelog review
+  const [changelogText, setChangelogText] = useState('');
+  const [reviewRunning, setReviewRunning] = useState(false);
+  const [reviewMarkdown, setReviewMarkdown] = useState<string | null>(null);
+  const [maintReports, setMaintReports] = useState<{ id: string; vendor: string; created_at: string | null }[]>([]);
+
   const getHeaders = useCallback(() => {
     const token = localStorage.getItem('access_token');
     return { Authorization: `Bearer ${token}` };
@@ -87,6 +93,50 @@ const AdminContent: React.FC = () => {
     setBlogs(res.data);
   }, [getHeaders]);
 
+  const loadMaintReports = useCallback(async () => {
+    const res = await axios.get(`${API_URL}/api/v1/content/admin/maintenance/reports`, { headers: getHeaders() });
+    setMaintReports(res.data);
+  }, [getHeaders]);
+
+  const runChangelogReview = async () => {
+    if (!changelogText.trim()) return;
+    setReviewRunning(true);
+    setReviewMarkdown(null);
+    try {
+      const res = await axios.post(
+        `${API_URL}/api/v1/content/admin/maintenance/changelog/review`,
+        { changelog_text: changelogText, vendor: 'FMP' },
+        { headers: getHeaders() },
+      );
+      setReviewMarkdown(res.data.report_markdown);
+      setMessage({ type: 'success', text: 'Changelog review complete.' });
+      await loadMaintReports();
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.response?.data?.detail || 'Review failed.' });
+    } finally {
+      setReviewRunning(false);
+    }
+  };
+
+  const viewMaintReport = async (id: string) => {
+    try {
+      const res = await axios.get(`${API_URL}/api/v1/content/admin/maintenance/reports/${id}`, { headers: getHeaders() });
+      setReviewMarkdown(res.data.report_markdown);
+    } catch {
+      setMessage({ type: 'error', text: 'Could not load report.' });
+    }
+  };
+
+  const downloadMarkdown = (markdown: string) => {
+    const blob = new Blob([markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fmp-changelog-review-${new Date().toISOString().slice(0, 10)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -96,7 +146,7 @@ const AdminContent: React.FC = () => {
           return;
         }
         setUser(userRes.data);
-        await Promise.all([loadTutorials(), loadBlogs()]);
+        await Promise.all([loadTutorials(), loadBlogs(), loadMaintReports()]);
       } catch (err: any) {
         if (err.response?.status === 401) navigate('/login');
         else navigate('/dashboard');
@@ -105,7 +155,7 @@ const AdminContent: React.FC = () => {
       }
     };
     loadData();
-  }, [navigate, loadTutorials, loadBlogs]);
+  }, [navigate, loadTutorials, loadBlogs, loadMaintReports]);
 
   // ── Tutorial CRUD ───────────────────────────────────────
 
@@ -292,6 +342,16 @@ const AdminContent: React.FC = () => {
             }`}
           >
             Blog Posts ({blogs.length})
+          </button>
+          <button
+            onClick={() => { setActiveTab('maintenance'); setTutorialForm(false); setBlogForm(false); }}
+            className={`px-6 py-2 text-sm font-medium transition-colors ${
+              activeTab === 'maintenance'
+                ? 'bg-primary-600 text-white'
+                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+            }`}
+          >
+            Maintenance
           </button>
         </div>
 
@@ -681,6 +741,92 @@ const AdminContent: React.FC = () => {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* ════════════════════════════════════════════════════
+            MAINTENANCE TAB — vendor (FMP) changelog review
+           ════════════════════════════════════════════════════ */}
+        {activeTab === 'maintenance' && (
+          <div className="space-y-6">
+            <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg border dark:border-gray-500 p-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Vendor API Changelog Review</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Paste the FMP changelog (e.g. from their update email). Claude reviews it against the list of
+                FMP endpoints this app uses and returns a markdown report flagging anything that may need a code
+                change — download it and hand it to Claude Code.
+              </p>
+              <textarea
+                value={changelogText}
+                onChange={e => setChangelogText(e.target.value)}
+                rows={10}
+                placeholder="Paste the FMP changelog text here…"
+                className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-mono"
+              />
+              <div className="mt-3 flex items-center gap-3">
+                <button
+                  onClick={runChangelogReview}
+                  disabled={reviewRunning || !changelogText.trim()}
+                  className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
+                >
+                  {reviewRunning ? 'Reviewing…' : 'Run Claude review'}
+                </button>
+                {changelogText && (
+                  <button
+                    onClick={() => { setChangelogText(''); setReviewMarkdown(null); }}
+                    className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {reviewMarkdown && (
+              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg border dark:border-gray-500 p-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-base font-semibold text-gray-900 dark:text-white">Review report</h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => navigator.clipboard.writeText(reviewMarkdown)}
+                      className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600"
+                    >
+                      Copy
+                    </button>
+                    <button
+                      onClick={() => downloadMarkdown(reviewMarkdown)}
+                      className="text-sm px-3 py-1.5 rounded bg-teal-600 hover:bg-teal-700 text-white"
+                    >
+                      Download .md
+                    </button>
+                  </div>
+                </div>
+                <pre className="whitespace-pre-wrap break-words text-sm text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 rounded p-4 max-h-[32rem] overflow-auto font-mono">
+                  {reviewMarkdown}
+                </pre>
+              </div>
+            )}
+
+            {maintReports.length > 0 && (
+              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg border dark:border-gray-500 p-6">
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3">Past reviews</h3>
+                <div className="space-y-2">
+                  {maintReports.map(r => (
+                    <div key={r.id} className="flex items-center justify-between gap-3 text-sm border-b border-gray-100 dark:border-gray-600 pb-2 last:border-0">
+                      <span className="text-gray-700 dark:text-gray-300">
+                        {r.vendor} — {r.created_at ? new Date(r.created_at).toLocaleString() : '—'}
+                      </span>
+                      <button
+                        onClick={() => viewMaintReport(r.id)}
+                        className="text-teal-600 dark:text-teal-400 hover:underline shrink-0"
+                      >
+                        View
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

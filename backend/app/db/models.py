@@ -280,3 +280,15 @@ class BlogPost(Base):
     author_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class MaintenanceReport(Base):
+    """AI-generated review of a vendor (FMP) changelog, for the Admin maintenance console."""
+    __tablename__ = "maintenance_reports"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    vendor = Column(String(50), nullable=False, default="FMP")
+    source_text = Column(Text, nullable=False)        # the pasted changelog
+    report_markdown = Column(Text, nullable=False)    # Claude's assessment
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
