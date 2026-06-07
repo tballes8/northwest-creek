@@ -1,6 +1,6 @@
 # NWC-Analytics — Shipped Features Log
 
-**Last Updated:** May 2026  
+**Last Updated:** June 2026  
 **Purpose:** Cross-project reference document. Attach to NWC Marketing, NWC Blog/SM Post, NWC Enhancements, and NWC Sandbox projects so all workstreams have visibility into what has shipped, what tier it lives on, and what content angles it unlocks.
 
 ---
@@ -917,6 +917,24 @@ Each entry follows a consistent format:
 - How to build a stock screener strategy from fundamentals down to technicals
 - Finding undervalued stocks with market cap and sector filters
 - Small-cap vs. large-cap — using screener filters to match your risk tolerance
+
+---
+
+### June 7, 2026
+
+---
+
+#### Admin Maintenance Console — AI-Assisted Vendor Changelog Review
+
+> **Internal tool — not a public or subscriber-facing feature.** Logged here for cross-project visibility into platform operations work.
+
+**What It Does:** Added a Maintenance tab to the Admin panel that turns vendor (FMP) API changelogs into actionable code-review reports. An admin pastes an FMP changelog — typically received by email — into the panel; Claude evaluates it against a maintained registry of every FMP endpoint the platform actually uses (including the specific response fields each piece of code reads) and returns a markdown report flagging any documented change likely to affect NWC code. Findings are tagged by severity — Breaking, Field change, Additive, or Irrelevant — with the exact files involved and a "For Claude Code" checklist a developer can act on directly. Reports download as `.md` and are saved to a history list. Built after two silent FMP endpoint breakages (institutional holders and dilution filings) to shorten the gap between a vendor changing their API and the team catching it.
+
+**Tier Availability:** Internal — Admin only. No public surface; gated behind the existing admin check.
+
+**Marketing Angle:** None — internal operations tooling. Indirect benefit: faster detection of upstream data-vendor changes means fewer user-visible data outages, which supports the platform's reliability positioning.
+
+**Blog/Content Hooks:** None — internal infrastructure. Possible behind-the-scenes/meta angle: "How we keep our market data reliable when our data vendor changes their API."
 
 ---
 
