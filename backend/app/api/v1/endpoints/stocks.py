@@ -1437,35 +1437,78 @@ async def get_ownership(
         except Exception:
             return []
 
-    s3_raw, b5_raw, inst_raw = await asyncio.gather(
-        _get("sec-filings", {"symbol": ticker, "type": "S-3", "limit": 5}),
-        _get("sec-filings", {"symbol": ticker, "type": "424B5", "limit": 5}),
-        _get("institutional-holder", {"symbol": ticker}),
+    def _recent_quarters(count: int = 5) -> list[tuple[int, int]]:
+        """Last `count` (year, quarter) pairs, counting back from the quarter
+        before today's — the current quarter's 13Fs aren't filed yet (~45-day lag)."""
+        today = date.today()
+        q = (today.month - 1) // 3 + 1
+        y = today.year
+        out: list[tuple[int, int]] = []
+        for _ in range(count):
+            q -= 1
+            if q == 0:
+                q, y = 4, y - 1
+            out.append((y, q))
+        return out
+
+    async def _load_holders() -> list:
+        # 13F data lags ~45 days; walk back quarters until one has rows.
+        for y, q in _recent_quarters():
+            rows = await _get(
+                "institutional-ownership/extract-analytics/holder",
+                {"symbol": ticker, "year": y, "quarter": q, "page": 0, "limit": 50},
+            )
+            if rows:
+                return rows
+        return []
+
+    today = date.today()
+    filings_raw, inst_raw = await asyncio.gather(
+        _get(
+            "sec-filings-search/symbol",
+            {
+                "symbol": ticker,
+                "from": (today - timedelta(days=730)).isoformat(),
+                "to": today.isoformat(),
+                "page": 0,
+                "limit": 100,
+            },
+        ),
+        _load_holders(),
     )
 
+    def _is_dilution(form_type: str | None) -> bool:
+        ft = (form_type or "").upper()
+        return ft.startswith("S-3") or ft.startswith("424B5")
+
     def _parse_filing(f: dict) -> dict:
+        raw_date = f.get("filingDate") or f.get("acceptedDate") or f.get("date") or ""
         return {
-            "type": f.get("type") or f.get("formType"),
-            "date": f.get("date") or f.get("fillingDate"),
+            "type": f.get("formType") or f.get("type"),
+            "date": raw_date[:10] or None,  # normalize to YYYY-MM-DD for the frontend
             "link": f.get("finalLink") or f.get("link"),
         }
 
     filings = sorted(
-        [_parse_filing(f) for f in (s3_raw + b5_raw) if f.get("date") or f.get("fillingDate")],
+        [_parse_filing(f) for f in filings_raw if _is_dilution(f.get("formType") or f.get("type"))],
         key=lambda x: x["date"] or "",
         reverse=True,
     )[:6]
 
-    holders = [
-        {
-            "holder": h.get("holder") or h.get("name"),
-            "shares": h.get("shares"),
-            "date_reported": h.get("dateReported"),
-            "change": h.get("change"),
-            "weight_percent": h.get("weightPercent"),
-        }
-        for h in (inst_raw[:10] if inst_raw else [])
-    ]
+    holders = sorted(
+        [
+            {
+                "holder": h.get("investorName") or None,
+                "shares": h.get("sharesNumber"),
+                "date_reported": h.get("date"),
+                "change": h.get("changeInSharesNumber"),
+                "weight_percent": h.get("ownership"),
+            }
+            for h in inst_raw
+        ],
+        key=lambda x: x["weight_percent"] or 0,
+        reverse=True,
+    )[:10]
 
     return {"filings": filings, "institutional_holders": holders}
 
