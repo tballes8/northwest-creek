@@ -218,6 +218,7 @@ async def _compute_and_store() -> int:
             squeeze_bars=bindparam("b_bars"),
             squeeze_computed_at=bindparam("b_at"),
         )
+        .execution_options(synchronize_session=None)
     )
     async with async_session() as session:
         for i in range(0, len(params), _UPSERT_CHUNK):
