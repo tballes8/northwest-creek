@@ -1605,6 +1605,122 @@ const TechnicalAnalysis: React.FC = () => {
                 </div>
             </div>
 
+            {/* Indicator Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Moving Averages */}
+              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Moving Averages</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-400">20-day SMA:</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      ${analysisData.indicators.moving_averages.sma_20?.toFixed(2) || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-400">50-day SMA:</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      ${analysisData.indicators.moving_averages.sma_50?.toFixed(2) || 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-400">200-day SMA:</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      ${analysisData.indicators.moving_averages.sma_200?.toFixed(2) || 'N/A'}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-4">
+                  {analysisData.indicators.moving_averages.description}
+                </p>
+              </div>
+
+              {/* Bollinger Bands */}
+              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Bollinger Bands</h3>
+                  {analysisData.indicators.squeeze && analysisData.indicators.squeeze.state !== 'none' && (
+                    analysisData.indicators.squeeze.state === 'on' ? (
+                      <span className="px-2 py-1 text-xs font-bold rounded bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">
+                        Squeeze ON · {analysisData.indicators.squeeze.bars_in_squeeze} bars
+                      </span>
+                    ) : (
+                      <span className="px-2 py-1 text-xs font-bold rounded bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300">
+                        Squeeze Fired · {analysisData.indicators.squeeze.bars_since_fire === 0 ? 'today' : `${analysisData.indicators.squeeze.bars_since_fire}d ago`}
+                      </span>
+                    )
+                  )}
+                </div>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-400">Upper Band:</span>
+                    <span className="font-semibold text-red-500">
+                      ${analysisData.indicators.bollinger_bands.upper_band?.toFixed(2) ?? 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-400">Middle Band:</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      ${analysisData.indicators.bollinger_bands.middle_band?.toFixed(2) ?? 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-400">Lower Band:</span>
+                    <span className="font-semibold text-green-500">
+                      ${analysisData.indicators.bollinger_bands.lower_band?.toFixed(2) ?? 'N/A'}
+                    </span>
+                  </div>
+                  <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">Position: </span>
+                      <span className="font-semibold text-gray-900 dark:text-white capitalize">
+                        {analysisData.indicators.bollinger_bands.position.replace('_', ' ')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-4">
+                  {analysisData.indicators.bollinger_bands.description}
+                </p>
+              </div>
+
+              {/* Keltner Channels */}
+              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Keltner Channels</h3>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-400">Upper Channel:</span>
+                    <span className="font-semibold text-red-500">
+                      ${analysisData.indicators.keltner?.upper?.toFixed(2) ?? 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-400">Middle (EMA):</span>
+                    <span className="font-semibold text-gray-900 dark:text-white">
+                      ${analysisData.indicators.keltner?.middle?.toFixed(2) ?? 'N/A'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 dark:text-gray-400">Lower Channel:</span>
+                    <span className="font-semibold text-green-500">
+                      ${analysisData.indicators.keltner?.lower?.toFixed(2) ?? 'N/A'}
+                    </span>
+                  </div>
+                  <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="text-sm">
+                      <span className="text-gray-600 dark:text-gray-400">Position: </span>
+                      <span className="font-semibold text-gray-900 dark:text-white capitalize">
+                        {analysisData.indicators.keltner?.position?.replace('_', ' ') ?? 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-4">
+                  {analysisData.indicators.keltner?.description ?? 'Keltner Channels — EMA ± ATR volatility envelope around the 20-day EMA.'}
+                </p>
+              </div>
+            </div>
+
             {/* Moving Averages Chart with Golden/Death Cross */}
             <div id="chart-moving-averages" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Moving Averages — Trend &amp; Crossovers</h3>
@@ -1724,86 +1840,6 @@ const TechnicalAnalysis: React.FC = () => {
                 {getMACDChartData() && (
                     <Chart type="bar" data={getMACDChartData()!} options={chartOptions} />
                 )}
-              </div>
-            </div>
-
-            {/* Indicator Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Moving Averages */}
-              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Moving Averages</h3>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600 dark:text-gray-400">20-day SMA:</span>
-                    <span className="font-semibold text-gray-900 dark:text-white">
-                      ${analysisData.indicators.moving_averages.sma_20?.toFixed(2) || 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600 dark:text-gray-400">50-day SMA:</span>
-                    <span className="font-semibold text-gray-900 dark:text-white">
-                      ${analysisData.indicators.moving_averages.sma_50?.toFixed(2) || 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600 dark:text-gray-400">200-day SMA:</span>
-                    <span className="font-semibold text-gray-900 dark:text-white">
-                      ${analysisData.indicators.moving_averages.sma_200?.toFixed(2) || 'N/A'}
-                    </span>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-4">
-                  {analysisData.indicators.moving_averages.description}
-                </p>
-              </div>
-
-              {/* Bollinger Bands */}
-              <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Bollinger Bands</h3>
-                  {analysisData.indicators.squeeze && analysisData.indicators.squeeze.state !== 'none' && (
-                    analysisData.indicators.squeeze.state === 'on' ? (
-                      <span className="px-2 py-1 text-xs font-bold rounded bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">
-                        Squeeze ON · {analysisData.indicators.squeeze.bars_in_squeeze} bars
-                      </span>
-                    ) : (
-                      <span className="px-2 py-1 text-xs font-bold rounded bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300">
-                        Squeeze Fired · {analysisData.indicators.squeeze.bars_since_fire === 0 ? 'today' : `${analysisData.indicators.squeeze.bars_since_fire}d ago`}
-                      </span>
-                    )
-                  )}
-                </div>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600 dark:text-gray-400">Upper Band:</span>
-                    <span className="font-semibold text-red-500">
-                      ${analysisData.indicators.bollinger_bands.upper_band?.toFixed(2) ?? 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600 dark:text-gray-400">Middle Band:</span>
-                    <span className="font-semibold text-gray-900 dark:text-white">
-                      ${analysisData.indicators.bollinger_bands.middle_band?.toFixed(2) ?? 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-600 dark:text-gray-400">Lower Band:</span>
-                    <span className="font-semibold text-green-500">
-                      ${analysisData.indicators.bollinger_bands.lower_band?.toFixed(2) ?? 'N/A'}
-                    </span>
-                  </div>
-                  <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                    <div className="text-sm">
-                      <span className="text-gray-600 dark:text-gray-400">Position: </span>
-                      <span className="font-semibold text-gray-900 dark:text-white capitalize">
-                        {analysisData.indicators.bollinger_bands.position.replace('_', ' ')}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mt-4">
-                  {analysisData.indicators.bollinger_bands.description}
-                </p>
               </div>
             </div>
 
