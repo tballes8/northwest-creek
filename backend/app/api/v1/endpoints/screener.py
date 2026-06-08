@@ -54,6 +54,8 @@ class ScreenerCriteria(BaseModel):
     death_cross: Optional[bool] = None
     price_above_50ma: Optional[bool] = None
     price_above_200ma: Optional[bool] = None
+    squeeze_on: Optional[bool] = None
+    squeeze_fired_within_days: Optional[int] = None
     exclude_etfs: bool = True
 
     # Industry and sector filters
@@ -114,6 +116,8 @@ def _build_row(row: StockSnapshot) -> dict:
         "gap_percent": gap_pct,
         "last_refreshed": ts.isoformat() if ts else None,
         "is_etf": row.is_etf,
+        "squeeze_state": row.squeeze_state,
+        "squeeze_bars": row.squeeze_bars,
     }
 
 
@@ -222,6 +226,20 @@ async def run_screener(
                 StockSnapshot.price_avg_200.is_(None),
             )
         )
+
+    if criteria.squeeze_on is True:
+        conditions.append(StockSnapshot.squeeze_state == 'on')
+    elif criteria.squeeze_on is False:
+        conditions.append(
+            or_(
+                StockSnapshot.squeeze_state != 'on',
+                StockSnapshot.squeeze_state.is_(None),
+            )
+        )
+
+    if criteria.squeeze_fired_within_days is not None:
+        conditions.append(StockSnapshot.squeeze_state == 'fired')
+        conditions.append(StockSnapshot.squeeze_bars <= criteria.squeeze_fired_within_days)
 
     if criteria.exclude_etfs:
         conditions.append(
@@ -380,6 +398,28 @@ _PRESETS = [
             "market_cap": {"min": 200_000_000},
             "sort_by": "change_percentage",
             "sort_desc": False,
+        },
+    },
+    {
+        "id": "in_squeeze",
+        "name": "In Squeeze",
+        "description": "Volatility is coiling — Bollinger Bands are inside the Keltner Channels. A breakout often follows.",
+        "criteria": {
+            "squeeze_on": True,
+            "market_cap": {"min": 250_000_000},
+            "sort_by": "market_cap",
+            "sort_desc": True,
+        },
+    },
+    {
+        "id": "squeeze_fired",
+        "name": "Squeeze Fired (3d)",
+        "description": "A volatility squeeze released in the last 3 trading days — potential breakout underway.",
+        "criteria": {
+            "squeeze_fired_within_days": 3,
+            "market_cap": {"min": 250_000_000},
+            "sort_by": "market_cap",
+            "sort_desc": True,
         },
     },
 ]

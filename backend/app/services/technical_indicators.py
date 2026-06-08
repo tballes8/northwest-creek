@@ -395,6 +395,41 @@ class TechnicalIndicators:
         return {"state": "none", "bars_in_squeeze": 0, "bars_since_fire": None, "min_bars": min_bars}
 
     @staticmethod
+    def compute_squeeze_from_ohlc(highs, lows, closes, bb_period=20, bb_std=2.0):
+        """
+        Convenience wrapper for batch/screener use: build BB + KC history arrays
+        from raw OHLC lists and return the squeeze state dict (same shape and
+        parameters as the Technical Analysis card pill so the two always agree).
+
+        BB history matches the analyze endpoint exactly: 20-period SMA ± 2×population
+        std. KC history comes from calculate_keltner_channels (EMA 20, ATR 10, 2.0×).
+        Returns None if there is not enough history to evaluate.
+        """
+        if not closes or len(closes) < bb_period:
+            return None
+
+        bb_upper, bb_lower = [], []
+        for i in range(len(closes)):
+            if i >= bb_period - 1:
+                window = closes[i - bb_period + 1:i + 1]
+                sma = sum(window) / bb_period
+                variance = sum((p - sma) ** 2 for p in window) / bb_period
+                sd = variance ** 0.5
+                bb_upper.append(sma + bb_std * sd)
+                bb_lower.append(sma - bb_std * sd)
+            else:
+                bb_upper.append(None)
+                bb_lower.append(None)
+
+        kc = TechnicalIndicators.calculate_keltner_channels(highs, lows, closes)
+        if not kc:
+            return None
+
+        return TechnicalIndicators.compute_squeeze_state(
+            bb_upper, bb_lower, kc["upper_history"], kc["lower_history"]
+        )
+
+    @staticmethod
     def calculate_std_dev(closes, period=20):
         """Standard Deviation — price dispersion."""
         if len(closes) < period: return None

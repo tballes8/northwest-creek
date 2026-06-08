@@ -201,11 +201,40 @@ class StockSnapshot(Base):
     industry = Column(String(200), nullable=True)
     description = Column(Text, nullable=True)
 
+    # BB/KC squeeze state — precomputed daily by compute_squeeze_job
+    squeeze_state = Column(String(8), nullable=True)  # 'on' | 'fired' | 'none'
+    squeeze_bars = Column(Integer, nullable=True)     # bars_in_squeeze if 'on', bars_since_fire if 'fired'
+    squeeze_computed_at = Column(DateTime(timezone=True), nullable=True)
+
     __table_args__ = (
         Index('idx_ss_market_cap', 'market_cap'),
         Index('idx_ss_price_avg_50', 'price_avg_50'),
         Index('idx_ss_price_avg_200', 'price_avg_200'),
         Index('idx_ss_change_pct', 'change_percentage'),
+        Index('idx_ss_squeeze_state', 'squeeze_state'),
+    )
+
+
+class TickerDailyBar(Base):
+    """Rolling daily OHLC history per ticker — feeds the squeeze precompute job.
+
+    Seeded once from FMP historical EOD, then appended each trading day from the
+    OHLC already captured in StockSnapshot. Only the most recent ~40 bars per
+    ticker are retained (older bars are pruned by the job).
+    """
+    __tablename__ = "ticker_daily_bars"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    symbol = Column(String(10), nullable=False, index=True)
+    bar_date = Column(Date, nullable=False)
+    open = Column(Numeric(precision=18, scale=4), nullable=True)
+    high = Column(Numeric(precision=18, scale=4), nullable=True)
+    low = Column(Numeric(precision=18, scale=4), nullable=True)
+    close = Column(Numeric(precision=18, scale=4), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint('symbol', 'bar_date', name='uq_ticker_daily_bar'),
+        Index('idx_tdb_symbol', 'symbol'),
     )
 
 

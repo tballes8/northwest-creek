@@ -174,6 +174,8 @@ interface ScreenerResult {
   pct_from_52wk_low: number | null;
   dollar_volume: number | null;
   last_refreshed: string | null;
+  squeeze_state: 'on' | 'fired' | 'none' | null;
+  squeeze_bars: number | null;
 }
 
 interface VolumeSurgeRow {
@@ -200,6 +202,8 @@ interface ScreenerFormState {
   deathCross: boolean | null;
   priceAbove50ma: boolean | null;
   priceAbove200ma: boolean | null;
+  squeezeOn: boolean | null;
+  squeezeFiredWithinDays: string;
   exchange: string[];
   excludeEtfs: boolean;
   gapPctMin: string;
@@ -238,6 +242,8 @@ const defaultScreenerForm: ScreenerFormState = {
   deathCross: null,
   priceAbove50ma: null,
   priceAbove200ma: null,
+  squeezeOn: null,
+  squeezeFiredWithinDays: '',
   exchange: [],
   excludeEtfs: true,
   gapPctMin: '', gapPctMax: '',
@@ -297,6 +303,8 @@ function buildScreenerCriteria(
   if (form.deathCross !== null) c.death_cross = form.deathCross;
   if (form.priceAbove50ma !== null) c.price_above_50ma = form.priceAbove50ma;
   if (form.priceAbove200ma !== null) c.price_above_200ma = form.priceAbove200ma;
+  if (form.squeezeOn !== null) c.squeeze_on = form.squeezeOn;
+  if (form.squeezeFiredWithinDays !== '') c.squeeze_fired_within_days = parseInt(form.squeezeFiredWithinDays, 10);
   if (form.exchange.length) c.exchange = form.exchange;
   c.exclude_etfs = form.excludeEtfs;
   const gp = nr(form.gapPctMin, form.gapPctMax);
@@ -1446,6 +1454,8 @@ const Stocks: React.FC = () => {
       deathCross: c.death_cross ?? null,
       priceAbove50ma: c.price_above_50ma ?? null,
       priceAbove200ma: c.price_above_200ma ?? null,
+      squeezeOn: c.squeeze_on ?? null,
+      squeezeFiredWithinDays: c.squeeze_fired_within_days?.toString() ?? '',
       exchange: c.exchange ?? [],
       excludeEtfs: c.exclude_etfs ?? true,
       gapPctMin: c.gap_percent?.min?.toString() ?? '',
@@ -1480,6 +1490,8 @@ const Stocks: React.FC = () => {
       deathCross: c.death_cross ?? null,
       priceAbove50ma: c.price_above_50ma ?? null,
       priceAbove200ma: c.price_above_200ma ?? null,
+      squeezeOn: c.squeeze_on ?? null,
+      squeezeFiredWithinDays: c.squeeze_fired_within_days?.toString() ?? '',
       exchange: c.exchange ?? [],
       excludeEtfs: c.exclude_etfs ?? true,
       gapPctMin: c.gap_percent?.min?.toString() ?? '',
@@ -3242,6 +3254,16 @@ const Stocks: React.FC = () => {
                                 }}
                               >
                                 <span className="cursor-pointer hover:underline">{r.symbol}</span>
+                                {r.squeeze_state === 'on' && (
+                                  <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 align-middle">
+                                    SQUEEZE
+                                  </span>
+                                )}
+                                {r.squeeze_state === 'fired' && (
+                                  <span className="ml-1.5 px-1.5 py-0.5 text-[10px] font-bold rounded bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300 align-middle">
+                                    FIRED{r.squeeze_bars != null ? ` ${r.squeeze_bars}d` : ''}
+                                  </span>
+                                )}
                               </td>
                               <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300 max-w-[180px] truncate">{r.name ?? '—'}</td>
                               <td className="px-3 py-2.5 font-medium whitespace-nowrap">{r.price != null ? `$${r.price.toFixed(2)}` : '—'}</td>
