@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import {
   AreaChart, Area, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer,
+  Tooltip, Legend, ResponsiveContainer, Customized,
 } from 'recharts';
 import { intradayAPI } from '../services/api';
 
@@ -91,6 +91,22 @@ const fmtNow = () =>
 const fmtDate = (d: string) => {
   try { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
   catch { return d; }
+};
+
+// Recharts <Customized> child: reports the computed plot-area `offset` (px) up to
+// the parent so the drawing overlay can be pinned to the real plot rectangle.
+// Cloned by Recharts with the chart's internal props (incl. `offset`).
+const CaptureOffset: React.FC<any> = ({ offset, onRect }) => {
+  const prev = useRef('');
+  useEffect(() => {
+    if (!offset || !onRect) return;
+    const key = `${offset.left}|${offset.top}|${offset.width}|${offset.height}`;
+    if (key !== prev.current) {
+      prev.current = key;
+      onRect({ left: offset.left, top: offset.top, width: offset.width, height: offset.height });
+    }
+  });
+  return null;
 };
 
 // ─── component ──────────────────────────────────────────────────────────────
@@ -301,6 +317,13 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
       : displayChartData,
     [displayChartData, zoomRange],
   );
+
+  // Recharts' actual plot rectangle (px, relative to the chart wrapper), captured
+  // via <Customized> below. The drawing overlay is pinned to this rect so its
+  // 0–100% coordinate space matches the rendered price axis exactly — Recharts
+  // insets the plot area for the X-axis + legend, so covering the full container
+  // would push every fib/trend line below its true price.
+  const [plotRect, setPlotRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
 
   // ─── Coordinate helpers (data ↔ SVG-%) ────────────────────────────────────
   // yDomain mirrors what Recharts renders so our SVG overlay stays in sync.
@@ -694,6 +717,8 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                         tickFormatter={v => `$${v < 10 ? v.toFixed(2) : v < 100 ? v.toFixed(1) : v.toFixed(0)}`}
                         width={55}
                       />
+                      {/* Report the real plot rect so the drawing overlay aligns with the axis */}
+                      <Customized component={<CaptureOffset onRect={setPlotRect} />} />
                       {/* 3-second delay tooltip */}
                       <Tooltip content={<ChartTooltip />} />
                       <Legend wrapperStyle={{ fontSize: '11px' }} />
@@ -713,11 +738,15 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                     </AreaChart>
                   </ResponsiveContainer>
 
-                  {/* SVG drawing overlay */}
+                  {/* SVG drawing overlay — pinned to Recharts' real plot rect so 0–100%
+                      maps to the rendered price axis (falls back to full container pre-capture) */}
                   <svg
-                    className="absolute inset-0 w-full"
+                    className="absolute"
                     style={{
-                      height: chartHeight,
+                      left: plotRect ? plotRect.left : 0,
+                      top: plotRect ? plotRect.top : 0,
+                      width: plotRect ? plotRect.width : '100%',
+                      height: plotRect ? plotRect.height : chartHeight,
                       pointerEvents: drawingMode ? 'all' : 'none',
                       cursor: drawingMode ? 'crosshair' : 'inherit',
                     }}
@@ -878,8 +907,13 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                   {/* Fibonacci labels (HTML overlay — real px font size, no SVG stretch) */}
                   {fibonaccis.length > 0 && (
                     <div
-                      className="absolute inset-0 pointer-events-none"
-                      style={{ height: chartHeight }}
+                      className="absolute pointer-events-none"
+                      style={{
+                        left: plotRect ? plotRect.left : 0,
+                        top: plotRect ? plotRect.top : 0,
+                        width: plotRect ? plotRect.width : '100%',
+                        height: plotRect ? plotRect.height : chartHeight,
+                      }}
                     >
                       {fibonaccis.flatMap((fib, fi) => {
                         const range = fib.p2.price - fib.p1.price;
