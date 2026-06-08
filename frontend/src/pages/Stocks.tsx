@@ -133,9 +133,16 @@ interface InstitutionalHolder {
   weight_percent: number | null;
 }
 
+interface BankruptcyFlag {
+  detected: boolean;
+  date: string | null;
+  link: string | null;
+}
+
 interface OwnershipData {
   filings: SecFiling[];
   institutional_holders: InstitutionalHolder[];
+  bankruptcy: BankruptcyFlag | null;
 }
 
 interface AnalystEstimates {
@@ -1513,6 +1520,10 @@ const Stocks: React.FC = () => {
 
   const screenerInputCls = "w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500";
 
+  // Recent bankruptcy/receivership 8-K (Item 1.03) on record — suppresses going-concern valuation.
+  const bankruptcy = ownershipData?.bankruptcy ?? null;
+  const inBankruptcy = !!bankruptcy?.detected;
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white transition-colors">
       {/* Navigation */}
@@ -1827,7 +1838,12 @@ const Stocks: React.FC = () => {
                   <div className={`text-lg font-semibold ${quote.change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {quote.change >= 0 ? '+' : ''}{quote.change.toFixed(2)} ({quote.change_percent >= 0 ? '+' : ''}{quote.change_percent.toFixed(2)}%)
                   </div>
-                  {!isFundType(company.type) && !isWarrant && (() => {
+                  {!isFundType(company.type) && !isWarrant && inBankruptcy && (
+                    <div className="mt-1 text-sm font-medium text-red-600 dark:text-red-400">
+                      ⚠ Bankruptcy/receivership filing on record — valuation estimates hidden (see Company Details)
+                    </div>
+                  )}
+                  {!isFundType(company.type) && !isWarrant && !inBankruptcy && (() => {
                     const forwardEps = analystEstimates?.forward_eps;
                     const forwardPE = forwardEps && forwardEps > 0 ? quote.price / forwardEps : null;
                     const target = analystEstimates?.price_target_consensus;
@@ -2173,9 +2189,36 @@ const Stocks: React.FC = () => {
                 {!isFundType(company.type) && (
                   <div className="border-t border-gray-200 dark:border-gray-600 pt-4 mt-4 space-y-5">
 
+                    {/* Bankruptcy / Receivership flag */}
+                    {inBankruptcy && (
+                      <div className="rounded-md border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 p-3">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-red-700 dark:text-red-300">
+                          ⚠ Bankruptcy / Receivership
+                        </div>
+                        <p className="text-xs text-red-700/90 dark:text-red-300/90 mt-1">
+                          An 8-K Item 1.03 (Bankruptcy or Receivership) filing is on record
+                          {bankruptcy?.date ? ` (filed ${new Date(bankruptcy.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })})` : ''}.
+                          Going-concern valuation estimates are suppressed — in restructuring, existing equity is typically cancelled.
+                          {bankruptcy?.link && (
+                            <>
+                              {' '}
+                              <a href={bankruptcy.link} target="_blank" rel="noopener noreferrer" className="underline font-medium">
+                                View filing
+                              </a>
+                            </>
+                          )}
+                        </p>
+                      </div>
+                    )}
+
                     {/* SEC Dilution Filings */}
                     <div>
                       <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider mb-2">Dilution Filings</h4>
+                      {inBankruptcy && (
+                        <p className="text-xs italic text-gray-500 dark:text-gray-400 mb-2">
+                          Any S-3 / 424B5 shelf filings below are pre-petition and are typically rendered moot by the restructuring.
+                        </p>
+                      )}
                       {ownershipLoading ? (
                         <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm py-2">
                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-teal-600"></div>

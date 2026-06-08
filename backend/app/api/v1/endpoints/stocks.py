@@ -8,6 +8,7 @@ from sqlalchemy import select, func, Date, Float, cast, or_
 from datetime import date, datetime, timedelta
 from typing import Optional
 import asyncio
+import httpx
 from app.api.dependencies import get_current_user
 from app.services.market_data import market_data_service
 from app.services.fmp_client import get_fmp_client, API_KEY
@@ -24,6 +25,9 @@ from app.schemas.stock import (
     NewsData,
     NewsArticle,
 )
+
+# SEC EDGAR requires a descriptive User-Agent with contact info on every request.
+SEC_USER_AGENT = "NWC-Analytics/1.0 (support@nwc-analytics.com)"
 
 
 def _safe_error(e: Exception) -> str:
@@ -1462,6 +1466,53 @@ async def get_ownership(
                 return rows
         return []
 
+    async def _detect_bankruptcy(cik: str | None) -> dict | None:
+        """Flag a recent 8-K Item 1.03 (Bankruptcy or Receivership) via SEC EDGAR.
+        FMP exposes form types but not 8-K item codes, so we read the item codes
+        from SEC's free submissions API. Item 1.03 doesn't encode chapter (7 vs 11)
+        or entry-vs-emergence, so this is a hedged 'recent filing on record' flag."""
+        if not cik:
+            return None
+        try:
+            cik_padded = str(int(cik)).zfill(10)
+        except (TypeError, ValueError):
+            return None
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as sec:
+                r = await sec.get(
+                    f"https://data.sec.gov/submissions/CIK{cik_padded}.json",
+                    headers={"User-Agent": SEC_USER_AGENT, "Accept": "application/json"},
+                )
+                r.raise_for_status()
+                recent = (r.json().get("filings") or {}).get("recent") or {}
+        except Exception:
+            return None
+
+        forms = recent.get("form") or []
+        items = recent.get("items") or []
+        dates = recent.get("filingDate") or []
+        accns = recent.get("accessionNumber") or []
+        docs = recent.get("primaryDocument") or []
+        cutoff = (date.today() - timedelta(days=550)).isoformat()
+
+        for i, form in enumerate(forms):
+            if form != "8-K":
+                continue
+            item_str = (items[i] if i < len(items) else "") or ""
+            if "1.03" not in item_str:
+                continue
+            filing_date = dates[i] if i < len(dates) else ""
+            if filing_date < cutoff:  # ISO dates compare lexicographically
+                continue
+            acc = (accns[i] if i < len(accns) else "").replace("-", "")
+            doc = docs[i] if i < len(docs) else ""
+            link = (
+                f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{acc}/{doc}"
+                if acc and doc else None
+            )
+            return {"detected": True, "date": filing_date, "link": link}
+        return None
+
     today = date.today()
     filings_raw, inst_raw = await asyncio.gather(
         _get(
@@ -1510,7 +1561,12 @@ async def get_ownership(
         reverse=True,
     )[:10]
 
-    return {"filings": filings, "institutional_holders": holders}
+    # Company CIK comes free with the SEC filings response; use it to check for
+    # a recent bankruptcy/receivership 8-K (Item 1.03) via SEC EDGAR.
+    cik = next((f.get("cik") for f in filings_raw if f.get("cik")), None)
+    bankruptcy = await _detect_bankruptcy(cik)
+
+    return {"filings": filings, "institutional_holders": holders, "bankruptcy": bankruptcy}
 
 
 @router.get("/{ticker}", response_model=dict)
