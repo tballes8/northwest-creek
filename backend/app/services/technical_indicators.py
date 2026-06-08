@@ -345,6 +345,56 @@ class TechnicalIndicators:
         }
 
     @staticmethod
+    def compute_squeeze_state(bb_upper, bb_lower, kc_upper, kc_lower, min_bars=6, fired_window=5):
+        """
+        BB/KC squeeze: a bar is "in squeeze" when the Bollinger Bands sit fully
+        inside the Keltner Channels (bb_upper < kc_upper AND bb_lower > kc_lower).
+
+        Pure: takes aligned per-bar arrays (None allowed during indicator warmup),
+        returns a small dict for the UI pill. No directional call.
+        """
+        if not bb_upper or not bb_lower or not kc_upper or not kc_lower:
+            return None
+        n = min(len(bb_upper), len(bb_lower), len(kc_upper), len(kc_lower))
+        if n == 0:
+            return None
+
+        in_sqz = []
+        for i in range(n):
+            bu, bl, ku, kl = bb_upper[i], bb_lower[i], kc_upper[i], kc_lower[i]
+            if bu is None or bl is None or ku is None or kl is None:
+                in_sqz.append(False)
+            else:
+                in_sqz.append(bu < ku and bl > kl)
+
+        # Currently coiling?
+        if in_sqz[-1]:
+            bars = 0
+            for v in reversed(in_sqz):
+                if not v:
+                    break
+                bars += 1
+            return {"state": "on", "bars_in_squeeze": bars, "bars_since_fire": None, "min_bars": min_bars}
+
+        # Recently fired? Find the most recent squeeze bar and measure the run + gap.
+        last_true = -1
+        for i in range(n - 1, -1, -1):
+            if in_sqz[i]:
+                last_true = i
+                break
+        if last_true != -1:
+            run = 0
+            for i in range(last_true, -1, -1):
+                if not in_sqz[i]:
+                    break
+                run += 1
+            gap = (n - 1) - last_true
+            if run >= min_bars and gap <= fired_window:
+                return {"state": "fired", "bars_in_squeeze": 0, "bars_since_fire": gap, "min_bars": min_bars}
+
+        return {"state": "none", "bars_in_squeeze": 0, "bars_since_fire": None, "min_bars": min_bars}
+
+    @staticmethod
     def calculate_std_dev(closes, period=20):
         """Standard Deviation — price dispersion."""
         if len(closes) < period: return None

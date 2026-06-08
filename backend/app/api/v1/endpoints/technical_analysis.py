@@ -415,6 +415,11 @@ async def analyze_stock(
                     "position": _determine_bb_position(current_price, bb_upper_history[-1], bb_lower_history[-1]),
                     "description": "Bands show volatility. Price at edges = potential reversal opportunity"
                 },
+                "squeeze": technical_indicators.compute_squeeze_state(
+                    bb_upper_history, bb_lower_history,
+                    (advanced.get("keltner") or {}).get("upper_history"),
+                    (advanced.get("keltner") or {}).get("lower_history"),
+                ) if advanced.get("keltner") else None,
                 # ── Advanced Indicators (summaries only — history in chart_data) ──
                 "vwap": _strip_history(advanced.get("vwap")),
                 "obv": _strip_history(advanced.get("obv")),

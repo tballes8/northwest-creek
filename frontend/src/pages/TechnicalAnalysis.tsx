@@ -70,6 +70,12 @@ interface TechnicalAnalysisData {
       position: string;
       description: string;
     };
+    squeeze?: {
+      state: 'on' | 'fired' | 'none';
+      bars_in_squeeze: number;
+      bars_since_fire: number | null;
+      min_bars: number;
+    } | null;
     // ── Advanced Indicators ────────────────────────────
     vwap?: { value: number; signal: string; description: string } | null;
     obv?: { value: number; signal: string; description: string } | null;
@@ -1753,7 +1759,20 @@ const TechnicalAnalysis: React.FC = () => {
 
               {/* Bollinger Bands */}
               <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Bollinger Bands</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Bollinger Bands</h3>
+                  {analysisData.indicators.squeeze && analysisData.indicators.squeeze.state !== 'none' && (
+                    analysisData.indicators.squeeze.state === 'on' ? (
+                      <span className="px-2 py-1 text-xs font-bold rounded bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">
+                        Squeeze ON · {analysisData.indicators.squeeze.bars_in_squeeze} bars
+                      </span>
+                    ) : (
+                      <span className="px-2 py-1 text-xs font-bold rounded bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300">
+                        Squeeze Fired · {analysisData.indicators.squeeze.bars_since_fire === 0 ? 'today' : `${analysisData.indicators.squeeze.bars_since_fire}d ago`}
+                      </span>
+                    )
+                  )}
+                </div>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600 dark:text-gray-400">Upper Band:</span>
