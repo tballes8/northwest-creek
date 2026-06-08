@@ -1642,7 +1642,7 @@ const TechnicalAnalysis: React.FC = () => {
                   {analysisData.indicators.squeeze && analysisData.indicators.squeeze.state !== 'none' && (
                     analysisData.indicators.squeeze.state === 'on' ? (
                       <span className="px-2 py-1 text-xs font-bold rounded bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">
-                        Squeeze ON · {analysisData.indicators.squeeze.bars_in_squeeze} bars
+                        Squeeze ON · {analysisData.indicators.squeeze.bars_in_squeeze} bar{analysisData.indicators.squeeze.bars_in_squeeze === 1 ? '' : 's'}
                       </span>
                     ) : (
                       <span className="px-2 py-1 text-xs font-bold rounded bg-teal-100 dark:bg-teal-900/30 text-teal-800 dark:text-teal-300">
@@ -1667,7 +1667,7 @@ const TechnicalAnalysis: React.FC = () => {
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600 dark:text-gray-400">Lower Band:</span>
                     <span className="font-semibold text-green-500">
-                      ${analysisData.indicators.bollinger_bands.lower_band?.toFixed(2) ?? 'N/A'}
+                      ${analysisData.indicators.bollinger_bands.lower_band != null ? Math.max(0, analysisData.indicators.bollinger_bands.lower_band).toFixed(2) : 'N/A'}
                     </span>
                   </div>
                   <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
@@ -1703,7 +1703,7 @@ const TechnicalAnalysis: React.FC = () => {
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600 dark:text-gray-400">Lower Channel:</span>
                     <span className="font-semibold text-green-500">
-                      ${analysisData.indicators.keltner?.lower?.toFixed(2) ?? 'N/A'}
+                      ${analysisData.indicators.keltner?.lower != null ? Math.max(0, analysisData.indicators.keltner.lower).toFixed(2) : 'N/A'}
                     </span>
                   </div>
                   <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
