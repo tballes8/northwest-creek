@@ -953,4 +953,39 @@ Each entry follows a consistent format:
 
 ---
 
+### June 8, 2026
+
+---
+
+#### Volatility Squeeze Detection — Technical Analysis + Stock Screener
+
+**What It Does:** Added detection of the classic "squeeze" setup — when a stock's Bollinger Bands contract inside its Keltner Channels, signaling that volatility is coiling and a breakout (in either direction) often follows. It surfaces in two places. On the **Technical Analysis page**, the Bollinger Bands card shows a status pill: an amber "Squeeze ON · N bars" while a stock is coiling (with the count of consecutive days inside the squeeze), or a teal "Squeeze Fired · Nd ago" when the squeeze has just released. On the **Stock Screener**, two new one-click presets — "In Squeeze" and "Squeeze Fired (3d)" — let users surface every coiling or just-broken-out stock across the ~5,000-name universe, with a matching SQUEEZE / FIRED badge on each result row. The squeeze state for the whole universe is precomputed once daily after market close from a rolling history of daily price bars, so screening stays instant. The signal is deliberately non-directional — it flags that a move is likely, not which way — keeping it honest rather than predictive.
+
+**Tier Availability:** All tiers (Technical Analysis page and Stock Screener)
+
+**Marketing Angle:** The squeeze is one of the most-followed setups among active traders because it answers the question "what's about to move?" before the move happens — but it normally requires manually eyeballing two overlaid indicator bands on chart after chart. Packaging it as a one-click screener preset and an at-a-glance card badge turns a tedious manual scan into an instant, universe-wide opportunity finder. It pairs naturally with the existing Golden Cross and breakout screens as another "moment of opportunity" entry point, and the honest, non-directional framing reinforces the platform's trustworthy-signal positioning.
+
+**Blog/Content Hooks:**
+- The Bollinger Band squeeze explained — what it is and why traders watch for it
+- "Coiling" vs. "fired" — how to trade a volatility squeeze and confirm the breakout direction
+- Why low volatility precedes big moves — the statistics behind the squeeze
+- Using the NWC-Analytics squeeze screen to build a daily breakout watchlist
+
+---
+
+#### Technical Analysis — Keltner Channels Card
+
+**What It Does:** Added a Keltner Channels summary card to the Technical Analysis page, showing the upper channel, middle (20-day EMA), lower channel, and the price's position relative to the channels. It sits alongside the Moving Averages and Bollinger Bands cards, which were also repositioned directly beneath the price/volatility chart for a tighter read. Keltner Channels are the second half of the squeeze calculation, so the card gives users the underlying volatility envelope behind the new squeeze badge. Lower-band values that compute below zero on low-priced, high-volatility names are now floored to $0.00 rather than showing a confusing negative price.
+
+**Tier Availability:** All tiers with Technical Analysis access
+
+**Marketing Angle:** Keltner Channels are an ATR-based volatility envelope that many traders use instead of, or alongside, Bollinger Bands. Surfacing them as a first-class card — rather than burying them in an advanced panel — rounds out the platform's volatility toolkit and directly explains the new squeeze signal for users who want to see the math behind it.
+
+**Blog/Content Hooks:**
+- Keltner Channels vs. Bollinger Bands — what's the difference and when to use each
+- How ATR-based bands adapt to a stock's own volatility
+- Reading volatility envelopes — what it means when price rides the upper or lower channel
+
+---
+
 *Document compiled May 2026. Update this file after each shipped feature and re-attach to all active projects.*
