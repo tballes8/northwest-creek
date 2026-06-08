@@ -924,6 +924,21 @@ Each entry follows a consistent format:
 
 ---
 
+#### Bankruptcy Detection — Stock Research Page
+
+**What It Does:** Automatically flags when a company has a recent bankruptcy or receivership filing on record by reading SEC 8-K item codes directly from SEC EDGAR and detecting Item 1.03 (Bankruptcy or Receivership) within the trailing ~18 months. When detected, the Stock Research page suppresses the going-concern valuation lines — NWC AI target price, analyst price target, and forward P/E — since these models assume the company keeps operating and existing equity is typically cancelled in restructuring. A red "Bankruptcy / Receivership" flag appears in the Company Details panel with the filing date and a direct link to the 8-K, and the Dilution Filings section gets a note explaining that any S-3 or 424B5 shelf filings shown are pre-petition and rendered moot by the restructuring. The flag is intentionally worded conservatively — it confirms a filing exists and links to the source rather than asserting the chapter or that proceedings are still active.
+
+**Tier Availability:** All tiers (Stock Research page)
+
+**Marketing Angle:** Showing a confident AI price target and analyst upside on a company in bankruptcy is exactly the kind of misleading signal that erodes trust in a research tool — retail investors have lost money buying "cheap" bankrupt stocks whose equity was about to be wiped. Surfacing the bankruptcy filing front-and-center, and deliberately hiding valuation models that don't apply, is a strong trust and investor-protection differentiator most retail platforms don't bother with.
+
+**Blog/Content Hooks:**
+- What happens to a stock when a company files Chapter 11 — why the equity usually goes to zero
+- How to read an 8-K — the SEC filing items that actually move stocks (1.03, 2.01, 5.02)
+- Why a low share price isn't a discount — the bankruptcy trap retail investors fall into
+
+---
+
 #### Admin Maintenance Console — AI-Assisted Vendor Changelog Review
 
 > **Internal tool — not a public or subscriber-facing feature.** Logged here for cross-project visibility into platform operations work.
