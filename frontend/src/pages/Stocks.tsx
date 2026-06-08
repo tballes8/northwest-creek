@@ -2948,6 +2948,15 @@ const Stocks: React.FC = () => {
               </div>
             )}
 
+            {activePresetId && (() => {
+              const active = presets.find(p => p.id === activePresetId);
+              return active ? (
+                <p className="text-xs text-gray-500 dark:text-gray-400">{active.description}</p>
+              ) : null;
+            })()}
+
+            <div className="border-t border-gray-200 dark:border-gray-700" />
+
             {savedScreens.length > 0 && (
               <div className="flex flex-wrap gap-2 items-center">
                 <span className="text-sm font-medium text-gray-500 dark:text-gray-400 shrink-0">Saved:</span>
@@ -3007,13 +3016,6 @@ const Stocks: React.FC = () => {
                 {saveError && <span className="text-xs text-red-500">{saveError}</span>}
               </div>
             )}
-
-            {activePresetId && (() => {
-              const active = presets.find(p => p.id === activePresetId);
-              return active ? (
-                <p className="text-xs text-gray-500 dark:text-gray-400">{active.description}</p>
-              ) : null;
-            })()}
           </div>
 
           {/* Main layout */}
