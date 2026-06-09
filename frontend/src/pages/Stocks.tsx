@@ -176,6 +176,7 @@ interface ScreenerResult {
   last_refreshed: string | null;
   squeeze_state: 'on' | 'fired' | 'none' | null;
   squeeze_bars: number | null;
+  squeeze_ratio: number | null;
 }
 
 interface VolumeSurgeRow {
@@ -204,6 +205,8 @@ interface ScreenerFormState {
   priceAbove200ma: boolean | null;
   squeezeOn: boolean | null;
   squeezeFiredWithinDays: string;
+  squeezeMinBars: string;
+  squeezeMaxRatio: string;
   exchange: string[];
   excludeEtfs: boolean;
   gapPctMin: string;
@@ -244,6 +247,8 @@ const defaultScreenerForm: ScreenerFormState = {
   priceAbove200ma: null,
   squeezeOn: null,
   squeezeFiredWithinDays: '',
+  squeezeMinBars: '',
+  squeezeMaxRatio: '',
   exchange: [],
   excludeEtfs: true,
   gapPctMin: '', gapPctMax: '',
@@ -305,6 +310,8 @@ function buildScreenerCriteria(
   if (form.priceAbove200ma !== null) c.price_above_200ma = form.priceAbove200ma;
   if (form.squeezeOn !== null) c.squeeze_on = form.squeezeOn;
   if (form.squeezeFiredWithinDays !== '') c.squeeze_fired_within_days = parseInt(form.squeezeFiredWithinDays, 10);
+  if (form.squeezeMinBars !== '') c.squeeze_min_bars = parseInt(form.squeezeMinBars, 10);
+  if (form.squeezeMaxRatio !== '') c.squeeze_max_ratio = parseFloat(form.squeezeMaxRatio);
   if (form.exchange.length) c.exchange = form.exchange;
   c.exclude_etfs = form.excludeEtfs;
   const gp = nr(form.gapPctMin, form.gapPctMax);
@@ -1456,6 +1463,8 @@ const Stocks: React.FC = () => {
       priceAbove200ma: c.price_above_200ma ?? null,
       squeezeOn: c.squeeze_on ?? null,
       squeezeFiredWithinDays: c.squeeze_fired_within_days?.toString() ?? '',
+      squeezeMinBars: c.squeeze_min_bars?.toString() ?? '',
+      squeezeMaxRatio: c.squeeze_max_ratio?.toString() ?? '',
       exchange: c.exchange ?? [],
       excludeEtfs: c.exclude_etfs ?? true,
       gapPctMin: c.gap_percent?.min?.toString() ?? '',
@@ -1492,6 +1501,8 @@ const Stocks: React.FC = () => {
       priceAbove200ma: c.price_above_200ma ?? null,
       squeezeOn: c.squeeze_on ?? null,
       squeezeFiredWithinDays: c.squeeze_fired_within_days?.toString() ?? '',
+      squeezeMinBars: c.squeeze_min_bars?.toString() ?? '',
+      squeezeMaxRatio: c.squeeze_max_ratio?.toString() ?? '',
       exchange: c.exchange ?? [],
       excludeEtfs: c.exclude_etfs ?? true,
       gapPctMin: c.gap_percent?.min?.toString() ?? '',
@@ -3115,6 +3126,32 @@ const Stocks: React.FC = () => {
                     {label}
                   </label>
                 ))}
+              </div>
+
+              {/* Squeeze */}
+              <div className="mb-3">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1.5">Volatility Squeeze</div>
+                <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 mb-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={screenerForm.squeezeOn === true}
+                    onChange={e => setScreenerForm(f => ({ ...f, squeezeOn: e.target.checked ? true : null }))}
+                    className="rounded border-gray-300 dark:border-gray-600 text-teal-600 focus:ring-teal-500"
+                  />
+                  In squeeze only
+                </label>
+                <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-1">Min days coiling</div>
+                <input type="number" placeholder="e.g. 10" value={screenerForm.squeezeMinBars}
+                  onChange={e => setScreenerForm(f => ({ ...f, squeezeMinBars: e.target.value }))}
+                  className={`${screenerInputCls} mb-2`} />
+                <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-1">Max tightness (BB÷KC, lower = tighter)</div>
+                <input type="number" step="0.05" placeholder="e.g. 0.85" value={screenerForm.squeezeMaxRatio}
+                  onChange={e => setScreenerForm(f => ({ ...f, squeezeMaxRatio: e.target.value }))}
+                  className={`${screenerInputCls} mb-2`} />
+                <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-1">Fired within N days</div>
+                <input type="number" placeholder="e.g. 3" value={screenerForm.squeezeFiredWithinDays}
+                  onChange={e => setScreenerForm(f => ({ ...f, squeezeFiredWithinDays: e.target.value }))}
+                  className={screenerInputCls} />
               </div>
 
               {/* Exchange */}

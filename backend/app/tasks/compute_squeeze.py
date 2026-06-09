@@ -199,13 +199,15 @@ async def _compute_and_store() -> int:
             closes = [c for h, l, c in keep]
 
         sq = technical_indicators.compute_squeeze_from_ohlc(highs, lows, closes)
+        ratio = sq.get("bandwidth_ratio") if sq else None
         if not sq or sq["state"] == "none":
             state, nbars = "none", None
         elif sq["state"] == "on":
             state, nbars = "on", sq["bars_in_squeeze"]
         else:  # fired
             state, nbars = "fired", sq["bars_since_fire"]
-        params.append({"b_symbol": symbol, "b_state": state, "b_bars": nbars, "b_at": now})
+        params.append({"b_symbol": symbol, "b_state": state, "b_bars": nbars,
+                       "b_ratio": ratio, "b_at": now})
 
     if not params:
         return 0
@@ -219,6 +221,7 @@ async def _compute_and_store() -> int:
         .values(
             squeeze_state=bindparam("b_state"),
             squeeze_bars=bindparam("b_bars"),
+            squeeze_ratio=bindparam("b_ratio"),
             squeeze_computed_at=bindparam("b_at"),
         )
     )

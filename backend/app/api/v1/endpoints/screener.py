@@ -56,6 +56,8 @@ class ScreenerCriteria(BaseModel):
     price_above_200ma: Optional[bool] = None
     squeeze_on: Optional[bool] = None
     squeeze_fired_within_days: Optional[int] = None
+    squeeze_min_bars: Optional[int] = None
+    squeeze_max_ratio: Optional[float] = None
     exclude_etfs: bool = True
 
     # Industry and sector filters
@@ -118,6 +120,7 @@ def _build_row(row: StockSnapshot) -> dict:
         "is_etf": row.is_etf,
         "squeeze_state": row.squeeze_state,
         "squeeze_bars": row.squeeze_bars,
+        "squeeze_ratio": _f(row.squeeze_ratio),
     }
 
 
@@ -240,6 +243,14 @@ async def run_screener(
     if criteria.squeeze_fired_within_days is not None:
         conditions.append(StockSnapshot.squeeze_state == 'fired')
         conditions.append(StockSnapshot.squeeze_bars <= criteria.squeeze_fired_within_days)
+
+    if criteria.squeeze_min_bars is not None:
+        conditions.append(StockSnapshot.squeeze_state == 'on')
+        conditions.append(StockSnapshot.squeeze_bars >= criteria.squeeze_min_bars)
+
+    if criteria.squeeze_max_ratio is not None:
+        conditions.append(StockSnapshot.squeeze_ratio.isnot(None))
+        conditions.append(StockSnapshot.squeeze_ratio <= criteria.squeeze_max_ratio)
 
     if criteria.exclude_etfs:
         conditions.append(

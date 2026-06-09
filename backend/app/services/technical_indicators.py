@@ -425,9 +425,21 @@ class TechnicalIndicators:
         if not kc:
             return None
 
-        return TechnicalIndicators.compute_squeeze_state(
+        result = TechnicalIndicators.compute_squeeze_state(
             bb_upper, bb_lower, kc["upper_history"], kc["lower_history"]
         )
+        if result is not None:
+            # Tightness: Bollinger width ÷ Keltner width at the latest bar
+            # (smaller = bands sit deeper inside the channels = tighter coil).
+            bu, bl = bb_upper[-1], bb_lower[-1]
+            ku, kl = kc["upper_history"][-1], kc["lower_history"][-1]
+            ratio = None
+            if None not in (bu, bl, ku, kl):
+                kc_width = ku - kl
+                if kc_width:
+                    ratio = round((bu - bl) / kc_width, 4)
+            result["bandwidth_ratio"] = ratio
+        return result
 
     @staticmethod
     def calculate_std_dev(closes, period=20):

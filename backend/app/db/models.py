@@ -204,6 +204,7 @@ class StockSnapshot(Base):
     # BB/KC squeeze state — precomputed daily by compute_squeeze_job
     squeeze_state = Column(String(8), nullable=True)  # 'on' | 'fired' | 'none'
     squeeze_bars = Column(Integer, nullable=True)     # bars_in_squeeze if 'on', bars_since_fire if 'fired'
+    squeeze_ratio = Column(Numeric(precision=10, scale=4), nullable=True)  # BB width ÷ KC width (smaller = tighter)
     squeeze_computed_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
