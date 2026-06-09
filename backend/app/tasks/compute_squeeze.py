@@ -210,15 +210,17 @@ async def _compute_and_store() -> int:
     if not params:
         return 0
 
+    # Core table UPDATE (not the ORM entity) executed as an executemany — bypasses
+    # the ORM bulk-update machinery, which rejects a keyed bulk update with WHERE.
+    tbl = StockSnapshot.__table__
     stmt = (
-        update(StockSnapshot)
-        .where(StockSnapshot.symbol == bindparam("b_symbol"))
+        tbl.update()
+        .where(tbl.c.symbol == bindparam("b_symbol"))
         .values(
             squeeze_state=bindparam("b_state"),
             squeeze_bars=bindparam("b_bars"),
             squeeze_computed_at=bindparam("b_at"),
         )
-        .execution_options(synchronize_session=None)
     )
     async with async_session() as session:
         for i in range(0, len(params), _UPSERT_CHUNK):
@@ -244,6 +246,7 @@ async def compute_squeeze_job(api_key: str | None = None) -> None:
     except Exception as exc:
         print(f"❌ Squeeze precompute failed: {exc}", flush=True)
         logger.exception("Squeeze precompute failed")
+        raise  # surface the failure so the process exits non-zero (Railway shows red)
 
 
 if __name__ == "__main__":
