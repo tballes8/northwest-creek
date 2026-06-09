@@ -21,7 +21,6 @@ from app.services.fmp_client import init_fmp_client, close_fmp_client
 from datetime import datetime, timezone
 from app.tasks.refresh_stock_snapshots import refresh_stock_snapshots_job
 from app.tasks.fetch_macro_indicators import macro_indicators_job
-from app.tasks.compute_squeeze import compute_squeeze_job
 from app.services.sector_rotation import append_today_closes
 
 
@@ -81,17 +80,10 @@ async def lifespan(app: FastAPI):
         coalesce=True,
     )
 
-    # Squeeze precompute: append today's bar + recompute BB/KC squeeze state for the
-    # screener universe after the US close. 22:00 UTC covers both EST (21:00) and
-    # EDT (20:00) closes on the same calendar day. Backfills history on first run.
-    _scheduler.add_job(
-        compute_squeeze_job,
-        CronTrigger(hour=22, minute=0, timezone=timezone.utc),
-        id="compute_squeeze",
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True,
-    )
+    # Squeeze precompute runs as its own Railway cron service (python -m
+    # app.tasks.compute_squeeze, weekdays post-close), not in-process — see
+    # app/tasks/compute_squeeze.py. Keeping it out of this scheduler avoids a
+    # duplicate daily run.
 
     _scheduler.start()
 
