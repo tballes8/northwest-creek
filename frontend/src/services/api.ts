@@ -281,4 +281,5 @@ export const screenerAPI = {
 
 export const marketAPI = {
   getTickerTape: () => axiosInstance.get('/market/ticker-tape'),
+  getScreensTickerTape: () => axiosInstance.get('/market/ticker-tape/screens'),
 };

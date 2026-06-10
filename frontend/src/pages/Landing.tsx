@@ -94,6 +94,8 @@ const Landing: React.FC = () => {
 
       {/* Live ticker tape (volume-sorted most-actives) */}
       <TickerTape />
+      {/* Screener tape: High Volume Breakout + In Squeeze quick-screens */}
+      <TickerTape source="screens" />
 
       {/* Hero */}
       <section className="relative overflow-hidden">
