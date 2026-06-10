@@ -125,14 +125,7 @@ const TickerTape: React.FC<TickerTapeProps> = ({
         }
       `}</style>
       <div className="nwc-ticker-wrap">
-        {/* The screens tape scrolls the opposite way so the stacked tapes read
-            as two distinct streams. The duplicated-list loop is symmetric, so
-            reversing the same keyframes stays seamless; the inline longhand
-            wins over the class's animation shorthand. */}
-        <div
-          className="nwc-ticker-track flex w-max py-3"
-          style={isScreens ? { animationDirection: 'reverse' } : undefined}
-        >
+        <div className="nwc-ticker-track flex w-max py-3">
           {loop.map((q, i) => {
             const up = q.change_percent >= 0;
             return (
