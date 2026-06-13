@@ -74,9 +74,18 @@ const AdminContent: React.FC = () => {
 
   // Maintenance: vendor changelog review
   const [changelogText, setChangelogText] = useState('');
+  const [vendor, setVendor] = useState('FMP');
+  const [customVendor, setCustomVendor] = useState('');
   const [reviewRunning, setReviewRunning] = useState(false);
   const [reviewMarkdown, setReviewMarkdown] = useState<string | null>(null);
   const [maintReports, setMaintReports] = useState<{ id: string; vendor: string; created_at: string | null }[]>([]);
+
+  // Vendors NWC has a code-level dependency registry for → grounded review.
+  // Anything else (Railway, Cloudflare, custom) gets a best-effort generic review.
+  const GROUNDED_VENDORS = ['FMP', 'Stripe', 'Anthropic', 'Twilio', 'SendGrid'];
+  const VENDOR_OPTIONS = [...GROUNDED_VENDORS, 'Railway', 'Cloudflare', 'Other'];
+  const effectiveVendor = vendor === 'Other' ? customVendor.trim() : vendor;
+  const isGrounded = GROUNDED_VENDORS.includes(effectiveVendor);
 
   const getHeaders = useCallback(() => {
     const token = localStorage.getItem('access_token');
@@ -99,13 +108,13 @@ const AdminContent: React.FC = () => {
   }, [getHeaders]);
 
   const runChangelogReview = async () => {
-    if (!changelogText.trim()) return;
+    if (!changelogText.trim() || !effectiveVendor) return;
     setReviewRunning(true);
     setReviewMarkdown(null);
     try {
       const res = await axios.post(
         `${API_URL}/api/v1/content/admin/maintenance/changelog/review`,
-        { changelog_text: changelogText, vendor: 'FMP' },
+        { changelog_text: changelogText, vendor: effectiveVendor },
         { headers: getHeaders() },
       );
       setReviewMarkdown(res.data.report_markdown);
@@ -132,7 +141,8 @@ const AdminContent: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `fmp-changelog-review-${new Date().toISOString().slice(0, 10)}.md`;
+    const slug = (effectiveVendor || 'vendor').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    a.download = `${slug}-changelog-review-${new Date().toISOString().slice(0, 10)}.md`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -745,28 +755,62 @@ const AdminContent: React.FC = () => {
         )}
 
         {/* ════════════════════════════════════════════════════
-            MAINTENANCE TAB — vendor (FMP) changelog review
+            MAINTENANCE TAB — vendor changelog review
            ════════════════════════════════════════════════════ */}
         {activeTab === 'maintenance' && (
           <div className="space-y-6">
             <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg border dark:border-gray-500 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Vendor API Changelog Review</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Vendor Changelog Review</h2>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                Paste the FMP changelog (e.g. from their update email). Claude reviews it against the list of
-                FMP endpoints this app uses and returns a markdown report flagging anything that may need a code
-                change — download it and hand it to Claude Code.
+                Pick the vendor, then paste their changelog (e.g. from an update email). Claude reviews it and
+                returns a markdown report flagging anything that may need a code change — download it and hand it
+                to Claude Code. For FMP, Stripe, Anthropic, Twilio, and SendGrid it checks against NWC's actual
+                code dependencies; for any other vendor it does a best-effort review against NWC's stack.
               </p>
+
+              <div className="mb-3">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Vendor</label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={vendor}
+                    onChange={e => setVendor(e.target.value)}
+                    className="px-3 py-2 rounded-md border border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                  >
+                    {VENDOR_OPTIONS.map(v => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
+                  {vendor === 'Other' && (
+                    <input
+                      type="text"
+                      value={customVendor}
+                      onChange={e => setCustomVendor(e.target.value)}
+                      maxLength={50}
+                      placeholder="Vendor name (e.g. Railway, Cloudflare)…"
+                      className="px-3 py-2 rounded-md border border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm flex-1 min-w-[14rem]"
+                    />
+                  )}
+                </div>
+                {effectiveVendor && (
+                  <p className={`mt-1.5 text-xs ${isGrounded ? 'text-teal-600 dark:text-teal-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                    {isGrounded
+                      ? `Grounded review — checked against NWC's ${effectiveVendor} code dependencies.`
+                      : `Best-effort review — no dependency registry for ${effectiveVendor}; findings are based on NWC's stack and need manual verification.`}
+                  </p>
+                )}
+              </div>
+
               <textarea
                 value={changelogText}
                 onChange={e => setChangelogText(e.target.value)}
                 rows={10}
-                placeholder="Paste the FMP changelog text here…"
+                placeholder={`Paste the ${effectiveVendor || 'vendor'} changelog text here…`}
                 className="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm font-mono"
               />
               <div className="mt-3 flex items-center gap-3">
                 <button
                   onClick={runChangelogReview}
-                  disabled={reviewRunning || !changelogText.trim()}
+                  disabled={reviewRunning || !changelogText.trim() || !effectiveVendor}
                   className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg font-medium text-sm transition-colors"
                 >
                   {reviewRunning ? 'Reviewing…' : 'Run Claude review'}

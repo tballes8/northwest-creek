@@ -314,7 +314,7 @@ async def delete_blog_post(
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  MAINTENANCE — Vendor (FMP) changelog review (admin only)
+#  MAINTENANCE — Vendor changelog review (admin only)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 @router.post("/admin/maintenance/changelog/review", response_model=MaintenanceReportResponse)
@@ -323,15 +323,16 @@ async def review_changelog(
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Run Claude over a pasted vendor changelog + the NWC FMP endpoint registry,
-    persist the markdown assessment, and return it."""
+    """Run Claude over a pasted vendor changelog against that vendor's NWC
+    dependency registry (or a best-effort generic review for vendors we don't
+    have a registry for), persist the markdown assessment, and return it."""
     try:
-        markdown = await assess_changelog(data.changelog_text)
+        markdown = await assess_changelog(data.changelog_text, data.vendor)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AI review failed: {e}")
 
     report = MaintenanceReport(
-        vendor=data.vendor or "FMP",
+        vendor=(data.vendor or "FMP").strip(),
         source_text=data.changelog_text,
         report_markdown=markdown,
         created_by=admin.id,
