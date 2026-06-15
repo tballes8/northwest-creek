@@ -1393,6 +1393,7 @@ const Stocks: React.FC = () => {
   const [screenerSortDesc, setScreenerSortDesc] = useState(true);
   const [presets, setPresets] = useState<ScreenerPreset[]>([]);
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
+  const [activeSavedScreenId, setActiveSavedScreenId] = useState<string | null>(null);
   const [savedScreens, setSavedScreens] = useState<SavedScreenItem[]>([]);
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [saveScreenName, setSaveScreenName] = useState('');
@@ -1476,6 +1477,7 @@ const Stocks: React.FC = () => {
     setScreenerSortBy(sb);
     setScreenerSortDesc(sd);
     setActivePresetId(preset.id);
+    setActiveSavedScreenId(null);
     runScreener(1, form, sb, sd);
   };
 
@@ -1514,6 +1516,7 @@ const Stocks: React.FC = () => {
     setScreenerSortBy(sb);
     setScreenerSortDesc(sd);
     setActivePresetId(null);
+    setActiveSavedScreenId(screen.id);
     runScreener(1, form, sb, sd);
   };
 
@@ -1538,6 +1541,7 @@ const Stocks: React.FC = () => {
     try {
       await screenerAPI.deleteSavedScreen(id);
       setSavedScreens(prev => prev.filter(s => s.id !== id));
+      setActiveSavedScreenId(prev => (prev === id ? null : prev));
     } catch {}
   };
 
@@ -2971,23 +2975,39 @@ const Stocks: React.FC = () => {
             {savedScreens.length > 0 && (
               <div className="flex flex-wrap gap-2 items-center">
                 <span className="text-sm font-medium text-gray-500 dark:text-gray-400 shrink-0">Saved:</span>
-                {savedScreens.map(s => (
-                  <div key={s.id} className="flex items-center gap-0.5 pl-3 pr-1 py-1.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-full">
+                {savedScreens.map(s => {
+                  const isActive = activeSavedScreenId === s.id;
+                  return (
+                  <div
+                    key={s.id}
+                    className={`flex items-center gap-0.5 pl-3 pr-1 py-1.5 border rounded-full transition-colors ${
+                      isActive
+                        ? 'bg-teal-600 border-teal-600'
+                        : 'bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600'
+                    }`}
+                  >
                     <button
                       onClick={() => applySavedScreen(s)}
-                      className="text-sm text-gray-700 dark:text-gray-300 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
+                      className={`text-sm transition-colors ${
+                        isActive
+                          ? 'text-white'
+                          : 'text-gray-700 dark:text-gray-300 hover:text-teal-600 dark:hover:text-teal-400'
+                      }`}
                     >
                       {s.name}
                     </button>
                     <button
                       onClick={() => deleteSavedScreen(s.id)}
-                      className="ml-1.5 text-gray-400 hover:text-red-500 transition-colors text-base leading-none pb-0.5"
+                      className={`ml-1.5 transition-colors text-base leading-none pb-0.5 ${
+                        isActive ? 'text-teal-200 hover:text-white' : 'text-gray-400 hover:text-red-500'
+                      }`}
                       title="Delete saved screen"
                     >
                       ×
                     </button>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -3195,7 +3215,7 @@ const Stocks: React.FC = () => {
               {/* Actions */}
               <div className="flex gap-2">
                 <button
-                  onClick={() => { setScreenerForm(defaultScreenerForm); setScreenerResults([]); setScreenerTotal(0); setActivePresetId(null); }}
+                  onClick={() => { setScreenerForm(defaultScreenerForm); setScreenerResults([]); setScreenerTotal(0); setActivePresetId(null); setActiveSavedScreenId(null); }}
                   className="flex-1 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
                   Clear
