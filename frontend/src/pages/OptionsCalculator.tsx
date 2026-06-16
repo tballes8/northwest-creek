@@ -328,13 +328,34 @@ function PricingPage({ params }) {
 function GreeksPage({ params }) {
   const S = +params.S, K = +params.K, T = +params.days/365, r = +params.r/100, sig = +params.sigma/100, tp = params.type;
   const g = bsGreeks(S, K, T, r, sig, tp);
+  const [openInfo, setOpenInfo] = useState(null);
 
   const greekData = [
-    { name: "Delta", val: g.delta, fmt: g.delta.toFixed(4), desc: `Option price moves $${Math.abs(g.delta).toFixed(2)} per $1 stock move` },
-    { name: "Gamma", val: g.gamma, fmt: g.gamma.toFixed(4), desc: `Delta changes by ${g.gamma.toFixed(4)} per $1 stock move` },
-    { name: "Theta", val: g.theta, fmt: g.theta.toFixed(4), desc: `Option loses $${Math.abs(g.theta).toFixed(4)}/day to time decay` },
-    { name: "Vega", val: g.vega, fmt: g.vega.toFixed(4), desc: `Option moves $${Math.abs(g.vega).toFixed(4)} per 1% vol change` },
-    { name: "Rho", val: g.rho, fmt: g.rho.toFixed(4), desc: `Option moves $${Math.abs(g.rho).toFixed(4)} per 1% rate change` },
+    { name: "Delta", val: g.delta, fmt: g.delta.toFixed(4), desc: `Option price moves $${Math.abs(g.delta).toFixed(2)} per $1 stock move`,
+      info: {
+        means: "How much the option's price moves for a $1 move in the underlying stock.",
+        how: "Calls range from 0 to 1, puts from −1 to 0. A delta of 0.69 means the option gains roughly $0.69 when the stock rises $1 (and loses the same when it falls). It also doubles as a rough probability of finishing in-the-money. Deep in-the-money options approach ±1 and move nearly dollar-for-dollar with the stock; far out-of-the-money options approach 0.",
+      } },
+    { name: "Gamma", val: g.gamma, fmt: g.gamma.toFixed(4), desc: `Delta changes by ${g.gamma.toFixed(4)} per $1 stock move`,
+      info: {
+        means: "How much Delta itself changes for a $1 move in the stock.",
+        how: "Think of it as the acceleration of the option's price. It is highest for at-the-money options near expiry. High gamma means your directional exposure (delta) shifts quickly — which cuts both ways: gains compound faster, but so do losses.",
+      } },
+    { name: "Theta", val: g.theta, fmt: g.theta.toFixed(4), desc: `Option loses $${Math.abs(g.theta).toFixed(4)}/day to time decay`,
+      info: {
+        means: "How much value the option loses each day simply from time passing (time decay).",
+        how: "It is negative for buyers — you are fighting the clock — and positive for sellers, who collect the decay. Theta accelerates as expiration approaches, especially for at-the-money options.",
+      } },
+    { name: "Vega", val: g.vega, fmt: g.vega.toFixed(4), desc: `Option moves $${Math.abs(g.vega).toFixed(4)} per 1% vol change`,
+      info: {
+        means: "How much the option's price moves for a 1-point change in implied volatility.",
+        how: "Both calls and puts gain value when volatility rises and lose value when it falls. Vega is largest for longer-dated, at-the-money options. Note this is sensitivity to implied volatility, not to the stock actually moving.",
+      } },
+    { name: "Rho", val: g.rho, fmt: g.rho.toFixed(4), desc: `Option moves $${Math.abs(g.rho).toFixed(4)} per 1% rate change`,
+      info: {
+        means: "How much the option's price moves for a 1-point change in interest rates.",
+        how: "Calls have positive Rho, puts negative. It is the least impactful Greek for short-dated options and matters most for long-dated positions (LEAPS).",
+      } },
   ];
 
   const icons = { Delta: "Δ", Gamma: "Γ", Theta: "Θ", Vega: "ν", Rho: "ρ" };
@@ -351,19 +372,42 @@ function GreeksPage({ params }) {
         return (
           <div key={gd.name} style={cardBox()}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div onClick={() => setOpenInfo(gd)} title="What does this mean?" style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
                 <span style={{ fontSize: 18, fontWeight: 700, color: barColors[gd.name], fontFamily: "serif", width: 20, textAlign: "center" }}>{icons[gd.name]}</span>
-                <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{gd.name}</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: C.text, borderBottom: `1px dotted ${C.textMuted}` }}>{gd.name}</span>
+                <span style={{ fontSize: 12, color: C.textMuted }}>ⓘ</span>
               </div>
               <span style={{ fontSize: 20, fontWeight: 700, color: C.text, fontFamily: "monospace" }}>{gd.fmt}</span>
             </div>
             <div style={{ height: 6, background: C.cardAlt, borderRadius: 3, overflow: "hidden", marginBottom: 6 }}>
               <div style={{ height: "100%", width: `${Math.min(pct, 100)}%`, background: barColors[gd.name], borderRadius: 3, transition: "width 0.3s" }} />
             </div>
-            <div style={{ fontSize: 11, color: C.textMuted }}>{gd.desc}</div>
+            <div style={{ fontSize: 13, color: C.text }}>{gd.desc}</div>
           </div>
         );
       })}
+
+      {openInfo && (
+        <div onClick={() => setOpenInfo(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, padding: 20 }}>
+          <div onClick={e => e.stopPropagation()} style={{ ...cardBox(), maxWidth: 440, width: "100%", padding: 24, boxShadow: "0 10px 40px rgba(0,0,0,0.45)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 24, fontWeight: 700, color: barColors[openInfo.name], fontFamily: "serif" }}>{icons[openInfo.name]}</span>
+                <span style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{openInfo.name}</span>
+              </div>
+              <span onClick={() => setOpenInfo(null)} style={{ cursor: "pointer", fontSize: 22, color: C.textDim, lineHeight: 1 }}>×</span>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: C.accent, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>What it means</div>
+              <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.55 }}>{openInfo.info.means}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: C.accent, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>How it works</div>
+              <div style={{ fontSize: 13, color: C.textSec, lineHeight: 1.55 }}>{openInfo.info.how}</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
