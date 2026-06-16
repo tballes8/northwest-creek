@@ -163,6 +163,16 @@ const pillBtn = (active) => ({
 });
 
 // ─── Input Panel (shared) ───
+// Nearest realistic option strike for a given underlying price — mimics real
+// option-chain increments ($1 under $25, $5 to $500, $10 above) so the default
+// strike sits near-the-money instead of a fixed value.
+function nearestStrike(price) {
+  const p = Number(price);
+  if (!isFinite(p) || p <= 0) return null;
+  const inc = p < 25 ? 1 : p < 500 ? 5 : 10;
+  return Math.round(p / inc) * inc;
+}
+
 function InputPanel({ params, setParams, page }) {
   const set = (k) => (e) => setParams(p => ({ ...p, [k]: e.target.value }));
   const [tickerInput, setTickerInput] = useState(params.ticker || "");
@@ -193,12 +203,16 @@ function InputPanel({ params, setParams, page }) {
         setLookupStatus({ ok: false, msg: `No data for ${sym}` });
         return;
       }
-      setParams(p => ({
-        ...p,
-        ticker: sym,
-        ...(newPrice != null ? { S: Number(newPrice).toFixed(2) } : {}),
-        ...(ivVal != null ? { sigma: (Number(ivVal) * 100).toFixed(1) } : {}),
-      }));
+      setParams(p => {
+        const next = { ...p, ticker: sym };
+        if (newPrice != null) {
+          next.S = Number(newPrice).toFixed(2);
+          const k = nearestStrike(newPrice);
+          if (k != null) next.K = k.toFixed(2);
+        }
+        if (ivVal != null) next.sigma = (Number(ivVal) * 100).toFixed(1);
+        return next;
+      });
       const priceMsg = newPrice != null ? `$${Number(newPrice).toFixed(2)}` : "price n/a";
       const ivMsg = ivVal != null ? `${(Number(ivVal) * 100).toFixed(1)}% vol (${ivSource === "realized" ? "30D realized" : "default"})` : "vol n/a";
       setLookupStatus({ ok: true, msg: `${sym} · ${priceMsg} · ${ivMsg}`, source: ivSource });
@@ -862,7 +876,7 @@ export default function OptionsCalculator() {
   const [page, setPage] = useState(searchParams.get("page") || "pricing");
   const [params, setParams] = useState({
     S: searchParams.get("S") || "150.00",
-    K: searchParams.get("K") || "155.00",
+    K: searchParams.get("K") || "150.00",
     days: searchParams.get("days") || "30",
     r: searchParams.get("r") || "5.0",
     sigma: searchParams.get("sigma") || "25.0",
