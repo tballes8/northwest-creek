@@ -180,6 +180,9 @@ export const stocksAPI = {
   getImpliedVolatility: (ticker: string, lookback_days: number = 30) =>
     axiosInstance.get(`/stocks/${ticker}/implied-volatility`, { params: { lookback_days } }),
 
+  getTreasuryRates: () =>
+    axiosInstance.get(`/stocks/treasury-rates`),
+
   // Search endpoints
   search: (query: string) =>
     axiosInstance.get(`/stocks/search`, { params: { q: query } }),

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { authAPI, stocksAPI } from "../services/api";
 import NavBar from "../components/NavBar";
@@ -171,6 +171,29 @@ function nearestStrike(price) {
   if (!isFinite(p) || p <= 0) return null;
   const inc = p < 25 ? 1 : p < 500 ? 5 : 10;
   return Math.round(p / inc) * inc;
+}
+
+// Approximate calendar days for each Treasury maturity the API returns.
+const TREASURY_MATURITY_DAYS = {
+  "1 Month": 30, "2 Month": 60, "3 Month": 91, "6 Month": 182,
+  "1 Year": 365, "2 Year": 730, "3 Year": 1095, "5 Year": 1825,
+  "7 Year": 2555, "10 Year": 3650, "20 Year": 7300, "30 Year": 10950,
+};
+
+// Pick the live Treasury yield whose maturity is closest to the option's
+// days-to-expiry — the correct risk-free rate for Black-Scholes is the one
+// matching the option's tenor (30-day option → ~1-month bill, 2yr LEAP → 2yr).
+function nearestTreasuryRate(rates, days) {
+  const d = Number(days);
+  if (!isFinite(d) || d <= 0 || !rates || !rates.length) return null;
+  let best = null, bestDiff = Infinity;
+  for (const r of rates) {
+    const md = TREASURY_MATURITY_DAYS[r.name];
+    if (md == null || r.value == null) continue;
+    const diff = Math.abs(md - d);
+    if (diff < bestDiff) { bestDiff = diff; best = r; }
+  }
+  return best ? Number(best.value) : null;
 }
 
 function InputPanel({ params, setParams, page }) {
@@ -884,6 +907,13 @@ export default function OptionsCalculator() {
     ticker: searchParams.get("ticker") || "",
   });
 
+  // Live risk-free rate: pulled from the Treasury-rates endpoint and matched to
+  // the option's tenor. We stop auto-managing it once the user edits the field
+  // (or if a rate was passed explicitly via the URL).
+  const treasuryRates = useRef(null);
+  const autoRate = useRef(null);
+  const userSetRate = useRef(searchParams.get("r") != null);
+
   // Pre-fill spread strikes from URL (used by "Trade This" → "Open in Options Calculator")
   const urlStrategy = searchParams.get("strategy") || undefined;
   const urlStrikes = (() => {
@@ -913,6 +943,43 @@ export default function OptionsCalculator() {
     };
     loadUser();
   }, [navigate]);
+
+  // Apply the tenor-matched live Treasury yield to the risk-free rate field,
+  // unless the user has taken control of it.
+  const applyTreasuryRate = useCallback(() => {
+    if (userSetRate.current || !treasuryRates.current) return;
+    const rate = nearestTreasuryRate(treasuryRates.current, params.days);
+    if (rate == null) return;
+    const str = rate.toFixed(1);
+    autoRate.current = str;
+    setParams(p => (p.r === str ? p : { ...p, r: str }));
+  }, [params.days]);
+
+  // Fetch live Treasury rates once on mount.
+  useEffect(() => {
+    let cancelled = false;
+    stocksAPI.getTreasuryRates()
+      .then(res => {
+        if (cancelled) return;
+        const rates = res.data?.rates || [];
+        if (rates.length) {
+          treasuryRates.current = rates;
+          applyTreasuryRate();
+        }
+      })
+      .catch(() => { /* keep the manual default if the lookup fails */ });
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-match the rate to tenor whenever days-to-expiry changes.
+  useEffect(() => { applyTreasuryRate(); }, [applyTreasuryRate]);
+
+  // Once the user edits the rate away from what we set, stop auto-managing it.
+  useEffect(() => {
+    if (autoRate.current != null && params.r !== autoRate.current) {
+      userSetRate.current = true;
+    }
+  }, [params.r]);
 
   // Loading state
   if (userLoading) {
