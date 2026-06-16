@@ -537,8 +537,23 @@ function PayoffPage({ params }) {
 
 // ─── IV Solver Page ───
 function IVSolverPage({ params }) {
-  const [mktPrice, setMktPrice] = useState("5.00");
-  const S = +params.S, K = +params.K, T = +params.days/365, r = +params.r/100, tp = params.type;
+  const S = +params.S, K = +params.K, T = +params.days/365, r = +params.r/100, sig = +params.sigma/100, tp = params.type;
+
+  // Seed the market price with the Black-Scholes theoretical value for the
+  // current inputs, so the solved IV round-trips to ~the volatility input on
+  // load instead of showing a meaningless number from an arbitrary default.
+  // We keep it in sync with the inputs until the user enters a real premium.
+  const theoPrice = (T > 0 && sig > 0) ? bsPrice(S, K, T, r, sig, tp) : 0;
+  const [mktPrice, setMktPrice] = useState(theoPrice > 0 ? theoPrice.toFixed(2) : "5.00");
+  const userSetPrice = useRef(false);
+
+  useEffect(() => {
+    if (userSetPrice.current || theoPrice <= 0) return;
+    setMktPrice(theoPrice.toFixed(2));
+  }, [theoPrice]);
+
+  const onPriceChange = (e) => { userSetPrice.current = true; setMktPrice(e.target.value); };
+
   const mp = +mktPrice;
   const iv = mp > 0 && T > 0 ? impliedVol(S, K, T, r, mp, tp) : null;
   const ivPct = iv ? (iv * 100).toFixed(2) : "—";
@@ -561,7 +576,7 @@ function IVSolverPage({ params }) {
       <div style={{ ...cardBox(), display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
         <div style={{ ...inputGroup, flex: "1 1 140px" }}>
           <span style={labelStyle()}>Market Option Price ($)</span>
-          <input style={inputStyle()} type="number" step="0.01" value={mktPrice} onChange={e => setMktPrice(e.target.value)} />
+          <input style={inputStyle()} type="number" step="0.01" value={mktPrice} onChange={onPriceChange} />
         </div>
         <div style={{ flex: "1 1 140px", textAlign: "center", padding: "8px 0" }}>
           <div style={{ fontSize: 11, color: C.textDim, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Implied Volatility</div>
@@ -572,6 +587,9 @@ function IVSolverPage({ params }) {
           <div style={{ fontSize: 18, fontWeight: 600, color: C.textSec, fontFamily: "monospace" }}>
             {iv ? `±$${(S * iv * Math.sqrt(T)).toFixed(2)}` : "—"}
           </div>
+        </div>
+        <div style={{ flexBasis: "100%", fontSize: 11, color: C.textMuted, lineHeight: 1.5 }}>
+          Defaults to the Black-Scholes theoretical price computed from your inputs above (stock price, strike, days, rate, volatility) — so the solved IV starts out matching your volatility input. For an accurate read, replace it with the option's actual market price (the bid/ask mid) from your trading platform.
         </div>
       </div>
       <div style={cardBox()}>
