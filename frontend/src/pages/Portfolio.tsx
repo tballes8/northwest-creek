@@ -393,9 +393,14 @@ const Portfolio: React.FC = () => {
     const totalPL = totalValue - totalCost;
     const totalPLPercent = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
 
+    // Day-change baseline = Σ(previous close × qty). When a position has no
+    // previous close (FMP gap / illiquid ticker), fall back to its cost basis so
+    // its full current value isn't miscounted as a one-day move. Skip positions
+    // we can't value at all, keeping the baseline symmetric with totalValue.
     const totalPrevClose = portfolio.reduce((sum, pos) => {
-      const prevClose = prevCloseMap[pos.ticker];
-      return sum + (prevClose ? prevClose * pos.quantity : 0);
+      if (pos.total_value == null) return sum;
+      const baseline = prevCloseMap[pos.ticker] ?? pos.buy_price;
+      return sum + (baseline ? baseline * pos.quantity : 0);
     }, 0);
     const dayChange = totalPrevClose > 0 ? totalValue - totalPrevClose : 0;
     const dayChangePercent = totalPrevClose > 0 ? (dayChange / totalPrevClose) * 100 : 0;
