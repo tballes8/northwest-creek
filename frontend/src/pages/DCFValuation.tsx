@@ -36,6 +36,28 @@ function _roundStrike(price: number): number {
   return Math.round(price);
 }
 
+// Approximate calendar days for each Treasury maturity the rates endpoint returns.
+const _TREASURY_MATURITY_DAYS: Record<string, number> = {
+  "1 Month": 30, "2 Month": 60, "3 Month": 91, "6 Month": 182,
+  "1 Year": 365, "2 Year": 730, "3 Year": 1095, "5 Year": 1825,
+  "7 Year": 2555, "10 Year": 3650, "20 Year": 7300, "30 Year": 10950,
+};
+
+// Pick the live Treasury yield (as a %) whose maturity is closest to the trade's
+// days-to-expiry — the same tenor-matching the Options Calculator uses, so both
+// stay consistent. Returns null if no rates are available.
+function _nearestTreasuryRate(rates: any[] | null, days: number): number | null {
+  if (!rates || !rates.length || !isFinite(days) || days <= 0) return null;
+  let best: number | null = null, bestDiff = Infinity;
+  for (const rate of rates) {
+    const md = _TREASURY_MATURITY_DAYS[rate?.name];
+    if (md == null || rate?.value == null) continue;
+    const diff = Math.abs(md - days);
+    if (diff < bestDiff) { bestDiff = diff; best = Number(rate.value); }
+  }
+  return best;
+}
+
 interface TradeSuggestion {
   strategyType: string;
   strategyName: string;
@@ -59,6 +81,7 @@ function suggestStrategy(
   days: number,
   maxCapital: number,
   sigmaOverride?: number,
+  rOverride?: number,
 ): TradeSuggestion | null {
   const isBullish = targetPrice > currentPrice * 1.02;
   const isBearish = targetPrice < currentPrice * 0.98;
@@ -66,7 +89,7 @@ function suggestStrategy(
 
   const T = days / 365;
   const sigma = sigmaOverride && sigmaOverride > 0 ? sigmaOverride : 0.30;
-  const r = 0.05;
+  const r = rOverride && rOverride > 0 ? rOverride : 0.05;
   // 1σ expected move of the underlying by expiration. This is what bounds where the
   // short strike can realistically end up — DCF intrinsic value is a multi-year
   // estimate and is not a near-term price target.
@@ -303,6 +326,9 @@ const DCFValuation: React.FC = () => {
   // Volatility fetched on demand when the Trade This modal opens. value is decimal (0.87 = 87%).
   const [tradeIv, setTradeIv] = useState<{ value: number; source: "realized" | "default"; lookbackDays: number | null } | null>(null);
   const [tradeIvLoading, setTradeIvLoading] = useState(false);
+  // Live Treasury rates (full curve) fetched when the modal opens; the rate for
+  // the chosen timeframe is matched by tenor at render time.
+  const [tradeTreasuryRates, setTradeTreasuryRates] = useState<any[] | null>(null);
 
   // Warrant detection is now API-driven using Polygon's `type` field (CS, WARRANT, ETF, etc.)
   // These helpers are only used as a pre-fetch hint for explicit separator patterns
@@ -398,6 +424,10 @@ const DCFValuation: React.FC = () => {
     let cancelled = false;
     setTradeIvLoading(true);
     setTradeIv(null);
+    // Live risk-free rate, matched to the trade's tenor at render time.
+    stocksAPI.getTreasuryRates()
+      .then(res => { if (!cancelled) setTradeTreasuryRates(res.data?.rates || []); })
+      .catch(() => { /* fall back to the 5% default if unavailable */ });
     stocksAPI.getImpliedVolatility(dcfData.ticker, 30)
       .then(res => {
         if (cancelled) return;
@@ -1549,6 +1579,8 @@ const DCFValuation: React.FC = () => {
       {/* Trade This Modal */}
       {showTradeModal && dcfData && (() => {
         const sigmaToUse = tradeIv?.value && tradeIv.value > 0 ? tradeIv.value : 0.30;
+        // Tenor-matched live Treasury yield (%), falling back to 5% until loaded.
+        const rfRatePct = _nearestTreasuryRate(tradeTreasuryRates, parseInt(tradeTimeframe)) ?? 5.0;
         const suggestion = suggestStrategy(
           dcfData.current_price,
           dcfData.valuation.intrinsic_value_per_share,
@@ -1556,6 +1588,7 @@ const DCFValuation: React.FC = () => {
           parseInt(tradeTimeframe),
           parseFloat(tradeMaxCapital) || 0,
           sigmaToUse,
+          rfRatePct / 100,
         );
 
         return (
@@ -1695,7 +1728,7 @@ const DCFValuation: React.FC = () => {
                           S: dcfData.current_price.toFixed(2),
                           days: suggestion.days.toString(),
                           sigma: sigmaPct,
-                          r: '5.0',
+                          r: rfRatePct.toFixed(1),
                           strategy: suggestion.strategyType,
                           K1: suggestion.K1.toFixed(2),
                           K2: suggestion.K2.toFixed(2),
@@ -1720,7 +1753,7 @@ const DCFValuation: React.FC = () => {
                 )}
 
                 <p className="text-[10px] text-gray-400 dark:text-gray-500 text-center leading-tight mt-2">
-                  Educational only — estimates use {(sigmaToUse * 100).toFixed(0)}% volatility ({tradeIv?.source === "realized" ? "30-day realized" : "default"}) and 5% risk-free rate. Verify strikes, pricing, and liquidity with your broker before trading.
+                  Educational only — estimates use {(sigmaToUse * 100).toFixed(0)}% volatility ({tradeIv?.source === "realized" ? "30-day realized" : "default"}) and a {rfRatePct.toFixed(1)}% risk-free rate (live Treasury yield matched to the timeframe). Verify strikes, pricing, and liquidity with your broker before trading.
                 </p>
               </div>
             </div>
