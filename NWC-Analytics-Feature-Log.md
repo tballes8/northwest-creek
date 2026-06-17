@@ -1,6 +1,6 @@
 # NWC-Analytics — Shipped Features Log
 
-**Last Updated:** June 2026  
+**Last Updated:** June 17, 2026  
 **Purpose:** Cross-project reference document. Attach to NWC Marketing, NWC Blog/SM Post, NWC Enhancements, and NWC Sandbox projects so all workstreams have visibility into what has shipped, what tier it lives on, and what content angles it unlocks.
 
 ---
@@ -985,6 +985,67 @@ Each entry follows a consistent format:
 - Keltner Channels vs. Bollinger Bands — what's the difference and when to use each
 - How ATR-based bands adapt to a stock's own volatility
 - Reading volatility envelopes — what it means when price rides the upper or lower channel
+
+---
+
+### June 17, 2026
+
+---
+
+#### Options Calculator — Greeks Explained (Clickable Definitions)
+
+**What It Does:** Each Greek on the Options Calculator's Greeks tab — Delta, Gamma, Theta, Vega, and Rho — is now a clickable name that opens a popup explaining the Greek in plain language. The popup separates "What it means" (the one-line definition) from "How it works" (the practical behavior — e.g. that Delta doubles as a rough probability of finishing in-the-money, that Gamma is the acceleration of Delta, or that Theta decay accelerates into expiry). The per-Greek value description shown under each bar was also enlarged and brightened for readability. The popup matches the calculator's theme and adapts to light/dark mode automatically.
+
+**Tier Availability:** Active and Professional
+
+**Marketing Angle:** The Greeks are the single biggest conceptual hurdle for investors new to options — most tools display the numbers but assume the user already understands them. Inline, on-demand definitions turn the Greeks panel into a teaching tool, letting a curious investor learn what each number does without leaving the page or opening a separate guide.
+
+**Blog/Content Hooks:**
+- The options Greeks explained — Delta, Gamma, Theta, Vega, and Rho in plain English
+- What Delta really tells you — sensitivity, hedge ratio, and probability of profit in one number
+- Theta decay — why time is an option buyer's enemy and a seller's friend
+
+---
+
+#### Options Calculator — Live Risk-Free Rate (Tenor-Matched Treasury Yield)
+
+**What It Does:** The Risk-Free Rate field previously defaulted to a hardcoded 5%. It now pulls the live U.S. Treasury yield curve and auto-fills the rate that matches the option's time to expiry — a 30-day option uses the ~1-month bill yield, a 2-year LEAP uses the 2-year yield, and so on. The rate re-matches automatically when the user changes days-to-expiry, and stops auto-managing the moment the user types their own value. The same tenor-matched live rate now also flows through the DCF page's "Trade This — Suggest Options Strategy" modal: its spread estimates and the rate it hands off to the Options Calculator now agree, eliminating a prior inconsistency where the handoff always opened at 5%, and the modal footnote reports the actual rate used. Reuses the existing Treasury-rates feed already powering the Dashboard — no new data source.
+
+**Tier Availability:** Active and Professional (Options Calculator); Trade This handoff on the DCF Valuation page (Casual and above)
+
+**Marketing Angle:** The risk-free rate is a required Black-Scholes input, and a stale hardcoded value quietly undermines the credibility of an "institutional-grade" pricing tool. Auto-matching the live Treasury yield to the option's tenor — the way the rate is actually supposed to be chosen — means the output reflects real market conditions without the user needing to look up the current T-bill rate themselves.
+
+**Blog/Content Hooks:**
+- What the risk-free rate is and why it belongs in an options pricing model
+- Matching the Treasury yield to your option's expiry — a detail most calculators get wrong
+- How interest rates affect options prices — Rho, calls, puts, and LEAPS
+
+---
+
+#### Options Calculator — Smarter Defaults (Realistic Strikes & IV Solver Seed Price)
+
+**What It Does:** Two placeholder values that previously produced confusing or meaningless output were replaced with defaults grounded in the actual inputs. (1) The Strike Price no longer defaults to a fixed $155 — it snaps to a realistic near-the-money strike based on the stock price, using real option-chain increments ($1 under $25, $5 up to $500, $10 above), and updates to match whenever a ticker's live price is fetched. (2) On the IV Solver tab, the Market Option Price now seeds with the Black-Scholes theoretical price computed from the current inputs instead of a fixed $5.00, so the solved implied volatility starts out consistent with the volatility input rather than reflecting an arbitrary placeholder. An accompanying note explains how that value is derived and advises replacing it with the option's actual market price (the bid/ask mid) from the user's trading platform for an accurate read.
+
+**Tier Availability:** Active and Professional
+
+**Marketing Angle:** Hardcoded placeholder values — a strike stuck at $155 regardless of the stock, an option price stuck at $5 — make a calculator look broken and can mislead less-experienced users with nonsense outputs. Defaults derived from the actual stock price and inputs mean the tool shows something sensible the instant it loads, and the IV Solver note steers users to the one input that genuinely has to come from their broker.
+
+**Blog/Content Hooks:**
+- How to read an options chain — strikes, expirations, and the bid/ask spread
+- Implied volatility explained — what the market's option price is really telling you
+- Why "at-the-money" matters — choosing a strike relative to the current price
+
+---
+
+#### Stock Research — ETF Financials 404 Cleanup
+
+**What It Does:** Eliminated a class of browser-console 404 errors that fired when researching ETFs and other fund types. The Stock Research page was requesting company financial statements (to display a P/E ratio) for every ticker, including ETFs — which have no financial statements, so the request always failed. Since a P/E ratio isn't a meaningful metric for a fund anyway, the page now skips that request entirely for fund types, removing the failed network calls without changing anything users see.
+
+**Tier Availability:** All tiers (Stock Research page)
+
+**Marketing Angle:** None directly user-facing — console hygiene and avoiding wasted vendor API calls. Indirect benefit: fewer spurious failed requests keep the platform's diagnostics clean and reduce unnecessary load on the data provider.
+
+**Blog/Content Hooks:** None — bug fix / infrastructure
 
 ---
 

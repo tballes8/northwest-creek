@@ -771,7 +771,14 @@ const Stocks: React.FC = () => {
         setRelatedCommonStock(null);
       }
       loadDividends(symbol);
-      loadPeRatio(symbol);
+      // PE ratio comes from company financials, which funds/ETFs don't have
+      // (the /financials endpoint 404s for them), and a PE is meaningless for a
+      // fund anyway — skip the call for fund types to avoid console 404 noise.
+      if (isFundType(apiType)) {
+        setPeRatio(null);
+      } else {
+        loadPeRatio(symbol);
+      }
       loadAnalystEstimates(symbol);
       loadOwnership(symbol);
       loadPriceForecast(symbol);
