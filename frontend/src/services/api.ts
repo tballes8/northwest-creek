@@ -169,14 +169,6 @@ export const stocksAPI = {
   getOwnership: (ticker: string) =>
     axiosInstance.get(`/stocks/ownership/${ticker}`),
 
-  getVolumeSurge: (params?: {
-    min_ratio?: number;
-    max_price_change_pct?: number;
-    min_volume?: number;
-    limit?: number;
-  }) =>
-    axiosInstance.get(`/stocks/volume-surge`, { params }),
-
   getImpliedVolatility: (ticker: string, lookback_days: number = 30) =>
     axiosInstance.get(`/stocks/${ticker}/implied-volatility`, { params: { lookback_days } }),
 

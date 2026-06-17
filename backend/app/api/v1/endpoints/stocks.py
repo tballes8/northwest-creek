@@ -4,7 +4,7 @@ Stock API Endpoints
 import re
 from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, Date, Float, cast, or_
+from sqlalchemy import select, func, Date, or_
 from datetime import date, datetime, timedelta
 from typing import Optional
 import asyncio
@@ -1255,83 +1255,6 @@ async def stock_screener(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error running stock screener: {_safe_error(e)}")
-
-
-@router.get("/volume-surge")
-async def volume_surge_scan(
-    min_ratio: float = Query(default=2.5, ge=1.0, le=20.0, description="Minimum volume / avg_volume ratio"),
-    max_price_change_pct: float = Query(default=2.0, ge=0.0, le=20.0, description="Maximum |change %| (price flatness)"),
-    min_volume: int = Query(default=500_000, ge=0, description="Minimum absolute volume"),
-    limit: int = Query(default=50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
-):
-    """
-    Find stocks showing institutional accumulation: unusual volume on relatively flat price.
-    Wyckoff/VSA pattern — surges in volume without price advancing typically indicate
-    quiet accumulation before a breakout.
-
-    Tier-gated: active and professional only.
-    Inherits CS-only universe from stock_snapshots (ETFs are excluded by the refresh job).
-    """
-    if not can_use_feature(current_user.subscription_tier, "volume_surge_scan", 0):
-        next_tier = get_upgrade_tier(current_user.subscription_tier)
-        upgrade_msg = f" Upgrade to {next_tier.title()} for access." if next_tier else ""
-        raise HTTPException(
-            status_code=402,
-            detail=f"Volume Surge scanner is available on Active and Professional tiers.{upgrade_msg}",
-        )
-
-    ratio_expr = cast(StockSnapshot.volume, Float) / cast(StockSnapshot.avg_volume, Float)
-    stmt = (
-        select(
-            StockSnapshot.symbol,
-            StockSnapshot.name,
-            StockSnapshot.price,
-            StockSnapshot.change_percentage,
-            StockSnapshot.volume,
-            StockSnapshot.avg_volume,
-            StockSnapshot.market_cap,
-            StockSnapshot.exchange,
-            ratio_expr.label("volume_ratio"),
-        )
-        .where(StockSnapshot.avg_volume.is_not(None))
-        .where(StockSnapshot.avg_volume > 0)
-        .where(StockSnapshot.volume.is_not(None))
-        .where(ratio_expr >= min_ratio)
-        .where(func.abs(StockSnapshot.change_percentage) <= max_price_change_pct)
-        .where(StockSnapshot.volume >= min_volume)
-        .order_by(ratio_expr.desc())
-        .limit(limit)
-    )
-
-    try:
-        result = await db.execute(stmt)
-        rows = result.all()
-        return {
-            "results": [
-                {
-                    "symbol": r.symbol,
-                    "name": r.name,
-                    "price": float(r.price) if r.price is not None else None,
-                    "change_percentage": float(r.change_percentage) if r.change_percentage is not None else None,
-                    "volume": int(r.volume) if r.volume is not None else None,
-                    "avg_volume": int(r.avg_volume) if r.avg_volume is not None else None,
-                    "volume_ratio": round(float(r.volume_ratio), 2) if r.volume_ratio is not None else None,
-                    "market_cap": float(r.market_cap) if r.market_cap is not None else None,
-                    "exchange": r.exchange,
-                }
-                for r in rows
-            ],
-            "count": len(rows),
-            "filters": {
-                "min_ratio": min_ratio,
-                "max_price_change_pct": max_price_change_pct,
-                "min_volume": min_volume,
-            },
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error running volume-surge scan: {_safe_error(e)}")
 
 
 @router.get("/analyst-estimates/{ticker}")

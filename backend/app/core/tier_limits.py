@@ -17,7 +17,6 @@ TIER_LIMITS = {
         "dcf_valuations": 5,          # per week
         "technical_analysis": 5,      # per week
         "ai_analysis": 0,             # not available
-        "volume_surge_scan": False,
 
         "review_period": "week",
         "trial_days": 14,
@@ -33,7 +32,6 @@ TIER_LIMITS = {
         "dcf_valuations": 15,         # per week
         "technical_analysis": 15,     # per week
         "ai_analysis": 5,             # per week
-        "volume_surge_scan": False,
 
         "review_period": "week",
         "trial_days": 14,
@@ -49,7 +47,6 @@ TIER_LIMITS = {
         "dcf_valuations": 20,         # per day
         "technical_analysis": 20,     # per day
         "ai_analysis": 10,            # per day
-        "volume_surge_scan": True,
 
         "review_period": "day",
     },
@@ -64,7 +61,6 @@ TIER_LIMITS = {
         "dcf_valuations": 40,         # per day
         "technical_analysis": 40,     # per day
         "ai_analysis": 25,            # per day
-        "volume_surge_scan": True,
 
         "review_period": "day",
         "ad_free": True,
