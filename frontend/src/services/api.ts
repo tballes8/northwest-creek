@@ -266,6 +266,8 @@ export const screenerAPI = {
     axiosInstance.post('/screener/run', criteria),
   getPresets: () =>
     axiosInstance.get('/screener/presets'),
+  getFilterOptions: () =>
+    axiosInstance.get('/screener/filter-options'),
   getSavedScreens: () =>
     axiosInstance.get('/screener/saved'),
   saveScreen: (data: { name: string; criteria: object }) =>

@@ -200,6 +200,8 @@ interface ScreenerFormState {
   excludeEtfs: boolean;
   gapPctMin: string;
   gapPctMax: string;
+  sector: string;
+  industry: string;
 }
 
 interface ScreenerPreset {
@@ -241,6 +243,7 @@ const defaultScreenerForm: ScreenerFormState = {
   exchange: [],
   excludeEtfs: true,
   gapPctMin: '', gapPctMax: '',
+  sector: '', industry: '',
 };
 
 function fmtMarketCap(v: number | null): string {
@@ -302,6 +305,8 @@ function buildScreenerCriteria(
   if (form.squeezeMinBars !== '') c.squeeze_min_bars = parseInt(form.squeezeMinBars, 10);
   if (form.squeezeMaxRatio !== '') c.squeeze_max_ratio = parseFloat(form.squeezeMaxRatio);
   if (form.exchange.length) c.exchange = form.exchange;
+  if (form.sector) c.sector = [form.sector];
+  if (form.industry) c.industry = [form.industry];
   c.exclude_etfs = form.excludeEtfs;
   const gp = nr(form.gapPctMin, form.gapPctMax);
   if (gp) c.gap_percent = gp;
@@ -1363,6 +1368,7 @@ const Stocks: React.FC = () => {
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const [activeSavedScreenId, setActiveSavedScreenId] = useState<string | null>(null);
   const [savedScreens, setSavedScreens] = useState<SavedScreenItem[]>([]);
+  const [filterOptions, setFilterOptions] = useState<{ sectors: string[]; industries_by_sector: Record<string, string[]> }>({ sectors: [], industries_by_sector: {} });
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [saveScreenName, setSaveScreenName] = useState('');
   const [savingScreen, setSavingScreen] = useState(false);
@@ -1377,6 +1383,7 @@ const Stocks: React.FC = () => {
       presetsLoadedRef.current = true;
       screenerAPI.getPresets().then(r => setPresets(r.data.presets)).catch(() => {});
       screenerAPI.getSavedScreens().then(r => setSavedScreens(r.data.screens)).catch(() => {});
+      screenerAPI.getFilterOptions().then(r => setFilterOptions(r.data)).catch(() => {});
     }
   }, [activeTab]);
 
@@ -1438,6 +1445,8 @@ const Stocks: React.FC = () => {
       excludeEtfs: c.exclude_etfs ?? true,
       gapPctMin: c.gap_percent?.min?.toString() ?? '',
       gapPctMax: c.gap_percent?.max?.toString() ?? '',
+      sector: c.sector?.[0] ?? '',
+      industry: c.industry?.[0] ?? '',
     };
     const sb = c.sort_by ?? 'market_cap';
     const sd = c.sort_desc ?? true;
@@ -1477,6 +1486,8 @@ const Stocks: React.FC = () => {
       excludeEtfs: c.exclude_etfs ?? true,
       gapPctMin: c.gap_percent?.min?.toString() ?? '',
       gapPctMax: c.gap_percent?.max?.toString() ?? '',
+      sector: c.sector?.[0] ?? '',
+      industry: c.industry?.[0] ?? '',
     };
     const sb = c.sort_by ?? 'market_cap';
     const sd = c.sort_desc ?? true;
@@ -3034,6 +3045,37 @@ const Stocks: React.FC = () => {
                 <input type="number" placeholder="e.g. 3" value={screenerForm.squeezeFiredWithinDays}
                   onChange={e => setScreenerForm(f => ({ ...f, squeezeFiredWithinDays: e.target.value }))}
                   className={screenerInputCls} />
+              </div>
+
+              {/* Sector */}
+              <div className="mb-3">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Sector</div>
+                <select
+                  value={screenerForm.sector}
+                  onChange={e => setScreenerForm(f => ({ ...f, sector: e.target.value, industry: '' }))}
+                  className={screenerInputCls}
+                >
+                  <option value="">Any sector</option>
+                  {filterOptions.sectors.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Industry — depends on the selected sector */}
+              <div className="mb-3">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Industry</div>
+                <select
+                  value={screenerForm.industry}
+                  onChange={e => setScreenerForm(f => ({ ...f, industry: e.target.value }))}
+                  disabled={!screenerForm.sector}
+                  className={`${screenerInputCls} disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  <option value="">{screenerForm.sector ? 'Any industry' : 'Select a sector first'}</option>
+                  {(filterOptions.industries_by_sector[screenerForm.sector] || []).map(ind => (
+                    <option key={ind} value={ind}>{ind}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Exchange */}

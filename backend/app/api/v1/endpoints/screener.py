@@ -436,6 +436,34 @@ _PRESETS = [
 ]
 
 
+@router.get("/filter-options")
+async def get_filter_options(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Distinct sectors and their industries present in the snapshot universe.
+
+    Drives the screener's Sector / Industry dropdowns so the UI only ever offers
+    values that actually exist in the data — picking one always returns matches.
+    """
+    result = await db.execute(
+        select(StockSnapshot.sector, StockSnapshot.industry)
+        .where(StockSnapshot.sector.isnot(None))
+        .distinct()
+    )
+    by_sector: dict[str, set] = {}
+    for sector, industry in result.all():
+        if not sector:
+            continue
+        bucket = by_sector.setdefault(sector, set())
+        if industry:
+            bucket.add(industry)
+    return {
+        "sectors": sorted(by_sector.keys()),
+        "industries_by_sector": {s: sorted(v) for s, v in by_sector.items()},
+    }
+
+
 @router.get("/presets")
 async def get_presets():
     return {"presets": _PRESETS}
