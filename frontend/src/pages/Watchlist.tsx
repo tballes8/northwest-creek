@@ -66,36 +66,43 @@ const Watchlist: React.FC = () => {
   // Update watchlist with live prices and trigger flash animations
   useEffect(() => {
     if (prices.size === 0) return;
-    
+
     setWatchlist(prevWatchlist => {
       return prevWatchlist.map(item => {
         const livePrice = prices.get(item.ticker);
         if (!livePrice) return item;
-        
-        const previousPrice = previousPricesRef.current.get(item.ticker) || item.price || livePrice.price;
-        
+
+        const previousPrice = previousPricesRef.current.get(item.ticker) ?? item.price ?? livePrice.price;
+
         if (livePrice.price !== previousPrice) {
           const isUp = livePrice.price > previousPrice;
           setPriceFlash(prev => ({ ...prev, [item.ticker]: isUp ? 'green' : 'red' }));
-          
+
           setTimeout(() => {
             setPriceFlash(prev => ({ ...prev, [item.ticker]: null }));
           }, 600);
-          
+
           previousPricesRef.current.set(item.ticker, livePrice.price);
-          
-          const oldPrice = item.price || livePrice.price;
-          const change = livePrice.price - oldPrice;
-          const changePercent = oldPrice ? ((change / oldPrice) * 100) : 0;
-          
-          return {
-            ...item,
-            price: livePrice.price,
-            change: change,
-            change_percent: changePercent
-          };
+
+          // Day change is measured from the previous close (a stable per-day
+          // baseline), NOT the last tick. Using item.price here would make the
+          // value drift to ~0 as the price settles and blank the field out.
+          if (item.previous_close && item.previous_close > 0) {
+            const change = livePrice.price - item.previous_close;
+            const changePercent = (change / item.previous_close) * 100;
+            return {
+              ...item,
+              price: livePrice.price,
+              change: change,
+              change_percent: changePercent
+            };
+          }
+
+          // No previous close available — update the price but keep the last
+          // known day change rather than overwriting it with a bad value.
+          return { ...item, price: livePrice.price };
         }
-        
+
         return item;
       });
     });
@@ -113,24 +120,33 @@ const Watchlist: React.FC = () => {
           { headers: { Authorization: `Bearer ${token}` } }
         );
 
-        const freshPrices: Record<string, number> = {};
+        const freshData: Record<string, any> = {};
         if (Array.isArray(priceResponse.data)) {
           priceResponse.data.forEach((item: any) => {
             if (item.ticker && item.price) {
-              freshPrices[item.ticker] = item.price;
+              freshData[item.ticker] = item;
             }
           });
         }
 
         setWatchlist(prev => prev.map(item => {
-          const freshPrice = freshPrices[item.ticker];
+          const fresh = freshData[item.ticker];
+          if (!fresh) return item;
+          const freshPrice = fresh.price;
           if (freshPrice && freshPrice !== item.price) {
             const isUp = freshPrice > (item.price || 0);
             setPriceFlash(pf => ({ ...pf, [item.ticker]: isUp ? 'green' : 'red' }));
             setTimeout(() => setPriceFlash(pf => ({ ...pf, [item.ticker]: null })), 600);
-            return { ...item, price: freshPrice };
           }
-          return item;
+          // Always refresh day-change fields from the batch quote so the live
+          // baseline (previous_close) stays in sync and the field never goes stale.
+          return {
+            ...item,
+            price: freshPrice,
+            change: fresh.change ?? item.change,
+            change_percent: fresh.change_percent ?? item.change_percent,
+            previous_close: fresh.previous_close ?? item.previous_close,
+          };
         }));
       } catch (err) {
         // Silent fail
@@ -159,26 +175,34 @@ const Watchlist: React.FC = () => {
             { headers: { Authorization: `Bearer ${token}` } }
           );
 
-          const freshPrices: Record<string, number> = {};
+          const freshData: Record<string, any> = {};
           if (Array.isArray(priceResponse.data)) {
             priceResponse.data.forEach((item: any) => {
               if (item.ticker && item.price) {
-                freshPrices[item.ticker] = item.price;
+                freshData[item.ticker] = item;
               }
             });
           }
 
-          // Overlay fresh prices onto watchlist items
+          // Overlay fresh price + day-change baseline onto watchlist items.
+          // previous_close is what the live WebSocket effect uses to compute
+          // day change, so it must be carried through here.
           const updatedItems = items.map((item: WatchlistItem) => {
-            const freshPrice = freshPrices[item.ticker];
-            if (freshPrice) {
-              return { ...item, price: freshPrice };
+            const fresh = freshData[item.ticker];
+            if (fresh) {
+              return {
+                ...item,
+                price: fresh.price,
+                change: fresh.change ?? item.change,
+                change_percent: fresh.change_percent ?? item.change_percent,
+                previous_close: fresh.previous_close ?? item.previous_close,
+              };
             }
             return item;
           });
 
           setWatchlist(updatedItems);
-          console.log(`✅ Refreshed watchlist prices for ${Object.keys(freshPrices).length} tickers`);
+          console.log(`✅ Refreshed watchlist prices for ${Object.keys(freshData).length} tickers`);
         } catch (priceErr) {
           console.warn('⚠️ Could not fetch fresh prices, using cached:', priceErr);
           setWatchlist(items);
@@ -600,11 +624,15 @@ const Watchlist: React.FC = () => {
                       })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className={`text-sm font-semibold ${
-                        stock.change && stock.change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-                      }`}>
-                        {stock.change ? `${stock.change >= 0 ? '+' : ''}$${stock.change.toFixed(2)} (${stock.change_percent?.toFixed(2)}%)` : '-'}
-                      </div>
+                      {stock.change != null && stock.change_percent != null ? (
+                        <div className={`text-sm font-semibold ${
+                          stock.change >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+                        }`}>
+                          {stock.change >= 0 ? '+' : ''}${stock.change.toFixed(2)} ({stock.change_percent.toFixed(2)}%)
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-600 dark:text-gray-400">-</div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       <div className="text-sm text-gray-600 dark:text-gray-400">
