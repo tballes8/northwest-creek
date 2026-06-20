@@ -235,16 +235,23 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
   }, [peers]);
 
   // ── Peer fetching ───────────────────────────────────────────────────────
-  const addPeerRatios = async (tickers: string[]) => {
-    const fresh = tickers
-      .map((t) => t.toUpperCase().trim())
-      .filter((t) => t && t !== ticker.toUpperCase() && !peers.some((p) => p.ticker === t));
-    if (!fresh.length) return;
+  // replace=true (a fresh "Pull peers") swaps the whole set; replace=false
+  // (manual "Add") appends, skipping names already present.
+  const addPeerRatios = async (tickers: string[], replace = false) => {
+    const norm = tickers.map((t) => t.toUpperCase().trim()).filter((t) => t && t !== ticker.toUpperCase());
+    const fresh = replace
+      ? Array.from(new Set(norm))
+      : norm.filter((t) => !peers.some((p) => p.ticker === t));
+    if (!fresh.length) {
+      if (replace) setPeers([]);
+      return;
+    }
     setLoadingPeers(true);
     setError('');
     try {
       const res = await relvalAPI.getPeerRatios(fresh);
-      setPeers((prev) => [...prev, ...(res.data.peers || [])]);
+      const fetched: Peer[] = res.data.peers || [];
+      setPeers((prev) => (replace ? fetched : [...prev, ...fetched]));
     } catch (e: any) {
       setError(e.response?.data?.detail || 'Could not fetch peer ratios.');
     } finally {
@@ -293,7 +300,7 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
         setError('Screener returned no peers for this sector/industry — add peers manually.');
         return;
       }
-      await addPeerRatios(symbols.slice(0, 20));
+      await addPeerRatios(symbols.slice(0, 20), true);
     } catch (e: any) {
       setError(e.response?.data?.detail || 'Could not pull peers from screener.');
     } finally {
