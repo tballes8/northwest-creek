@@ -1268,6 +1268,41 @@ const DCFValuation: React.FC = () => {
                 >
                   📈 Technical Analysis
                 </Link>
+                {/* Cross-check with Relative Valuation — passes the ticker only;
+                    RelVal pulls its own forward estimates, net debt, shares & price. */}
+                <button
+                  onClick={() => {
+                    setTicker(dcfData.ticker);
+                    setActiveTab('relval');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  title="A wide gap between the DCF target and the multiple-based range is itself a signal worth examining."
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium text-sm transition-colors"
+                >
+                  ⚖️ Cross-check with Relative Valuation
+                </button>
+                {/* Trade This — Active/Professional only; placed last so it simply
+                    disappears for Hold ratings without leaving a gap. */}
+                {dcfData.recommendation.rating !== 'Hold' && (() => {
+                  const tier = user?.subscription_tier;
+                  const isTradeEligible = tier === 'active' || tier === 'professional';
+                  return isTradeEligible ? (
+                    <button
+                      onClick={() => setShowTradeModal(true)}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-sm transition-colors"
+                    >
+                      📊 Trade This — Suggest Options Strategy
+                    </button>
+                  ) : (
+                    <button
+                      disabled
+                      title="Available on Active and Professional plans"
+                      className="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 rounded-lg font-medium text-sm cursor-not-allowed"
+                    >
+                      📊 Trade This — Suggest Options Strategy
+                    </button>
+                  );
+                })()}
                 {watchlistMsg && (
                   <span className={`text-sm font-medium ${watchlistMsg.type === 'success' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                     {watchlistMsg.text}
@@ -1329,53 +1364,6 @@ const DCFValuation: React.FC = () => {
               </div>
               <div>
                 <p className="text-gray-700 dark:text-gray-300">{dcfData.recommendation.message}</p>
-              </div>
-
-              {/* Trade This button — Active/Professional only */}
-              {dcfData.recommendation.rating !== 'Hold' && (() => {
-                const isTradeEligible = ['active', 'professional'].includes(user?.subscription_tier || '');
-                return (
-                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
-                    {isTradeEligible ? (
-                      <button
-                        onClick={() => setShowTradeModal(true)}
-                        className="w-full py-2.5 px-4 rounded-lg font-semibold text-sm transition-colors bg-indigo-600 hover:bg-indigo-700 text-white"
-                      >
-                        Trade This — Suggest Options Strategy
-                      </button>
-                    ) : (
-                      <div className="text-center">
-                        <button
-                          disabled
-                          className="w-full py-2.5 px-4 rounded-lg font-semibold text-sm bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 cursor-not-allowed"
-                        >
-                          Trade This — Suggest Options Strategy
-                        </button>
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                          Available on Active and Professional plans — <Link to="/account" className="text-indigo-500 hover:underline">Upgrade</Link>
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* Cross-check with Relative Valuation — passes the ticker only;
-                  RelVal pulls its own forward estimates, net debt, shares & price. */}
-              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
-                <button
-                  onClick={() => {
-                    setTicker(dcfData.ticker);
-                    setActiveTab('relval');
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                  className="w-full py-2.5 px-4 rounded-lg font-semibold text-sm transition-colors bg-purple-600 hover:bg-purple-700 text-white"
-                >
-                  ⚖️ Cross-check with Relative Valuation
-                </button>
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 text-center">
-                  A wide gap between the DCF target and the multiple-based range is itself a signal worth examining.
-                </p>
               </div>
             </div>
 
