@@ -175,7 +175,7 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
     # ── Balance Sheet summary (latest quarter) ────────────────────────
     balance_sheet = {
         "period_end": balance.get("date"),
-        "fiscal_year": balance.get("calendarYear"),
+        "fiscal_year": balance.get("fiscalYear") or balance.get("calendarYear"),
         "fiscal_quarter": balance.get("period"),
         "cash_and_equivalents": balance.get("cashAndCashEquivalents"),
         "short_term_investments": balance.get("shortTermInvestments"),
@@ -233,7 +233,7 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
     for q in income_quarters:
         quarterly_trend.append({
             "period_end": q.get("date"),
-            "fiscal_year": q.get("calendarYear"),
+            "fiscal_year": q.get("fiscalYear") or q.get("calendarYear"),
             "fiscal_quarter": q.get("period"),
             "revenue": q.get("revenue"),
             "net_income": q.get("netIncome"),
@@ -384,8 +384,11 @@ def _build_growth_profile(
 
     def _q_label(q: dict) -> str:
         period = q.get("period", "?")  # FMP uses "Q1", "Q2", etc.
-        year = q.get("calendarYear", "?")
-        return f"{period} {year}"
+        # FMP /stable/ returns the year under "fiscalYear" (older API used "calendarYear").
+        year = q.get("fiscalYear") or q.get("calendarYear")
+        if not year and q.get("date"):
+            year = q["date"][:4]  # "2024-09-30" -> "2024"
+        return f"{period} {year or '?'}"
 
     # ── Revenue trend (up to 12Q) ─────────────────────────────────────
     revenue_trend = []
