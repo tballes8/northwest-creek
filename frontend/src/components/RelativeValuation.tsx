@@ -67,6 +67,39 @@ const median = (vals: (number | null | undefined)[]): number | null => {
   return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
 };
 
+// ── Median hygiene ─────────────────────────────────────────────────────────
+// A negative multiple is not a meaningful comp (negative earnings → negative
+// P/E; negative EBITDA → negative EV/EBITDA) and must never enter a median.
+// A P/E above this ceiling signals a near-zero earnings base and distorts the
+// median the same way a 91× trailing P/E does for the target company.
+const PE_MAX = 100;
+const isPeMeaningful = (v: number | null | undefined): boolean =>
+  v != null && isFinite(v) && v > 0 && v <= PE_MAX;
+const isEveMeaningful = (v: number | null | undefined): boolean =>
+  v != null && isFinite(v) && v > 0;
+const isPsMeaningful = (v: number | null | undefined): boolean =>
+  v != null && isFinite(v) && v > 0;
+// P/E values that are present but disqualified — flagged in the table.
+const isPeExcluded = (v: number | null | undefined): boolean =>
+  v != null && isFinite(v) && !isPeMeaningful(v);
+
+interface MedianResult {
+  value: number | null;
+  used: number; // peers that fed the median
+  total: number; // peers with a present (non-null) value for this multiple
+}
+
+// Median over only the meaningful values, while reporting how many of the
+// present values were used so the UI can disclose any exclusions.
+const medianMeaningful = (
+  vals: (number | null | undefined)[],
+  ok: (v: number | null | undefined) => boolean,
+): MedianResult => {
+  const present = vals.filter((v): v is number => v != null && isFinite(v));
+  const used = present.filter(ok);
+  return { value: median(used), used: used.length, total: present.length };
+};
+
 const numOrNull = (s: string): number | null => {
   if (s.trim() === '') return null;
   const n = Number(s);
@@ -125,6 +158,10 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
   const [peers, setPeers] = useState<Peer[]>([]);
   const [peerInput, setPeerInput] = useState('');
   const [loadingPeers, setLoadingPeers] = useState(false);
+  // Optional market-cap band ($B) for the "Pull peers" screen. Pre-filled to a
+  // band around the target's cap; empty = no user bound (prior behavior).
+  const [capMin, setCapMin] = useState('');
+  const [capMax, setCapMax] = useState('');
 
   // Results.
   const [result, setResult] = useState<RelvalResult | null>(null);
@@ -157,6 +194,19 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
       setSubjectSector(data.sector);
       setSubjectIndustry(data.industry);
       setEstimateYear(data.estimate_year);
+
+      // Pre-fill the peer-pull cap band ($B) around the target's market cap
+      // (price × diluted shares). Leave blank if either isn't available.
+      const price = i.current_price ?? currentPrice ?? null;
+      const shares = i.diluted_shares_m; // millions
+      if (price && shares) {
+        const mcapB = (price * shares) / 1000; // $M / 1000 → $B
+        setCapMin((mcapB * 0.25).toFixed(2));
+        setCapMax((mcapB * 4).toFixed(2));
+      } else {
+        setCapMin('');
+        setCapMax('');
+      }
     } catch (e: any) {
       setError(e.response?.data?.detail || 'Could not load inputs for this ticker.');
     } finally {
@@ -175,9 +225,9 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
   // ── Auto-fill median multiples from the (cut) peer set ──────────────────
   useEffect(() => {
     if (peers.length) {
-      const mp = median(peers.map((p) => p.pe));
-      const ms = median(peers.map((p) => p.ps));
-      const me = median(peers.map((p) => p.ev_ebitda));
+      const mp = medianMeaningful(peers.map((p) => p.pe), isPeMeaningful).value;
+      const ms = medianMeaningful(peers.map((p) => p.ps), isPsMeaningful).value;
+      const me = medianMeaningful(peers.map((p) => p.ev_ebitda), isEveMeaningful).value;
       if (mp != null) setMedianPe(mp.toFixed(2));
       if (ms != null) setMedianPs(ms.toFixed(2));
       if (me != null) setMedianEve(me.toFixed(2));
@@ -218,8 +268,16 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
     setLoadingPeers(true);
     setError('');
     try {
+      // Cap band ($B → raw $). Empty min keeps the prior 300M floor.
+      const minB = numOrNull(capMin);
+      const maxB = numOrNull(capMax);
+      const market_cap: { min: number; max?: number } = {
+        min: minB != null ? minB * 1e9 : 300_000_000,
+      };
+      if (maxB != null) market_cap.max = maxB * 1e9;
+
       const criteria: any = {
-        market_cap: { min: 300_000_000 },
+        market_cap,
         exclude_etfs: true,
         page_size: 25,
         sort_by: 'market_cap',
@@ -245,10 +303,10 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
 
   const removePeer = (t: string) => setPeers((prev) => prev.filter((p) => p.ticker !== t));
 
-  // Live median preview (independent of the editable override fields).
-  const livePe = median(peers.map((p) => p.pe));
-  const livePs = median(peers.map((p) => p.ps));
-  const liveEve = median(peers.map((p) => p.ev_ebitda));
+  // Live median preview (hygiene-filtered; independent of the editable fields).
+  const peMed = medianMeaningful(peers.map((p) => p.pe), isPeMeaningful);
+  const psMed = medianMeaningful(peers.map((p) => p.ps), isPsMeaningful);
+  const eveMed = medianMeaningful(peers.map((p) => p.ev_ebitda), isEveMeaningful);
   // Fundamental-context medians (decision-support only — not valuation inputs).
   const liveGrowth = median(peers.map((p) => p.revenue_growth_yoy));
   const liveMargin = median(peers.map((p) => p.gross_margin));
@@ -440,14 +498,40 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
           above the set median are flagged <span className="text-amber-500">⚡</span>.
         </p>
 
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <button
-            onClick={handlePullFromScreener}
-            disabled={loadingPeers || (!subjectSector && !subjectIndustry)}
-            className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-          >
-            {loadingPeers ? 'Loading…' : `Pull peers (${subjectIndustry || subjectSector || 'n/a'})`}
-          </button>
+        <div className="flex flex-wrap items-end gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handlePullFromScreener}
+              disabled={loadingPeers || (!subjectSector && !subjectIndustry)}
+              className="px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            >
+              {loadingPeers ? 'Loading…' : `Pull peers (${subjectIndustry || subjectSector || 'n/a'})`}
+            </button>
+            <div className="flex flex-col">
+              <label className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">Market cap band ($B, optional)</label>
+              <div className="flex items-center gap-1">
+                <input
+                  className={inputClass + ' !w-20'}
+                  type="number"
+                  step="0.1"
+                  placeholder="min"
+                  value={capMin}
+                  onChange={(e) => setCapMin(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handlePullFromScreener()}
+                />
+                <span className="text-gray-400 text-sm">–</span>
+                <input
+                  className={inputClass + ' !w-20'}
+                  type="number"
+                  step="0.1"
+                  placeholder="max"
+                  value={capMax}
+                  onChange={(e) => setCapMax(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handlePullFromScreener()}
+                />
+              </div>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
             <input
               className={inputClass + ' !w-48'}
@@ -495,7 +579,14 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
                       <td className="py-2 pr-4 font-semibold text-gray-900 dark:text-white">{p.ticker}</td>
                       <td className="py-2 pr-4 text-gray-700 dark:text-gray-300 max-w-[180px] truncate">{p.name || '—'}</td>
                       <td className="py-2 pr-4 text-gray-500 dark:text-gray-400 text-xs max-w-[160px] truncate">{p.industry || '—'}</td>
-                      <td className="py-2 pr-4 text-right tabular-nums text-gray-900 dark:text-white">{fmtMult(p.pe)}</td>
+                      <td className={`py-2 pr-4 text-right tabular-nums ${isPeExcluded(p.pe) ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white'}`}>
+                        <span className="inline-flex items-center gap-1 justify-end">
+                          {isPeExcluded(p.pe) && (
+                            <span title="Excluded from the P/E median — negative or above 100× (near-zero earnings base)" className="text-amber-500">⚠</span>
+                          )}
+                          {fmtMult(p.pe)}
+                        </span>
+                      </td>
                       <td className="py-2 pr-4 text-right tabular-nums text-gray-900 dark:text-white">{fmtMult(p.ps)}</td>
                       <td className="py-2 pr-4 text-right tabular-nums text-gray-900 dark:text-white">{fmtMult(p.ev_ebitda)}</td>
                       <td className="py-2 pr-4 text-right tabular-nums text-gray-900 dark:text-white">
@@ -523,9 +614,24 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
                   <td className="py-2 pr-4 text-gray-900 dark:text-white" colSpan={3}>
                     Median ({peers.length} {peers.length === 1 ? 'peer' : 'peers'})
                   </td>
-                  <td className="py-2 pr-4 text-right tabular-nums text-teal-700 dark:text-teal-300">{fmtMult(livePe)}</td>
-                  <td className="py-2 pr-4 text-right tabular-nums text-teal-700 dark:text-teal-300">{fmtMult(livePs)}</td>
-                  <td className="py-2 pr-4 text-right tabular-nums text-teal-700 dark:text-teal-300">{fmtMult(liveEve)}</td>
+                  <td className="py-2 pr-4 text-right text-teal-700 dark:text-teal-300">
+                    <div className="tabular-nums">{fmtMult(peMed.value)}</div>
+                    {peMed.used < peMed.total && (
+                      <div className="text-[10px] font-normal text-amber-600 dark:text-amber-400">{peMed.used} of {peMed.total}</div>
+                    )}
+                  </td>
+                  <td className="py-2 pr-4 text-right text-teal-700 dark:text-teal-300">
+                    <div className="tabular-nums">{fmtMult(psMed.value)}</div>
+                    {psMed.used < psMed.total && (
+                      <div className="text-[10px] font-normal text-amber-600 dark:text-amber-400">{psMed.used} of {psMed.total}</div>
+                    )}
+                  </td>
+                  <td className="py-2 pr-4 text-right text-teal-700 dark:text-teal-300">
+                    <div className="tabular-nums">{fmtMult(eveMed.value)}</div>
+                    {eveMed.used < eveMed.total && (
+                      <div className="text-[10px] font-normal text-amber-600 dark:text-amber-400">{eveMed.used} of {eveMed.total}</div>
+                    )}
+                  </td>
                   <td className="py-2 pr-4 text-right tabular-nums text-gray-500 dark:text-gray-400">{fmtPct(liveGrowth)}</td>
                   <td className="py-2 pr-4 text-right tabular-nums text-gray-500 dark:text-gray-400">{fmtPct(liveMargin)}</td>
                   <td></td>
