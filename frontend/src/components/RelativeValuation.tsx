@@ -12,6 +12,8 @@ interface Peer {
   pe: number | null;
   ps: number | null;
   ev_ebitda: number | null;
+  revenue_growth_yoy: number | null;
+  gross_margin: number | null;
 }
 
 type SourceTag = 'estimate' | 'actual' | 'live' | null;
@@ -72,6 +74,7 @@ const numOrNull = (s: string): number | null => {
 };
 
 const fmtMult = (v: number | null): string => (v == null ? '—' : `${v.toFixed(1)}×`);
+const fmtPct = (v: number | null): string => (v == null ? '—' : `${v.toFixed(1)}%`);
 const fmtUsd = (v: number | null | undefined): string =>
   v == null ? '—' : `$${v.toFixed(2)}`;
 
@@ -246,6 +249,13 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
   const livePe = median(peers.map((p) => p.pe));
   const livePs = median(peers.map((p) => p.ps));
   const liveEve = median(peers.map((p) => p.ev_ebitda));
+  // Fundamental-context medians (decision-support only — not valuation inputs).
+  const liveGrowth = median(peers.map((p) => p.revenue_growth_yoy));
+  const liveMargin = median(peers.map((p) => p.gross_margin));
+  // A peer is flagged a growth outlier when its growth clearly exceeds the set
+  // median (>1.5×). Visual cue only — the cut stays the user's call.
+  const isGrowthOutlier = (g: number | null): boolean =>
+    g != null && liveGrowth != null && liveGrowth > 0 && g > liveGrowth * 1.5;
 
   // ── Calculate ─────────────────────────────────────────────────────────
   const handleCalculate = async () => {
@@ -424,7 +434,10 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
         <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">
           Pull comps by sector/industry or add them manually, then <strong>remove any bad comps</strong>{' '}
           before the medians are used. Industry tags from the data vendor are imperfect — hand-cutting
-          mis-tagged companies is part of the job.
+          mis-tagged companies is part of the job. The <strong>revenue-growth</strong> and{' '}
+          <strong>gross-margin</strong> columns are context, not inputs: a size-matched name with a very
+          different growth or margin profile is what skews a multiple median. Rows whose growth runs well
+          above the set median are flagged <span className="text-amber-500">⚡</span>.
         </p>
 
         <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -464,29 +477,48 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
                   <th className="py-2 pr-4 text-right">P/E</th>
                   <th className="py-2 pr-4 text-right">P/S</th>
                   <th className="py-2 pr-4 text-right">EV/EBITDA</th>
+                  <th className="py-2 pr-4 text-right">Rev Growth</th>
+                  <th className="py-2 pr-4 text-right">Gross Margin</th>
                   <th className="py-2"></th>
                 </tr>
               </thead>
               <tbody>
-                {peers.map((p) => (
-                  <tr key={p.ticker} className="border-b border-gray-100 dark:border-gray-600/50">
-                    <td className="py-2 pr-4 font-semibold text-gray-900 dark:text-white">{p.ticker}</td>
-                    <td className="py-2 pr-4 text-gray-700 dark:text-gray-300 max-w-[180px] truncate">{p.name || '—'}</td>
-                    <td className="py-2 pr-4 text-gray-500 dark:text-gray-400 text-xs max-w-[160px] truncate">{p.industry || '—'}</td>
-                    <td className="py-2 pr-4 text-right tabular-nums text-gray-900 dark:text-white">{fmtMult(p.pe)}</td>
-                    <td className="py-2 pr-4 text-right tabular-nums text-gray-900 dark:text-white">{fmtMult(p.ps)}</td>
-                    <td className="py-2 pr-4 text-right tabular-nums text-gray-900 dark:text-white">{fmtMult(p.ev_ebitda)}</td>
-                    <td className="py-2 text-right">
-                      <button
-                        onClick={() => removePeer(p.ticker)}
-                        className="text-red-500 hover:text-red-700 font-bold px-2"
-                        title="Remove this comp"
-                      >
-                        ×
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {peers.map((p) => {
+                  const outlier = isGrowthOutlier(p.revenue_growth_yoy);
+                  return (
+                    <tr
+                      key={p.ticker}
+                      className={`border-b border-gray-100 dark:border-gray-600/50 ${
+                        outlier ? 'bg-amber-50 dark:bg-amber-900/20' : ''
+                      }`}
+                    >
+                      <td className="py-2 pr-4 font-semibold text-gray-900 dark:text-white">{p.ticker}</td>
+                      <td className="py-2 pr-4 text-gray-700 dark:text-gray-300 max-w-[180px] truncate">{p.name || '—'}</td>
+                      <td className="py-2 pr-4 text-gray-500 dark:text-gray-400 text-xs max-w-[160px] truncate">{p.industry || '—'}</td>
+                      <td className="py-2 pr-4 text-right tabular-nums text-gray-900 dark:text-white">{fmtMult(p.pe)}</td>
+                      <td className="py-2 pr-4 text-right tabular-nums text-gray-900 dark:text-white">{fmtMult(p.ps)}</td>
+                      <td className="py-2 pr-4 text-right tabular-nums text-gray-900 dark:text-white">{fmtMult(p.ev_ebitda)}</td>
+                      <td className="py-2 pr-4 text-right tabular-nums text-gray-900 dark:text-white">
+                        <span className="inline-flex items-center gap-1 justify-end">
+                          {outlier && (
+                            <span title="Growth well above the peer median — check comparability before keeping" className="text-amber-500">⚡</span>
+                          )}
+                          {fmtPct(p.revenue_growth_yoy)}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-4 text-right tabular-nums text-gray-900 dark:text-white">{fmtPct(p.gross_margin)}</td>
+                      <td className="py-2 text-right">
+                        <button
+                          onClick={() => removePeer(p.ticker)}
+                          className="text-red-500 hover:text-red-700 font-bold px-2"
+                          title="Remove this comp"
+                        >
+                          ×
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
                 <tr className="border-t-2 border-gray-300 dark:border-gray-500 font-semibold bg-gray-50 dark:bg-gray-800/40">
                   <td className="py-2 pr-4 text-gray-900 dark:text-white" colSpan={3}>
                     Median ({peers.length} {peers.length === 1 ? 'peer' : 'peers'})
@@ -494,6 +526,8 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
                   <td className="py-2 pr-4 text-right tabular-nums text-teal-700 dark:text-teal-300">{fmtMult(livePe)}</td>
                   <td className="py-2 pr-4 text-right tabular-nums text-teal-700 dark:text-teal-300">{fmtMult(livePs)}</td>
                   <td className="py-2 pr-4 text-right tabular-nums text-teal-700 dark:text-teal-300">{fmtMult(liveEve)}</td>
+                  <td className="py-2 pr-4 text-right tabular-nums text-gray-500 dark:text-gray-400">{fmtPct(liveGrowth)}</td>
+                  <td className="py-2 pr-4 text-right tabular-nums text-gray-500 dark:text-gray-400">{fmtPct(liveMargin)}</td>
                   <td></td>
                 </tr>
               </tbody>

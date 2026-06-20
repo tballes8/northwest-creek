@@ -45,6 +45,50 @@ def _sum_quarters(quarters: List[dict], field: str) -> Optional[float]:
     return sum(vals)
 
 
+def compute_peer_fundamentals(income_quarters: List[dict]) -> Dict[str, Optional[float]]:
+    """Decision-support context for a peer: TTM YoY revenue growth and gross margin.
+
+    Uses the SAME date-based YoY matching and TTM gross-margin computation as
+    `_derive_dcf_suggestions` / the income-statement summary, so the values shown
+    in the Relative Valuation peer table match the Financials page for the same
+    ticker. Returns a dict with both values (either may be None).
+    """
+    if not isinstance(income_quarters, list):
+        income_quarters = []
+
+    # ── TTM gross margin (4 most-recent quarters) ─────────────────────────
+    ttm = income_quarters[:4]
+    gross_margin_pct = _pct(_sum_quarters(ttm, "grossProfit"), _sum_quarters(ttm, "revenue"))
+
+    # ── YoY revenue growth — date-based matching (tolerant to quarter gaps) ─
+    revenue_growth_yoy = None
+    dated = [q for q in income_quarters if q.get("date") and q.get("revenue")]
+    if len(dated) >= 2:
+        dated_sorted = sorted(dated, key=lambda q: q["date"], reverse=True)
+        recent = dated_sorted[0]
+        recent_rev = recent.get("revenue")
+        try:
+            recent_date = datetime.strptime(recent["date"], "%Y-%m-%d")
+            target_date = recent_date - timedelta(days=365)
+            tolerance = timedelta(days=46)
+            yoy_quarter = next(
+                (q for q in dated_sorted[1:]
+                 if abs(datetime.strptime(q["date"], "%Y-%m-%d") - target_date) <= tolerance),
+                None,
+            )
+            if yoy_quarter:
+                yoy_rev = yoy_quarter.get("revenue")
+                if recent_rev and yoy_rev and yoy_rev > 0:
+                    revenue_growth_yoy = round(((recent_rev - yoy_rev) / yoy_rev) * 100, 2)
+        except (ValueError, TypeError):
+            pass
+
+    return {
+        "revenue_growth_yoy_pct": revenue_growth_yoy,
+        "gross_margin_pct": gross_margin_pct,
+    }
+
+
 async def _fetch(path: str, params: dict) -> Any:
     """Fetch a single FMP endpoint, return parsed JSON or empty list on failure."""
     full_params = {"apikey": API_KEY, **params}

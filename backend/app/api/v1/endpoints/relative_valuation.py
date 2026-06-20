@@ -26,7 +26,7 @@ from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.db.models import User, FeatureUsage
 from app.services.market_data import market_data_service
-from app.services.financials_service import get_company_financials
+from app.services.financials_service import get_company_financials, compute_peer_fundamentals
 from app.services.fmp_client import get_fmp_client, API_KEY
 from app.core.tier_limits import get_tier_limit, get_review_period, get_upgrade_tier
 
@@ -275,12 +275,16 @@ async def _fetch_peer_ratio(sym: str) -> Dict[str, Any]:
         "pe": None,
         "ps": None,
         "ev_ebitda": None,
+        # Fundamental context — helps the user judge comparability before cutting.
+        "revenue_growth_yoy": None,
+        "gross_margin": None,
     }
     try:
         client = get_fmp_client()
-        ratios_resp, profile_resp = await asyncio.gather(
+        ratios_resp, profile_resp, income_resp = await asyncio.gather(
             client.get("ratios-ttm", params={"symbol": sym, "apikey": API_KEY}),
             client.get("profile", params={"symbol": sym, "apikey": API_KEY}),
+            client.get("income-statement", params={"symbol": sym, "period": "quarter", "limit": 6, "apikey": API_KEY}),
             return_exceptions=True,
         )
 
@@ -301,6 +305,13 @@ async def _fetch_peer_ratio(sym: str) -> Dict[str, Any]:
                 row["name"] = p.get("companyName")
                 row["sector"] = p.get("sector")
                 row["industry"] = p.get("industry")
+
+        if not isinstance(income_resp, BaseException):
+            income_resp.raise_for_status()
+            iq = income_resp.json()
+            fundamentals = compute_peer_fundamentals(iq if isinstance(iq, list) else [])
+            row["revenue_growth_yoy"] = fundamentals["revenue_growth_yoy_pct"]
+            row["gross_margin"] = fundamentals["gross_margin_pct"]
     except Exception as e:
         print(f"⚠️ Peer ratio fetch failed for {sym}: {_safe_error(e)}")
     return row
