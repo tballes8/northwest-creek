@@ -1359,6 +1359,24 @@ const DCFValuation: React.FC = () => {
                   </div>
                 );
               })()}
+
+              {/* Cross-check with Relative Valuation — passes the ticker only;
+                  RelVal pulls its own forward estimates, net debt, shares & price. */}
+              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+                <button
+                  onClick={() => {
+                    setTicker(dcfData.ticker);
+                    setActiveTab('relval');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="w-full py-2.5 px-4 rounded-lg font-semibold text-sm transition-colors bg-purple-600 hover:bg-purple-700 text-white"
+                >
+                  ⚖️ Cross-check with Relative Valuation
+                </button>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 text-center">
+                  A wide gap between the DCF target and the multiple-based range is itself a signal worth examining.
+                </p>
+              </div>
             </div>
 
             {/* FMP Benchmark Comparison */}
