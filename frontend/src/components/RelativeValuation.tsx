@@ -9,6 +9,7 @@ interface Peer {
   name: string | null;
   sector: string | null;
   industry: string | null;
+  market_cap: number | null;
   pe: number | null;
   ps: number | null;
   ev_ebitda: number | null;
@@ -16,13 +17,29 @@ interface Peer {
   gross_margin: number | null;
 }
 
-type SourceTag = 'estimate' | 'actual' | 'live' | null;
+type SourceTag = 'estimate' | 'actual' | 'live' | 'derived' | null;
+
+interface RelvalReference {
+  revenue_ttm_b: number | null;
+  ebitda_ttm_b: number | null;
+  ebitda_margin_pct: number | null;
+  net_income_ttm_b: number | null;
+  diluted_eps_ttm: number | null;
+  gross_margin_pct: number | null;
+  operating_margin_pct: number | null;
+  total_debt_b: number | null;
+  cash_b: number | null;
+  forward_revenue_avg: number | null;
+  forward_eps_avg: number | null;
+  estimate_year: number | null;
+}
 
 interface RelvalInputs {
   ticker: string;
   company_name: string;
   sector: string | null;
   industry: string | null;
+  market_cap: number | null;
   estimate_year: number | null;
   inputs: {
     forward_eps: number | null;
@@ -34,6 +51,7 @@ interface RelvalInputs {
   };
   sources: Record<string, SourceTag>;
   trailing_pe: number | null;
+  reference?: RelvalReference | null;
 }
 
 interface RelvalResult {
@@ -108,12 +126,21 @@ const numOrNull = (s: string): number | null => {
 
 const fmtMult = (v: number | null): string => (v == null ? '—' : `${v.toFixed(1)}×`);
 const fmtPct = (v: number | null): string => (v == null ? '—' : `${v.toFixed(1)}%`);
+const fmtMcap = (v: number | null): string => {
+  if (v == null) return '—';
+  if (v >= 1e12) return `$${(v / 1e12).toFixed(2)}T`;
+  if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(0)}M`;
+  return `$${v.toFixed(0)}`;
+};
 const fmtUsd = (v: number | null | undefined): string =>
   v == null ? '—' : `$${v.toFixed(2)}`;
 
 const SourceBadge: React.FC<{ src: SourceTag }> = ({ src }) => {
   if (src === 'estimate')
     return <span className="ml-2 text-[10px] font-medium text-orange-600 dark:text-orange-400">⚠ Estimate</span>;
+  if (src === 'derived')
+    return <span className="ml-2 text-[10px] font-medium text-blue-600 dark:text-blue-400" title="Derived from forward revenue × TTM EBITDA margin (no analyst EBITDA consensus available)">≈ Derived</span>;
   if (src === 'actual')
     return <span className="ml-2 text-[10px] font-medium text-green-600 dark:text-green-400">✓ Actual</span>;
   if (src === 'live')
@@ -142,10 +169,13 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
     current_price: '',
   });
   const [sources, setSources] = useState<Record<string, SourceTag>>({});
+  const [reference, setReference] = useState<RelvalReference | null>(null);
+  const [showFinancials, setShowFinancials] = useState(false);
   const [trailingPe, setTrailingPe] = useState<number | null>(null);
   const [companyName, setCompanyName] = useState('');
   const [subjectSector, setSubjectSector] = useState<string | null>(null);
   const [subjectIndustry, setSubjectIndustry] = useState<string | null>(null);
+  const [subjectMarketCap, setSubjectMarketCap] = useState<number | null>(null);
   const [estimateYear, setEstimateYear] = useState<number | null>(null);
   const [loadingInputs, setLoadingInputs] = useState(false);
 
@@ -189,10 +219,12 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
           i.current_price != null ? String(i.current_price) : currentPrice != null ? String(currentPrice) : '',
       });
       setSources(data.sources || {});
+      setReference(data.reference || null);
       setTrailingPe(data.trailing_pe);
       setCompanyName(data.company_name || ticker);
       setSubjectSector(data.sector);
       setSubjectIndustry(data.industry);
+      setSubjectMarketCap(data.market_cap ?? null);
       setEstimateYear(data.estimate_year);
 
       // Pre-fill the peer-pull cap band ($B) around the target's market cap
@@ -315,6 +347,7 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
   const psMed = medianMeaningful(peers.map((p) => p.ps), isPsMeaningful);
   const eveMed = medianMeaningful(peers.map((p) => p.ev_ebitda), isEveMeaningful);
   // Fundamental-context medians (decision-support only — not valuation inputs).
+  const liveMcap = median(peers.map((p) => p.market_cap));
   const liveGrowth = median(peers.map((p) => p.revenue_growth_yoy));
   const liveMargin = median(peers.map((p) => p.gross_margin));
   // A peer is flagged a growth outlier when its growth clearly exceeds the set
@@ -395,31 +428,63 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
       <div className="bg-white dark:bg-gray-700 rounded-xl shadow-md p-6">
         <h2 className="text-xl font-bold text-gray-900 dark:text-white">
           Relative Valuation{ticker ? ` — ${companyName || ticker}` : ''}
+          {ticker && subjectMarketCap != null && (
+            <span className="ml-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+              · {fmtMcap(subjectMarketCap)} market cap
+            </span>
+          )}
         </h2>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
           Applies peer-<strong>median</strong> multiples to forward estimates across three methods
           (P/E, P/S, EV/EBITDA) to produce a target-price <strong>range</strong>. The spread between
           methods — not any single number — is the point.
         </p>
-        {onTickerChange && (
-          <div className="flex gap-2 mt-4 max-w-sm">
-            <input
-              type="text"
-              value={tickerInput}
-              onChange={(e) => setTickerInput(e.target.value.toUpperCase())}
-              onKeyDown={(e) => e.key === 'Enter' && submitTicker()}
-              placeholder="e.g., AAPL"
-              className={inputClass}
-            />
+        <div className="flex flex-wrap items-center gap-2 mt-4">
+          {onTickerChange && (
+            <div className="flex gap-2 max-w-sm">
+              <input
+                type="text"
+                value={tickerInput}
+                onChange={(e) => setTickerInput(e.target.value.toUpperCase())}
+                onKeyDown={(e) => e.key === 'Enter' && submitTicker()}
+                placeholder="e.g., AAPL"
+                className={inputClass}
+              />
+              <button
+                onClick={submitTicker}
+                className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium whitespace-nowrap"
+              >
+                Load
+              </button>
+            </div>
+          )}
+          {ticker && reference && (
             <button
-              onClick={submitTicker}
-              className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium whitespace-nowrap"
+              onClick={() => setShowFinancials(true)}
+              className="px-4 py-2 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 rounded-lg text-sm font-medium whitespace-nowrap"
+              title="View the source financials behind these inputs and copy any value"
             >
-              Load
+              📋 Source financials
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
+
+      {showFinancials && reference && (
+        <SourceFinancialsModal
+          ticker={ticker}
+          companyName={companyName}
+          reference={reference}
+          forward={{
+            eps: form.forward_eps,
+            revenue_b: form.forward_revenue_b,
+            ebitda_b: form.forward_ebitda_b,
+            net_debt_b: form.net_debt_b,
+            shares_m: form.diluted_shares_m,
+          }}
+          onClose={() => setShowFinancials(false)}
+        />
+      )}
 
       {!ticker && (
         <div className="bg-white dark:bg-gray-700 rounded-xl shadow-md p-6 text-sm text-gray-500 dark:text-gray-400">
@@ -565,6 +630,7 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
                   <th className="py-2 pr-4">Ticker</th>
                   <th className="py-2 pr-4">Name</th>
                   <th className="py-2 pr-4">Industry</th>
+                  <th className="py-2 pr-4 text-right">Mkt Cap</th>
                   <th className="py-2 pr-4 text-right">P/E</th>
                   <th className="py-2 pr-4 text-right">P/S</th>
                   <th className="py-2 pr-4 text-right">EV/EBITDA</th>
@@ -586,6 +652,7 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
                       <td className="py-2 pr-4 font-semibold text-gray-900 dark:text-white">{p.ticker}</td>
                       <td className="py-2 pr-4 text-gray-700 dark:text-gray-300 max-w-[180px] truncate">{p.name || '—'}</td>
                       <td className="py-2 pr-4 text-gray-500 dark:text-gray-400 text-xs max-w-[160px] truncate">{p.industry || '—'}</td>
+                      <td className="py-2 pr-4 text-right tabular-nums text-gray-900 dark:text-white">{fmtMcap(p.market_cap)}</td>
                       <td className={`py-2 pr-4 text-right tabular-nums ${isPeExcluded(p.pe) ? 'text-amber-600 dark:text-amber-400' : 'text-gray-900 dark:text-white'}`}>
                         <span className="inline-flex items-center gap-1 justify-end">
                           {isPeExcluded(p.pe) && (
@@ -621,6 +688,7 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
                   <td className="py-2 pr-4 text-gray-900 dark:text-white" colSpan={3}>
                     Median ({peers.length} {peers.length === 1 ? 'peer' : 'peers'})
                   </td>
+                  <td className="py-2 pr-4 text-right tabular-nums text-gray-500 dark:text-gray-400">{fmtMcap(liveMcap)}</td>
                   <td className="py-2 pr-4 text-right text-teal-700 dark:text-teal-300">
                     <div className="tabular-nums">{fmtMult(peMed.value)}</div>
                     {peMed.used < peMed.total && (
@@ -852,6 +920,104 @@ const RelvalResults: React.FC<{ result: RelvalResult }> = ({ result }) => {
       {/* Disclaimer */}
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-4 text-sm text-blue-800 dark:text-blue-300">
         <strong>This is a valuation range, not a price target.</strong> {result.disclaimer}
+      </div>
+    </div>
+  );
+};
+
+// ─── Source-financials popup ───────────────────────────────────────────────
+interface SourceFinancialsModalProps {
+  ticker: string;
+  companyName: string;
+  reference: RelvalReference;
+  forward: { eps: string; revenue_b: string; ebitda_b: string; net_debt_b: string; shares_m: string };
+  onClose: () => void;
+}
+
+const SourceFinancialsModal: React.FC<SourceFinancialsModalProps> = ({
+  ticker,
+  companyName,
+  reference,
+  forward,
+  onClose,
+}) => {
+  const [copied, setCopied] = useState<string | null>(null);
+  const copy = (text: string | null, key: string) => {
+    if (!text) return;
+    navigator.clipboard?.writeText(text)?.then(() => {
+      setCopied(key);
+      setTimeout(() => setCopied(null), 1200);
+    }).catch(() => {});
+  };
+
+  const usd = (v: number | null, suf = 'B') => (v == null ? '—' : `$${v.toFixed(2)}${suf}`);
+  const pct = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)}%`);
+  const cstr = (v: number | null) => (v == null ? null : String(v));
+  const fstr = (s: string) => (s === '' ? null : s);
+  const fdisp = (s: string, pre = '', suf = '') => (s === '' ? '—' : `${pre}${s}${suf}`);
+
+  const row = (label: string, display: string, copyText: string | null, k: string) => (
+    <div className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-600/50">
+      <span className="text-sm text-gray-600 dark:text-gray-300">{label}</span>
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-semibold tabular-nums text-gray-900 dark:text-white">{display}</span>
+        {copyText ? (
+          <button
+            onClick={() => copy(copyText, k)}
+            title="Copy value"
+            className="text-gray-400 hover:text-purple-500 text-xs w-5 text-center"
+          >
+            {copied === k ? '✓' : '⧉'}
+          </button>
+        ) : (
+          <span className="inline-block w-5" />
+        )}
+      </div>
+    </div>
+  );
+
+  const heading = (text: string) => (
+    <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mt-4 mb-1">{text}</h4>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl border dark:border-gray-600 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-6 py-4 border-b dark:border-gray-600">
+          <div>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Source financials: {ticker}</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{companyName}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl leading-none">&times;</button>
+        </div>
+        <div className="px-6 py-4">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+            The figures behind the auto-filled inputs. Click ⧉ to copy a value, then paste it into a field to override.
+          </p>
+
+          {heading(`Forward estimates${reference.estimate_year ? ` (FY${reference.estimate_year})` : ''}`)}
+          {row('Forward EPS', fdisp(forward.eps), fstr(forward.eps), 'feps')}
+          {row('Forward Revenue', fdisp(forward.revenue_b, '$', 'B'), fstr(forward.revenue_b), 'frev')}
+          {row('Forward EBITDA', fdisp(forward.ebitda_b, '$', 'B'), fstr(forward.ebitda_b), 'febitda')}
+
+          {heading('TTM actuals')}
+          {row('Revenue (TTM)', usd(reference.revenue_ttm_b), cstr(reference.revenue_ttm_b), 'rev')}
+          {row('EBITDA (TTM)', usd(reference.ebitda_ttm_b), cstr(reference.ebitda_ttm_b), 'ebitda')}
+          {row('EBITDA margin', pct(reference.ebitda_margin_pct), cstr(reference.ebitda_margin_pct), 'ebm')}
+          {row('Net income (TTM)', usd(reference.net_income_ttm_b), cstr(reference.net_income_ttm_b), 'ni')}
+          {row('Diluted EPS (TTM)', reference.diluted_eps_ttm == null ? '—' : `$${reference.diluted_eps_ttm.toFixed(2)}`, cstr(reference.diluted_eps_ttm), 'deps')}
+          {row('Gross margin', pct(reference.gross_margin_pct), cstr(reference.gross_margin_pct), 'gm')}
+          {row('Operating margin', pct(reference.operating_margin_pct), cstr(reference.operating_margin_pct), 'om')}
+
+          {heading('Balance sheet')}
+          {row('Net debt', fdisp(forward.net_debt_b, '$', 'B'), fstr(forward.net_debt_b), 'nd')}
+          {row('Total debt', usd(reference.total_debt_b), cstr(reference.total_debt_b), 'td')}
+          {row('Cash & equivalents', usd(reference.cash_b), cstr(reference.cash_b), 'cash')}
+          {row('Diluted shares', fdisp(forward.shares_m, '', 'M'), fstr(forward.shares_m), 'sh')}
+        </div>
       </div>
     </div>
   );

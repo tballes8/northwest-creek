@@ -207,6 +207,20 @@ async def get_relval_inputs(
         fwd_rev = estimates.get("forward_revenue")
         fwd_ebitda = estimates.get("forward_ebitda")
 
+        # TTM actuals (raw $) used for reference + the forward-EBITDA fallback.
+        ttm_revenue = income.get("revenue")
+        ttm_ebitda = income.get("ebitda")
+        ttm_ebitda_margin = (
+            ttm_ebitda / ttm_revenue if ttm_ebitda is not None and ttm_revenue else None
+        )
+
+        # Forward EBITDA: prefer analyst consensus; otherwise derive it from
+        # forward revenue × the TTM EBITDA margin so the field still pre-fills.
+        fwd_ebitda_source = "estimate" if fwd_ebitda is not None else None
+        if fwd_ebitda is None and fwd_rev is not None and ttm_ebitda_margin is not None:
+            fwd_ebitda = fwd_rev * ttm_ebitda_margin
+            fwd_ebitda_source = "derived"
+
         # Net debt (in $B). Prefer the explicit net_debt field, else total_debt - cash.
         net_debt = balance.get("net_debt")
         if net_debt is None:
@@ -228,6 +242,7 @@ async def get_relval_inputs(
             "company_name": (company or {}).get("name") or company_name,
             "sector": (company or {}).get("sector"),
             "industry": (company or {}).get("industry"),
+            "market_cap": (company or {}).get("market_cap"),
             "estimate_year": estimates.get("estimate_year"),
             "inputs": {
                 "forward_eps": round(fwd_eps, 4) if fwd_eps is not None else None,
@@ -240,12 +255,27 @@ async def get_relval_inputs(
             "sources": {
                 "forward_eps": "estimate" if fwd_eps is not None else None,
                 "forward_revenue_b": "estimate" if fwd_rev is not None else None,
-                "forward_ebitda_b": "estimate" if fwd_ebitda is not None else None,
+                "forward_ebitda_b": fwd_ebitda_source,
                 "net_debt_b": "actual" if net_debt is not None else None,
                 "diluted_shares_m": "actual" if diluted_shares is not None else None,
                 "current_price": "live" if current_price else None,
             },
             "trailing_pe": ratios.get("pe_ratio"),
+            # Source figures for the "Source financials" popup (raw $ → $B/$M).
+            "reference": {
+                "revenue_ttm_b": _to_b(ttm_revenue),
+                "ebitda_ttm_b": _to_b(ttm_ebitda),
+                "ebitda_margin_pct": round(ttm_ebitda_margin * 100, 1) if ttm_ebitda_margin is not None else None,
+                "net_income_ttm_b": _to_b(income.get("net_income")),
+                "diluted_eps_ttm": income.get("diluted_eps"),
+                "gross_margin_pct": income.get("gross_margin_pct"),
+                "operating_margin_pct": income.get("operating_margin_pct"),
+                "total_debt_b": _to_b(balance.get("total_debt")),
+                "cash_b": _to_b(balance.get("cash_and_equivalents")),
+                "forward_revenue_avg": fwd_rev,
+                "forward_eps_avg": fwd_eps,
+                "estimate_year": estimates.get("estimate_year"),
+            },
         }
 
     except Exception as e:
@@ -272,6 +302,7 @@ async def _fetch_peer_ratio(sym: str) -> Dict[str, Any]:
         "name": None,
         "sector": None,
         "industry": None,
+        "market_cap": None,
         "pe": None,
         "ps": None,
         "ev_ebitda": None,
@@ -305,6 +336,7 @@ async def _fetch_peer_ratio(sym: str) -> Dict[str, Any]:
                 row["name"] = p.get("companyName")
                 row["sector"] = p.get("sector")
                 row["industry"] = p.get("industry")
+                row["market_cap"] = p.get("marketCap") or p.get("mktCap")
 
         if not isinstance(income_resp, BaseException):
             income_resp.raise_for_status()
