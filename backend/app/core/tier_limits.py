@@ -15,6 +15,7 @@ TIER_LIMITS = {
         "saved_screens": 0,
         "stock_reviews": 5,           # per week
         "dcf_valuations": 5,          # per week
+        "relval_valuations": 0,       # not available (below RELVAL_MIN_TIER)
         "technical_analysis": 5,      # per week
         "ai_analysis": 0,             # not available
 
@@ -30,6 +31,7 @@ TIER_LIMITS = {
         "saved_screens": 0,
         "stock_reviews": 15,          # per week
         "dcf_valuations": 15,         # per week
+        "relval_valuations": 15,      # per week
         "technical_analysis": 15,     # per week
         "ai_analysis": 5,             # per week
 
@@ -45,6 +47,7 @@ TIER_LIMITS = {
         "saved_screens": 15,
         "stock_reviews": 20,          # per day
         "dcf_valuations": 20,         # per day
+        "relval_valuations": 20,      # per day
         "technical_analysis": 20,     # per day
         "ai_analysis": 10,            # per day
 
@@ -59,6 +62,7 @@ TIER_LIMITS = {
         "saved_screens": 50,
         "stock_reviews": 40,          # per day
         "dcf_valuations": 40,         # per day
+        "relval_valuations": 40,      # per day
         "technical_analysis": 40,     # per day
         "ai_analysis": 25,            # per day
 

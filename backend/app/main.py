@@ -8,7 +8,7 @@ from app.api.v1.endpoints import (
     stocks, watchlist, technical_analysis, stripe_payments,
     intraday, live_prices, financials, phone, technical_alerts,
     portfolio_analysis, stock_analysis, screener, market,
-    sector_rotation,
+    sector_rotation, relative_valuation,
 )
 from app.api.v1.endpoints.content import router as content_router
 from app.api.v1.endpoints.waitlist import router as waitlist_router
@@ -146,6 +146,7 @@ app.include_router(portfolio.router, prefix=f"/api/{settings.API_VERSION}/portfo
 app.include_router(alerts.router, prefix=f"/api/{settings.API_VERSION}/alerts", tags=["alerts"])
 app.include_router(technical_analysis.router, prefix="/api/v1/technical-analysis", tags=["Technical Analysis"])
 app.include_router(dcf_valuation.router, prefix="/api/v1/dcf", tags=["DCF Valuation"])
+app.include_router(relative_valuation.router, prefix="/api/v1/relval", tags=["Relative Valuation"])
 app.include_router(stripe_payments.router, prefix="/api/v1/stripe", tags=["Stripe"])
 app.include_router(intraday.router, prefix="/api/v1/intraday", tags=["Intraday"])
 app.include_router(live_prices.router, prefix="/api/v1/live-prices", tags=["Live Prices"])

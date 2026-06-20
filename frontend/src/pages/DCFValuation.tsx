@@ -5,6 +5,7 @@ import { User } from '../types';
 import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
 import UpgradeRequired from '../components/UpgradeRequired';
+import RelativeValuation from '../components/RelativeValuation';
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid,
@@ -299,6 +300,7 @@ const DCFValuation: React.FC = () => {
   const [terminalGrowth, setTerminalGrowth] = useState(2.5);
   const [discountRate, setDiscountRate] = useState(10);
   const [projectionYears, setProjectionYears] = useState(5);
+  const [activeTab, setActiveTab] = useState<'dcf' | 'relval'>('dcf');
   const [loading, setLoading] = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [dcfData, setDcfData] = useState<DCFData | null>(null);
@@ -637,6 +639,28 @@ const DCFValuation: React.FC = () => {
 
       {/* Main Content */}
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Valuation method tabs */}
+        <div className="flex gap-1 mb-6 border-b border-gray-300 dark:border-gray-600">
+          {([
+            { id: 'dcf', label: 'DCF Model' },
+            { id: 'relval', label: 'Relative Valuation' },
+          ] as const).map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setActiveTab(t.id)}
+              className={`px-5 py-2.5 text-sm font-semibold rounded-t-lg transition-colors -mb-px border-b-2 ${
+                activeTab === t.id
+                  ? 'border-purple-600 text-purple-700 dark:text-purple-300'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'dcf' && (
+        <>
         {/* Warrant Warning Box */}
         {isWarrant && (
           <div className="bg-yellow-50 dark:bg-yellow-900/30 border-2 border-yellow-500 dark:border-yellow-600 rounded-lg p-6 mb-6">
@@ -1572,6 +1596,17 @@ const DCFValuation: React.FC = () => {
               </div>
             </div>
           </div>
+        )}
+        </>
+        )}
+
+        {activeTab === 'relval' && (
+          <RelativeValuation
+            ticker={ticker}
+            currentPrice={suggestions?.current_price ?? dcfData?.current_price ?? null}
+            user={user}
+            onTickerChange={(t) => handleTickerChange(t)}
+          />
         )}
       </div>
       <BackToTop />

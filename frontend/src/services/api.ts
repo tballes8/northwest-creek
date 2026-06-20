@@ -197,6 +197,29 @@ export const dcfAPI = {
     axiosInstance.get(`/dcf/calculate/${ticker}`, { params }),
 };
 
+// Relative Valuation API
+export const relvalAPI = {
+  getInputs: (ticker: string) =>
+    axiosInstance.get(`/relval/inputs/${ticker}`),
+
+  getPeerRatios: (tickers: string[]) =>
+    axiosInstance.post('/relval/peer-ratios', { tickers }),
+
+  calculate: (payload: {
+    fwd_eps: number;
+    fwd_revenue_b: number;
+    fwd_ebitda_b: number;
+    net_debt_b: number;
+    diluted_shares_m: number;
+    current_price?: number | null;
+    median_pe: number;
+    median_ps: number;
+    median_ev_ebitda: number;
+    trailing_pe?: number | null;
+  }) =>
+    axiosInstance.post('/relval/calculate', payload),
+};
+
 // Technical Analysis API
 export const technicalAPI = {
   analyze: (ticker: string) =>

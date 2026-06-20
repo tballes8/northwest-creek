@@ -183,6 +183,17 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
         "total_assets": balance.get("totalAssets"),
         "total_current_liabilities": balance.get("totalCurrentLiabilities"),
         "long_term_debt": balance.get("longTermDebt"),
+        "total_debt": balance.get("totalDebt"),
+        "net_debt": (
+            balance.get("netDebt")
+            if balance.get("netDebt") is not None
+            else (
+                balance.get("totalDebt") - balance.get("cashAndCashEquivalents")
+                if balance.get("totalDebt") is not None
+                and balance.get("cashAndCashEquivalents") is not None
+                else None
+            )
+        ),
         "total_liabilities": balance.get("totalLiabilities"),
         "total_equity": balance.get("totalStockholdersEquity"),
         "retained_earnings": balance.get("retainedEarnings"),
