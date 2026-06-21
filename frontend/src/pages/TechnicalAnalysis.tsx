@@ -1584,9 +1584,10 @@ const TechnicalAnalysis: React.FC = () => {
             <div id="chart-bollinger" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Bollinger Bands &amp; Volume</h3>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    📊 <strong>How to read:</strong> Green dashed line = Lower Bollinger Band (potential buy zone), 
-                    Red dashed line = Upper Bollinger Band (potential sell zone). 
-                    The middle band (not shown) is the 20-day SMA — price tends to revert toward it. 
+                    📊 <strong>How to read:</strong> Green dashed line = Lower Bollinger Band,
+                    Red dashed line = Upper Bollinger Band; the bands widen and narrow with volatility.
+                    The middle band (not shown) is the 20-day SMA — in a range price tends to revert toward it,
+                    but in a trend price can ride the upper or lower band, so a band touch isn't a buy or sell on its own.
                     Volume bars on the right axis show trading activity.
                 </p>
                 {isWarrant && (
@@ -1734,8 +1735,9 @@ const TechnicalAnalysis: React.FC = () => {
                     <strong>Golden Cross &amp; Death Cross:</strong> When the 20-day SMA crosses <em>above</em> the 50-day SMA, 
                     it forms a <strong className="text-green-500">Golden Cross</strong> — a bullish signal indicating short-term momentum 
                     is outpacing the medium-term trend. When the 20-day crosses <em>below</em> the 50-day, 
-                    it forms a <strong className="text-red-500">Death Cross</strong> — a bearish signal. 
-                    Look for the cross, then confirm with volume and RSI before acting.
+                    it forms a <strong className="text-red-500">Death Cross</strong> — a bearish signal.
+                    Because both lines are built from past prices, these crosses lag the move and whipsaw in choppy markets —
+                    look for the cross, then confirm with volume and RSI before acting.
                 </p>
                 {isWarrant && (
                   <p className="text-sm text-orange-600 dark:text-orange-400 mb-4 font-medium">
@@ -1930,7 +1932,7 @@ const TechnicalAnalysis: React.FC = () => {
                 {/* OBV Chart */}
                 <div id="chart-obv" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">On-Balance Volume (OBV)</h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">OBV tracks cumulative buying and selling pressure by adding volume on up days and subtracting on down days. A rising OBV confirms an uptrend is supported by strong volume. When OBV diverges from price — such as price rising while OBV falls — it often signals an impending trend reversal.</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">OBV tracks cumulative buying and selling pressure by adding volume on up days and subtracting on down days. It's a confirmation tool, not a trigger: a rising OBV supports an uptrend, and a divergence (price rising while OBV falls) can warn the move is weakening — but divergences can persist for a long time before price turns, if it turns at all.</p>
                   <div style={{ height: '250px' }}>
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
@@ -1972,7 +1974,7 @@ const TechnicalAnalysis: React.FC = () => {
                 <div id="chart-stochastic" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Stochastic Oscillator</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    The Stochastic Oscillator compares a stock's closing price to its price range over a set period. Readings above 80 indicate overbought conditions where a pullback may occur, while readings below 20 suggest oversold conditions where a bounce is likely. Crossovers between the %K and %D lines generate buy and sell signals.
+                    The Stochastic Oscillator compares the closing price to its recent high–low range. In a ranging market, readings above 80 (overbought) or below 20 (oversold) and %K/%D crossovers can flag reversals — but in a strong trend it can stay pinned in the extreme zone while price keeps moving, so an extreme reading isn't a trade on its own. Use it for context and divergences, confirmed by the trend.
                   </p>
                   <div style={{ height: '250px' }}>
                     <Line data={{
@@ -1990,7 +1992,7 @@ const TechnicalAnalysis: React.FC = () => {
                 <div id="chart-adx" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ADX (Average Directional Index)</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    ADX measures trend strength regardless of direction — values above 25 indicate a strong trend worth trading, while values below 20 suggest a weak or sideways market. The +DI and -DI lines show direction: when +DI is above -DI the trend is bullish, and vice versa. Together they help determine whether to use trend-following or range-bound strategies.
+                    ADX measures trend strength, not direction — above 25 signals a strong trend, below 20 a weak or sideways market. Direction comes from the separate +DI/-DI lines (+DI above -DI is bullish, and vice versa). ADX lags and only tells you whether a trend exists, never whether to buy or sell, so pair it with a direction read before acting.
                   </p>
                   <div style={{ height: '250px' }}>
                     <Line data={{
@@ -2008,7 +2010,7 @@ const TechnicalAnalysis: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div id="chart-cci" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                     <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">CCI (Commodity Channel Index)</h4>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">CCI measures how far the current price deviates from its statistical average. Readings above +100 indicate overbought conditions and potential for a pullback, while readings below -100 signal oversold conditions and a possible bounce. It is useful for identifying cyclical trends and price extremes across any asset class.</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">CCI measures how far price has moved from its recent average. In a range, readings above +100 or below −100 mark overbought/oversold extremes that may snap back — but CCI is unbounded and can stay extended through a strong trend, so an extreme reading is context, not a buy or sell signal on its own.</p>
                     <div style={{ height: '200px' }}>
                       <Line data={{
                         labels: analysisData.chart_data.map(d => d.date),
@@ -2022,7 +2024,7 @@ const TechnicalAnalysis: React.FC = () => {
                   </div>
                   <div id="chart-roc" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                     <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ROC (Rate of Change)</h4>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">ROC measures the percentage change in price over a specific period, making it useful for identifying overbought or oversold conditions as well as trend reversals. A rising ROC above zero confirms bullish momentum, while a falling ROC below zero signals bearish pressure. Extreme readings often precede price corrections.</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">ROC measures the percentage change in price over a set period: above zero is bullish momentum, below zero is bearish. Extreme readings can precede a pullback, but momentum can stay elevated for a long time in a strong trend, so a high ROC alone isn't a reversal signal — use it to gauge momentum and divergences.</p>
                     <div style={{ height: '200px' }}>
                       <Line data={{
                         labels: analysisData.chart_data.map(d => d.date),
@@ -2058,7 +2060,7 @@ const TechnicalAnalysis: React.FC = () => {
                 {/* ATR Chart */}
                 <div id="chart-atr" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ATR (Average True Range)</h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">ATR measures market volatility by calculating the average range between high and low prices over a given period. Higher ATR means greater volatility and wider price swings, which is important for setting stop-loss levels and position sizing. Traders use ATR to avoid placing stops too tight in volatile markets or too wide in calm ones.</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">ATR measures volatility as the average range between high and low prices over a period — higher ATR means wider swings. It's used to size positions and set stop-losses (avoiding stops too tight in volatile markets or too wide in calm ones). ATR gives no direction and reflects past movement, so it's never a buy or sell signal on its own.</p>
                   <div style={{ height: '250px' }}>
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
@@ -2071,7 +2073,7 @@ const TechnicalAnalysis: React.FC = () => {
                 {/* Keltner Channels (overlay on price) */}
                 <div id="chart-keltner" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Keltner Channels</h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Keltner Channels plot an EMA with upper and lower bands based on ATR. Price breaking above the upper channel suggests strong bullish momentum and a potential breakout, while a break below the lower channel signals bearish pressure. Price staying within the channels indicates normal trading. They are commonly used with Bollinger Bands to identify squeeze setups.</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Keltner Channels plot an EMA with upper and lower bands set by ATR. A close beyond the upper or lower channel points to strong momentum and a possible breakout, while price inside the channels is normal trading — but breakouts can fail and reverse in choppy markets, so confirm with volume or trend rather than acting on the break alone. They're often paired with Bollinger Bands to spot squeeze setups.</p>
                   <div style={{ height: '350px' }}>
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
@@ -2112,7 +2114,7 @@ const TechnicalAnalysis: React.FC = () => {
                 {/* Parabolic SAR (dots on price chart) */}
                 <div id="chart-parabolic-sar" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Parabolic SAR</h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Parabolic SAR (Stop and Reverse) places dots above or below the price to indicate trend direction. Dots below the price confirm an uptrend, while dots above signal a downtrend. When the dots flip sides it generates a reversal signal, making it particularly useful for setting trailing stop-losses and identifying entry and exit points during trending markets.</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Parabolic SAR (Stop and Reverse) places dots below price in an uptrend and above price in a downtrend; a flip to the other side flags a possible trend reversal, which makes it useful for trailing stop-losses. It works well in trending markets but whipsaws badly in sideways, choppy action — generating frequent false flips — so it's best for managing trend exits rather than as a standalone entry trigger.</p>
                   <div style={{ height: '350px' }}>
                     <Chart type="line" data={{
                       labels: analysisData.chart_data.map(d => d.date),
@@ -2128,7 +2130,7 @@ const TechnicalAnalysis: React.FC = () => {
                 {/* Ichimoku Cloud */}
                 <div id="chart-ichimoku" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Ichimoku Cloud</h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">The Ichimoku Cloud is a comprehensive indicator that shows support/resistance levels, trend direction, and momentum all at once. Price above the cloud is bullish, below is bearish, and within the cloud is neutral. The Tenkan-Sen and Kijun-Sen lines act like short-term and medium-term moving averages — their crossovers generate trade signals similar to moving average crossovers.</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">The Ichimoku Cloud shows support/resistance, trend direction, and momentum at once: price above the cloud is bullish, below is bearish, inside is neutral, and Tenkan-Sen/Kijun-Sen crossovers act like moving-average signals. Like other trend tools it lags and produces conflicting, whipsaw-prone signals in flat or choppy markets, so it's most reliable when a clear trend is already in place.</p>
                   <div style={{ height: '400px' }}>
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
@@ -2145,7 +2147,7 @@ const TechnicalAnalysis: React.FC = () => {
                 {/* Donchian Channels */}
                 <div id="chart-donchian" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Donchian Channels</h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Donchian Channels plot the highest high and lowest low over a set period, creating a breakout trading system. A price break above the upper channel signals a potential new uptrend, while a break below the lower channel signals a new downtrend. Made famous by the "Turtle Traders," this indicator is a foundational tool for trend-following and breakout strategies.</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Donchian Channels plot the highest high and lowest low over a set period to define a breakout system: a break above the upper channel suggests a new uptrend, a break below the lower channel a new downtrend. Made famous by the "Turtle Traders," it shines in trending markets but produces frequent false breakouts in rangebound action, so confirm the break holds before treating it as a signal.</p>
                   <div style={{ height: '350px' }}>
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
@@ -2173,28 +2175,28 @@ const TechnicalAnalysis: React.FC = () => {
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">📊 RSI (Relative Strength Index)</h3>
                 <p className="text-gray-600 dark:text-gray-400">
-                  Measures momentum on a scale of 0-100. Below 30 = oversold (potential buy), Above 70 = overbought (potential sell).
+                  Measures momentum on a 0–100 scale. In a sideways market, dips below 30 (oversold) or pushes above 70 (overbought) can flag a possible reversal — but in a strong trend RSI can stay above 70 (or below 30) for a long time while price keeps running, so it's a momentum gauge, not a buy/sell trigger. It's most reliable for spotting divergences (price makes a new high, RSI doesn't) and for confirming other signals.
                 </p>
               </div>
 
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">📈 MACD (Moving Average Convergence Divergence)</h3>
                 <p className="text-gray-600 dark:text-gray-400">
-                  Shows trend direction and momentum. Bullish = upward momentum, Bearish = downward momentum. When MACD line crosses above signal line = buy signal.
+                  Shows trend direction and momentum: the MACD line crossing above the signal line is bullish, crossing below is bearish. It works best confirming a trend that's already underway and whipsaws with false crosses in choppy, sideways markets — confirm with price action or volume before acting.
                 </p>
               </div>
 
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">📉 Moving Averages</h3>
                 <p className="text-gray-600 dark:text-gray-400">
-                  Average price over time. Price above MA = uptrend, Price below MA = downtrend. When the 20-day SMA crosses above the 50-day = Golden Cross (bullish). When it crosses below = Death Cross (bearish).
+                  Average price over time: price above the MA leans bullish, below leans bearish. The 20-day crossing above the 50-day is a Golden Cross (bullish); crossing below is a Death Cross (bearish) — but both are lagging confirmations built from past prices and throw false signals in choppy markets, so confirm before acting.
                 </p>
               </div>
 
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">🎯 Bollinger Bands</h3>
                 <p className="text-gray-600 dark:text-gray-400">
-                  Show volatility. When price touches lower band = potential bounce opportunity. When price touches upper band = potential reversal down.
+                  Bands sit above and below a moving average to show volatility and where price is relative to its recent range — they don't predict direction. A touch of the lower or upper band only hints at a reversal in a ranging market; in a trend, price can "walk" a band for a long time, so check the trend before treating a touch as a bounce or a top.
                 </p>
               </div>
 
