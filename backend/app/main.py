@@ -21,6 +21,7 @@ from app.services.fmp_client import init_fmp_client, close_fmp_client
 from datetime import datetime, timezone
 from app.tasks.refresh_stock_snapshots import refresh_stock_snapshots_job
 from app.tasks.fetch_macro_indicators import macro_indicators_job
+from app.tasks.audit_fmp_fields_task import fmp_field_audit_job
 from app.services.sector_rotation import append_today_closes
 
 
@@ -84,6 +85,18 @@ async def lifespan(app: FastAPI):
     # app.tasks.compute_squeeze, weekdays post-close), not in-process — see
     # app/tasks/compute_squeeze.py. Keeping it out of this scheduler avoids a
     # duplicate daily run.
+
+    # FMP field-name drift audit: weekly (Mon 13:00 UTC). Probes live /stable/
+    # responses and emails AUDIT_ALERT_EMAIL only when a documented field is
+    # missing (a vendor rename). Silent when clean. See app/tasks/audit_fmp_fields_task.py.
+    _scheduler.add_job(
+        fmp_field_audit_job,
+        CronTrigger(day_of_week="mon", hour=13, minute=0, timezone=timezone.utc),
+        id="fmp_field_audit",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
 
     _scheduler.start()
 

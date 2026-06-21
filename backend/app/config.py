@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     SALES_EMAIL: str = Field(default="", env="SALES_EMAIL")
     FROM_NAME: str = Field(default="NWC-Analytics", env="FROM_NAME")
     FRONTEND_URL: str = Field(default="http://localhost:3000", env="FRONTEND_URL")
+    # Recipient for the weekly FMP field-audit alert. Falls back to SUPPORT_EMAIL.
+    AUDIT_ALERT_EMAIL: str = Field(default="", env="AUDIT_ALERT_EMAIL")
     
     # Twilio SMS Settings
     TWILIO_ACCOUNT_SID: str = Field(default="", env="TWILIO_ACCOUNT_SID")

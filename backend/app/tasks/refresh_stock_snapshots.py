@@ -145,7 +145,9 @@ async def _fetch_quotes(
                         "change_percentage": q.get("changePercentage"),
                         "change": q.get("change"),
                         "volume": q.get("volume"),
-                        "avg_volume": q.get("avgVolume"),
+                        # NOTE: batch-quote has no avgVolume; the avg_volume column
+                        # has no consumer (volume-surge scanner was removed), so we
+                        # don't write it. See scripts/audit_fmp_fields.py.
                         "day_low": q.get("dayLow"),
                         "day_high": q.get("dayHigh"),
                         "year_high": q.get("yearHigh"),
@@ -167,7 +169,7 @@ async def _fetch_quotes(
     return rows
 
 
-_UPSERT_CHUNK = 1_000  # asyncpg caps params at 32767; 19 cols × 1000 = 19000
+_UPSERT_CHUNK = 1_000  # asyncpg caps params at 32767; 18 cols × 1000 = 18000
 
 async def _upsert(rows: list[dict]) -> None:
     if not rows:

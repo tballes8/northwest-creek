@@ -39,6 +39,16 @@ def _safe_error(e: Exception) -> str:
     return msg
 
 
+def _pick(d: dict, *keys):
+    """Return d[k] for the first PRESENT key (not first truthy), so a legit 0 /
+    negative value isn't skipped. Tolerates FMP field renames (stable dropped the
+    `estimated` prefix on analyst-estimates: estimatedEpsAvg -> epsAvg)."""
+    for k in keys:
+        if k in d:
+            return d[k]
+    return None
+
+
 router = APIRouter()
 @router.get("/daily-snapshot", response_model=DailySnapshotResponse)
 async def get_daily_snapshot(
@@ -1228,7 +1238,6 @@ async def stock_screener(
         # Filter out non-US exchanges client-side for cleaner results
         results = []
         for item in data:
-            short_name = (item.get("exchangeShortName") or "").upper()
             sym = item.get("symbol", "")
             # Skip foreign-listed symbols (contain dots like .BA, .T)
             if "." in sym:
@@ -1243,7 +1252,8 @@ async def stock_screener(
                 "price": item.get("price"),
                 "last_annual_dividend": item.get("lastAnnualDividend"),
                 "volume": item.get("volume"),
-                "exchange": item.get("exchangeShortName"),
+                # /stable/company-screener returns `exchange`; older API used `exchangeShortName`.
+                "exchange": item.get("exchange") or item.get("exchangeShortName"),
                 "is_etf": item.get("isEtf"),
                 "is_actively_trading": item.get("isActivelyTrading"),
             })
@@ -1277,7 +1287,7 @@ async def get_analyst_estimates(ticker: str):
         client = get_fmp_client()
 
         estimates_resp, targets_resp = await asyncio.gather(
-            client.get("analyst-estimates", params={"symbol": sym, "apikey": API_KEY, "limit": 4}),
+            client.get("analyst-estimates", params={"symbol": sym, "apikey": API_KEY, "period": "annual", "limit": 4}),
             client.get("price-target-consensus", params={"symbol": sym, "apikey": API_KEY}),
             return_exceptions=True,
         )
@@ -1303,11 +1313,14 @@ async def get_analyst_estimates(ticker: str):
                     except (ValueError, TypeError):
                         pass
                     if entry_year and entry_year >= current_year:
-                        forward_eps = entry.get("estimatedEpsAvg")
-                        forward_eps_high = entry.get("estimatedEpsHigh")
-                        forward_eps_low = entry.get("estimatedEpsLow")
-                        forward_revenue_avg = entry.get("estimatedRevenueAvg")
-                        num_analysts_eps = entry.get("numberAnalystEstimatedEps")
+                        # Stable analyst-estimates dropped the `estimated` prefix;
+                        # old names kept as fallback in case FMP reverts.
+                        forward_eps = _pick(entry, "epsAvg", "estimatedEpsAvg")
+                        forward_eps_high = _pick(entry, "epsHigh", "estimatedEpsHigh")
+                        forward_eps_low = _pick(entry, "epsLow", "estimatedEpsLow")
+                        forward_revenue_avg = _pick(entry, "revenueAvg", "estimatedRevenueAvg")
+                        num_analysts_eps = _pick(entry, "numAnalystsEps", "numberAnalystsEps",
+                                                 "numberAnalystEstimatedEps")
                         estimate_year = entry_year
                         break
 

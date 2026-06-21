@@ -170,8 +170,10 @@ class MarketDataService:
                 "sector": result.get("sector", "Other"),
                 "industry": result.get("industry", ""),
                 "website": result.get("website", ""),
-                "exchange": result.get("exchangeShortName", ""),
-                "market_cap": result.get("mktCap"),
+                # /stable/profile returns `exchange`; older API used `exchangeShortName`.
+                "exchange": result.get("exchange") or result.get("exchangeShortName") or "",
+                # /stable/profile returns `marketCap`; older API used `mktCap`.
+                "market_cap": result.get("marketCap") or result.get("mktCap"),
                 "phone": result.get("phone", ""),
                 "employees": result.get("fullTimeEmployees"),
                 "country": result.get("country", "US"),
@@ -182,7 +184,7 @@ class MarketDataService:
                 "fund_family": None,
                 "fund_expense_ratio": None,
                 "fund_inception_date": result.get("ipoDate") if is_etf else None,
-                "fund_total_assets": result.get("mktCap") if is_etf else None,
+                "fund_total_assets": (result.get("marketCap") or result.get("mktCap")) if is_etf else None,
             }
 
             self._profile_cache.set(cache_key, company)

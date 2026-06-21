@@ -224,7 +224,12 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
       setCompanyName(data.company_name || ticker);
       setSubjectSector(data.sector);
       setSubjectIndustry(data.industry);
-      setSubjectMarketCap(data.market_cap ?? null);
+      // Fall back to price × diluted shares when the profile market cap is missing.
+      const mcapFallback =
+        i.current_price != null && i.diluted_shares_m != null
+          ? i.current_price * i.diluted_shares_m * 1e6
+          : null;
+      setSubjectMarketCap(data.market_cap ?? mcapFallback);
       setEstimateYear(data.estimate_year);
 
       // Pre-fill the peer-pull cap band ($B) around the target's market cap

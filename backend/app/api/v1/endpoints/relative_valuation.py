@@ -48,6 +48,16 @@ def _safe_error(e: Exception) -> str:
     return msg
 
 
+def _pick(d: dict, *keys):
+    """Return d[k] for the first key that is PRESENT (not first truthy), so a
+    legitimate 0 / negative value isn't skipped. Used to tolerate FMP field
+    renames (e.g. stable `epsAvg` vs legacy `estimatedEpsAvg`)."""
+    for k in keys:
+        if k in d:
+            return d[k]
+    return None
+
+
 router = APIRouter()
 
 
@@ -136,7 +146,7 @@ async def _fetch_forward_estimates(ticker: str) -> Dict[str, Any]:
         client = get_fmp_client()
         resp = await client.get(
             "analyst-estimates",
-            params={"symbol": ticker, "apikey": API_KEY, "limit": 4},
+            params={"symbol": ticker, "apikey": API_KEY, "period": "annual", "limit": 4},
         )
         resp.raise_for_status()
         data = resp.json()
@@ -148,9 +158,11 @@ async def _fetch_forward_estimates(ticker: str) -> Dict[str, Any]:
                 except (ValueError, TypeError):
                     continue
                 if entry_year >= current_year:
-                    out["forward_eps"] = entry.get("estimatedEpsAvg")
-                    out["forward_revenue"] = entry.get("estimatedRevenueAvg")
-                    out["forward_ebitda"] = entry.get("estimatedEbitdaAvg")
+                    # Stable analyst-estimates dropped the `estimated` prefix
+                    # (estimatedEpsAvg -> epsAvg). Old names kept as fallback.
+                    out["forward_eps"] = _pick(entry, "epsAvg", "estimatedEpsAvg")
+                    out["forward_revenue"] = _pick(entry, "revenueAvg", "estimatedRevenueAvg")
+                    out["forward_ebitda"] = _pick(entry, "ebitdaAvg", "estimatedEbitdaAvg")
                     out["estimate_year"] = entry_year
                     break
     except Exception as e:

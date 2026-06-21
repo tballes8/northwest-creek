@@ -23,7 +23,9 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
     {"path": "batch-quote", "description": "Batch quotes for many symbols (screener, snapshots, ticker tape)",
      "used_by": ["services/market_data.py:119", "api/v1/endpoints/intraday.py:181",
                  "tasks/fetch_daily_snapshots.py:137", "tasks/refresh_stock_snapshots.py:120"],
-     "key_fields": ["symbol", "price", "open", "changePercentage", "change", "volume", "avgVolume",
+     # NOTE: batch-quote does NOT return avgVolume (only the single `quote` endpoint /
+     # `profile.averageVolume` do). refresh_stock_snapshots reading it gets None.
+     "key_fields": ["symbol", "name", "price", "open", "changePercentage", "change", "volume",
                     "dayLow", "dayHigh", "yearHigh", "yearLow", "marketCap", "priceAvg50", "priceAvg200",
                     "exchange", "previousClose", "timestamp"]},
     {"path": "historical-price-eod/full", "description": "End-of-day historical prices with date range",
@@ -42,8 +44,10 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
     {"path": "profile", "description": "Company profile: name, sector, industry, website, employees, country",
      "used_by": ["services/market_data.py:157", "services/financials_service.py:88",
                  "api/v1/endpoints/relative_valuation.py (peer-ratios)"],
-     "key_fields": ["companyName", "sector", "industry", "website", "fullTimeEmployees", "country",
-                    "description", "price", "mktCap", "isEtf", "isFund"]},
+     # Stable profile uses `exchange` (not `exchangeShortName`) and has no `type` field
+     # (use isEtf/isFund/isAdr booleans). See scripts/audit_fmp_fields.py.
+     "key_fields": ["symbol", "companyName", "sector", "industry", "website", "fullTimeEmployees",
+                    "country", "description", "exchange", "marketCap", "isEtf", "ipoDate"]},
     {"path": "income-statement", "description": "Quarterly/annual income statement",
      "used_by": ["services/financials_service.py:72",
                  "api/v1/endpoints/relative_valuation.py (peer-ratios: growth/margin context)"],
@@ -57,12 +61,13 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
     {"path": "ratios-ttm", "description": "Trailing-twelve-month financial ratios",
      "used_by": ["services/financials_service.py:81",
                  "api/v1/endpoints/relative_valuation.py (peer-ratios)"],
-     "key_fields": ["peRatioTTM", "priceToEarningsRatioTTM", "priceToSalesRatioTTM",
-                    "enterpriseValueMultipleTTM", "evToEBITDATTM",
-                    "dividendYielTTM", "dividendPerShareTTM"]},
+     "key_fields": ["priceToEarningsRatioTTM", "priceToSalesRatioTTM", "priceToBookRatioTTM",
+                    "priceToFreeCashFlowRatioTTM", "enterpriseValueMultipleTTM",
+                    "debtToEquityRatioTTM", "currentRatioTTM", "quickRatioTTM", "dividendYieldTTM"]},
     {"path": "key-metrics-ttm", "description": "Trailing-twelve-month key metrics",
      "used_by": ["services/financials_service.py:84"],
-     "key_fields": ["marketCapTTM", "enterpriseValueTTM", "freeCashFlowPerShareTTM"]},
+     "key_fields": ["marketCap", "enterpriseValueTTM", "evToEBITDATTM", "evToSalesTTM",
+                    "returnOnEquityTTM", "returnOnAssetsTTM"]},
     {"path": "shares-float", "description": "Outstanding/float shares (used by DCF)",
      "used_by": ["api/v1/endpoints/dcf_valuation.py:90"],
      "key_fields": ["outstandingShares", "floatShares"]},
@@ -73,12 +78,15 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
      "key_fields": ["dcf", "Stock Price", "date"]},
     {"path": "levered-discounted-cash-flow", "description": "Levered DCF",
      "used_by": ["api/v1/endpoints/dcf_valuation.py:53"], "key_fields": ["dcf", "date"]},
-    {"path": "custom-discounted-cash-flow", "description": "Custom-assumption DCF",
-     "used_by": ["api/v1/endpoints/dcf_valuation.py:54"], "key_fields": ["dcf", "year", "revenue"]},
-    {"path": "analyst-estimates", "description": "EPS/revenue/EBITDA analyst estimates",
+    {"path": "custom-discounted-cash-flow", "description": "Custom-assumption DCF (advanced projection rows)",
+     "used_by": ["api/v1/endpoints/dcf_valuation.py:54"],
+     "key_fields": ["year", "wacc", "equityValuePerShare", "terminalValue", "enterpriseValue"]},
+    # IMPORTANT: stable dropped the `estimated` prefix AND requires period=annual|quarter.
+    # Fields are epsAvg/revenueAvg/ebitdaAvg (NOT estimatedEpsAvg/...).
+    {"path": "analyst-estimates", "description": "EPS/revenue/EBITDA analyst estimates (requires period param)",
      "used_by": ["api/v1/endpoints/stocks.py:1353", "api/v1/endpoints/dcf_valuation.py:52",
                  "api/v1/endpoints/relative_valuation.py (inputs)"],
-     "key_fields": ["date", "estimatedRevenueAvg", "estimatedEpsAvg", "estimatedEbitdaAvg"]},
+     "key_fields": ["date", "revenueAvg", "epsAvg", "epsHigh", "epsLow", "ebitdaAvg", "numAnalystsEps"]},
     {"path": "price-target-consensus", "description": "Analyst price-target consensus",
      "used_by": ["api/v1/endpoints/stocks.py:1354", "services/stock_analysis.py:249"],
      "key_fields": ["targetConsensus", "targetHigh", "targetLow", "targetMedian"]},
@@ -106,12 +114,17 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
      "key_fields": ["date", "dividend", "recordDate", "paymentDate", "yield"]},
 
     # ── Market movers / status / calendars ───────────────────────────
+    # NOTE: these list endpoints use `changesPercentage` (with the s), unlike
+    # quote/batch-quote which use `changePercentage`. The code reads the correct one.
     {"path": "most-actives", "description": "Most active stocks by volume (ticker tape)",
-     "used_by": ["api/v1/endpoints/market.py:34"], "key_fields": ["symbol", "price", "changePercentage"]},
+     "used_by": ["api/v1/endpoints/market.py:34"],
+     "key_fields": ["symbol", "name", "price", "change", "changesPercentage", "exchange"]},
     {"path": "biggest-gainers", "description": "Top % gainers",
-     "used_by": ["services/market_data.py:428"], "key_fields": ["symbol", "price", "changePercentage", "name"]},
+     "used_by": ["services/market_data.py:428"],
+     "key_fields": ["symbol", "name", "price", "change", "changesPercentage", "exchange"]},
     {"path": "biggest-losers", "description": "Top % losers",
-     "used_by": ["services/market_data.py:471"], "key_fields": ["symbol", "price", "changePercentage", "name"]},
+     "used_by": ["services/market_data.py:471"],
+     "key_fields": ["symbol", "name", "price", "change", "changesPercentage", "exchange"]},
     {"path": "exchange-market-hours", "description": "Market open/closed status for an exchange",
      "used_by": ["api/v1/endpoints/intraday.py:34"],
      "key_fields": ["exchange", "isMarketOpen", "openingHour", "closingHour"]},
@@ -120,18 +133,22 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
     {"path": "ipos-calendar", "description": "Upcoming/recent IPO calendar",
      "used_by": ["api/v1/endpoints/stocks.py:695"], "key_fields": ["symbol", "date", "company", "priceRange"]},
     {"path": "earnings-calendar", "description": "Earnings report calendar with date range",
-     "used_by": ["api/v1/endpoints/stocks.py:1029"], "key_fields": ["symbol", "date", "epsEstimated", "eps"]},
+     "used_by": ["api/v1/endpoints/stocks.py:1029"],
+     "key_fields": ["symbol", "date", "epsEstimated", "epsActual", "revenueEstimated", "revenueActual"]},
 
     # ── Search & screener & lists ────────────────────────────────────
     {"path": "search-name", "description": "Search companies by name",
      "used_by": ["api/v1/endpoints/stocks.py:821"], "key_fields": ["symbol", "name", "exchange"]},
     {"path": "search-symbol", "description": "Search companies by ticker symbol",
      "used_by": ["api/v1/endpoints/stocks.py:822"], "key_fields": ["symbol", "name", "exchange"]},
+    # Stable uses `exchange` (not `exchangeShortName`). isEtf/isFund/isActivelyTrading/country
+    # are also accepted as request FILTERS. key_fields = response fields the code reads.
     {"path": "company-screener", "description": "Filter stocks/build the screener universe",
      "used_by": ["api/v1/endpoints/stocks.py:1217", "tasks/refresh_stock_snapshots.py:55"],
-     "key_fields": ["symbol", "companyName", "marketCap", "sector", "price", "exchange", "isEtf", "isFund"]},
+     "key_fields": ["symbol", "companyName", "marketCap", "sector", "industry", "beta", "price",
+                    "lastAnnualDividend", "volume", "exchange", "isEtf", "isActivelyTrading"]},
     {"path": "stock-list", "description": "Full list of tradable stocks",
-     "used_by": ["tasks/fetch_daily_snapshots.py:57"], "key_fields": ["symbol", "name", "exchange"]},
+     "used_by": ["tasks/fetch_daily_snapshots.py:57"], "key_fields": ["symbol", "companyName"]},
     {"path": "etf-list", "description": "Full list of tradable ETFs",
      "used_by": ["tasks/fetch_daily_snapshots.py:96"], "key_fields": ["symbol", "name"]},
     {"path": "delisted-companies", "description": "Delisted symbols (paginated, used to exclude)",
@@ -140,19 +157,22 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
     # ── ETF detail ───────────────────────────────────────────────────
     {"path": "etf/info", "description": "ETF metadata (expense ratio, AUM, sectors)",
      "used_by": ["api/v1/endpoints/stocks.py:1080"],
-     "key_fields": ["symbol", "expenseRatio", "aum", "isActivelyTrading", "sectorsList"]},
+     "key_fields": ["symbol", "name", "expenseRatio", "assetsUnderManagement", "nav",
+                    "holdingsCount", "isActivelyTrading", "sectorsList"]},
     {"path": "etf/holdings", "description": "Top holdings within an ETF",
      "used_by": ["api/v1/endpoints/stocks.py:1135"], "key_fields": ["asset", "name", "weightPercentage"]},
 
     # ── Batch quotes for other asset classes & macro ─────────────────
     {"path": "treasury-rates", "description": "Treasury yields across maturities",
      "used_by": ["api/v1/endpoints/stocks.py:285"], "key_fields": ["date", "month1", "year2", "year10", "year30"]},
+    # NOTE: these batch endpoints return only `change` (absolute), not a percent
+    # field — the code's percent read falls back to None/0. (See audit script.)
     {"path": "batch-commodity-quotes", "description": "Batch commodity quotes (gold, oil, …)",
-     "used_by": ["api/v1/endpoints/stocks.py:342"], "key_fields": ["symbol", "price", "changePercentage"]},
+     "used_by": ["api/v1/endpoints/stocks.py:342"], "key_fields": ["symbol", "price", "change", "volume"]},
     {"path": "batch-crypto-quotes", "description": "Batch crypto quotes",
-     "used_by": ["api/v1/endpoints/stocks.py:438"], "key_fields": ["symbol", "price", "changePercentage"]},
+     "used_by": ["api/v1/endpoints/stocks.py:438"], "key_fields": ["symbol", "price", "change", "volume"]},
     {"path": "batch-index-quotes", "description": "Batch index quotes (S&P, Dow, Nasdaq, …)",
-     "used_by": ["api/v1/endpoints/stocks.py:535"], "key_fields": ["symbol", "price", "changePercentage"]},
+     "used_by": ["api/v1/endpoints/stocks.py:535"], "key_fields": ["symbol", "price", "change", "volume"]},
     {"path": "technical-indicators/sma", "description": "Simple moving averages (20/50/200)",
      "used_by": ["api/v1/endpoints/intraday.py:359"], "key_fields": ["date", "sma"]},
 ]
