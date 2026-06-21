@@ -1,6 +1,6 @@
 # NWC-Analytics — Shipped Features Log
 
-**Last Updated:** June 17, 2026  
+**Last Updated:** June 20, 2026  
 **Purpose:** Cross-project reference document. Attach to NWC Marketing, NWC Blog/SM Post, NWC Enhancements, and NWC Sandbox projects so all workstreams have visibility into what has shipped, what tier it lives on, and what content angles it unlocks.
 
 ---
@@ -1046,6 +1046,41 @@ Each entry follows a consistent format:
 **Marketing Angle:** None directly user-facing — console hygiene and avoiding wasted vendor API calls. Indirect benefit: fewer spurious failed requests keep the platform's diagnostics clean and reduce unnecessary load on the data provider.
 
 **Blog/Content Hooks:** None — bug fix / infrastructure
+
+---
+
+### June 20, 2026
+
+---
+
+#### Relative Valuation Calculator — Peer-Multiple Price-Target Range
+
+**What It Does:** Added a Relative Valuation tab to the DCF Valuation page that estimates a target-price *range* from peer multiples rather than a single intrinsic value. It applies the peer-**median** P/E, P/S, and EV/EBITDA multiples to a company's forward estimates (forward EPS, revenue, EBITDA) to produce three method-based target prices and a MIN–MAX band. The model inputs — forward estimates, net debt, diluted shares, and current price — auto-fill on load, each tagged with a source badge (analyst estimate, actual filing, derived, or live), and a "Source financials" popup exposes the underlying TTM figures with one-click copy so a user never has to leave the page to look something up. Users build a peer set by pulling comparable companies from the fundamental screener (with an optional market-cap band, pre-filled around the target company's own size) or by entering tickers manually, then hand-cut bad comps from a per-peer table that shows each peer's multiples alongside revenue growth, gross margin, and market cap as comparability context — with a flag on growth outliers and median hygiene that excludes negative or extreme (over 100×) P/E values from the median and discloses how many peers actually fed each figure (e.g. "14 of 20"). The output is deliberately a range, never a hero number: P/S is labeled the central estimate for low-earnings names, the P/E method is flagged as unreliable when the trailing multiple is extreme, and a ±10% sensitivity grid on the P/S target shows which assumption the thesis really rides on. A "Cross-check with Relative Valuation" button on the DCF results card hands the ticker straight over, so the intrinsic-value and market-multiple views sit side by side.
+
+**Tier Availability:** Casual and above (matches the DCF Valuation tool)
+
+**Marketing Angle:** A DCF tells you what a company has to do to justify its price; relative valuation tells you what the market is actually paying for comparable businesses right now — and the gap between the two is itself information. Pairing both on one page, forcing the output to be a defensible range, and putting the peer set in the user's hands to curate operationalizes the "calculate your own price target" workflow that retail investors otherwise do by hand in a spreadsheet. The honest framing — a range instead of a single number, comps you can see and cut, a P/E method that flags itself when it's unreliable, and a sensitivity grid for stress-testing — is exactly the trustworthy-signal positioning the platform is built around.
+
+**Blog/Content Hooks:**
+- How to calculate your own price target — the three-multiple method (P/E, P/S, EV/EBITDA) explained
+- Why a valuation range beats a single number — and how the spread between methods is the real signal
+- Choosing comparable companies — how to spot and cut a bad comp before it skews your median
+- The EV-to-equity bridge — why subtracting net debt is the step most people get wrong
+- DCF vs. relative valuation — how to cross-check intrinsic value against what the market pays
+
+---
+
+#### FMP API Field-Drift Audit — Automated Detection & Weekly Alert
+
+> **Internal tool — not a public or subscriber-facing feature.** Logged here for cross-project visibility into platform operations work.
+
+**What It Does:** Added an automated audit that probes every Financial Modeling Prep `/stable/` endpoint the platform depends on and flags any response field the code expects but the live API no longer returns — the silent class of bug where a data vendor renames or drops a field and our code reads null with no error or warning. It runs three ways: an on-demand CLI script, a weekly scheduled job that emails an alert **only** when it detects drift (and stays silent when everything is clean), and it complements the existing admin changelog-review tool by checking the live API directly rather than waiting for a changelog to be pasted in. Building it immediately surfaced and fixed several latent breakages: the analyst-estimates endpoint had begun requiring a parameter and had renamed its fields (e.g. `estimatedEpsAvg` → `epsAvg`), which had been silently blanking forward EPS / revenue / EBITDA across the DCF and Relative Valuation tools; the company profile's market-cap and exchange fields were being read under stale names (returning null, which also mis-classified company size in the DCF model); and the fundamental screener's exchange field had the same problem. The internal endpoint registry was corrected to match the live field names so it stays a reliable source of truth.
+
+**Tier Availability:** Internal — operations tooling. The underlying field-name fixes benefit all tiers: forward estimates, market cap, and screener exchange data that had quietly stopped populating now work again.
+
+**Marketing Angle:** None directly — internal reliability tooling. Indirect benefit: valuation inputs and forward-looking estimates that had silently broken are restored, and the weekly audit shortens the gap between a data vendor changing their API and the team catching it — reinforcing the platform's data-quality and reliability positioning.
+
+**Blog/Content Hooks:** None — internal infrastructure. Possible behind-the-scenes/meta angle: "How we catch it when our market-data vendor silently changes their API."
 
 ---
 
