@@ -1567,7 +1567,11 @@ const TechnicalAnalysis: React.FC = () => {
                             ? 'bg-red-500 text-white'
                             : 'bg-gray-500 text-white'
                         }`}>
-                          {signal.type.toUpperCase()}
+                          {signal.type === 'buy'
+                            ? 'Bullish'
+                            : signal.type === 'sell'
+                            ? 'Bearish'
+                            : signal.type.charAt(0).toUpperCase() + signal.type.slice(1)}
                         </span>
                         <div>
                           <div className="font-semibold text-gray-900 dark:text-white">{signal.indicator}</div>
