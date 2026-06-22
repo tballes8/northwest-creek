@@ -151,7 +151,7 @@ async def add_to_watchlist(
 
 @router.put("/{item_id}", response_model=schemas.WatchlistItemResponse)
 async def update_watchlist_item(
-    item_id: int,
+    item_id: UUID,
     item_data: schemas.WatchlistItemUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
