@@ -1555,28 +1555,21 @@ const TechnicalAnalysis: React.FC = () => {
             {analysisData.signals && analysisData.signals.length > 0 && (
               <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Trading Signals</h3>
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {analysisData.signals.map((signal, index) => (
                     <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" onClick={() => scrollToChart(signal.indicator)}>
-
-                      <div className="flex-shrink-0 flex items-center gap-3">
-                        <span className={`px-2 py-1 rounded text-xs font-bold ${
-                          signal.type === 'buy' 
-                            ? 'bg-green-500 text-white'
-                            : signal.type === 'sell'
-                            ? 'bg-red-500 text-white'
-                            : 'bg-gray-500 text-white'
-                        }`}>
-                          {signal.type === 'buy'
-                            ? 'Bullish'
-                            : signal.type === 'sell'
-                            ? 'Bearish'
-                            : signal.type.charAt(0).toUpperCase() + signal.type.slice(1)}
-                        </span>
-                        <div>
-                          <div className="font-semibold text-gray-900 dark:text-white">{signal.indicator}</div>
-                          <div className="text-sm text-gray-600 dark:text-gray-400">{signal.message}</div>
-                        </div>
+                      <span className={`flex-shrink-0 px-2 py-1 rounded text-xs font-bold text-center min-w-[64px] text-white ${
+                        signal.type === 'bullish'
+                          ? 'bg-green-500'
+                          : signal.type === 'bearish'
+                          ? 'bg-red-500'
+                          : 'bg-amber-500'
+                      }`}>
+                        {signal.type.charAt(0).toUpperCase() + signal.type.slice(1)}
+                      </span>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-gray-900 dark:text-white">{signal.indicator}</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">{signal.message}</div>
                       </div>
                     </div>
                   ))}

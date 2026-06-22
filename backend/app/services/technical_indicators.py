@@ -681,6 +681,158 @@ def _calculate_price_range(current_price, bb_data, ma_data, advanced):
     }
 
 
+def build_signal_rows(rsi, macd_data, ma_data, bb_data, current_price, advanced=None):
+    """
+    Build the per-indicator rows for the Trading Signals panel.
+
+    Covers exactly the indicators that participate in generate_summary() scoring,
+    using identical thresholds, so the rows reconcile with the outlook's
+    "X of N indicators" count (X = bullish rows, N = non-neutral rows).
+
+    Each row is a *condition* — type is "bullish", "bearish", or "neutral" — not
+    a trade instruction, and the message describes the reading (and, where it
+    matters, why an extreme isn't a reversal in a trend). Phrasing avoids
+    equity-specific wording so it reads correctly for ETFs/funds too.
+
+    Indicators with no data are omitted entirely.
+    """
+    if advanced is None:
+        advanced = {}
+
+    rows = []
+
+    # ── MACD (trend) ──────────────────────────────────────────────────
+    if macd_data and isinstance(macd_data, dict):
+        trend = macd_data.get("trend")
+        if trend == "bullish":
+            rows.append({"type": "bullish", "indicator": "MACD", "message": "MACD line above its signal line — bullish momentum."})
+        elif trend == "bearish":
+            rows.append({"type": "bearish", "indicator": "MACD", "message": "MACD line below its signal line — bearish momentum."})
+        else:
+            rows.append({"type": "neutral", "indicator": "MACD", "message": "MACD near its signal line — no clear momentum."})
+
+    # ── ADX + Directional Index (trend strength, not direction) ───────
+    adx_data = advanced.get("adx")
+    if adx_data and isinstance(adx_data, dict) and adx_data.get("adx") is not None:
+        adx_val = adx_data.get("adx")
+        direction = adx_data.get("direction")
+        strength = adx_data.get("strength")
+        if strength in ("trending", "very_strong") and direction == "bullish":
+            rows.append({"type": "bullish", "indicator": "ADX", "message": f"Strong trend, bullish direction (ADX {adx_val:.1f})."})
+        elif strength in ("trending", "very_strong") and direction == "bearish":
+            rows.append({"type": "bearish", "indicator": "ADX", "message": f"Strong trend, bearish direction (ADX {adx_val:.1f})."})
+        else:
+            rows.append({"type": "neutral", "indicator": "ADX", "message": f"Trend too weak to confirm direction (ADX {adx_val:.1f})."})
+
+    # ── Moving Average alignment ──────────────────────────────────────
+    if ma_data and isinstance(ma_data, dict) and (ma_data.get("sma_20") is not None or ma_data.get("sma_50") is not None):
+        sma_20 = ma_data.get("sma_20")
+        sma_50 = ma_data.get("sma_50")
+        ma_score = 0
+        if sma_20 is not None:
+            ma_score += 1 if current_price > sma_20 else -1
+        if sma_50 is not None:
+            ma_score += 1 if current_price > sma_50 else -1
+        if ma_score > 0:
+            rows.append({"type": "bullish", "indicator": "Moving Averages", "message": "Price above its 20- and 50-day averages — uptrend."})
+        elif ma_score < 0:
+            rows.append({"type": "bearish", "indicator": "Moving Averages", "message": "Price below its 20- and 50-day averages — downtrend."})
+        else:
+            rows.append({"type": "neutral", "indicator": "Moving Averages", "message": "Price between its 20- and 50-day averages — no clear trend."})
+
+    # ── Ichimoku Cloud ────────────────────────────────────────────────
+    ich_data = advanced.get("ichimoku")
+    if ich_data and isinstance(ich_data, dict):
+        sig = ich_data.get("signal")
+        if sig == "bullish":
+            rows.append({"type": "bullish", "indicator": "Ichimoku Cloud", "message": "Price above the cloud — bullish trend."})
+        elif sig == "bearish":
+            rows.append({"type": "bearish", "indicator": "Ichimoku Cloud", "message": "Price below the cloud — bearish trend."})
+        else:
+            rows.append({"type": "neutral", "indicator": "Ichimoku Cloud", "message": "Price inside the cloud — trend unclear."})
+
+    # ── Parabolic SAR ─────────────────────────────────────────────────
+    sar_data = advanced.get("parabolic_sar")
+    if sar_data and isinstance(sar_data, dict):
+        sar_trend = sar_data.get("trend")
+        val = sar_data.get("value")
+        val_str = f" (SAR ${val:.2f})" if isinstance(val, (int, float)) else ""
+        if sar_trend == "uptrend":
+            rows.append({"type": "bullish", "indicator": "Parabolic SAR", "message": f"Dots below price{val_str} — uptrend."})
+        elif sar_trend == "downtrend":
+            rows.append({"type": "bearish", "indicator": "Parabolic SAR", "message": f"Dots above price{val_str} — downtrend."})
+        else:
+            rows.append({"type": "neutral", "indicator": "Parabolic SAR", "message": "Parabolic SAR shows no clear trend."})
+
+    # ── RSI (only extremes score; mid-range is neutral) ───────────────
+    if rsi is not None:
+        if rsi < 30:
+            rows.append({"type": "bullish", "indicator": "RSI", "message": f"Oversold (RSI {rsi:.1f}) — stretched low; in a strong downtrend this can persist rather than bounce."})
+        elif rsi > 70:
+            rows.append({"type": "bearish", "indicator": "RSI", "message": f"Overbought (RSI {rsi:.1f}) — extended; in a strong uptrend this reflects momentum, not a reversal on its own."})
+        else:
+            rows.append({"type": "neutral", "indicator": "RSI", "message": f"Neutral (RSI {rsi:.1f}) — momentum within the normal 30–70 range."})
+
+    # ── Bollinger Bands ───────────────────────────────────────────────
+    if bb_data and isinstance(bb_data, dict):
+        position = bb_data.get("position")
+        if position == "below_lower":
+            rows.append({"type": "bullish", "indicator": "Bollinger Bands", "message": "Below the lower band — stretched low; in a downtrend price can ride the band rather than bounce."})
+        elif position == "above_upper":
+            rows.append({"type": "bearish", "indicator": "Bollinger Bands", "message": "Above the upper band — stretched high; in an uptrend price can ride the band rather than reverse."})
+        else:
+            rows.append({"type": "neutral", "indicator": "Bollinger Bands", "message": "Within the bands — trading in its normal range."})
+
+    # ── Stochastic ────────────────────────────────────────────────────
+    stoch = advanced.get("stochastic")
+    if stoch and isinstance(stoch, dict):
+        sig = stoch.get("signal")
+        k = stoch.get("k")
+        k_str = f"%K {k:.1f}" if isinstance(k, (int, float)) else "%K"
+        if sig == "oversold":
+            rows.append({"type": "bullish", "indicator": "Stochastic", "message": f"Oversold ({k_str}) — extended low; can stay pinned low in a strong downtrend."})
+        elif sig == "overbought":
+            rows.append({"type": "bearish", "indicator": "Stochastic", "message": f"Overbought ({k_str}) — extended in an uptrend, not a standalone reversal signal."})
+        else:
+            rows.append({"type": "neutral", "indicator": "Stochastic", "message": f"Neutral ({k_str}) — mid-range."})
+
+    # ── CCI ───────────────────────────────────────────────────────────
+    cci_data = advanced.get("cci")
+    if cci_data and isinstance(cci_data, dict) and cci_data.get("value") is not None:
+        sig = cci_data.get("signal")
+        val = cci_data.get("value")
+        if sig == "oversold":
+            rows.append({"type": "bullish", "indicator": "CCI", "message": f"Oversold (CCI {val:.0f}) — stretched low; CCI is unbounded and can stay low in a downtrend."})
+        elif sig == "overbought":
+            rows.append({"type": "bearish", "indicator": "CCI", "message": f"Overbought (CCI {val:.0f}) — stretched high; CCI is unbounded and can stay high in an uptrend."})
+        else:
+            rows.append({"type": "neutral", "indicator": "CCI", "message": f"Neutral (CCI {val:.0f}) — within ±100."})
+
+    # ── VWAP ──────────────────────────────────────────────────────────
+    vwap_data = advanced.get("vwap")
+    if vwap_data and isinstance(vwap_data, dict):
+        sig = vwap_data.get("signal")
+        if sig == "bullish":
+            rows.append({"type": "bullish", "indicator": "VWAP", "message": "Price above its volume-weighted average — buyers in control over the period."})
+        elif sig == "bearish":
+            rows.append({"type": "bearish", "indicator": "VWAP", "message": "Price below its volume-weighted average — sellers in control over the period."})
+        else:
+            rows.append({"type": "neutral", "indicator": "VWAP", "message": "Price near its volume-weighted average."})
+
+    # ── OBV ───────────────────────────────────────────────────────────
+    obv_data = advanced.get("obv")
+    if obv_data and isinstance(obv_data, dict):
+        sig = obv_data.get("signal")
+        if sig == "bullish":
+            rows.append({"type": "bullish", "indicator": "OBV", "message": "On-balance volume rising — volume confirming buying pressure."})
+        elif sig == "bearish":
+            rows.append({"type": "bearish", "indicator": "OBV", "message": "On-balance volume falling — volume confirming selling pressure."})
+        else:
+            rows.append({"type": "neutral", "indicator": "OBV", "message": "On-balance volume flat — no clear volume bias."})
+
+    return rows
+
+
 def generate_summary(rsi, macd_data, ma_data, bb_data, current_price, advanced=None):
     """
     Generate overall trading summary using weighted indicator scoring.

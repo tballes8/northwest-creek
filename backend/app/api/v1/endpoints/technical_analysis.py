@@ -12,7 +12,7 @@ from app.db.models import User, Watchlist
 from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.services.market_data import market_data_service
-from app.services.technical_indicators import technical_indicators, generate_summary
+from app.services.technical_indicators import technical_indicators, generate_summary, build_signal_rows
 
 
 def _safe_error(e: Exception) -> str:
@@ -254,82 +254,35 @@ async def analyze_stock(
             print(f"Advanced indicators error: {e}")
             advanced = {}
 
-        # Generate trading signals
-        signals = []
-        if rsi is not None:
-            if rsi < 30:
-                signals.append({
-                    "type": "buy", 
-                    "indicator": "RSI", 
-                    "message": f"Oversold (RSI: {rsi:.1f}) - potential buying opportunity"
-                })
-            elif rsi > 70:
-                signals.append({
-                    "type": "sell", 
-                    "indicator": "RSI", 
-                    "message": f"Overbought (RSI: {rsi:.1f}) - consider taking profits"
-                })
-        
-        if macd_data and isinstance(macd_data, dict):
-            if macd_data.get("trend") == "bullish":
-                signals.append({
-                    "type": "buy", 
-                    "indicator": "MACD", 
-                    "message": "Bullish momentum detected"
-                })
-            elif macd_data.get("trend") == "bearish":
-                signals.append({
-                    "type": "sell", 
-                    "indicator": "MACD", 
-                    "message": "Bearish momentum detected"
-                })
-        
-        if bb_data and isinstance(bb_data, dict):
-            if bb_data.get("position") == "below_lower":
-                signals.append({
-                    "type": "buy", 
-                    "indicator": "Bollinger Bands", 
-                    "message": "Below lower band - potential bounce opportunity"
-                })
-            elif bb_data.get("position") == "above_upper":
-                signals.append({
-                    "type": "sell", 
-                    "indicator": "Bollinger Bands", 
-                    "message": "Above upper band - overbought territory"
-                })
-        
-        # ── Advanced indicator signals ─────────────────────────────────────
-        stoch = advanced.get("stochastic")
-        if stoch:
-            if stoch.get("signal") == "oversold":
-                signals.append({"type": "buy", "indicator": "Stochastic", "message": f"Oversold (%K: {stoch['k']:.1f}) - potential reversal"})
-            elif stoch.get("signal") == "overbought":
-                signals.append({"type": "sell", "indicator": "Stochastic", "message": f"Overbought (%K: {stoch['k']:.1f}) - potential pullback"})
-        
-        adx_data = advanced.get("adx")
-        if adx_data:
-            if adx_data.get("strength") in ("trending", "very_strong"):
-                signals.append({"type": "buy" if adx_data["direction"] == "bullish" else "sell", "indicator": "ADX",
-                    "message": f"Strong {adx_data['direction']} trend (ADX: {adx_data['adx']:.1f})"})
-        
-        cci_data = advanced.get("cci")
-        if cci_data and cci_data.get("value") is not None:
-            if cci_data["signal"] == "oversold":
-                signals.append({"type": "buy", "indicator": "CCI", "message": f"Oversold (CCI: {cci_data['value']:.0f})"})
-            elif cci_data["signal"] == "overbought":
-                signals.append({"type": "sell", "indicator": "CCI", "message": f"Overbought (CCI: {cci_data['value']:.0f})"})
-        
-        sar_data = advanced.get("parabolic_sar")
-        if sar_data:
-            signals.append({"type": "buy" if sar_data["trend"] == "uptrend" else "sell", "indicator": "Parabolic SAR",
-                "message": f"SAR ${sar_data['value']:.2f} — {sar_data['trend']}"})
-        
-        ich_data = advanced.get("ichimoku")
-        if ich_data:
-            if ich_data["signal"] == "bullish":
-                signals.append({"type": "buy", "indicator": "Ichimoku Cloud", "message": "Price above cloud — bullish"})
-            elif ich_data["signal"] == "bearish":
-                signals.append({"type": "sell", "indicator": "Ichimoku Cloud", "message": "Price below cloud — bearish"})
+        # ── Build the scoring inputs once, then derive both the per-indicator
+        #    signal rows and the weighted outlook from the SAME inputs so the
+        #    rows always reconcile with the outlook's "X of N" count.
+        summary_rsi = rsi_history[-1] if rsi_history[-1] is not None else None
+        summary_macd = (
+            {
+                "trend": "bullish" if macd_histogram_history[-1] and macd_histogram_history[-1] > 0
+                         else "bearish" if macd_histogram_history[-1] and macd_histogram_history[-1] < 0
+                         else "neutral",
+                "histogram": macd_histogram_history[-1],
+            }
+            if macd_histogram_history[-1] is not None else None
+        )
+        summary_ma = {
+            "sma_20": sma_20_history[-1],
+            "sma_50": sma_50_history[-1],
+            "sma_200": sma_200_history[-1],
+        }
+        summary_bb = (
+            {
+                "upper_band": bb_upper_history[-1],
+                "middle_band": bb_middle_history[-1],
+                "lower_band": bb_lower_history[-1],
+                "position": _determine_bb_position(current_price, bb_upper_history[-1], bb_lower_history[-1]),
+            }
+            if bb_upper_history[-1] is not None else None
+        )
+
+        signals = build_signal_rows(summary_rsi, summary_macd, summary_ma, summary_bb, current_price, advanced)
 
         # Enrich historical data with indicators (existing + advanced)
         n = len(historical)
@@ -437,26 +390,7 @@ async def analyze_stock(
             },
             "signals": signals,
             "chart_data": enriched_chart_data,
-            "summary": generate_summary(
-                rsi_history[-1] if rsi_history[-1] is not None else None,
-                {
-                    "trend": "bullish" if macd_histogram_history[-1] and macd_histogram_history[-1] > 0 else "bearish" if macd_histogram_history[-1] and macd_histogram_history[-1] < 0 else "neutral",
-                    "histogram": macd_histogram_history[-1]
-                } if macd_histogram_history[-1] is not None else None,
-                {
-                    "sma_20": sma_20_history[-1],
-                    "sma_50": sma_50_history[-1],
-                    "sma_200": sma_200_history[-1]
-                },
-                {
-                    "upper_band": bb_upper_history[-1],
-                    "middle_band": bb_middle_history[-1],
-                    "lower_band": bb_lower_history[-1],
-                    "position": _determine_bb_position(current_price, bb_upper_history[-1], bb_lower_history[-1])
-                } if bb_upper_history[-1] is not None else None,
-                current_price,
-                advanced
-            )
+            "summary": generate_summary(summary_rsi, summary_macd, summary_ma, summary_bb, current_price, advanced)
         }    
     except HTTPException:
         raise
