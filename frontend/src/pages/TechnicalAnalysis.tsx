@@ -1208,7 +1208,7 @@ const TechnicalAnalysis: React.FC = () => {
                     {analysisData.company_name} ({analysisData.ticker})
                   </h2>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Analysis as of {new Date(analysisData.analysis_date).toLocaleDateString()}
+                    Analysis as of {new Date(`${analysisData.analysis_date.split('T')[0].split(' ')[0]}T00:00:00`).toLocaleDateString()}
                   </p>
                 </div>
                 <div className="text-right">
