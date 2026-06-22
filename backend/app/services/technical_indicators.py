@@ -295,6 +295,58 @@ class TechnicalIndicators:
             "history": vals
         }
 
+    def calculate_roc_divergence(self, highs, lows, closes, period=12, pivot_strength=3, lookback=60):
+        """
+        Detect divergence between price and ROC momentum.
+
+        Bearish divergence: price makes a higher swing high while ROC makes a lower
+        high — the advance is losing momentum. Bullish divergence: price makes a
+        lower swing low while ROC makes a higher low — selling pressure is fading.
+
+        Compares the two most recent confirmed swing pivots (a bar is a swing high/low
+        when its high/low is the extreme of a +/- pivot_strength window, so the last
+        pivot_strength bars are never pivots) within the most recent lookback bars.
+        Heuristic by nature — an early-warning reading, not a trade trigger.
+
+        Returns {"signal", "value", "description"} or None if there isn't enough data.
+        """
+        roc = self.calculate_roc(closes, period)
+        if not roc:
+            return None
+        roc_hist = roc["history"]
+        n = len(closes)
+        start = max(period, n - lookback)  # ROC undefined before `period`
+
+        swing_highs, swing_lows = [], []
+        for i in range(max(start, pivot_strength), n - pivot_strength):
+            window = slice(i - pivot_strength, i + pivot_strength + 1)
+            if roc_hist[i] is None:
+                continue
+            if highs[i] == max(highs[window]):
+                swing_highs.append(i)
+            if lows[i] == min(lows[window]):
+                swing_lows.append(i)
+
+        bearish_idx = bullish_idx = None
+        if len(swing_highs) >= 2:
+            prev, recent = swing_highs[-2], swing_highs[-1]
+            if highs[recent] > highs[prev] and roc_hist[recent] < roc_hist[prev]:
+                bearish_idx = recent
+        if len(swing_lows) >= 2:
+            prev, recent = swing_lows[-2], swing_lows[-1]
+            if lows[recent] < lows[prev] and roc_hist[recent] > roc_hist[prev]:
+                bullish_idx = recent
+
+        # If both fire, the more recent pivot wins.
+        if bearish_idx is not None and (bullish_idx is None or bearish_idx >= bullish_idx):
+            signal, description = "bearish", "Bearish divergence — price made a higher high while ROC made a lower high"
+        elif bullish_idx is not None:
+            signal, description = "bullish", "Bullish divergence — price made a lower low while ROC made a higher low"
+        else:
+            signal, description = "neutral", "No divergence — momentum confirming price"
+
+        return {"signal": signal, "value": roc["value"], "description": description}
+
     # ═══════════════════════════════════════════════════════════════════════
     # C. VOLATILITY INDICATORS
     # ═══════════════════════════════════════════════════════════════════════
@@ -573,6 +625,7 @@ class TechnicalIndicators:
             ("adx", lambda: self.calculate_adx(highs, lows, closes)),
             ("cci", lambda: self.calculate_cci(highs, lows, closes)),
             ("roc", lambda: self.calculate_roc(closes)),
+            ("roc_divergence", lambda: self.calculate_roc_divergence(highs, lows, closes)),
             ("atr", lambda: self.calculate_atr(highs, lows, closes)),
             ("keltner", lambda: self.calculate_keltner_channels(highs, lows, closes)),
             ("std_dev", lambda: self.calculate_std_dev(closes)),
@@ -685,9 +738,12 @@ def build_signal_rows(rsi, macd_data, ma_data, bb_data, current_price, advanced=
     """
     Build the per-indicator rows for the Trading Signals panel.
 
-    Covers exactly the indicators that participate in generate_summary() scoring,
-    using identical thresholds, so the rows reconcile with the outlook's
-    "X of N indicators" count (X = bullish rows, N = non-neutral rows).
+    Each row carries a "scored" flag. Scored rows use the same indicators and
+    thresholds as generate_summary(), so they reconcile with the outlook's
+    "X of N indicators" count (X = bullish scored rows, N = non-neutral scored
+    rows). Unscored rows (ROC divergence, A/D Line, Keltner, Donchian) are
+    informational only and intentionally do NOT contribute to that count — a
+    mismatch between total rows and N is expected, not a bug.
 
     Each row is a *condition* — type is "bullish", "bearish", or "neutral" — not
     a trade instruction, and the message describes the reading (and, where it
@@ -829,6 +885,60 @@ def build_signal_rows(rsi, macd_data, ma_data, bb_data, current_price, advanced=
             rows.append({"type": "bearish", "indicator": "OBV", "message": "On-balance volume falling — volume confirming selling pressure."})
         else:
             rows.append({"type": "neutral", "indicator": "OBV", "message": "On-balance volume flat — no clear volume bias."})
+
+    # ── Informational rows (not scored — see docstring) ───────────────
+    # ── ROC divergence (momentum vs. price) ───────────────────────────
+    roc_div = advanced.get("roc_divergence")
+    if roc_div and isinstance(roc_div, dict):
+        sig = roc_div.get("signal")
+        if sig == "bearish":
+            rows.append({"type": "bearish", "indicator": "ROC", "message": "Bearish divergence — price made a higher high while ROC made a lower high; the momentum behind the advance is weakening."})
+        elif sig == "bullish":
+            rows.append({"type": "bullish", "indicator": "ROC", "message": "Bullish divergence — price made a lower low while ROC made a higher low; selling pressure may be fading."})
+        else:
+            rows.append({"type": "neutral", "indicator": "ROC", "message": "Momentum confirming price — no divergence between price and ROC."})
+
+    # ── A/D Line (volume flow) ────────────────────────────────────────
+    ad_data = advanced.get("ad_line")
+    if ad_data and isinstance(ad_data, dict):
+        sig = ad_data.get("signal")
+        if sig == "bullish":
+            rows.append({"type": "bullish", "indicator": "A/D Line", "message": "A/D line rising — volume flowing in (accumulation)."})
+        elif sig == "bearish":
+            rows.append({"type": "bearish", "indicator": "A/D Line", "message": "A/D line falling — volume flowing out (distribution)."})
+        else:
+            rows.append({"type": "neutral", "indicator": "A/D Line", "message": "A/D line flat — no clear accumulation or distribution."})
+
+    # ── Keltner Channels (volatility envelope) ────────────────────────
+    kc_data = advanced.get("keltner")
+    if kc_data and isinstance(kc_data, dict):
+        pos = kc_data.get("position")
+        if pos == "above_upper":
+            rows.append({"type": "bearish", "indicator": "Keltner Channels", "message": "Above the upper Keltner channel — stretched high for its recent volatility."})
+        elif pos == "below_lower":
+            rows.append({"type": "bullish", "indicator": "Keltner Channels", "message": "Below the lower Keltner channel — stretched low for its recent volatility."})
+        else:
+            rows.append({"type": "neutral", "indicator": "Keltner Channels", "message": "Within the Keltner channels — normal volatility range."})
+
+    # ── Donchian Channels (20-day high/low range) ─────────────────────
+    dc_data = advanced.get("donchian")
+    if dc_data and isinstance(dc_data, dict) and dc_data.get("upper") is not None and dc_data.get("lower") is not None:
+        upper, lower = dc_data["upper"], dc_data["lower"]
+        if upper > lower:
+            pos = (current_price - lower) / (upper - lower)
+            if pos >= 0.8:
+                rows.append({"type": "bullish", "indicator": "Donchian Channels", "message": "Near the top of its 20-day range — breakout territory."})
+            elif pos <= 0.2:
+                rows.append({"type": "bearish", "indicator": "Donchian Channels", "message": "Near the bottom of its 20-day range — breakdown territory."})
+            else:
+                rows.append({"type": "neutral", "indicator": "Donchian Channels", "message": "Mid-range within its 20-day high–low channel."})
+
+    # Tag which rows feed generate_summary()'s outlook score; the rest are
+    # informational and intentionally excluded from the "X of N" count.
+    SCORED = {"MACD", "ADX", "Moving Averages", "Ichimoku Cloud", "Parabolic SAR",
+              "RSI", "Bollinger Bands", "Stochastic", "CCI", "VWAP", "OBV"}
+    for row in rows:
+        row["scored"] = row["indicator"] in SCORED
 
     return rows
 

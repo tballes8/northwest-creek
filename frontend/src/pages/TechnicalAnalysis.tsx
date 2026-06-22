@@ -95,6 +95,7 @@ interface TechnicalAnalysisData {
     type: string;
     indicator: string;
     message: string;
+    scored?: boolean;
   }>;
   chart_data: Array<{
     date: string;
@@ -1554,10 +1555,17 @@ const TechnicalAnalysis: React.FC = () => {
             {/* Trading Signals */}
             {analysisData.signals && analysisData.signals.length > 0 && (
               <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Trading Signals</h3>
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Trading Signals</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                  The outlook above is scored from the <span className="text-teal-600 dark:text-teal-400 font-medium">teal-bordered</span> indicators (trend indicators count double). Cards without a border — ROC, A/D Line, Keltner, Donchian — are informational and don't affect the score.
+                </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {analysisData.signals.map((signal, index) => (
-                    <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" onClick={() => scrollToChart(signal.indicator)}>
+                    <div key={index} className={`flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+                      signal.scored
+                        ? 'border border-teal-500 dark:border-teal-600'
+                        : 'border border-transparent'
+                    }`} onClick={() => scrollToChart(signal.indicator)}>
                       <span className={`flex-shrink-0 px-2 py-1 rounded text-xs font-bold text-center min-w-[64px] text-white ${
                         signal.type === 'bullish'
                           ? 'bg-green-500'
