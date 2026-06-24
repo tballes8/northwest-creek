@@ -141,12 +141,13 @@ const Landing: React.FC = () => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
-        {/* Trusted-by strip */}
+        {/* Trusted-by strip 
         <div className="mt-8 mb-20 text-center">
           <p className="text-sm uppercase tracking-widest text-gray-500 dark:text-gray-400 font-medium">
             Built in Post Falls, Idaho · Powered by Anthropic · FMP · Stripe · SendGrid
           </p>
         </div>
+        */}
 
         {/* How it works */}
         <div className="mb-32">
@@ -233,9 +234,9 @@ const Landing: React.FC = () => {
               'Usage scales with tier: 5/week (Casual) → 25/day (Professional)',
               'Built on Anthropic Claude — no hallucinated tickers or made-up financials',
             ]}
-            screenshotFile="ai_portfolio_analysis.gif"
+            screenshotFile="ai-analysis.png"
             screenshotDescription="Stock detail or Dashboard showing the AI-generated analysis text panel for a real ticker."
-            imageSrc="/landing/ai_portfolio_analysis.gif"
+            imageSrc="/landing/ai-analysis.png"
             reverse
             withChrome
           />
