@@ -24,7 +24,6 @@ from app.services.vendor_registries import (
 )
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
-MODEL = "claude-sonnet-4-6"
 
 
 def _grounded_system_prompt(vendor_display: str) -> str:
@@ -148,7 +147,7 @@ async def assess_changelog(changelog_text: str, vendor: str | None = None) -> st
                 "content-type": "application/json",
             },
             json={
-                "model": MODEL,
+                "model": settings.ANTHROPIC_MODEL,
                 "max_tokens": 2000,
                 "system": system_prompt,
                 "messages": [{"role": "user", "content": prompt}],

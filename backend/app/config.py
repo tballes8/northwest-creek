@@ -49,6 +49,9 @@ class Settings(BaseSettings):
 
     # Anthropic AI
     ANTHROPIC_API_KEY: str = Field(default="", env="ANTHROPIC_API_KEY")
+    # Single source of truth for the model ID used by every AI service.
+    # Bump this (or set the ANTHROPIC_MODEL env var) when migrating Sonnet versions.
+    ANTHROPIC_MODEL: str = Field(default="claude-sonnet-4-6", env="ANTHROPIC_MODEL")
 
     # FRED (Federal Reserve Economic Data) API — optional. When unset, the FRED
     # client falls back to the unauthenticated fredgraph CSV endpoint.

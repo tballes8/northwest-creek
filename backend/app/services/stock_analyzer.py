@@ -2,10 +2,13 @@
 Stock AI analysis service — builds a focused prompt from technical indicator data
 and calls the Anthropic Claude API to generate a plain-language summary.
 """
+import logging
 import httpx
 import json
 from typing import Dict, Any, List, Optional
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 async def analyze_stock(
@@ -118,7 +121,7 @@ Summarize what these indicators suggest about this stock's momentum, trend stren
                     "content-type": "application/json",
                 },
                 json={
-                    "model": "claude-sonnet-4-6",
+                    "model": settings.ANTHROPIC_MODEL,
                     "max_tokens": 400,
                     "system": system_prompt,
                     "messages": [{"role": "user", "content": prompt}],
@@ -128,6 +131,7 @@ Summarize what these indicators suggest about this stock's momentum, trend stren
             data = response.json()
             return data["content"][0]["text"]
     except Exception:
+        logger.exception("Stock AI analysis request failed for %s (model=%s)", ticker, settings.ANTHROPIC_MODEL)
         return (
             "Unable to generate AI analysis at this time. "
             "Please try again in a moment."
@@ -217,7 +221,7 @@ Respond with ONLY this JSON (no markdown, no explanation outside the object):
                     "content-type": "application/json",
                 },
                 json={
-                    "model": "claude-sonnet-4-6",
+                    "model": settings.ANTHROPIC_MODEL,
                     "max_tokens": 200,
                     "system": system_prompt,
                     "messages": [{"role": "user", "content": prompt}],
@@ -250,4 +254,5 @@ Respond with ONLY this JSON (no markdown, no explanation outside the object):
                 "rationale": rationale,
             }
     except Exception:
+        logger.exception("Stock price forecast request failed (model=%s)", settings.ANTHROPIC_MODEL)
         return None

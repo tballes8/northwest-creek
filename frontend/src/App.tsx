@@ -23,7 +23,6 @@ import BlogPost from './pages/BlogPost';
 import AdminContent from './pages/AdminContent';
 import ResetPassword from './pages/ResetPassword';
 import WaitlistLanding from './pages/WaitlistLanding';
-import MICDecoder from './pages/MICDecoder';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsConditions from './pages/TermsConditions';
 import FAQ from './pages/FAQ';
@@ -100,7 +99,6 @@ function App() {
             <Route path="/registerwithpayment" element={<RegisterWithPayment />} />
             <Route path="/stocks" element={<SubscriptionGuard><Stocks /></SubscriptionGuard>} />
             <Route path="/dashboard" element={<SubscriptionGuard><Dashboard /></SubscriptionGuard>} />
-            <Route path="/mic-decoder" element={<MICDecoder />} />
             <Route path="/account" element={<SubscriptionGuard><AccountSettings /></SubscriptionGuard>} />
             <Route path="/watchlist" element={<SubscriptionGuard><Watchlist /></SubscriptionGuard>} />
             <Route path="/portfolio" element={<SubscriptionGuard><Portfolio /></SubscriptionGuard>} />

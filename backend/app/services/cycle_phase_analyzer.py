@@ -195,7 +195,7 @@ async def synthesize_cycle_phase(end_date: date_cls) -> Optional[dict[str, Any]]
                     "content-type": "application/json",
                 },
                 json={
-                    "model": "claude-sonnet-4-6",
+                    "model": settings.ANTHROPIC_MODEL,
                     "max_tokens": 700,
                     "system": system_prompt,
                     "messages": [{"role": "user", "content": user_prompt}],

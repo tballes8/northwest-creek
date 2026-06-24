@@ -87,9 +87,11 @@ NWC calls the Anthropic Messages API directly over HTTP (no SDK), via httpx.
 - Request body fields used: `model`, `max_tokens`, `system` (some callers), `messages: [{role, content}]`
 - Response read: `content[0].text` (assumes first content block is text)
 
-Pinned model IDs in use (a model retirement/deprecation directly breaks these):
-- `claude-sonnet-4-6` — `services/stock_analyzer.py` (price target + analysis), `services/cycle_phase_analyzer.py`, `services/changelog_review.py` (this reviewer)
-- `claude-sonnet-4-20250514` — `services/portfolio_analyzer.py`  ⚠ OLDER pinned model; highest deprecation risk
+Pinned model ID (a model retirement/deprecation directly breaks all AI services):
+- `config.ANTHROPIC_MODEL` (default `claude-sonnet-4-6`, overridable via the ANTHROPIC_MODEL
+  env var) — single source of truth read by `services/stock_analyzer.py` (price target +
+  analysis), `services/cycle_phase_analyzer.py`, `services/changelog_review.py` (this reviewer),
+  and `services/portfolio_analyzer.py`. Bump it in one place when migrating Sonnet versions.
 
 Files: `services/stock_analyzer.py`, `services/cycle_phase_analyzer.py`, `services/portfolio_analyzer.py`, `services/changelog_review.py`.
 

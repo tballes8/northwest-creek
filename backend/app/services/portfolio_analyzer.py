@@ -2,9 +2,12 @@
 Portfolio AI analysis service — builds a focused prompt from portfolio data
 and calls the Anthropic Claude API to generate a plain-language summary.
 """
+import logging
 import httpx
 from typing import List, Dict, Any
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 async def analyze_portfolio(
@@ -120,7 +123,7 @@ Write a 3-5 sentence plain-language summary explaining what is happening in this
                     "content-type": "application/json",
                 },
                 json={
-                    "model": "claude-sonnet-4-20250514",
+                    "model": settings.ANTHROPIC_MODEL,
                     "max_tokens": 500,
                     "system": system_prompt,
                     "messages": [{"role": "user", "content": prompt}],
@@ -130,6 +133,7 @@ Write a 3-5 sentence plain-language summary explaining what is happening in this
             data = response.json()
             return data["content"][0]["text"]
     except Exception:
+        logger.exception("Portfolio AI analysis request failed (model=%s)", settings.ANTHROPIC_MODEL)
         return (
             "Unable to generate AI analysis at this time. "
             "Please try again in a moment."
