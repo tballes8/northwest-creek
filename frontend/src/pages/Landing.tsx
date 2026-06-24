@@ -21,7 +21,7 @@ const Landing: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       {/* SEO — React 19 hoists these to <head> automatically */}
       <title>NWC-Analytics — Professional Stock Analysis for Retail Investors</title>
-      <meta name="description" content="Real-time prices, AI-powered stock & portfolio analysis, 15+ technical indicators, DCF valuation, and smart alerts — built for retail investors who do their own homework." />
+      <meta name="description" content="Real-time prices, AI-powered stock & portfolio analysis, 15+ technical indicators, DCF & relative valuation, and smart alerts — built for retail investors who do their own homework." />
       <link rel="canonical" href="https://nwc-analytics.com" />
       <meta property="og:type" content="website" />
       <meta property="og:title" content="NWC-Analytics — Professional Stock Analysis for Retail Investors" />
@@ -257,6 +257,7 @@ const Landing: React.FC = () => {
               'Moving Averages (SMA/EMA), VWAP, OBV, A/D Line',
               'Ichimoku Cloud, Keltner & Donchian Channels, Parabolic SAR',
               'CCI and Rate of Change momentum indicators',
+              'Volatility Squeeze detection — Bollinger inside Keltner, with coiling vs. fired status',
               'Watchlist batch analysis with preset filters (oversold, overbought, uptrend)',
             ]}
             screenshotFile="tech-analysis.png"
@@ -306,10 +307,39 @@ const Landing: React.FC = () => {
               'Year-by-year projected cash flows and present values',
               'Intrinsic value per share with margin of safety',
               'Clear Buy / Hold / Overvalued recommendation',
+              'Cross-checked against independent simple, levered & custom DCF benchmarks',
             ]}
             screenshotFile="dcf-suggestions.png"
             screenshotDescription="DCF page for a recognizable ticker (e.g. MSFT or AAPL) showing the suggestion panel and the resulting Buy/Hold/Overvalued recommendation."
             imageSrc="/landing/dcf-suggestions.png"
+          />
+
+          {/* 6b. Relative Valuation */}
+          <FeatureSection
+            eyebrow="⚖️ PEER MULTIPLES"
+            eyebrowColor="blue"
+            title="Relative Valuation — Peer-Multiple Price Targets"
+            body={
+              <>
+                A DCF tells you what a company has to do to justify its price. Relative valuation tells you
+                what the market is already paying for comparable businesses right now — and the gap between
+                the two is itself a signal. Build your own peer set, apply median P/E, P/S, and EV/EBITDA
+                multiples to forward estimates, and get a defensible target-price range instead of a single
+                hero number.
+              </>
+            }
+            bullets={[
+              'Three methods — P/E, P/S, EV/EBITDA — combined into a MIN–MAX target range',
+              'Build a peer set from the screener or by ticker, then hand-cut bad comps',
+              'Median hygiene excludes negative and extreme (>100×) P/E outliers',
+              'Forward estimates, net debt, and shares auto-fill with source badges',
+              '±10% sensitivity grid shows which assumption your thesis rides on',
+              'One-click cross-check against the DCF intrinsic value for the same ticker',
+            ]}
+            screenshotFile="relative-valuation.png"
+            screenshotDescription="Relative Valuation tab showing the MIN–MAX target-price range, the three method cards (P/E, P/S central, EV/EBITDA), and the P/S sensitivity grid."
+            imageSrc="/landing/relative-valuation.png"
+            reverse
           />
 
           {/* 7. Smart Alerts */}
@@ -335,7 +365,6 @@ const Landing: React.FC = () => {
             screenshotFile="alerts-page.png"
             screenshotDescription="Alerts page showing both a price alert and at least one technical alert configured."
             imageSrc="/landing/alerts-page.png"
-            reverse
           />
 
           {/* 8. Stock Screener */}
@@ -354,12 +383,14 @@ const Landing: React.FC = () => {
               'Filter by price, market cap, volume, and sector',
               'Technical filters: golden cross, death cross, 50/200-day MA position',
               '52-week high/low proximity, gap %, volume spikes',
+              'One-click "In Squeeze" and "Squeeze Fired" presets to catch coiling breakouts',
               'Daily snapshot covers all common stocks and ETFs',
               'Save your screens (Active and Professional)',
             ]}
             screenshotFile="screener.png"
             screenshotDescription="Stocks page (screener view) with filters applied — ideally a technical filter like golden cross or 52-week range."
             imageSrc="/landing/screener.png"
+            reverse
           />
 
           {/* Options Calculator — condensed feature card */}
@@ -374,7 +405,9 @@ const Landing: React.FC = () => {
                 </h3>
                 <p className="text-gray-600 dark:text-gray-300">
                   Price single-leg and multi-leg strategies, visualize P&L at expiration, and calculate
-                  full Greeks (Delta, Gamma, Theta, Vega, Rho). Implied volatility solver included.
+                  full Greeks (Delta, Gamma, Theta, Vega, Rho) — each with a plain-English definition a
+                  click away. Inputs stay grounded in real market data: a live, tenor-matched Treasury
+                  risk-free rate and realistic near-the-money strikes. Implied volatility solver included.
                   Available on Active and Professional tiers.
                 </p>
               </div>
