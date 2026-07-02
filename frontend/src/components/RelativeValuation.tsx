@@ -429,16 +429,18 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
 
   return (
     <div className="space-y-6">
-      {/* Intro / framing */}
+      {/* Inputs — ticker loader + forward estimates in one card */}
       <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-          Relative Valuation{ticker ? ` — ${companyName || ticker}` : ''}
-          {ticker && subjectMarketCap != null && (
-            <span className="ml-2 text-sm font-medium text-gray-500 dark:text-gray-400">
-              · {fmtMcap(subjectMarketCap)} market cap
-            </span>
-          )}
-        </h2>
+        {ticker && (
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+            {companyName || ticker}
+            {subjectMarketCap != null && (
+              <span className="ml-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+                · {fmtMcap(subjectMarketCap)} market cap
+              </span>
+            )}
+          </h2>
+        )}
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
           Applies peer-<strong>median</strong> multiples to forward estimates across three methods
           (P/E, P/S, EV/EBITDA) to produce a target-price <strong>range</strong>. The spread between
@@ -473,45 +475,20 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
             </button>
           )}
         </div>
-      </div>
 
-      {showFinancials && reference && (
-        <SourceFinancialsModal
-          ticker={ticker}
-          companyName={companyName}
-          reference={reference}
-          forward={{
-            eps: form.forward_eps,
-            revenue_b: form.forward_revenue_b,
-            ebitda_b: form.forward_ebitda_b,
-            net_debt_b: form.net_debt_b,
-            shares_m: form.diluted_shares_m,
-          }}
-          onClose={() => setShowFinancials(false)}
-        />
-      )}
-
-      {!ticker && (
-        <div className="bg-white dark:bg-gray-700 rounded-xl shadow-md p-6 text-sm text-gray-500 dark:text-gray-400">
-          Enter a ticker above to load forward estimates and build a peer set.
-        </div>
-      )}
-
-      {ticker && (
-      <>
-      {/* ── Model inputs ──────────────────────────────────────────────── */}
-      <div className="bg-white dark:bg-gray-700 rounded-xl shadow-md p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-          Forward Estimates &amp; Balance Sheet
-          {estimateYear && (
-            <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
-              (estimates for FY{estimateYear})
-            </span>
-          )}
-        </h3>
-        {loadingInputs ? (
-          <p className="text-sm text-gray-500 dark:text-gray-400">Loading inputs…</p>
-        ) : (
+        {ticker && (
+          <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-600">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              Forward Estimates &amp; Balance Sheet
+              {estimateYear && (
+                <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
+                  (estimates for FY{estimateYear})
+                </span>
+              )}
+            </h3>
+            {loadingInputs ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Loading inputs…</p>
+            ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -560,11 +537,37 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
                 onChange={(e) => setField('current_price', e.target.value)} />
             </div>
           </div>
+            )}
+          </div>
         )}
       </div>
 
+      {showFinancials && reference && (
+        <SourceFinancialsModal
+          ticker={ticker}
+          companyName={companyName}
+          reference={reference}
+          forward={{
+            eps: form.forward_eps,
+            revenue_b: form.forward_revenue_b,
+            ebitda_b: form.forward_ebitda_b,
+            net_debt_b: form.net_debt_b,
+            shares_m: form.diluted_shares_m,
+          }}
+          onClose={() => setShowFinancials(false)}
+        />
+      )}
+
+      {!ticker && (
+        <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500 text-sm text-gray-500 dark:text-gray-400">
+          Enter a ticker above to load forward estimates and build a peer set.
+        </div>
+      )}
+
+      {ticker && (
+      <>
       {/* ── Peer set ──────────────────────────────────────────────────── */}
-      <div className="bg-white dark:bg-gray-700 rounded-xl shadow-md p-6">
+      <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">Peer Set</h3>
         <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">
           Pull comps by sector/industry or add them manually, then <strong>remove any bad comps</strong>{' '}
@@ -798,7 +801,7 @@ const RelvalResults: React.FC<{ result: RelvalResult }> = ({ result }) => {
   return (
     <div className="space-y-6">
       {/* Range headline */}
-      <div className="bg-white dark:bg-gray-700 rounded-xl shadow-md p-6">
+      <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
         <div className="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
           Target-Price Range
         </div>
@@ -879,7 +882,7 @@ const RelvalResults: React.FC<{ result: RelvalResult }> = ({ result }) => {
       )}
 
       {/* Sensitivity grid */}
-      <div className="bg-white dark:bg-gray-700 rounded-xl shadow-md p-6">
+      <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">P/S Sensitivity (±10%)</h3>
         <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">
           How the P/S target moves as the multiple and forward revenue each flex ±10%. This is where you
