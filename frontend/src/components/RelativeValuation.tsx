@@ -7,6 +7,7 @@ import UpgradeRequired from './UpgradeRequired';
 interface Peer {
   ticker: string;
   name: string | null;
+  description: string | null;
   sector: string | null;
   industry: string | null;
   market_cap: number | null;
@@ -37,6 +38,7 @@ interface RelvalReference {
 interface RelvalInputs {
   ticker: string;
   company_name: string;
+  description?: string | null;
   sector: string | null;
   industry: string | null;
   market_cap: number | null;
@@ -173,6 +175,10 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
   const [showFinancials, setShowFinancials] = useState(false);
   const [trailingPe, setTrailingPe] = useState<number | null>(null);
   const [companyName, setCompanyName] = useState('');
+  const [companyDescription, setCompanyDescription] = useState<string | null>(null);
+  const [aboutExpanded, setAboutExpanded] = useState(false);
+  // Peer whose "About" popup is open (null = closed).
+  const [peerAbout, setPeerAbout] = useState<Peer | null>(null);
   const [subjectSector, setSubjectSector] = useState<string | null>(null);
   const [subjectIndustry, setSubjectIndustry] = useState<string | null>(null);
   const [subjectMarketCap, setSubjectMarketCap] = useState<number | null>(null);
@@ -222,6 +228,8 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
       setReference(data.reference || null);
       setTrailingPe(data.trailing_pe);
       setCompanyName(data.company_name || ticker);
+      setCompanyDescription(data.description || null);
+      setAboutExpanded(false);
       setSubjectSector(data.sector);
       setSubjectIndustry(data.industry);
       // Fall back to price × diluted shares when the profile market cap is missing.
@@ -441,11 +449,21 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
             )}
           </h2>
         )}
-        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-          Applies peer-<strong>median</strong> multiples to forward estimates across three methods
-          (P/E, P/S, EV/EBITDA) to produce a target-price <strong>range</strong>. The spread between
-          methods — not any single number — is the point.
-        </p>
+        {ticker && companyDescription && (
+          <div className="mt-2">
+            <p className={`text-sm text-gray-600 dark:text-gray-400 leading-relaxed ${aboutExpanded ? '' : 'line-clamp-3'}`}>
+              {companyDescription}
+            </p>
+            {companyDescription.length > 220 && (
+              <button
+                onClick={() => setAboutExpanded((v) => !v)}
+                className="mt-1 text-xs font-medium text-purple-600 dark:text-purple-400 hover:underline"
+              >
+                {aboutExpanded ? 'Show less' : 'Show more'}
+              </button>
+            )}
+          </div>
+        )}
         <div className="flex flex-wrap items-center gap-2 mt-4">
           {onTickerChange && (
             <div className="flex gap-2 max-w-sm">
@@ -478,7 +496,7 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
 
         {ticker && (
           <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-600">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
               Forward Estimates &amp; Balance Sheet
               {estimateYear && (
                 <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
@@ -486,6 +504,11 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
                 </span>
               )}
             </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Applies peer-<strong>median</strong> multiples to forward estimates across three methods
+              (P/E, P/S, EV/EBITDA) to produce a target-price <strong>range</strong>. The spread between
+              methods — not any single number — is the point.
+            </p>
             {loadingInputs ? (
               <p className="text-sm text-gray-500 dark:text-gray-400">Loading inputs…</p>
             ) : (
@@ -558,6 +581,10 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
         />
       )}
 
+      {peerAbout && (
+        <PeerAboutModal peer={peerAbout} onClose={() => setPeerAbout(null)} />
+      )}
+
       {!ticker && (
         <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500 text-sm text-gray-500 dark:text-gray-400">
           Enter a ticker above to load forward estimates and build a peer set.
@@ -575,7 +602,9 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
           mis-tagged companies is part of the job. The <strong>revenue-growth</strong> and{' '}
           <strong>gross-margin</strong> columns are context, not inputs: a size-matched name with a very
           different growth or margin profile is what skews a multiple median. Rows whose growth runs well
-          above the set median are flagged <span className="text-amber-500">⚡</span>.
+          above the set median are flagged <span className="text-amber-500">⚡</span>.{' '}
+          <strong>Click a ticker</strong> to read what the company actually does — sector/industry tags
+          alone won't tell you whether it's a real comp.
         </p>
 
         <div className="flex flex-wrap items-end gap-3 mb-4">
@@ -657,7 +686,15 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
                         outlier ? 'bg-amber-50 dark:bg-amber-900/20' : ''
                       }`}
                     >
-                      <td className="py-2 pr-4 font-semibold text-gray-900 dark:text-white">{p.ticker}</td>
+                      <td className="py-2 pr-4 font-semibold">
+                        <button
+                          onClick={() => setPeerAbout(p)}
+                          className="text-purple-600 dark:text-purple-400 hover:underline"
+                          title="View company description"
+                        >
+                          {p.ticker}
+                        </button>
+                      </td>
                       <td className="py-2 pr-4 text-gray-700 dark:text-gray-300 max-w-[180px] truncate">{p.name || '—'}</td>
                       <td className="py-2 pr-4 text-gray-500 dark:text-gray-400 text-xs max-w-[160px] truncate">{p.industry || '—'}</td>
                       <td className="py-2 pr-4 text-right tabular-nums text-gray-900 dark:text-white">{fmtMcap(p.market_cap)}</td>
@@ -932,6 +969,44 @@ const RelvalResults: React.FC<{ result: RelvalResult }> = ({ result }) => {
     </div>
   );
 };
+
+// ─── Peer "About" popup ─────────────────────────────────────────────────────
+// Shows a peer's business description so the user can judge whether it's a real
+// comp — sector/industry tags routinely group companies that do very different
+// things.
+const PeerAboutModal: React.FC<{ peer: Peer; onClose: () => void }> = ({ peer, onClose }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <div
+      className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl border dark:border-gray-600 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-start justify-between px-6 py-4 border-b dark:border-gray-600">
+        <div className="pr-4">
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+            {peer.ticker}
+            {peer.market_cap != null && (
+              <span className="ml-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+                · {fmtMcap(peer.market_cap)}
+              </span>
+            )}
+          </h3>
+          {peer.name && <p className="text-xs text-gray-500 dark:text-gray-400">{peer.name}</p>}
+          {(peer.sector || peer.industry) && (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              {[peer.sector, peer.industry].filter(Boolean).join(' · ')}
+            </p>
+          )}
+        </div>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl leading-none">&times;</button>
+      </div>
+      <div className="px-6 py-4">
+        <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+          {peer.description || 'No company description available for this ticker.'}
+        </p>
+      </div>
+    </div>
+  </div>
+);
 
 // ─── Source-financials popup ───────────────────────────────────────────────
 interface SourceFinancialsModalProps {

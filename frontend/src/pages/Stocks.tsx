@@ -2485,7 +2485,7 @@ const Stocks: React.FC = () => {
 
               <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                  {isFundType(company.type) ? 'Investment Objective' : 'About'}
+                  {isFundType(company.type) ? 'Investment Objective' : 'Company Description'}
                 </h3>
                 <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
                   {isFundType(company.type)

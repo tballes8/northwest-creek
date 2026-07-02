@@ -252,6 +252,7 @@ async def get_relval_inputs(
         return {
             "ticker": sym,
             "company_name": (company or {}).get("name") or company_name,
+            "description": (company or {}).get("description") or None,
             "sector": (company or {}).get("sector"),
             "industry": (company or {}).get("industry"),
             "market_cap": (company or {}).get("market_cap"),
@@ -312,6 +313,7 @@ async def _fetch_peer_ratio(sym: str) -> Dict[str, Any]:
     row: Dict[str, Any] = {
         "ticker": sym,
         "name": None,
+        "description": None,
         "sector": None,
         "industry": None,
         "market_cap": None,
@@ -346,6 +348,7 @@ async def _fetch_peer_ratio(sym: str) -> Dict[str, Any]:
             if isinstance(pd, list) and pd:
                 p = pd[0]
                 row["name"] = p.get("companyName")
+                row["description"] = p.get("description")
                 row["sector"] = p.get("sector")
                 row["industry"] = p.get("industry")
                 row["market_cap"] = p.get("marketCap") or p.get("mktCap")
