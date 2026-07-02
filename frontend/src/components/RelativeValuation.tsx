@@ -430,7 +430,7 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
   return (
     <div className="space-y-6">
       {/* Intro / framing */}
-      <div className="bg-white dark:bg-gray-700 rounded-xl shadow-md p-6">
+      <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
         <h2 className="text-xl font-bold text-gray-900 dark:text-white">
           Relative Valuation{ticker ? ` — ${companyName || ticker}` : ''}
           {ticker && subjectMarketCap != null && (
