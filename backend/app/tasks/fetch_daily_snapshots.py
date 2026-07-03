@@ -15,7 +15,7 @@ from app.db.models import WaitlistSignup
 
 FMP_BASE = "https://financialmodelingprep.com/stable"
 # Batch size for quote requests — /stable/batch-quote supports larger batches
-QUOTE_BATCH_SIZE = 500
+QUOTE_BATCH_SIZE = 1000
 
 
 async def fetch_and_store_snapshots():

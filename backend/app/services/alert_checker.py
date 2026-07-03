@@ -348,7 +348,7 @@ class AlertChecker:
         Called when a user creates a new alert for a ticker we're not
         already watching. Adds it to the WebSocket subscription.
         """
-        if ticker not in price_service.subscribed_tickers:
+        if ticker not in price_service.persistent_tickers:
             await price_service.subscribe_to_tickers({ticker})
             print(f"🔔 AlertChecker: added subscription for new alert ticker {ticker}")
 

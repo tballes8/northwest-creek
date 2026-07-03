@@ -3,7 +3,9 @@ APScheduler job: refresh stock_snapshots from FMP /stable/batch-quote.
 
 Cadence (enforced inside the job, not by the scheduler):
 - Market hours (Mon–Fri 9:30–16:00 ET): runs every invocation (~15 min)
-- Off-hours: skips if last refresh < 55 minutes ago (effectively hourly)
+- Off-hours: one run after the most recent market close (to capture closing
+  prices), then skips until the next open — prices don't move overnight or
+  on weekends, so hourly re-fetches were pure API waste
 
 Initial population: if the table is empty, fetches /stock-list first to build
 the universe (US common stocks on NYSE/NASDAQ/AMEX, no ETFs, no warrants).
@@ -25,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 EASTERN = pytz.timezone("America/New_York")
 FMP_BASE = "https://financialmodelingprep.com/stable"
-QUOTE_BATCH_SIZE = 500
+QUOTE_BATCH_SIZE = 1000
 MARKET_OPEN = time(9, 30)
 MARKET_CLOSE = time(16, 0)
 
@@ -39,6 +41,18 @@ def _is_market_hours() -> bool:
         now.weekday() < 5
         and MARKET_OPEN <= now.time() <= MARKET_CLOSE
     )
+
+
+def _last_market_close() -> datetime:
+    """Most recent weekday 16:00 ET close that has already passed."""
+    now = datetime.now(EASTERN)
+    d = now.date()
+    while True:
+        if d.weekday() < 5:
+            close = EASTERN.localize(datetime.combine(d, MARKET_CLOSE))
+            if close <= now:
+                return close
+        d -= timedelta(days=1)
 
 
 async def _last_refresh_ts() -> datetime | None:
@@ -243,12 +257,12 @@ async def refresh_stock_snapshots_job(api_key: str) -> None:
     """Entry point called by APScheduler every 15 minutes."""
     if not _is_market_hours():
         last_ts = await _last_refresh_ts()
-        if last_ts:
-            age = datetime.now(timezone.utc) - last_ts
-            if age < timedelta(minutes=55):
-                print("📊 Off-hours throttle: snapshot fresh, skipping", flush=True)
-                logger.debug("Off-hours throttle: snapshot fresh, skipping")
-                return
+        # One refresh after the close captures final prices; after that,
+        # nothing changes until the next open — skip entirely.
+        if last_ts and last_ts >= _last_market_close():
+            print("📊 Off-hours throttle: closing snapshot already taken, skipping", flush=True)
+            logger.debug("Off-hours throttle: closing snapshot already taken, skipping")
+            return
 
     print("📊 Starting stock snapshot refresh…", flush=True)
     logger.info("Starting stock snapshot refresh…")

@@ -15,17 +15,33 @@ import pytz
 from app.services.fmp_client import get_fmp_client, API_KEY
 
 # How often to poll FMP for price updates (seconds)
-POLL_INTERVAL = 8
+POLL_INTERVAL = 20
+# Slower cadence when no browser clients are connected — alert checking
+# doesn't need sub-minute granularity, and this is what keeps the poller
+# from burning FMP calls all day for nobody.
+IDLE_POLL_INTERVAL = 60
 
 
 class LivePriceService:
     """Service to manage live price streaming via FMP REST polling"""
 
     def __init__(self):
-        self.subscribed_tickers: Set[str] = set()
+        # Alert tickers — subscribed at startup / on alert creation, never
+        # removed when clients disconnect.
+        self.persistent_tickers: Set[str] = set()
+        # Per-client ticker subscriptions; dropped when the client disconnects.
+        self.client_subscriptions: Dict = {}  # websocket → Set[str]
         self.clients: Set = set()
         self.price_cache: Dict[str, Dict] = {}  # Cache latest prices
         self.running = False
+
+    @property
+    def subscribed_tickers(self) -> Set[str]:
+        """Union of persistent (alert) tickers and all live client subscriptions."""
+        tickers = set(self.persistent_tickers)
+        for subs in self.client_subscriptions.values():
+            tickers |= subs
+        return tickers
 
         # Sprint 9: alert checker callback
         # Signature: async def callback(ticker: str, price: float)
@@ -47,33 +63,47 @@ class LivePriceService:
 
         return market_open <= current_time <= market_close
 
-    async def subscribe_to_tickers(self, tickers: Set[str]):
-        """Subscribe to ticker updates"""
+    async def subscribe_to_tickers(self, tickers: Set[str], client=None):
+        """Subscribe to ticker updates.
+
+        With a client, the subscription is tied to that connection and cleaned
+        up on disconnect. Without one (alert checker), it's persistent.
+        """
         new_tickers = tickers - self.subscribed_tickers
-        if not new_tickers:
-            return
+        if client is not None:
+            self.client_subscriptions.setdefault(client, set()).update(tickers)
+        else:
+            self.persistent_tickers.update(tickers)
 
-        self.subscribed_tickers.update(new_tickers)
-        print(f"📊 Subscribed to: {', '.join(new_tickers)}")
+        if new_tickers:
+            print(f"📊 Subscribed to: {', '.join(new_tickers)}")
 
-    async def unsubscribe_from_tickers(self, tickers: Set[str]):
-        """Unsubscribe from ticker updates"""
-        tickers_to_remove = tickers & self.subscribed_tickers
-        if not tickers_to_remove:
-            return
+    async def unsubscribe_from_tickers(self, tickers: Set[str], client=None):
+        """Unsubscribe from ticker updates (per-client unless persistent)."""
+        if client is not None:
+            subs = self.client_subscriptions.get(client)
+            if not subs:
+                return
+            subs -= tickers
+        else:
+            self.persistent_tickers -= tickers
 
-        self.subscribed_tickers -= tickers_to_remove
-        # Clean up price cache for removed tickers
-        for t in tickers_to_remove:
+        # Clean up price cache for tickers nobody watches anymore
+        dropped = tickers - self.subscribed_tickers
+        for t in dropped:
             self.price_cache.pop(t, None)
-        print(f"📊 Unsubscribed from: {', '.join(tickers_to_remove)}")
+        if dropped:
+            print(f"📊 Unsubscribed from: {', '.join(dropped)}")
 
     async def _poll_prices(self):
         """Poll FMP batch-quote endpoint for all subscribed tickers and broadcast changes."""
         while self.running:
+            # No clients connected → only alert tickers matter; poll slowly.
+            interval = POLL_INTERVAL if self.clients else IDLE_POLL_INTERVAL
             try:
-                if not self.subscribed_tickers:
-                    await asyncio.sleep(POLL_INTERVAL)
+                tickers = self.subscribed_tickers
+                if not tickers:
+                    await asyncio.sleep(interval)
                     continue
 
                 # Only poll during market hours (with a small buffer for pre/post)
@@ -81,7 +111,7 @@ class LivePriceService:
                     await asyncio.sleep(30)  # Check less frequently outside hours
                     continue
 
-                symbols = ",".join(self.subscribed_tickers)
+                symbols = ",".join(tickers)
 
                 client = get_fmp_client()
                 response = await client.get(
@@ -92,7 +122,7 @@ class LivePriceService:
                 data = response.json()
 
                 if not data or not isinstance(data, list):
-                    await asyncio.sleep(POLL_INTERVAL)
+                    await asyncio.sleep(interval)
                     continue
 
                 for item in data:
@@ -133,7 +163,7 @@ class LivePriceService:
             except Exception as e:
                 print(f"❌ Error in FMP price poller: {e}")
 
-            await asyncio.sleep(POLL_INTERVAL)
+            await asyncio.sleep(interval)
 
     async def broadcast_to_clients(self, message: dict):
         """Broadcast message to all connected clients"""
@@ -165,8 +195,12 @@ class LivePriceService:
             }))
 
     async def remove_client(self, websocket):
-        """Remove a client connection"""
+        """Remove a client connection and drop its ticker subscriptions."""
         self.clients.discard(websocket)
+        subs = self.client_subscriptions.pop(websocket, set())
+        # Prune cache for tickers no longer watched by anyone
+        for t in subs - self.subscribed_tickers:
+            self.price_cache.pop(t, None)
         print(f"👤 Client disconnected. Total clients: {len(self.clients)}")
 
     async def handle_client_message(self, websocket, message: str):
@@ -183,12 +217,12 @@ class LivePriceService:
             if action == "subscribe":
                 tickers = set(data.get("tickers", []))
                 if tickers:
-                    await self.subscribe_to_tickers(tickers)
+                    await self.subscribe_to_tickers(tickers, client=websocket)
 
             elif action == "unsubscribe":
                 tickers = set(data.get("tickers", []))
                 if tickers:
-                    await self.unsubscribe_from_tickers(tickers)
+                    await self.unsubscribe_from_tickers(tickers, client=websocket)
 
             elif action == "ping":
                 await websocket.send_text(json.dumps({"type": "pong"}))
