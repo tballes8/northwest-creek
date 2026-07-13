@@ -1,15 +1,14 @@
 # https://www.robotstxt.org/robotstxt.html
 User-agent: *
 
-# Public pages — allow
-Allow: /
-Allow: /pricing
-Allow: /blogs
-Allow: /blogs/*
-Allow: /login
-Allow: /register
+# Auth pages — no search value
+Disallow: /login
+Disallow: /register
+Disallow: /registerwithpayment
+Disallow: /verify-email
+Disallow: /reset-password
 
-# Authenticated pages — no indexing
+# Authenticated / app-internal pages — no indexing
 Disallow: /dashboard
 Disallow: /watchlist
 Disallow: /portfolio
@@ -22,8 +21,5 @@ Disallow: /payment
 Disallow: /payment-success
 Disallow: /admin
 Disallow: /tutorials
-Disallow: /verify-email
-Disallow: /reset-password
-Disallow: /registerwithpayment
 
-Sitemap: https://api.nwc-analytics.com/sitemap.xml
+Sitemap: https://nwc-analytics.com/sitemap.xml

@@ -1,0 +1,10 @@
+{
+  "redirects": [
+    {
+      "source": "/sitemap.xml",
+      "destination": "https://api.nwc-analytics.com/sitemap.xml",
+      "type": 301
+    }
+  ],
+  "rewrites": [{ "source": "**", "destination": "/index.html" }]
+}

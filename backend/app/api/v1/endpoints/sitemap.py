@@ -1,3 +1,6 @@
+from datetime import datetime
+from xml.sax.saxutils import escape
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,49 +11,43 @@ from app.db.models import BlogPost
 
 router = APIRouter()
 
-STATIC_URLS = [
-    ("https://nwc-analytics.com/", "weekly", "1.0"),
-    ("https://nwc-analytics.com/pricing", "monthly", "0.9"),
-    ("https://nwc-analytics.com/blogs", "weekly", "0.8"),
-    ("https://nwc-analytics.com/login", "monthly", "0.3"),
-    ("https://nwc-analytics.com/register", "monthly", "0.4"),
-]
+BASE_URL = "https://nwc-analytics.com"
+
+# Static pages worth indexing. Deliberately excludes /login and /register —
+# auth pages have no search value and robots.txt blocks them.
+STATIC_PATHS = ["/", "/pricing", "/blogs"]
+
+
+def _url_entry(loc: str, lastmod: datetime | None = None) -> str:
+    lastmod_tag = (
+        f"<lastmod>{lastmod.strftime('%Y-%m-%d')}</lastmod>" if lastmod else ""
+    )
+    return f"<url><loc>{escape(loc)}</loc>{lastmod_tag}</url>"
 
 
 @router.get("/sitemap.xml", include_in_schema=False)
 async def sitemap(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(BlogPost.slug, BlogPost.updated_at)
+        select(BlogPost.slug, BlogPost.updated_at, BlogPost.created_at)
         .where(BlogPost.is_published == True)
         .order_by(BlogPost.updated_at.desc())
     )
-    blog_posts = result.all()
+    posts = result.all()
 
-    urls = []
-    for loc, changefreq, priority in STATIC_URLS:
-        urls.append(
-            f"  <url>\n"
-            f"    <loc>{loc}</loc>\n"
-            f"    <changefreq>{changefreq}</changefreq>\n"
-            f"    <priority>{priority}</priority>\n"
-            f"  </url>"
-        )
-
-    for slug, updated_at in blog_posts:
-        lastmod = updated_at.strftime("%Y-%m-%d") if updated_at else ""
-        lastmod_tag = f"\n    <lastmod>{lastmod}</lastmod>" if lastmod else ""
-        urls.append(
-            f"  <url>\n"
-            f"    <loc>https://nwc-analytics.com/blogs/{slug}</loc>{lastmod_tag}\n"
-            f"    <changefreq>monthly</changefreq>\n"
-            f"    <priority>0.7</priority>\n"
-            f"  </url>"
-        )
+    newest = (posts[0].updated_at or posts[0].created_at) if posts else None
+    entries = [
+        _url_entry(f"{BASE_URL}{path}", newest if path == "/blogs" else None)
+        for path in STATIC_PATHS
+    ]
+    entries += [
+        _url_entry(f"{BASE_URL}/blogs/{slug}", updated_at or created_at)
+        for slug, updated_at, created_at in posts
+    ]
 
     xml = (
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-        + "\n".join(urls)
-        + "\n</urlset>"
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        + "".join(entries)
+        + "</urlset>"
     )
     return Response(content=xml, media_type="application/xml")
