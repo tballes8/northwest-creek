@@ -306,6 +306,10 @@ const SectorHeatmap: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-800">
+      {/* SEO — React 19 hoists to <head> */}
+      <title>Sector Heatmap — NWC-Analytics</title>
+      <meta name="description" content="Visualize sector and industry performance versus SPY in an interactive market heatmap." />
+      <link rel="canonical" href="https://nwc-analytics.com/sector-heatmap" />
       <NavBar currentPage="sector-heatmap" user={user} onLogout={handleLogout} />
 
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

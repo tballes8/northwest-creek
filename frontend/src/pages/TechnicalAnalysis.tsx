@@ -1056,6 +1056,10 @@ const TechnicalAnalysis: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
+      {/* SEO — React 19 hoists to <head> */}
+      <title>Technical Analysis — NWC-Analytics</title>
+      <meta name="description" content="Interactive candlestick charts with RSI, MACD, Bollinger Bands, and 15+ technical indicators." />
+      <link rel="canonical" href="https://nwc-analytics.com/technical-analysis" />
       <NavBar currentPage="technical-analysis" user={user} onLogout={handleLogout} />
 
       {/* Main Content */}

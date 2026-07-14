@@ -196,6 +196,10 @@ const AccountSettings: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-800">
+      {/* SEO — React 19 hoists to <head> */}
+      <title>Account Settings — NWC-Analytics</title>
+      <meta name="description" content="Manage your NWC-Analytics account, subscription, and notification preferences." />
+      <link rel="canonical" href="https://nwc-analytics.com/account" />
       {/* Navigation */}
       <NavBar currentPage="account" user={user} onLogout={handleLogout} />
 

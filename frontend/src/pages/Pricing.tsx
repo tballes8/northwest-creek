@@ -84,6 +84,10 @@ const Pricing: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+      {/* SEO — React 19 hoists to <head> */}
+      <title>Pricing — NWC-Analytics</title>
+      <meta name="description" content="Compare NWC-Analytics subscription plans — Beginner, Casual, Active, and Professional — with real-time data, technical indicators, DCF models, and alerts." />
+      <link rel="canonical" href="https://nwc-analytics.com/pricing" />
       {/* Navigation */}
       <nav className="bg-gray-800 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

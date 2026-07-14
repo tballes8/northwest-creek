@@ -308,6 +308,10 @@ const AdminContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-800">
+      {/* SEO — React 19 hoists to <head> */}
+      <title>Admin — NWC-Analytics</title>
+      <meta name="description" content="NWC-Analytics content administration." />
+      <link rel="canonical" href="https://nwc-analytics.com/admin" />
       <NavBar currentPage="admin" user={user} onLogout={handleLogout} />
 
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

@@ -406,6 +406,10 @@ const Watchlist: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
+      {/* SEO — React 19 hoists to <head> */}
+      <title>Watchlist — NWC-Analytics</title>
+      <meta name="description" content="Track your watchlist with live prices and daily performance." />
+      <link rel="canonical" href="https://nwc-analytics.com/watchlist" />
       {/* Navigation */}
       <NavBar currentPage="watchlist" user={user} onLogout={handleLogout} />
 

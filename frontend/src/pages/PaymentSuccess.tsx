@@ -17,6 +17,10 @@ const PaymentSuccess: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      {/* SEO — React 19 hoists to <head> */}
+      <title>Payment Successful — NWC-Analytics</title>
+      <meta name="description" content="Your NWC-Analytics subscription is active." />
+      <link rel="canonical" href="https://nwc-analytics.com/payment-success" />
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white dark:bg-gray-700 py-8 px-4 shadow-xl dark:shadow-gray-200/20 sm:rounded-lg sm:px-10 border dark:border-gray-500">
           <div className="text-center">

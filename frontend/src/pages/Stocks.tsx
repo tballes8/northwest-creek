@@ -1532,6 +1532,10 @@ const Stocks: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white transition-colors">
+      {/* SEO — React 19 hoists to <head> */}
+      <title>Stock Screener — NWC-Analytics</title>
+      <meta name="description" content="Screen stocks and ETFs by daily performance with price history charts and moving averages." />
+      <link rel="canonical" href="https://nwc-analytics.com/stocks" />
       {/* Navigation */}
       <NavBar currentPage="stocks" user={user} onLogout={handleLogout} />
 

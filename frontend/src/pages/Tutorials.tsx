@@ -87,6 +87,10 @@ const Tutorials: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-800">
+      {/* SEO — React 19 hoists to <head> */}
+      <title>Tutorials — NWC-Analytics</title>
+      <meta name="description" content="Video tutorials on using NWC-Analytics — stock screening, technical analysis, DCF valuation, portfolio tracking, and setting up price alerts." />
+      <link rel="canonical" href="https://nwc-analytics.com/tutorials" />
       {/* Navigation */}
       <NavBar currentPage="tutorials" user={user} onLogout={handleLogout} />
 

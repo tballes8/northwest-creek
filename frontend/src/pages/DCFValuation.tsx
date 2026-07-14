@@ -635,6 +635,10 @@ const DCFValuation: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
+      {/* SEO — React 19 hoists to <head> */}
+      <title>DCF Valuation — NWC-Analytics</title>
+      <meta name="description" content="Build discounted cash flow models with guided assumptions to estimate intrinsic stock value." />
+      <link rel="canonical" href="https://nwc-analytics.com/dcf-valuation" />
       <NavBar currentPage="dcf-valuation" user={user} onLogout={handleLogout} />
 
       {/* Main Content */}

@@ -1032,6 +1032,10 @@ export default function OptionsCalculator() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+      {/* SEO — React 19 hoists to <head> */}
+      <title>Options Calculator — NWC-Analytics</title>
+      <meta name="description" content="Price options strategies with Black-Scholes — greeks, payoff diagrams, and multi-leg strategy analysis." />
+      <link rel="canonical" href="https://nwc-analytics.com/options-calculator" />
       <NavBar currentPage="options-calculator" user={user} onLogout={handleLogout} />
       <div style={{ display: "flex", flex: 1 }}>
       {/* Sidebar — matches nav bg-gray-900 with border-gray-700 */}

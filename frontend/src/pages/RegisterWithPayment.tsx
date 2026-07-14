@@ -81,6 +81,10 @@ const RegisterWithPayment: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+      {/* SEO — React 19 hoists to <head> */}
+      <title>Sign Up — NWC-Analytics</title>
+      <meta name="description" content="Create your NWC-Analytics account and choose a subscription plan to unlock real-time stock analysis tools." />
+      <link rel="canonical" href="https://nwc-analytics.com/registerwithpayment" />
       <div className="max-w-6xl mx-auto">
         {/* Logo */}
         <div className="text-center mb-6">

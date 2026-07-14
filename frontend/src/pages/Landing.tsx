@@ -22,7 +22,7 @@ const Landing: React.FC = () => {
       {/* SEO — React 19 hoists these to <head> automatically */}
       <title>NWC-Analytics — Professional Stock Analysis for Retail Investors</title>
       <meta name="description" content="Real-time prices, AI-powered stock & portfolio analysis, 15+ technical indicators, DCF & relative valuation, and smart alerts — built for retail investors who do their own homework." />
-      <link rel="canonical" href="https://nwc-analytics.com" />
+      <link rel="canonical" href="https://nwc-analytics.com/" />
       <meta property="og:type" content="website" />
       <meta property="og:title" content="NWC-Analytics — Professional Stock Analysis for Retail Investors" />
       <meta property="og:description" content="Real-time prices, AI analysis, technical alerts, DCF modeling — for retail investors who do their own homework." />

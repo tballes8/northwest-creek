@@ -320,6 +320,10 @@ const Payment: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col justify-center py-12 px-4">
+      {/* SEO — React 19 hoists to <head> */}
+      <title>Checkout — NWC-Analytics</title>
+      <meta name="description" content="Complete your NWC-Analytics subscription." />
+      <link rel="canonical" href="https://nwc-analytics.com/payment" />
       <div className="max-w-lg mx-auto w-full">
         {/* Header */}
         <div className="text-center mb-8">

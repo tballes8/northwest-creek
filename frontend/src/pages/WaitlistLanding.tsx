@@ -81,6 +81,7 @@ const WaitlistLanding: React.FC = () => {
       {/* SEO */}
       <title>NWC-Analytics — Join the Waitlist</title>
       <meta name="description" content="Be the first to access NWC-Analytics — professional stock analysis for retail investors. Real-time data, 15+ indicators, DCF models, and more." />
+      <link rel="canonical" href="https://nwc-analytics.com/waitlist" />
       <meta property="og:title" content="NWC-Analytics — Join the Waitlist" />
       <meta property="og:description" content="Professional stock analysis for retail investors. Join the waitlist for early access." />
       <meta property="og:url" content="https://nwc-analytics.com/waitlist" />

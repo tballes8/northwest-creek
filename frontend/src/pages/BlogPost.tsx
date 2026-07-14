@@ -108,6 +108,21 @@ const IframeContent: React.FC<{ html: string }> = ({ html }) => {
   );
 };
 
+// Meta-description fallback for posts without an excerpt: first ~155 chars of
+// the body with HTML stripped, cut at a word boundary.
+const deriveDescription = (html: string): string => {
+  const text = html
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (text.length <= 155) return text;
+  const cut = text.slice(0, 155);
+  return `${cut.slice(0, cut.lastIndexOf(' '))}…`;
+};
+
 const BlogPost: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -151,6 +166,10 @@ const BlogPost: React.FC = () => {
     navigate('/');
   };
 
+  const metaDescription = post
+    ? post.excerpt || deriveDescription(post.content) || `${post.title} — stock analysis insights from NWC-Analytics.`
+    : '';
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
       {/* Navigation — full navbar for logged-in users, soft-sell for public */}
@@ -183,11 +202,11 @@ const BlogPost: React.FC = () => {
           <article className="max-w-4xl">
             {/* SEO — React 19 hoists to <head> automatically */}
             <title>{post.title} — NWC-Analytics Blog</title>
-            <meta name="description" content={post.excerpt || `${post.title} — stock analysis insights from NWC-Analytics.`} />
+            <meta name="description" content={metaDescription} />
             <link rel="canonical" href={`https://nwc-analytics.com/blogs/${post.slug}`} />
             <meta property="og:type" content="article" />
             <meta property="og:title" content={post.title} />
-            <meta property="og:description" content={post.excerpt || `${post.title} — stock analysis insights from NWC-Analytics.`} />
+            <meta property="og:description" content={metaDescription} />
             <meta property="og:url" content={`https://nwc-analytics.com/blogs/${post.slug}`} />
             {post.cover_image_url && <meta property="og:image" content={post.cover_image_url} />}
             <meta property="og:site_name" content="NWC-Analytics" />
@@ -196,24 +215,31 @@ const BlogPost: React.FC = () => {
             <meta property="article:section" content={post.category} />
             <meta name="twitter:card" content={post.cover_image_url ? 'summary_large_image' : 'summary'} />
             <meta name="twitter:title" content={post.title} />
-            <meta name="twitter:description" content={post.excerpt || `${post.title} — stock analysis insights.`} />
+            <meta name="twitter:description" content={metaDescription} />
             {post.cover_image_url && <meta name="twitter:image" content={post.cover_image_url} />}
 
-            {/* JSON-LD: BlogPosting (Google reads from anywhere in DOM) */}
+            {/* JSON-LD: BlogPosting (Google reads from anywhere in DOM).
+                "<" escaped so post text can never close the script tag. */}
             <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "BlogPosting",
               "headline": post.title,
-              "description": post.excerpt || post.title,
+              "description": metaDescription,
               "url": `https://nwc-analytics.com/blogs/${post.slug}`,
               ...(post.cover_image_url && { "image": post.cover_image_url }),
               ...(post.created_at && { "datePublished": new Date(post.created_at).toISOString() }),
               ...(post.updated_at && { "dateModified": new Date(post.updated_at).toISOString() }),
               "articleSection": post.category,
               ...(post.tags && { "keywords": post.tags }),
+              "author": {
+                "@type": "Organization",
+                "name": "NWC-Analytics",
+                "url": "https://nwc-analytics.com"
+              },
               "publisher": {
                 "@type": "Organization",
                 "name": "NWC-Analytics, LLC",
+                "url": "https://nwc-analytics.com",
                 "logo": {
                   "@type": "ImageObject",
                   "url": "https://nwc-analytics.com/images/logo.png"
@@ -223,7 +249,7 @@ const BlogPost: React.FC = () => {
                 "@type": "WebPage",
                 "@id": `https://nwc-analytics.com/blogs/${post.slug}`
               }
-            }) }} />
+            }).replace(/</g, '\\u003c') }} />
             {/* Cover Image */}
             {post.cover_image_url && (
               <div className="rounded-lg overflow-hidden mb-8 aspect-[21/9]">

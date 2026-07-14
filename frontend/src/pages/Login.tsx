@@ -69,6 +69,10 @@ const Login: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      {/* SEO — React 19 hoists to <head> */}
+      <title>Log In — NWC-Analytics</title>
+      <meta name="description" content="Log in to your NWC-Analytics account to access your dashboard, watchlists, portfolio tracking, price alerts, and stock analysis tools." />
+      <link rel="canonical" href="https://nwc-analytics.com/login" />
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <Link to="/" className="flex justify-center">
           <img 

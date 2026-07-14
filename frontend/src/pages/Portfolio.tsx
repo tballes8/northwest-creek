@@ -624,6 +624,10 @@ const Portfolio: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
+      {/* SEO — React 19 hoists to <head> */}
+      <title>Portfolio — NWC-Analytics</title>
+      <meta name="description" content="Track your portfolio holdings, performance, and allocation." />
+      <link rel="canonical" href="https://nwc-analytics.com/portfolio" />
       {/* Navigation */}
       <NavBar currentPage="portfolio" user={user} onLogout={handleLogout} />
 

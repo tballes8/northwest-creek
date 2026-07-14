@@ -94,6 +94,10 @@ const Register: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+      {/* SEO — React 19 hoists to <head> */}
+      <title>Create Account — NWC-Analytics</title>
+      <meta name="description" content="Create your NWC-Analytics account and start analyzing stocks with real-time data, technical indicators, DCF valuation models, and price alerts." />
+      <link rel="canonical" href="https://nwc-analytics.com/register" />
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <Link to="/" className="flex justify-center">
           <img 

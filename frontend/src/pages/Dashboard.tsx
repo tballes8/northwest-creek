@@ -665,6 +665,10 @@ const Dashboard: React.FC = () => {
 
 return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
+      {/* SEO — React 19 hoists to <head> */}
+      <title>Dashboard — NWC-Analytics</title>
+      <meta name="description" content="Your live market dashboard — watchlist prices, market overview, and alerts." />
+      <link rel="canonical" href="https://nwc-analytics.com/dashboard" />
       {/* Navigation */}
       <NavBar currentPage="dashboard" user={user} onLogout={handleLogout} />
 
