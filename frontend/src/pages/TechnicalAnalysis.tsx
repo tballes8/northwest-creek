@@ -1382,6 +1382,7 @@ const TechnicalAnalysis: React.FC = () => {
                       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
                         {[
                           { label: 'P/E', value: fmtNum(financialsData.ratios?.pe_ratio) },
+                          { label: 'PEG', value: fmtNum(financialsData.ratios?.peg_ratio) },
                           { label: 'EV/EBITDA', value: fmtNum(financialsData.ratios?.ev_to_ebitda) },
                           { label: 'P/S', value: fmtNum(financialsData.ratios?.ps_ratio) },
                           { label: 'P/B', value: fmtNum(financialsData.ratios?.pb_ratio) },
@@ -2231,7 +2232,7 @@ const TechnicalAnalysis: React.FC = () => {
                   <div><strong>Income Statement:</strong> Revenue, margins, net income, EBITDA, EPS</div>
                   <div><strong>Balance Sheet:</strong> Cash, debt, equity, current/quick ratios</div>
                   <div><strong>Cash Flow:</strong> Operating CF, CapEx, free cash flow, dividends</div>
-                  <div><strong>Ratios:</strong> P/E, EV/EBITDA, P/S, P/B, ROE, ROA, D/E</div>
+                  <div><strong>Ratios:</strong> P/E, PEG, EV/EBITDA, P/S, P/B, ROE, ROA, D/E</div>
                 </div>
                 <p className="text-gray-500 dark:text-gray-400 text-xs mt-2">
                   Also includes derived DCF inputs (growth rate, estimated WACC, TTM FCF) based on actual financials — use them to pre-populate the DCF Valuation model.

@@ -262,12 +262,21 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
     }
 
     # ── Ratios (from FMP ratios-ttm + key-metrics-ttm endpoints) ──────
+    # PEG <= 0 means negative earnings or negative growth — meaningless, so null it out
+    try:
+        peg_ttm = float(ratios.get("priceToEarningsGrowthRatioTTM"))
+        if peg_ttm <= 0:
+            peg_ttm = None
+    except (TypeError, ValueError):
+        peg_ttm = None
+
     ratios_summary = {
         "date": latest_q.get("date"),
         "price": None,  # not directly available from these endpoints
         "market_cap": key_metrics.get("marketCap"),
         "enterprise_value": key_metrics.get("enterpriseValueTTM"),
         "pe_ratio": _fmt(ratios.get("priceToEarningsRatioTTM")),
+        "peg_ratio": _fmt(peg_ttm),
         "ps_ratio": _fmt(ratios.get("priceToSalesRatioTTM")),
         "pb_ratio": _fmt(ratios.get("priceToBookRatioTTM")),
         "price_to_fcf": _fmt(ratios.get("priceToFreeCashFlowRatioTTM")),
