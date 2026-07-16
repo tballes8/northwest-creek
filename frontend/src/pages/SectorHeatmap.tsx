@@ -443,6 +443,17 @@ const SectorHeatmap: React.FC = () => {
             <div className="mb-5 pb-5 border-b border-gray-200 dark:border-gray-600">
               <div className="flex items-center gap-3 mb-2">
                 <button
+                  onClick={() => {
+                    setPlaying(false);
+                    setFrameIdx(prev => Math.max(prev - 1, 0));
+                  }}
+                  disabled={frameIdx <= 0}
+                  title="Step to previous interval"
+                  className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded text-sm font-medium"
+                >
+                  ⏮ Step
+                </button>
+                <button
                   onClick={() => setPlaying(p => !p)}
                   className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded text-sm font-medium"
                 >
