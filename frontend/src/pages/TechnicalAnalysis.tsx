@@ -1469,20 +1469,22 @@ const TechnicalAnalysis: React.FC = () => {
                                 <th className="pb-2 pr-4 text-right">Net Income</th>
                                 <th className="pb-2 pr-4 text-right">Gross Margin</th>
                                 <th className="pb-2 pr-4 text-right">Op. Margin</th>
-                                <th className="pb-2 text-right">EPS</th>
+                                <th className="pb-2 pr-4 text-right">EPS</th>
+                                <th className="pb-2 text-right">P/E</th>
                               </tr>
                             </thead>
                             <tbody>
                               {[...financialsData.quarterly_trend].map((q: any, i: number) => (
                                 <tr key={i} className="border-b border-gray-100 dark:border-gray-700 text-gray-900 dark:text-gray-200">
                                   <td className="py-2 pr-4 font-medium">
-                                    {q.fiscal_year ? `FY${q.fiscal_year} Q${q.fiscal_quarter}` : q.period_end}
+                                    {q.fiscal_year ? `FY${q.fiscal_year} ${q.fiscal_quarter}` : q.period_end}
                                   </td>
                                   <td className="py-2 pr-4 text-right">{fmtB(q.revenue)}</td>
                                   <td className="py-2 pr-4 text-right">{fmtB(q.net_income)}</td>
                                   <td className="py-2 pr-4 text-right">{fmtPct(q.gross_margin_pct)}</td>
                                   <td className="py-2 pr-4 text-right">{fmtPct(q.operating_margin_pct)}</td>
-                                  <td className="py-2 text-right">{fmtNum(q.eps_diluted)}</td>
+                                  <td className="py-2 pr-4 text-right">{fmtNum(q.eps_diluted)}</td>
+                                  <td className="py-2 text-right">{q.pe_ratio != null ? `${fmtNum(q.pe_ratio, 1)}x` : '—'}</td>
                                 </tr>
                               ))}
                             </tbody>

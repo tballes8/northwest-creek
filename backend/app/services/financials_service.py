@@ -10,6 +10,7 @@ FMP Stable endpoints used:
   /stable/cash-flow-statement?symbol=X&period=quarter
   /stable/ratios-ttm?symbol=X          (pre-computed trailing-twelve-month ratios)
   /stable/key-metrics-ttm?symbol=X     (pre-computed trailing-twelve-month metrics)
+  /stable/historical-price-eod/full?symbol=X  (quarter-end closes for trailing P/E)
 """
 import asyncio
 from datetime import datetime, timezone, timedelta
@@ -43,6 +44,44 @@ def _sum_quarters(quarters: List[dict], field: str) -> Optional[float]:
     if not vals:
         return None
     return sum(vals)
+
+
+def _trailing_pe_by_quarter(
+    income_quarters: List[dict], price_rows: List[dict]
+) -> List[Optional[float]]:
+    """Trailing P/E at each quarter end: close on/before period_end ÷ TTM diluted EPS.
+
+    TTM EPS requires a full 4-quarter window — a partial sum would understate
+    EPS and inflate the multiple. A quarter's P/E is None when the price or a
+    full EPS window is unavailable, or when TTM EPS <= 0 (meaningless multiple).
+    Expects income_quarters newest-first (FMP default).
+    """
+    closes: Dict[str, float] = {}
+    for row in price_rows:
+        if row.get("date") and row.get("close") is not None:
+            closes[row["date"]] = row["close"]
+
+    pes: List[Optional[float]] = []
+    for i, q in enumerate(income_quarters):
+        pe = None
+        window = [x.get("epsDiluted") for x in income_quarters[i:i + 4]]
+        period_end = q.get("date")
+        if period_end and len(window) == 4 and all(v is not None for v in window):
+            ttm_eps = sum(window)
+            price = None
+            try:
+                day = datetime.strptime(period_end, "%Y-%m-%d")
+                for _ in range(7):  # walk back over weekends/holidays
+                    price = closes.get(day.strftime("%Y-%m-%d"))
+                    if price is not None:
+                        break
+                    day -= timedelta(days=1)
+            except (ValueError, TypeError):
+                price = None
+            if price is not None and ttm_eps > 0:
+                pe = round(price / ttm_eps, 1)
+        pes.append(pe)
+    return pes
 
 
 def compute_peer_fundamentals(income_quarters: List[dict]) -> Dict[str, Optional[float]]:
@@ -132,6 +171,14 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
     profile_task = _fetch("profile", {
         "symbol": ticker,
     })
+    # Daily closes covering the 12-quarter window (+ fiscal-calendar margin),
+    # used to compute trailing P/E at each quarter end
+    now_utc = datetime.now(timezone.utc)
+    prices_task = _fetch("historical-price-eod/full", {
+        "symbol": ticker,
+        "from": (now_utc - timedelta(days=1250)).strftime("%Y-%m-%d"),
+        "to": now_utc.strftime("%Y-%m-%d"),
+    })
 
     (
         income_quarters,
@@ -140,6 +187,7 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
         ratios_list,
         key_metrics_list,
         profile_list,
+        price_rows,
     ) = await asyncio.gather(
         income_quarterly_task,
         balance_task,
@@ -147,6 +195,7 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
         ratios_task,
         key_metrics_task,
         profile_task,
+        prices_task,
     )
 
     # ── Normalise to lists (FMP returns arrays directly) ──────────────
@@ -162,6 +211,10 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
         key_metrics_list = []
     if not isinstance(profile_list, list):
         profile_list = []
+    if isinstance(price_rows, dict):  # tolerate legacy {"symbol", "historical": [...]} shape
+        price_rows = price_rows.get("historical", [])
+    if not isinstance(price_rows, list):
+        price_rows = []
 
     # Extract current CIK from profile for staleness detection
     profile = profile_list[0] if profile_list else {}
@@ -293,8 +346,9 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
     }
 
     # ── Quarterly revenue trend (for YoY growth) ──────────────────────
+    quarter_pes = _trailing_pe_by_quarter(income_quarters, price_rows)
     quarterly_trend = []
-    for q in income_quarters:
+    for i, q in enumerate(income_quarters):
         quarterly_trend.append({
             "period_end": q.get("date"),
             "fiscal_year": q.get("fiscalYear") or q.get("calendarYear"),
@@ -305,6 +359,7 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
             "operating_margin_pct": _pct(q.get("operatingIncome"), q.get("revenue")),
             "eps_diluted": _fmt(q.get("epsDiluted")),
             "diluted_shares_outstanding": q.get("weightedAverageShsOutDil"),
+            "pe_ratio": quarter_pes[i],
         })
 
     # ── DCF Suggestions (derived from actuals) ────────────────────────
