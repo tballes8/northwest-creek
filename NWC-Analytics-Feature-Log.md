@@ -1,6 +1,6 @@
 # NWC-Analytics — Shipped Features Log
 
-**Last Updated:** June 20, 2026  
+**Last Updated:** July 17, 2026  
 **Purpose:** Cross-project reference document. Attach to NWC Marketing, NWC Blog/SM Post, NWC Enhancements, and NWC Sandbox projects so all workstreams have visibility into what has shipped, what tier it lives on, and what content angles it unlocks.
 
 ---
@@ -548,6 +548,22 @@ Each entry follows a consistent format:
 
 ---
 
+#### Sector Rotation Heatmap — New Page
+
+**What It Does:** New full-page visualization showing the relative performance of all 11 GICS sector ETFs (XLK, XLV, XLF, XLY, XLC, XLE, XLP, XLI, XLU, XLRE, XLB) versus SPY as an equal-tile treemap. Color encodes how much each sector is out- or under-performing the broader market — teal for outperformance, red for underperformance, saturating at ±5% — so leadership and laggards are visible at a glance. Users pick a lookback window (1 day to 1 year) and an as-of date, and each tile shows the sector's absolute return with a hover tooltip breaking out return and vs-SPY figures. The standout capability is **time-lapse mode**: one click loads a frame-by-frame history of the selected window and users can scrub a slider, press play to animate it, or step frame-by-frame (forward and backward step buttons added May 30 and July 16) — literally watching money rotate between sectors over time. Data comes from the platform's own daily sector ETF close history, refreshed by the existing snapshot cron.
+
+**Tier Availability:** All tiers (any authenticated subscriber)
+
+**Marketing Angle:** Sector rotation is how professionals read the market's internals, but the standard retail view is a static one-day heatmap. Making the heatmap scrubbable through time turns a snapshot into a story — users can watch defensive sectors take leadership before a pullback or see a risk-on rotation forming in real time. It's also one of the platform's most visually distinctive and demo-friendly features: a playing time-lapse is inherently screenshot- and video-ready for social content.
+
+**Blog/Content Hooks:**
+- How to read a sector rotation heatmap — what outperformance vs. SPY actually tells you
+- The 11 GICS sectors explained — what's in each and how they behave across the cycle
+- Watching money rotate — using the time-lapse to spot leadership changes early
+- Defensive vs. cyclical sectors — what leadership shifts signal about market sentiment
+
+---
+
 #### Sector Heatmap — White-Screen Crash Fix
 
 **What It Does:** Resolved a crash that caused the Sector Heatmap page to render for one frame and then go completely white. The root cause was a Recharts 3.x compatibility issue where custom data fields weren't being passed directly to the tile render function as expected — accessing an undefined value on render killed the entire React tree. Fixed by reading fields defensively and replacing a broken Recharts tooltip implementation with a native SVG title element.
@@ -560,6 +576,26 @@ Each entry follows a consistent format:
 - How to use sector heatmaps to spot rotation — where is money moving right now?
 - Sector performance vs. SPY — what outperformance and underperformance signals about market sentiment
 - Understanding sector rotation as a portfolio management tool
+
+---
+
+### May 5, 2026
+
+---
+
+#### Sector Heatmap — "Where We Are in the Cycle" AI Macro Panel
+
+**What It Does:** Added an AI-synthesized economic cycle analysis panel to the Sector Rotation Heatmap page. The platform pulls live macro data from FRED — the Fed funds rate, unemployment rate, and 10Y-minus-2Y yield spread, plus CPI year-over-year and annualized real GDP growth computed from the raw series — and combines it with the current 3-month sector rotation picture. Claude then synthesizes which business-cycle phase the data is consistent with (Recovery, Expansion, Peak, or Contraction), displayed as a color-coded phase badge with a confidence level, a plain-language summary, a card for each supporting macro signal with its current value and interpretation, and a "Sector Alignment" paragraph assessing whether current sector leadership matches or contradicts the diagnosed phase. The analysis regenerates once per day system-wide — one AI call serves all users — and the panel carries an explicit "educational context, not a trading signal" disclaimer with a link to the sector rotation framework on the blog. If synthesis is unavailable the panel hides silently rather than showing an error above the heatmap.
+
+**Tier Availability:** All tiers (any authenticated subscriber)
+
+**Marketing Angle:** Retail investors constantly hear "we're late cycle" or "the yield curve says recession" without the tools to evaluate those claims. This panel puts the actual numbers, what each one means, and a synthesized read on the same screen as the sector performance data it should explain — connecting macro to the sector rotation playbook in one view. The honest framing (confidence level, explicit disclaimer, and a sector-alignment section willing to say the data *doesn't* fully match a classic pattern) reinforces the platform's trustworthy-signal positioning rather than overclaiming predictive power.
+
+**Blog/Content Hooks:**
+- The four phases of the business cycle — and which sectors historically lead in each
+- The yield curve explained — what 10Y minus 2Y actually measures and why everyone watches it
+- How to read the Fed — funds rate, inflation, and what "restrictive" really means
+- Sector rotation framework — the full playbook behind the cycle panel (the panel links here)
 
 ---
 
@@ -985,6 +1021,26 @@ Each entry follows a consistent format:
 - Keltner Channels vs. Bollinger Bands — what's the difference and when to use each
 - How ATR-based bands adapt to a stock's own volatility
 - Reading volatility envelopes — what it means when price rides the upper or lower channel
+
+---
+
+### June 10, 2026
+
+---
+
+#### Breakout & Squeeze Ticker Tape — Landing Page and Nav Header
+
+**What It Does:** Added a second continuously scrolling ticker strip — directly below the existing most-actives tape on the public landing page and embedded in the nav header on every signed-in page — showing live results from two of the platform's own quick-screens: High Volume Breakout and In Squeeze. Each entry carries a color-coded badge (teal "BO" for breakouts, amber "SQZ" for squeezes) alongside its price and percent change. Breakouts lead the tape (up to 8 names showing today's confirmed movers: up 3%+, $50M+ traded, $200M+ market cap) and squeeze candidates fill the remaining slots up to 15 total. Data refreshes every 60 seconds, ETFs and warrants are excluded, and the strip collapses entirely rather than sitting empty on a day with no qualifying names. A July 17 refinement tightened the quality bar: squeeze picks now rank by tightest volatility coil first (rather than biggest company first), require at least 3 consecutive days in squeeze to filter out one-day blips, and multiple share classes of the same company (e.g. GOOG/GOOGL) collapse to a single tape slot so the strip never wastes space on duplicates.
+
+**Tier Availability:** Public on the landing page — no login required; all tiers see it in the nav header across the platform
+
+**Marketing Angle:** The most-actives tape proves the data is live — this tape proves the platform finds *opportunities*. A visitor on the landing page sees actual stocks breaking out and coiling up right now, generated by the same screener they'd get by signing up. It's the product demonstrating itself before the first click. For signed-in users, it turns dead nav-bar space into a persistent "what's moving today" feed that invites a click into the screener from anywhere in the app.
+
+**Blog/Content Hooks:**
+- What the BO and SQZ badges in the ticker mean — the screens behind the tape
+- High-volume breakouts — why price moves need volume confirmation to be trusted
+- From ticker tape to trade idea — a workflow starting from the squeeze strip
+- Why we rank squeezes by tightness, not size — small coils, big moves
 
 ---
 
