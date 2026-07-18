@@ -25,6 +25,22 @@ router = APIRouter()
 TICKER_TAPE_LIMIT = 15
 SCREENS_TAPE_LIMIT = 15
 SCREENS_BREAKOUT_MAX = 8
+SCREENS_SQUEEZE_MIN_BARS = 3   # skip 1–2 day blips; only show established coils
+
+# Corporate boilerplate + share-class designators ignored when comparing company
+# names, so share classes (GOOG/GOOGL, FOX/FOXA) collapse to one tape slot.
+_NAME_NOISE_RE = re.compile(
+    r"\b(?:class\s+[a-z]|series\s+[a-z]|inc|incorporated|corp|corporation"
+    r"|company|co|ltd|plc|holdings?|group)\b"
+)
+
+
+def _company_key(name, symbol: str) -> str:
+    if not name:
+        return symbol
+    key = re.sub(r"[^a-z0-9\s]", " ", name.lower())
+    key = _NAME_NOISE_RE.sub(" ", key)
+    return " ".join(key.split()) or symbol
 
 _ticker_tape_cache = SimpleCache(ttl_seconds=60)
 _screens_tape_cache = SimpleCache(ttl_seconds=60)
@@ -72,7 +88,10 @@ async def get_screens_ticker_tape(db: AsyncSession = Depends(get_db)):
     """Tickers from the 'High Volume Breakout' and 'In Squeeze' quick-screens.
 
     Mirrors the screener presets of the same names (see screener.py _PRESETS),
-    including their implicit ETF exclusion.
+    including their implicit ETF exclusion — except squeeze picks rank by
+    bandwidth ratio (tightest coil first) instead of the preset's market-cap
+    sort, require a few bars in squeeze, and share classes of the same company
+    collapse to a single entry.
     """
     cached = _screens_tape_cache.get("tape")
     if cached is not None:
@@ -83,7 +102,8 @@ async def get_screens_ticker_tape(db: AsyncSession = Depends(get_db)):
 
         # Over-fetch both screens slightly to absorb dedupe/warrant drops.
         breakout_q = (
-            select(StockSnapshot.symbol, StockSnapshot.price, StockSnapshot.change_percentage)
+            select(StockSnapshot.symbol, StockSnapshot.name,
+                   StockSnapshot.price, StockSnapshot.change_percentage)
             .where(
                 StockSnapshot.change_percentage >= 3,
                 StockSnapshot.price * StockSnapshot.volume >= 50_000_000,
@@ -94,29 +114,36 @@ async def get_screens_ticker_tape(db: AsyncSession = Depends(get_db)):
             .limit(SCREENS_BREAKOUT_MAX + 4)
         )
         squeeze_q = (
-            select(StockSnapshot.symbol, StockSnapshot.price, StockSnapshot.change_percentage)
+            select(StockSnapshot.symbol, StockSnapshot.name,
+                   StockSnapshot.price, StockSnapshot.change_percentage)
             .where(
                 StockSnapshot.squeeze_state == 'on',
+                StockSnapshot.squeeze_bars >= SCREENS_SQUEEZE_MIN_BARS,
                 StockSnapshot.market_cap >= 250_000_000,
                 StockSnapshot.price.isnot(None),
                 StockSnapshot.change_percentage.isnot(None),
                 no_etf,
             )
-            .order_by(StockSnapshot.market_cap.desc())
-            .limit(SCREENS_TAPE_LIMIT)
+            .order_by(StockSnapshot.squeeze_ratio.asc().nulls_last())
+            .limit(SCREENS_TAPE_LIMIT + 4)
         )
         breakout_rows = (await db.execute(breakout_q)).all()
         squeeze_rows = (await db.execute(squeeze_q)).all()
 
         items = []
         seen = set()
+        seen_companies = set()
 
         def add(row, tag, cap):
             if len(items) >= cap or row.symbol in seen:
                 return
             if market_data_service._is_warrant_ticker(row.symbol):
                 return
+            company = _company_key(row.name, row.symbol)
+            if company in seen_companies:
+                return
             seen.add(row.symbol)
+            seen_companies.add(company)
             items.append({
                 "ticker": row.symbol,
                 "price": float(row.price),
