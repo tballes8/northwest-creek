@@ -34,6 +34,10 @@ MARKET_CLOSE = time(16, 0)
 # Exchanges that count as "US common stock" for the screener universe
 US_EXCHANGES = {"NYSE", "NASDAQ", "AMEX"}
 
+# (symbol, name, last_annual_dividend, beta) — fundamentals captured from
+# /company-screener on the daily rebuild; None means "don't touch the stored value".
+UniverseRow = tuple[str, str, float | None, float | None]
+
 
 def _is_market_hours() -> bool:
     now = datetime.now(EASTERN)
@@ -63,8 +67,14 @@ async def _last_refresh_ts() -> datetime | None:
         return result
 
 
-async def _build_universe(api_key: str) -> list[tuple[str, str]]:
-    """Fetch /company-screener and return (symbol, name) pairs — US common stocks only, no ETFs/funds."""
+async def _build_universe(api_key: str) -> list[UniverseRow]:
+    """Fetch /company-screener and return UniverseRow tuples — US common stocks only, no ETFs/funds.
+
+    Carries the two fundamentals the screener needs but batch-quote doesn't provide:
+    last_annual_dividend (trailing per-share $, yield derived live against price) and
+    beta. Refreshed here on the daily rebuild only — both change slowly enough that
+    once-a-day is frequent enough.
+    """
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
             f"{FMP_BASE}/company-screener",
@@ -82,7 +92,13 @@ async def _build_universe(api_key: str) -> list[tuple[str, str]]:
 
     print(f"📊 company-screener raw count: {len(stock_list) if isinstance(stock_list, list) else type(stock_list).__name__}", flush=True)
 
-    tickers: list[tuple[str, str]] = []
+    def _num(raw) -> float | None:
+        try:
+            return float(raw) if raw is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    tickers: list[UniverseRow] = []
     for s in (stock_list or []):
         if not isinstance(s, dict):
             continue
@@ -90,16 +106,21 @@ async def _build_universe(api_key: str) -> list[tuple[str, str]]:
         if not sym or "." in sym or len(sym) > 10:
             continue
         name = s.get("companyName") or s.get("name") or ""
-        tickers.append((sym, name))
+        div = _num(s.get("lastAnnualDividend"))
+        # Guard against FMP's occasional negative/garbage dividend values.
+        if div is not None and div < 0:
+            div = None
+        beta = _num(s.get("beta"))
+        tickers.append((sym, name, div, beta))
 
     print(f"📊 Universe built: {len(tickers)} CS tickers", flush=True)
     logger.info(f"Universe built: {len(tickers)} CS tickers")
     return tickers
 
 
-async def _prune_universe(tickers: list[tuple[str, str]]) -> None:
+async def _prune_universe(tickers: list[UniverseRow]) -> None:
     """Remove DB rows for symbols no longer in the filtered universe (ETFs/funds that slipped in)."""
-    current = {sym for sym, _ in tickers}
+    current = {t[0] for t in tickers}
     async with async_session() as session:
         db_symbols = set((await session.execute(select(StockSnapshot.symbol))).scalars().all())
         stale = db_symbols - current
@@ -110,19 +131,24 @@ async def _prune_universe(tickers: list[tuple[str, str]]) -> None:
             logger.info(f"Pruned {len(stale)} stale/excluded symbols from universe")
 
 
-async def _existing_universe() -> list[tuple[str, str]]:
+async def _existing_universe() -> list[UniverseRow]:
+    # Fundamentals are None here so intraday refreshes never touch last_annual_dividend
+    # or beta; the values captured on the daily rebuild persist untouched (see _fetch_quotes).
     async with async_session() as session:
         rows = (await session.execute(
             select(StockSnapshot.symbol, StockSnapshot.name)
         )).all()
-    return [(r.symbol, r.name or "") for r in rows]
+    return [(r.symbol, r.name or "", None, None) for r in rows]
 
 
 async def _fetch_quotes(
     api_key: str,
-    tickers: list[tuple[str, str]],
+    tickers: list[UniverseRow],
+    include_fundamentals: bool = False,
 ) -> list[dict]:
-    name_map = {sym: name for sym, name in tickers}
+    name_map = {t[0]: t[1] for t in tickers}
+    div_map = {t[0]: t[2] for t in tickers}
+    beta_map = {t[0]: t[3] for t in tickers}
     symbols = list(name_map)
     rows: list[dict] = []
     now_utc = datetime.now(timezone.utc)
@@ -152,7 +178,7 @@ async def _fetch_quotes(
                         if isinstance(ts_raw, (int, float))
                         else None
                     )
-                    rows.append({
+                    row = {
                         "symbol": sym,
                         "name": name_map.get(sym) or q.get("name") or "",
                         "price": q.get("price"),
@@ -175,7 +201,14 @@ async def _fetch_quotes(
                         "fmp_timestamp": fmp_ts,
                         "last_refreshed": now_utc,
                         "is_etf": False,
-                    })
+                    }
+                    # Only written on the daily rebuild (include_fundamentals). Every row
+                    # in the batch carries these keys so the multi-row upsert stays uniform;
+                    # intraday refreshes omit them entirely, preserving the stored values.
+                    if include_fundamentals:
+                        row["last_annual_dividend"] = div_map.get(sym)
+                        row["beta"] = beta_map.get(sym)
+                    rows.append(row)
             except Exception as e:
                 print(f"⚠️ Batch {i}–{i + QUOTE_BATCH_SIZE} failed: {e}", flush=True)
                 logger.warning(f"Batch {i}–{i + QUOTE_BATCH_SIZE} failed: {e}")
@@ -281,13 +314,13 @@ async def refresh_stock_snapshots_job(api_key: str) -> None:
         else:
             tickers = await _existing_universe()
 
-        rows = await _fetch_quotes(api_key, tickers)
+        rows = await _fetch_quotes(api_key, tickers, include_fundamentals=should_rebuild)
         await _upsert(rows)
 
         # Update company profiles periodically (once per day or on rebuild)
         if should_rebuild:
             # Update profiles for a subset of stocks to avoid rate limits
-            symbols = [sym for sym, _ in tickers]
+            symbols = [t[0] for t in tickers]
             await _update_company_profiles(symbols, limit=200)
 
         print(f"✅ Snapshot refresh complete — {len(rows)} symbols", flush=True)

@@ -173,6 +173,8 @@ interface ScreenerResult {
   pct_from_52wk_high: number | null;
   pct_from_52wk_low: number | null;
   dollar_volume: number | null;
+  dividend_yield: number | null;
+  beta: number | null;
   last_refreshed: string | null;
   squeeze_state: 'on' | 'fired' | 'none' | null;
   squeeze_bars: number | null;
@@ -184,6 +186,8 @@ interface ScreenerFormState {
   priceMin: string; priceMax: string;
   marketCapMinB: string; marketCapMaxB: string;
   changePctMin: string; changePctMax: string;
+  dividendYieldMin: string; dividendYieldMax: string;
+  betaMin: string; betaMax: string;
   dollarVolMinM: string;
   volumeMinM: string; volumeMaxM: string;
   pctFromHighMin: string; pctFromHighMax: string;
@@ -228,6 +232,8 @@ const defaultScreenerForm: ScreenerFormState = {
   priceMin: '', priceMax: '',
   marketCapMinB: '', marketCapMaxB: '',
   changePctMin: '', changePctMax: '',
+  dividendYieldMin: '', dividendYieldMax: '',
+  betaMin: '', betaMax: '',
   dollarVolMinM: '',
   volumeMinM: '', volumeMaxM: '',
   pctFromHighMin: '', pctFromHighMax: '',
@@ -286,6 +292,10 @@ function buildScreenerCriteria(
   }
   const ch = nr(form.changePctMin, form.changePctMax);
   if (ch) c.change_percentage = ch;
+  const dy = nr(form.dividendYieldMin, form.dividendYieldMax);
+  if (dy) c.dividend_yield = dy;
+  const bt = nr(form.betaMin, form.betaMax);
+  if (bt) c.beta = bt;
   if (form.dollarVolMinM !== '') c.dollar_volume = { min: parseFloat(form.dollarVolMinM) * 1e6 };
   const vol = nr(
     form.volumeMinM !== '' ? (parseFloat(form.volumeMinM) * 1e6).toString() : '',
@@ -1426,6 +1436,10 @@ const Stocks: React.FC = () => {
       marketCapMaxB: c.market_cap?.max != null ? (c.market_cap.max / 1e9).toString() : '',
       changePctMin: c.change_percentage?.min?.toString() ?? '',
       changePctMax: c.change_percentage?.max?.toString() ?? '',
+      dividendYieldMin: c.dividend_yield?.min?.toString() ?? '',
+      dividendYieldMax: c.dividend_yield?.max?.toString() ?? '',
+      betaMin: c.beta?.min?.toString() ?? '',
+      betaMax: c.beta?.max?.toString() ?? '',
       dollarVolMinM: c.dollar_volume?.min != null ? (c.dollar_volume.min / 1e6).toString() : '',
       volumeMinM: c.volume?.min != null ? (c.volume.min / 1e6).toString() : '',
       volumeMaxM: c.volume?.max != null ? (c.volume.max / 1e6).toString() : '',
@@ -1467,6 +1481,10 @@ const Stocks: React.FC = () => {
       marketCapMaxB: c.market_cap?.max != null ? (c.market_cap.max / 1e9).toString() : '',
       changePctMin: c.change_percentage?.min?.toString() ?? '',
       changePctMax: c.change_percentage?.max?.toString() ?? '',
+      dividendYieldMin: c.dividend_yield?.min?.toString() ?? '',
+      dividendYieldMax: c.dividend_yield?.max?.toString() ?? '',
+      betaMin: c.beta?.min?.toString() ?? '',
+      betaMax: c.beta?.max?.toString() ?? '',
       dollarVolMinM: c.dollar_volume?.min != null ? (c.dollar_volume.min / 1e6).toString() : '',
       volumeMinM: c.volume?.min != null ? (c.volume.min / 1e6).toString() : '',
       volumeMaxM: c.volume?.max != null ? (c.volume.max / 1e6).toString() : '',
@@ -2971,6 +2989,32 @@ const Stocks: React.FC = () => {
                 </div>
               </div>
 
+              {/* Dividend Yield */}
+              <div className="mb-3">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Dividend Yield (%)</div>
+                <div className="flex gap-1.5">
+                  <input type="number" placeholder="Min" value={screenerForm.dividendYieldMin}
+                    onChange={e => setScreenerForm(f => ({ ...f, dividendYieldMin: e.target.value }))}
+                    className={screenerInputCls} />
+                  <input type="number" placeholder="Max" value={screenerForm.dividendYieldMax}
+                    onChange={e => setScreenerForm(f => ({ ...f, dividendYieldMax: e.target.value }))}
+                    className={screenerInputCls} />
+                </div>
+              </div>
+
+              {/* Beta */}
+              <div className="mb-3">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Beta</div>
+                <div className="flex gap-1.5">
+                  <input type="number" step="0.1" placeholder="Min" value={screenerForm.betaMin}
+                    onChange={e => setScreenerForm(f => ({ ...f, betaMin: e.target.value }))}
+                    className={screenerInputCls} />
+                  <input type="number" step="0.1" placeholder="Max" value={screenerForm.betaMax}
+                    onChange={e => setScreenerForm(f => ({ ...f, betaMax: e.target.value }))}
+                    className={screenerInputCls} />
+                </div>
+              </div>
+
               {/* Dollar Volume */}
               <div className="mb-3">
                 <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Dollar Volume ($M min)</div>
@@ -3180,6 +3224,8 @@ const Stocks: React.FC = () => {
                             { key: 'change_percentage', label: 'Chg%' },
                             { key: 'market_cap', label: 'Mkt Cap' },
                             { key: 'volume', label: 'Volume' },
+                            { key: 'dividend_yield', label: 'Div Yld' },
+                            { key: 'beta', label: 'Beta' },
                           ] as const).map(col => (
                             <th
                               key={col.key}
@@ -3239,6 +3285,8 @@ const Stocks: React.FC = () => {
                               </td>
                               <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap">{fmtMarketCap(r.market_cap)}</td>
                               <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap">{fmtVolume(r.volume)}</td>
+                              <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums">{r.dividend_yield != null ? `${r.dividend_yield.toFixed(2)}%` : '—'}</td>
+                              <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums">{r.beta != null ? r.beta.toFixed(2) : '—'}</td>
                               <td className="px-3 py-2.5">
                                 {pos != null ? (
                                   <div className="flex items-center gap-1.5 min-w-[120px]">

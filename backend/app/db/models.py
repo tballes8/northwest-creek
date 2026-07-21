@@ -187,6 +187,11 @@ class StockSnapshot(Base):
     year_high = Column(Numeric(precision=18, scale=4), nullable=True)
     year_low = Column(Numeric(precision=18, scale=4), nullable=True)
     market_cap = Column(Numeric(precision=24, scale=2), nullable=True)
+    # Trailing annual dividend per share (from /company-screener, refreshed on the
+    # daily universe rebuild). Yield is derived live as this ÷ price — see screener.py.
+    last_annual_dividend = Column(Numeric(precision=18, scale=4), nullable=True)
+    # 5-year beta vs. market (from /company-screener, daily rebuild). Volatility filter.
+    beta = Column(Numeric(precision=10, scale=4), nullable=True)
     price_avg_50 = Column(Numeric(precision=18, scale=4), nullable=True)
     price_avg_200 = Column(Numeric(precision=18, scale=4), nullable=True)
     exchange = Column(String(20), nullable=True)

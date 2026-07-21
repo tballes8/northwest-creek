@@ -14,9 +14,18 @@ from app.db.session import get_db
 
 router = APIRouter()
 
+# Dividend yield is derived, not stored: trailing annual dividend $ ÷ current price.
+# coalesce(dividend, 0) so non-payers read as 0% (a "max yield" screen includes them,
+# a "min yield" screen excludes them); nullif guards the rare zero/NULL price.
+DIV_YIELD_EXPR = (
+    func.coalesce(StockSnapshot.last_annual_dividend, 0)
+    / func.nullif(StockSnapshot.price, 0)
+    * 100
+)
+
 SORTABLE = {
     "price", "market_cap", "change_percentage", "volume",
-    "price_avg_50", "price_avg_200", "symbol", "name",
+    "price_avg_50", "price_avg_200", "symbol", "name", "dividend_yield", "beta",
 }
 
 SORT_COL = {
@@ -28,6 +37,8 @@ SORT_COL = {
     "price_avg_200": StockSnapshot.price_avg_200,
     "symbol": StockSnapshot.symbol,
     "name": StockSnapshot.name,
+    "dividend_yield": DIV_YIELD_EXPR,
+    "beta": StockSnapshot.beta,
 }
 
 
@@ -43,6 +54,8 @@ class ScreenerCriteria(BaseModel):
     volume: Optional[NumericRange] = None
     price_avg_50: Optional[NumericRange] = None
     price_avg_200: Optional[NumericRange] = None
+    dividend_yield: Optional[NumericRange] = None  # percent, e.g. min 3 = ≥3% yield
+    beta: Optional[NumericRange] = None  # e.g. max 1 = defensive, min 1.5 = high-beta
     exchange: Optional[list[str]] = None
 
     pct_from_52wk_high: Optional[NumericRange] = None
@@ -94,6 +107,10 @@ def _build_row(row: StockSnapshot) -> dict:
     dollar_vol = round(price * volume, 2) if price and volume else None
     gap_pct = round((open_p - prev_c) / prev_c * 100, 2) if open_p and prev_c else None
 
+    annual_div = _f(row.last_annual_dividend)
+    # None (—) for non-payers; only payers get a yield number shown in the table.
+    div_yield = round(annual_div / price * 100, 2) if annual_div and price else None
+
     ts = row.last_refreshed
     if ts and ts.tzinfo is None:
         ts = ts.replace(tzinfo=timezone.utc)
@@ -116,6 +133,8 @@ def _build_row(row: StockSnapshot) -> dict:
         "pct_from_52wk_low": pct_from_low,
         "dollar_volume": dollar_vol,
         "gap_percent": gap_pct,
+        "dividend_yield": div_yield,
+        "beta": _f(row.beta),
         "last_refreshed": ts.isoformat() if ts else None,
         "is_etf": row.is_etf,
         "squeeze_state": row.squeeze_state,
@@ -166,6 +185,8 @@ async def run_screener(
     add_range(StockSnapshot.volume, criteria.volume)
     add_range(StockSnapshot.price_avg_50, criteria.price_avg_50)
     add_range(StockSnapshot.price_avg_200, criteria.price_avg_200)
+    add_range(DIV_YIELD_EXPR, criteria.dividend_yield)
+    add_range(StockSnapshot.beta, criteria.beta)
 
     if criteria.exchange:
         conditions.append(StockSnapshot.exchange.in_(criteria.exchange))
@@ -409,6 +430,17 @@ _PRESETS = [
             "market_cap": {"min": 200_000_000},
             "sort_by": "change_percentage",
             "sort_desc": False,
+        },
+    },
+    {
+        "id": "dividend_income",
+        "name": "Dividend Income",
+        "description": "Established companies yielding 3%+ with a market cap above $2B — a starting universe for income investors.",
+        "criteria": {
+            "dividend_yield": {"min": 3},
+            "market_cap": {"min": 2_000_000_000},
+            "sort_by": "dividend_yield",
+            "sort_desc": True,
         },
     },
     {
