@@ -943,14 +943,16 @@ Each entry follows a consistent format:
 
 #### Fundamental Company Screener
 
-**What It Does:** New screener endpoint with filters for market cap, sector, industry, price, beta, dividend yield, volume, exchange, country, and ETF/fund classification. Operates as a fundamental filter layer distinct from the existing technical screener. Frontend integration pending at time of backend ship.
+**What It Does:** A full stock screener on the Stocks page that filters the ~5,000-name daily snapshot universe on both fundamental and technical criteria in one panel. Fundamental filters: price, market cap, daily change %, **dividend yield %** (min/max), **beta** (min/max), sector, and industry (the industry dropdown is data-driven and narrows to the chosen sector). Liquidity filters: trading volume and dollar volume. Positioning filters: % from 52-week high/low, plus moving-average conditions (Golden Cross, price above 50-day MA, price above 200-day MA) and the full volatility-squeeze set (in-squeeze, minimum days coiling, maximum BB÷KC tightness, and fired-within-N-days). Universe controls: exchange toggles (NYSE / NASDAQ / AMEX) and an "Exclude ETFs & Funds" checkbox that is on by default. Results are sortable by any core column — including dividend yield and beta — paginated, stamped with a "data as of" time, and each row opens an inline price chart (Active/Professional). The screener ships with one-click presets — Near 52-Week High, Oversold Quality, Golden Cross, High Volume Breakout, Momentum Leaders, Near/at 52-Week Low, Death Cross, Gap Up, Gap Down, **Dividend Income**, In Squeeze, and Squeeze Fired — and users can save their own screens (count gated by tier). Dividend yield is derived from each company's trailing annual dividend (captured on the daily universe rebuild from FMP's company-screener) against the live price, so a non-payer reads as no yield rather than a misleading zero.
 
-**Tier Availability:** All tiers (backend ready; frontend integration pending)
+**Tier Availability:** All tiers can run the screener, use presets, and filter by dividend yield. Saved-screen count is tier-gated; the inline per-result price chart is Active and Professional.
 
-**Marketing Angle:** The existing technical screener finds setups — this screener finds companies. Filtering by sector, market cap, dividend yield, and beta lets value and income investors build a candidate universe before applying technical filters, completing a top-down research workflow in one platform.
+**Marketing Angle:** The technical screener finds setups — this one finds companies. Income and value investors can build a candidate universe by dividend yield, market cap, and sector, then layer on moving-average and squeeze conditions to time an entry — a full top-down research workflow without leaving the platform. The dividend-yield filter directly serves income investors (with a one-click Dividend Income preset for "quality names paying 3%+"), while the beta filter lets risk-conscious investors screen for defensive, low-volatility names or, conversely, high-beta movers — matching the candidate universe to their risk tolerance before they ever look at a chart.
 
 **Blog/Content Hooks:**
 - How to build a stock screener strategy from fundamentals down to technicals
+- Screening for dividend income — yield, market cap, and quality filters that matter
+- What beta really measures — building a low-volatility (or high-beta) watchlist
 - Finding undervalued stocks with market cap and sector filters
 - Small-cap vs. large-cap — using screener filters to match your risk tolerance
 
