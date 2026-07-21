@@ -181,6 +181,8 @@ class MarketDataService:
                 # Fund-specific fields
                 "fund_description": result.get("description") if is_etf else None,
                 "fund_category": result.get("industry") if is_etf else None,
+                # Not in /profile — the frontend enriches these from the
+                # etf/info endpoint (see loadEtfInfo in Stocks.tsx).
                 "fund_family": None,
                 "fund_expense_ratio": None,
                 "fund_inception_date": result.get("ipoDate") if is_etf else None,

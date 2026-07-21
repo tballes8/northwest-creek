@@ -43,7 +43,7 @@ interface CompanyInfo {
   fund_description?: string | null;
   fund_category?: string | null;
   fund_family?: string | null;
-  fund_expense_ratio?: number | null;
+  fund_expense_ratio?: number | null; // percent, e.g. 0.75 = 0.75% (populated by loadEtfInfo)
   fund_inception_date?: string | null;
   fund_total_assets?: number | null;
 }
@@ -763,6 +763,7 @@ const Stocks: React.FC = () => {
       const companyType = companyResult.value.data?.type || '';
       if (FUND_TYPES.has(companyType)) {
         loadEtfHoldings(symbol);
+        loadEtfInfo(symbol);
       } else {
         setEtfHoldings([]);
       }
@@ -830,7 +831,7 @@ const Stocks: React.FC = () => {
     try {
       const token = localStorage.getItem('access_token');
       const response = await axios.get(
-        `${API_URL}/api/v1/stocks/etf/${encodeURIComponent(symbol.toUpperCase())}/holdings?limit=5`,
+        `${API_URL}/api/v1/stocks/etf/${encodeURIComponent(symbol.toUpperCase())}/holdings?limit=10`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setEtfHoldings(response.data.holdings || []);
@@ -839,6 +840,46 @@ const Stocks: React.FC = () => {
       setEtfHoldings([]);
     } finally {
       setHoldingsLoading(false);
+    }
+  };
+
+  // Fund metadata (expense ratio, fund family, AUM, inception) lives in FMP's
+  // etf/info feed, which the company `profile` endpoint doesn't carry. Fetched
+  // separately for fund types and merged into `company` so the existing Fund
+  // Details rows light up. Non-blocking — the panel renders fine without it.
+  const loadEtfInfo = async (symbol: string) => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await axios.get(
+        `${API_URL}/api/v1/stocks/etf/${encodeURIComponent(symbol.toUpperCase())}/info`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const info = response.data || {};
+
+      // FMP's expenseRatio unit is inconsistent across funds — some rows are a
+      // percent (0.75 → 0.75%), others a fraction (0.0075 → 0.75%). Treat any
+      // value >= 0.02 as an already-percent figure and scale up the smaller
+      // ones; no real ETF charges below ~0.02%. Stored as a percent.
+      let expensePct: number | null = null;
+      const rawExpense = Number(info.expense_ratio);
+      if (info.expense_ratio != null && !Number.isNaN(rawExpense)) {
+        expensePct = rawExpense >= 0.02 ? rawExpense : rawExpense * 100;
+      }
+
+      setCompany((prev) => {
+        // Guard against a late response from a previously-searched ticker
+        // merging into the current fund.
+        if (!prev || prev.ticker?.toUpperCase() !== symbol.toUpperCase()) return prev;
+        return {
+          ...prev,
+          fund_family: info.etf_company || prev.fund_family,
+          fund_expense_ratio: expensePct != null ? expensePct : prev.fund_expense_ratio,
+          fund_total_assets: info.aum != null ? info.aum : prev.fund_total_assets,
+          fund_inception_date: info.inception_date || prev.fund_inception_date,
+        };
+      });
+    } catch (err) {
+      console.error('Failed to load ETF info:', err);
     }
   };
 
@@ -2149,7 +2190,7 @@ const Stocks: React.FC = () => {
                   {isFundType(company.type) && company.fund_expense_ratio != null && (
                     <div>
                       <div className="text-sm text-gray-600 dark:text-gray-400">Expense Ratio</div>
-                      <div className="text-gray-900 dark:text-white font-medium">{(company.fund_expense_ratio * 100).toFixed(2)}%</div>
+                      <div className="text-gray-900 dark:text-white font-medium">{company.fund_expense_ratio.toFixed(2)}%</div>
                     </div>
                   )}
                   {isFundType(company.type) && company.fund_inception_date && (
@@ -2326,25 +2367,39 @@ const Stocks: React.FC = () => {
                         ];
                         const OTHER_COLOR = '#6B7280';
 
-                        const topN = etfHoldings.slice(0, 10);
-                        const topNTotal = topN.reduce((sum, h) => sum + (h.weight || 0), 0);
-                        const otherWeight = Math.max(0, 100 - topNTotal);
+                        const buildSlices = (holdings: EtfHolding[]) => {
+                          const top = holdings.reduce((sum, h) => sum + (h.weight || 0), 0);
+                          // "Other" is the signed remainder so weights still reconcile
+                          // to ~100% even when a leveraged/inverse fund nets out below it.
+                          const other = 100 - top;
+                          return [
+                            ...holdings.map((h, i) => ({
+                              label: h.ticker || h.name,
+                              weight: h.weight || 0,
+                              color: CHART_COLORS[i],
+                            })),
+                            ...(Math.abs(other) > 0.5 ? [{ label: 'Other', weight: other, color: OTHER_COLOR }] : []),
+                          ];
+                        };
 
-                        const slices = [
-                          ...topN.map((h, i) => ({
-                            label: h.ticker || h.name,
-                            weight: h.weight || 0,
-                            color: CHART_COLORS[i],
-                          })),
-                          ...(otherWeight > 0.5 ? [{ label: 'Other', weight: otherWeight, color: OTHER_COLOR }] : []),
-                        ];
+                        // Wheel chart shows the top 10; the legend shows the top 5.
+                        const chartSlices = buildSlices(etfHoldings.slice(0, 10));
+                        const listSlices = buildSlices(etfHoldings.slice(0, 5));
 
-                        const total = slices.reduce((s, sl) => s + sl.weight, 0);
+                        // A donut can't render negative values geometrically, and some
+                        // leveraged/inverse ETFs hold short or cash-offset positions with
+                        // negative weights. Size each slice by the MAGNITUDE of its weight
+                        // (the legend still shows the true signed percentage).
+                        const magnitudeTotal = chartSlices.reduce((s, sl) => s + Math.abs(sl.weight), 0);
 
-                        // Build SVG donut
+                        if (magnitudeTotal <= 0) {
+                          return <p className="text-sm text-gray-400 dark:text-gray-500">Holdings data not available</p>;
+                        }
+
+                        // Build SVG donut from the top-10 slices
                         let cumulativePercent = 0;
-                        const paths = slices.map((slice) => {
-                          const pct = slice.weight / total;
+                        const paths = chartSlices.map((slice) => {
+                          const pct = Math.abs(slice.weight) / magnitudeTotal;
                           const startAngle = cumulativePercent * 2 * Math.PI;
                           cumulativePercent += pct;
                           const endAngle = cumulativePercent * 2 * Math.PI;
@@ -2366,12 +2421,12 @@ const Stocks: React.FC = () => {
                             'Z',
                           ].join(' ');
 
-                          return { d, color: slice.color, label: slice.label, weight: slice.weight };
+                          return { d, color: slice.color };
                         });
 
                         return (
                           <div className="flex items-start gap-4">
-                            {/* Donut Chart */}
+                            {/* Donut Chart — top 10 holdings */}
                             <div className="flex-shrink-0">
                               <svg width="160" height="160" viewBox="-1.15 -1.15 2.3 2.3">
                                 {paths.map((p, i) => (
@@ -2380,9 +2435,9 @@ const Stocks: React.FC = () => {
                               </svg>
                             </div>
 
-                            {/* Legend */}
+                            {/* Legend — top 5 holdings */}
                             <div className="flex-1 space-y-1.5 min-w-0">
-                              {slices.map((slice, i) => (
+                              {listSlices.map((slice, i) => (
                                 <div key={i} className="flex items-center justify-between gap-2">
                                   <div className="flex items-center gap-1.5 min-w-0">
                                     <span
