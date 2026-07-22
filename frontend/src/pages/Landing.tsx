@@ -115,8 +115,8 @@ const Landing: React.FC = () => {
               </span>
             </h1>
             <p className="mt-5 text-lg text-gray-600 dark:text-gray-300 max-w-xl">
-              Real-time prices, technical indicators, DCF valuation, and AI-generated
-              analysis on every US stock — without paying a Bloomberg terminal price.
+              Professional tools at individual prices. Real-time prices, technical indicators, DCF valuation, and AI-generated
+              analysis on every US stock.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link
