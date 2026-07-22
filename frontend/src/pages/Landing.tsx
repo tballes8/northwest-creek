@@ -75,6 +75,12 @@ const Landing: React.FC = () => {
             </div>
             <div className="flex items-center space-x-4">
               <Link
+                to="/blogs"
+                className="text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                Blog
+              </Link>
+              <Link
                 to="/login"
                 className="text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 px-3 py-2 rounded-md text-sm font-medium transition-colors"
               >
@@ -213,6 +219,7 @@ const Landing: React.FC = () => {
             screenshotFile="dashboard-livefeed.png"
             screenshotDescription="Dashboard or Watchlist showing live prices flashing green/red, with at least one ticker showing a PM or AH badge."
             imageSrc="/landing/dashboard-livefeed.png"
+            imageAlt="NWC-Analytics live dashboard streaming real-time watchlist prices with pre-market and after-hours badges"
           />
 
           {/* 4. AI Stock & Portfolio Analysis */}
@@ -237,6 +244,7 @@ const Landing: React.FC = () => {
             screenshotFile="ai-analysis.png"
             screenshotDescription="Stock detail or Dashboard showing the AI-generated analysis text panel for a real ticker."
             imageSrc="/landing/ai-analysis.png"
+            imageAlt="NWC-Analytics AI-generated plain-language stock analysis panel powered by Anthropic Claude"
             reverse
             withChrome
           />
@@ -263,6 +271,7 @@ const Landing: React.FC = () => {
             screenshotFile="tech-analysis.png"
             screenshotDescription="TechnicalAnalysis page showing candlestick chart with RSI + MACD subpanels for a real ticker."
             imageSrc="/landing/tech-analysis.png"
+            imageAlt="NWC-Analytics technical analysis candlestick chart with RSI and MACD indicator panels"
           />
 
           <FeatureSection
@@ -286,6 +295,7 @@ const Landing: React.FC = () => {
             screenshotFile="intraday-drawing.png"
             screenshotDescription="Intraday chart with channel drawing visible, MA overlays on, zoomed in. Capture mid-draw if possible."
             imageSrc="/landing/intraday-drawing.png"
+            imageAlt="NWC-Analytics intraday 1-minute chart with trendline drawing tools and moving-average overlays"
             reverse
           />
 
@@ -312,6 +322,7 @@ const Landing: React.FC = () => {
             screenshotFile="dcf-suggestions.png"
             screenshotDescription="DCF page for a recognizable ticker (e.g. MSFT or AAPL) showing the suggestion panel and the resulting Buy/Hold/Overvalued recommendation."
             imageSrc="/landing/dcf-suggestions.png"
+            imageAlt="NWC-Analytics DCF valuation with auto-suggested growth and discount rates and a Buy/Hold/Overvalued recommendation"
           />
 
           {/* 6b. Relative Valuation */}
@@ -339,6 +350,7 @@ const Landing: React.FC = () => {
             screenshotFile="relative-valuation.png"
             screenshotDescription="Relative Valuation tab showing the MIN–MAX target-price range, the three method cards (P/E, P/S central, EV/EBITDA), and the P/S sensitivity grid."
             imageSrc="/landing/relative-valuation.png"
+            imageAlt="NWC-Analytics relative valuation with a peer-multiple price-target range from P/E, P/S and EV/EBITDA methods"
             reverse
           />
 
@@ -365,6 +377,7 @@ const Landing: React.FC = () => {
             screenshotFile="alerts-page.png"
             screenshotDescription="Alerts page showing both a price alert and at least one technical alert configured."
             imageSrc="/landing/alerts-page.png"
+            imageAlt="NWC-Analytics alerts page with price alerts and technical indicator alerts configured"
           />
 
           {/* 8. Stock Screener */}
@@ -390,6 +403,7 @@ const Landing: React.FC = () => {
             screenshotFile="screener.png"
             screenshotDescription="Stocks page (screener view) with filters applied — ideally a technical filter like golden cross or 52-week range."
             imageSrc="/landing/screener.png"
+            imageAlt="NWC-Analytics stock screener with technical filters such as golden cross and 52-week range applied"
             reverse
           />
 
@@ -457,6 +471,7 @@ const Landing: React.FC = () => {
             <Link to="/terms" className="hover:text-white transition-colors">Terms</Link>
             <Link to="/privacy" className="hover:text-white transition-colors">Privacy</Link>
             <Link to="/faq" className="hover:text-white transition-colors">FAQ</Link>
+            <Link to="/blogs" className="hover:text-white transition-colors">Blog</Link>
             <a href="mailto:support@nwc-analytics.com" className="hover:text-white transition-colors">Support</a>
           </div>
         </div>

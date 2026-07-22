@@ -10,6 +10,9 @@ export interface FeatureSectionProps {
   screenshotFile: string;
   screenshotDescription?: string;
   imageSrc?: string;
+  /** User-facing alt text for the screenshot. Falls back to `title` if omitted.
+   *  Never derived from `screenshotDescription` — that's an internal capture note. */
+  imageAlt?: string;
   reverse?: boolean;
   withChrome?: boolean;
 }
@@ -43,6 +46,7 @@ const FeatureSection: React.FC<FeatureSectionProps> = ({
   screenshotFile,
   screenshotDescription,
   imageSrc,
+  imageAlt,
   reverse = false,
   withChrome = false,
 }) => {
@@ -76,7 +80,7 @@ const FeatureSection: React.FC<FeatureSectionProps> = ({
         fileName={screenshotFile}
         description={screenshotDescription}
         imageSrc={imageSrc}
-        imageAlt={title}
+        imageAlt={imageAlt || title}
         withChrome={withChrome}
       />
     </div>

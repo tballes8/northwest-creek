@@ -12,7 +12,11 @@
          contradict) the per-route tags in the rendered DOM Google indexes. -->
     <title>NWC-Analytics — Professional Stock Analysis for Retail Investors</title>
 
-    <!-- Open Graph (defaults — overridden per page) -->
+    <!-- Open Graph (defaults). Two things override these:
+         (1) In real browsers, React 19 hoists per-route og/twitter tags (see Landing.tsx, BlogPost.tsx).
+         (2) For non-JS social scrapers on /blogs/:slug, server.js rewrites this block server-side
+             (it keys off the property="og:*"/name="twitter:*" attributes — these HTML comments are
+             stripped by the production build, so no marker-based matching is used). -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="NWC-Analytics" />
     <meta property="og:title" content="NWC-Analytics — Professional Stock Analysis for Retail Investors" />
