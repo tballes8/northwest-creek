@@ -28,6 +28,7 @@ const http = require('http');
 const path = require('path');
 const fs = require('fs');
 const handler = require('serve-handler');
+const ogImage = require('./og-image');
 
 const PORT = process.env.PORT || 3000;
 const BUILD_DIR = path.join(__dirname, 'build');
@@ -37,9 +38,10 @@ const INDEX_PATH = path.join(BUILD_DIR, 'index.html');
 // browser uses; override with OG_API_BASE if a private URL is preferred.
 const API_BASE = (process.env.OG_API_BASE || 'https://api.nwc-analytics.com').replace(/\/+$/, '');
 const SITE_ORIGIN = 'https://nwc-analytics.com';
-const DEFAULT_OG_IMAGE = `${SITE_ORIGIN}/images/og-default.png`;
-const POST_TTL_MS = 60_000;     // in-memory cache per the task's guidance
-const FETCH_TIMEOUT_MS = 4_000; // keep scrapers fast; on timeout we serve the shell
+const POST_TTL_MS = 60_000;        // blog-post lookup cache per the task's guidance
+const FETCH_TIMEOUT_MS = 4_000;    // HTML injection path: keep scrapers fast
+const OG_FETCH_TIMEOUT_MS = 2_000; // image path: shorter — it has a safe default-card fallback
+const OG_CACHE_CAP = 100;          // rendered-PNG cache cap (blog is ~40 posts)
 
 // Read the shell once at startup — never hit disk per request.
 let INDEX_HTML;
@@ -78,22 +80,36 @@ function esc(value) {
 }
 
 /**
- * Meta-description fallback for posts without an excerpt: first ~155 chars of
- * the body with HTML stripped, cut at a word boundary. Mirrors deriveDescription
- * in src/pages/BlogPost.tsx so scraper and browser descriptions match.
+ * Reduce HTML (or a raw excerpt) to plain text: drop script/style, strip tags,
+ * decode the handful of entities that show up in our content, collapse
+ * whitespace. No truncation — callers truncate per target with truncate().
  */
-function deriveDescription(html) {
-  const text = String(html || '')
+function stripToText(html) {
+  return String(html || '')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
     .replace(/\s+/g, ' ')
     .trim();
-  if (text.length <= 155) return text;
-  const cut = text.slice(0, 155);
-  const lastSpace = cut.lastIndexOf(' ');
-  return `${lastSpace > 0 ? cut.slice(0, lastSpace) : cut}…`;
+}
+
+/**
+ * Truncate to `max` chars at a word boundary, appending "…" only if cut. The
+ * ellipsis is counted within the budget so the result never exceeds `max`.
+ */
+function truncate(text, max) {
+  const s = String(text || '').replace(/\s+/g, ' ').trim();
+  if (s.length <= max) return s;
+  const slice = s.slice(0, max - 1);
+  const lastSpace = slice.lastIndexOf(' ');
+  const base = (lastSpace > 0 ? slice.slice(0, lastSpace) : slice).replace(/[\s.,;:!?—–-]+$/, '');
+  return `${base}…`;
 }
 
 /** Normalize a cover-image URL to an absolute https URL, or null if unusable. */
@@ -119,25 +135,35 @@ function absoluteImage(url) {
 function injectOg(html, post) {
   const title = (post.title && String(post.title).trim()) || 'NWC-Analytics';
   const ogTitle = `${title} | NWC-Analytics`;
-  const description =
-    (post.excerpt && String(post.excerpt).trim()) ||
-    deriveDescription(post.content) ||
+
+  const base =
+    stripToText(post.excerpt) ||
+    stripToText(post.content) ||
     `${title} — stock analysis insights from NWC-Analytics.`;
-  const image = absoluteImage(post.cover_image_url) || DEFAULT_OG_IMAGE;
+  const ogDescription = truncate(base, 125);   // social preview cards truncate ~125
+  const metaDescription = truncate(base, 155); // Google truncates ~150–160
+
+  // og:image points at the dynamic card renderer (/og/{slug}.png -> 1200x630).
+  // FUTURE (out of scope): if post.cover_image_url is a real, non-logo image,
+  // prefer it here via absoluteImage(post.cover_image_url). Kept as a rendered
+  // card for now so every post gets a correctly-sized, on-brand preview.
+  const image = `${SITE_ORIGIN}/og/${encodeURIComponent(post.slug || '')}.png`;
   const url = `${SITE_ORIGIN}/blogs/${encodeURIComponent(post.slug || '')}`;
 
   const block =
     `<title>${esc(ogTitle)}</title>` +
-    `<meta name="description" content="${esc(description)}"/>` +
+    `<meta name="description" content="${esc(metaDescription)}"/>` +
     `<meta property="og:type" content="article"/>` +
     `<meta property="og:site_name" content="NWC-Analytics"/>` +
     `<meta property="og:title" content="${esc(ogTitle)}"/>` +
-    `<meta property="og:description" content="${esc(description)}"/>` +
+    `<meta property="og:description" content="${esc(ogDescription)}"/>` +
     `<meta property="og:image" content="${esc(image)}"/>` +
+    `<meta property="og:image:width" content="1200"/>` +
+    `<meta property="og:image:height" content="630"/>` +
     `<meta property="og:url" content="${esc(url)}"/>` +
     `<meta name="twitter:card" content="summary_large_image"/>` +
     `<meta name="twitter:title" content="${esc(ogTitle)}"/>` +
-    `<meta name="twitter:description" content="${esc(description)}"/>` +
+    `<meta name="twitter:description" content="${esc(ogDescription)}"/>` +
     `<meta name="twitter:image" content="${esc(image)}"/>`;
 
   return html
@@ -153,13 +179,13 @@ function injectOg(html, post) {
 
 const postCache = new Map(); // slug -> { at, post }  (post === null means "known miss")
 
-async function fetchPost(slug) {
+async function fetchPost(slug, timeoutMs = FETCH_TIMEOUT_MS) {
   const now = Date.now();
   const cached = postCache.get(slug);
   if (cached && now - cached.at < POST_TTL_MS) return cached.post;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const res = await fetch(`${API_BASE}/api/v1/content/blogs/${encodeURIComponent(slug)}`, {
       signal: controller.signal,
@@ -182,12 +208,84 @@ async function fetchPost(slug) {
   }
 }
 
+// ── OG image rendering (cached, fail-soft) ──────────────────────────────────
+
+const ogCache = new Map(); // key -> PNG Buffer (small LRU)
+
+function ogCacheGet(key) {
+  const buf = ogCache.get(key);
+  if (buf === undefined) return undefined;
+  ogCache.delete(key); // move to most-recent
+  ogCache.set(key, buf);
+  return buf;
+}
+
+function ogCacheSet(key, buf) {
+  ogCache.delete(key);
+  ogCache.set(key, buf);
+  while (ogCache.size > OG_CACHE_CAP) ogCache.delete(ogCache.keys().next().value); // evict oldest
+}
+
+/**
+ * Render (or serve cached) the OG card PNG for a slug. "default" -> site card.
+ * Any lookup miss/timeout falls back to the default card. Throws only if even
+ * the default card can't render (fonts missing) — the caller then redirects to
+ * the static logo so a scraper never gets a 500.
+ */
+async function getOgPng(slug) {
+  const key = slug === 'default' ? 'default' : `post:${slug}`;
+  const cached = ogCacheGet(key);
+  if (cached) return cached;
+
+  let png;
+  if (slug === 'default') {
+    png = await ogImage.renderDefaultCard();
+  } else {
+    const post = await fetchPost(slug, OG_FETCH_TIMEOUT_MS); // shorter ceiling; safe fallback below
+    if (post) {
+      try {
+        png = await ogImage.renderPostCard(post);
+      } catch (err) {
+        console.warn(`[server] post card render failed for "${slug}", using default: ${err.message}`);
+        png = await ogImage.renderDefaultCard();
+      }
+    } else {
+      png = await ogImage.renderDefaultCard(); // unknown slug / API down -> default card, still 200
+    }
+  }
+  ogCacheSet(key, png);
+  return png;
+}
+
+async function handleOgImage(rawSlug, req, res) {
+  const slug = decodeURIComponent(rawSlug);
+  try {
+    const png = await getOgPng(slug);
+    res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+    res.end(req.method === 'HEAD' ? undefined : png);
+  } catch (err) {
+    // Last-resort fail-soft: never 500 a scraper — redirect to the static logo.
+    console.error(`[server] OG image unavailable for "${slug}", redirecting to logo: ${err.message}`);
+    res.writeHead(302, { Location: '/images/logo.png', 'Cache-Control': 'public, max-age=300' });
+    res.end();
+  }
+}
+
+const OG_PATH_RE = /^\/og\/(.+)\.png$/;
 const BLOG_PATH_RE = /^\/blogs\/([^/]+)\/?$/;
 
 const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'GET' || req.method === 'HEAD') {
       const pathname = new URL(req.url, `http://${req.headers.host || 'localhost'}`).pathname;
+
+      // Dynamic OG cards — must be handled before the SPA fallback.
+      const ogMatch = pathname.match(OG_PATH_RE);
+      if (ogMatch) {
+        await handleOgImage(ogMatch[1], req, res);
+        return;
+      }
+
       const match = pathname.match(BLOG_PATH_RE);
       if (match) {
         const slug = decodeURIComponent(match[1]);
