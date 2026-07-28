@@ -88,6 +88,21 @@ confident claim. Do NOT invent NWC files or dependencies.
 react to), **Heads-up** (could matter, verify), **Additive** (new capability), \
 **Irrelevant**.
 
+Severity discipline — absence of evidence is NOT a reason to escalate:
+- The stack profile's "Known NEGATIVE facts" section is authoritative. If an item \
+only touches something listed there as unused, it is **Irrelevant**. Do not \
+re-open it as "Heads-up" on the theory that the setting might have been enabled \
+outside the codebase.
+- **Heads-up requires a positive hook**: name the specific thing from the stack \
+profile the item touches. If you cannot name one, the item is Irrelevant or \
+Additive — not Heads-up. "NWC might be using this" is not a hook.
+- For an OPT-IN vendor feature (something that must be deliberately turned on), the \
+default assumption is that NWC has not turned it on unless the profile says \
+otherwise. Rate it Irrelevant or Additive. If it would genuinely matter should NWC \
+adopt it later, add that as a one-line conditional note in the Recommended action \
+column — do not inflate the severity to carry the note.
+- Do not rate the same item twice or hedge across two severities. Pick one.
+
 Output format (markdown only, no preamble):
 
 # {vendor_display} Changelog Review — <changelog date or "undated">
@@ -103,8 +118,16 @@ A markdown table with columns: Severity | Changelog item | Why it might affect N
 If nothing is relevant, write "No items appear to affect NWC." and skip the table.
 
 ## For Claude Code / Ops
-A concrete, ordered checklist of things to verify, noting that these are unverified \
-against actual code and which require checking the live environment or dashboards."""
+A concrete, ordered checklist covering ONLY the items you rated **Action needed** or \
+**Heads-up**. Do not write checklist steps for Irrelevant or Additive items — an \
+item you ruled out in the table must not reappear here as a verification task. If no \
+item is Action needed or Heads-up, write exactly "No action required." and nothing \
+else in this section.
+Every step must be something whose outcome could actually change NWC's code or \
+config. Do not pad the list with dashboard tours, status checks of features the \
+profile says are unused, or "confirm X is still fine" steps. Prefer 1-3 real steps \
+over a long speculative list. Mark any step that needs the live environment or a \
+dashboard (rather than the repo) with "[manual]"."""
 
 
 async def assess_changelog(changelog_text: str, vendor: str | None = None) -> str:

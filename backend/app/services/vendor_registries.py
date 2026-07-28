@@ -9,7 +9,11 @@ here. Vendors without a registry (e.g. Railway, Cloudflare) get a best-effort
 "generic" review grounded only in the stack profile below.
 
 KEEP THESE IN SYNC when integration code changes — a stale registry silently
-makes the reviewer miss real breakages.
+makes the reviewer miss real breakages. The same applies to the "Known NEGATIVE
+facts" list in NWC_STACK_PROFILE: the generic review path treats it as
+authoritative and downgrades items to "Irrelevant" on the strength of it, so if we
+ever adopt CI, a Railway CDN, feature flags, or multi-region replicas, remove that
+line from the list or the reviewer will wave through a change that does affect us.
 """
 from typing import Callable, Optional
 
@@ -22,13 +26,37 @@ from app.services.fmp_endpoint_registry import render_registry_for_prompt as _re
 NWC_STACK_PROFILE = """\
 NWC-Analytics is a stock-analytics SaaS. Architecture:
 - Backend: Python FastAPI (async), SQLAlchemy + asyncpg, deployed on Railway
-  (web service + scheduled cron jobs). Postgres and Redis run as Railway services.
-- Frontend: React 19 + TypeScript, built and served as a static site.
-- Container/build: Docker + docker-compose for local dev.
+  (web service + scheduled cron jobs) at api.nwc-analytics.com. Postgres and Redis
+  run as Railway services. The API sets no Cache-Control headers on any response.
+- Frontend: React 19 + TypeScript (CRA build). NOT Railway static hosting — it runs
+  a custom Node http server (`frontend/server.js`, started by `npm run serve`) that
+  wraps `serve-handler` to add server-side Open Graph injection for /blogs/:slug.
+  It sets its own cache headers: HTML `public, max-age=0, must-revalidate`,
+  OG images `public, max-age=86400`.
+- Edge: nwc-analytics.com sits behind **Cloudflare**. Cloudflare is the CDN/DNS
+  layer; no other CDN is enabled in front of either service.
+- Container/build: Docker + docker-compose for local dev only.
 - Third-party APIs NWC calls from code: Financial Modeling Prep (market data),
   Stripe (billing), Anthropic (AI), Twilio (SMS), SendGrid (email).
 - Hosting/infra dependencies: Railway (deploy, runtime, cron, managed Postgres/
-  Redis, CLI used for ops), plus DNS/CDN at the edge.
+  Redis) + Cloudflare at the edge.
+
+Known NEGATIVE facts — things NWC does NOT use. Treat these as authoritative;
+a changelog item that only touches one of them is "Irrelevant", not "Heads-up":
+- No CI/CD pipeline of any kind. There is no `.github/workflows` directory, no
+  Jenkins/CircleCI/GitLab config, no Makefile. Deploys are Railway-native, driven by
+  the build/deploy blocks in `frontend/railway.json` and the backend service config.
+- Railway CLI is essentially unused in the codebase. The only reference anywhere is
+  a `railway run` example inside a docstring in
+  `backend/app/tasks/backfill_sector_rotation.py`. In particular NWC does not use
+  `railway config pull` / `railway config push`, `railway cdn`, or `railway flag`.
+- No Railway CDN. No Railway feature flags. No infrastructure-as-code and no
+  version-controlled Railway config beyond `frontend/railway.json` and
+  `backend/railway-cron.toml`.
+- No multi-region or replica configuration. Cron jobs are declared in
+  `backend/railway-cron.toml` as plain name/schedule/command entries with no region
+  or replica fields, so there is no region map to mis-round-trip.
+- No Grok/xAI, no OpenAI, no Gemini, no LangChain. Anthropic is the only LLM vendor.
 
 When reviewing an infrastructure/platform vendor (hosting, CDN, CI, CLI, runtime),
 the risk is usually operational — deploys, build images, runtime versions, cron
