@@ -17,6 +17,7 @@ No auto-fetch: many changelog pages 403 bots, so the owner pastes the changelog
 import httpx
 
 from app.config import get_settings
+from app.services.anthropic_response import extract_text
 from app.services.vendor_registries import (
     NWC_STACK_PROFILE,
     get_registry_text,
@@ -178,4 +179,4 @@ async def assess_changelog(changelog_text: str, vendor: str | None = None) -> st
         )
         response.raise_for_status()
         data = response.json()
-        return data["content"][0]["text"]
+        return extract_text(data)

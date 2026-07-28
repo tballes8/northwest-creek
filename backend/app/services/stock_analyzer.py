@@ -7,6 +7,7 @@ import httpx
 import json
 from typing import Dict, Any, List, Optional
 from app.config import get_settings
+from app.services.anthropic_response import extract_text
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +130,7 @@ Summarize what these indicators suggest about this stock's momentum, trend stren
             )
             response.raise_for_status()
             data = response.json()
-            return data["content"][0]["text"]
+            return extract_text(data)
     except Exception:
         logger.exception("Stock AI analysis request failed for %s (model=%s)", ticker, settings.ANTHROPIC_MODEL)
         return (
@@ -229,7 +230,7 @@ Respond with ONLY this JSON (no markdown, no explanation outside the object):
             )
             response.raise_for_status()
             data = response.json()
-            raw_text = data["content"][0]["text"].strip()
+            raw_text = extract_text(data).strip()
 
             # Strip any accidental markdown fences
             if raw_text.startswith("```"):

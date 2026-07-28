@@ -113,7 +113,12 @@ NWC calls the Anthropic Messages API directly over HTTP (no SDK), via httpx.
 - Endpoint: `POST https://api.anthropic.com/v1/messages`
 - Headers: `x-api-key`, `anthropic-version: 2023-06-01`, `content-type: application/json`
 - Request body fields used: `model`, `max_tokens`, `system` (some callers), `messages: [{role, content}]`
-- Response read: `content[0].text` (assumes first content block is text)
+- Response read: via `services/anthropic_response.extract_text()`, which scans the
+  `content` array for the first `type == "text"` block rather than indexing
+  `content[0]`. Models with thinking on by default (Sonnet 5 / Opus 5 and later)
+  lead with a `thinking` block that has no `text` key, so positional indexing
+  breaks on a model bump. Raises ValueError when there is no text block at all
+  (e.g. `stop_reason: "refusal"`, which returns HTTP 200 with empty content).
 
 Pinned model ID (a model retirement/deprecation directly breaks all AI services):
 - `config.ANTHROPIC_MODEL` (default `claude-sonnet-4-6`, overridable via the ANTHROPIC_MODEL
@@ -121,11 +126,14 @@ Pinned model ID (a model retirement/deprecation directly breaks all AI services)
   analysis), `services/cycle_phase_analyzer.py`, `services/changelog_review.py` (this reviewer),
   and `services/portfolio_analyzer.py`. Bump it in one place when migrating Sonnet versions.
 
-Files: `services/stock_analyzer.py`, `services/cycle_phase_analyzer.py`, `services/portfolio_analyzer.py`, `services/changelog_review.py`.
+Files: `services/stock_analyzer.py`, `services/cycle_phase_analyzer.py`, `services/portfolio_analyzer.py`, `services/changelog_review.py`, `services/anthropic_response.py`.
 
 Watch items: model deprecation/retirement dates (especially the older pinned model),
 `anthropic-version` date requirements, changes to the Messages request params or to the
-`content` block response shape, and any max_tokens / rate-limit changes.
+`content` block response shape, and any max_tokens / rate-limit changes. Note that a
+model bump also changes request-parameter validity — newer models reject `temperature`
+/ `top_p` / `top_k` and the old `thinking.budget_tokens` shape. NWC sends none of those
+today, so the bump itself is currently just the ANTHROPIC_MODEL value.
 Config: ANTHROPIC_API_KEY."""
 
 TWILIO_REGISTRY = """\

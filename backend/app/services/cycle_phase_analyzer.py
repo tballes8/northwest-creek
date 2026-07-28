@@ -21,6 +21,7 @@ from sqlalchemy import select
 from app.config import get_settings
 from app.db.models import MacroIndicator
 from app.db.session import async_session
+from app.services.anthropic_response import extract_text
 from app.services.fred_client import fetch_observations_csv
 from app.services.sector_rotation import compute_relative_returns
 
@@ -203,7 +204,7 @@ async def synthesize_cycle_phase(end_date: date_cls) -> Optional[dict[str, Any]]
             )
             resp.raise_for_status()
             data = resp.json()
-            raw_text = data["content"][0]["text"].strip()
+            raw_text = extract_text(data).strip()
     except Exception as exc:
         logger.warning(f"Anthropic call failed during cycle phase synthesis: {exc}")
         return None

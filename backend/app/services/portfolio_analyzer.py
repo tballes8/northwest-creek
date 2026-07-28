@@ -6,6 +6,7 @@ import logging
 import httpx
 from typing import List, Dict, Any
 from app.config import get_settings
+from app.services.anthropic_response import extract_text
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +132,7 @@ Write a 3-5 sentence plain-language summary explaining what is happening in this
             )
             response.raise_for_status()
             data = response.json()
-            return data["content"][0]["text"]
+            return extract_text(data)
     except Exception:
         logger.exception("Portfolio AI analysis request failed (model=%s)", settings.ANTHROPIC_MODEL)
         return (
