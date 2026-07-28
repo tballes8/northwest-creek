@@ -274,6 +274,13 @@ async function handleOgImage(rawSlug, req, res) {
 const OG_PATH_RE = /^\/og\/(.+)\.png$/;
 const BLOG_PATH_RE = /^\/blogs\/([^/]+)\/?$/;
 
+// Renamed post slugs — old slug -> current slug.
+// RULE: any time a published post's slug changes, add an entry here.
+const SLUG_REDIRECTS = {
+  'a-deep-dive-into-options-trading-strategies':
+    'options-strategies-a-full-breakdown-of-all-8',
+};
+
 const server = http.createServer(async (req, res) => {
   try {
     if (req.method === 'GET' || req.method === 'HEAD') {
@@ -289,6 +296,16 @@ const server = http.createServer(async (req, res) => {
       const match = pathname.match(BLOG_PATH_RE);
       if (match) {
         const slug = decodeURIComponent(match[1]);
+
+        // Renamed-slug redirect — checked before the post lookup so no API
+        // call is wasted on an old slug that will never resolve.
+        const redirectSlug = SLUG_REDIRECTS[slug];
+        if (redirectSlug) {
+          res.writeHead(301, { Location: `${SITE_ORIGIN}/blogs/${encodeURIComponent(redirectSlug)}` });
+          res.end();
+          return;
+        }
+
         const post = await fetchPost(slug); // null => serve default shell (fail-soft)
         const body = post ? injectOg(INDEX_HTML, post) : INDEX_HTML;
         res.writeHead(200, {
