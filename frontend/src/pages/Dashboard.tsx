@@ -43,7 +43,19 @@ interface IPOItem {
   currency_code: string | null;
   min_shares_offered: number | null;
   max_shares_offered: number | null;
+  // Populated only for the recently_active bucket
+  current_price?: number | null;
+  change_percent?: number | null;
+  volume?: number | null;
 }
+
+type IPOTab = 'upcoming' | 'recently_active' | 'pending';
+
+const IPO_TAB_LABELS: Record<IPOTab, string> = {
+  upcoming: 'Upcoming',
+  recently_active: 'Recently Active',
+  pending: 'Pending',
+};
 
 interface DashboardPosition {
   ticker: string;
@@ -85,9 +97,9 @@ const Dashboard: React.FC = () => {
   // const [valueFlash, setValueFlash] = useState<'green' | 'red' | null>(null);
 
   // IPO data
-  const [ipoData, setIpoData] = useState<{ upcoming: IPOItem[]; pending: IPOItem[] }>({ upcoming: [], pending: [] });
+  const [ipoData, setIpoData] = useState<Record<IPOTab, IPOItem[]>>({ upcoming: [], recently_active: [], pending: [] });
   const [ipoLoading, setIpoLoading] = useState(false);
-  const [ipoTab, setIpoTab] = useState<'upcoming' | 'pending'>('upcoming');
+  const [ipoTab, setIpoTab] = useState<IPOTab>('upcoming');
 
   // IPO detail modal
   const [ipoModalOpen, setIpoModalOpen] = useState(false);
@@ -425,7 +437,11 @@ const Dashboard: React.FC = () => {
       const ipoResponse = await axios.get(`${API_URL}/api/v1/stocks/ipos`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setIpoData(ipoResponse.data);
+      setIpoData({
+        upcoming: ipoResponse.data?.upcoming ?? [],
+        recently_active: ipoResponse.data?.recently_active ?? [],
+        pending: ipoResponse.data?.pending ?? [],
+      });
     } catch (ipoErr) {
       console.warn('Could not fetch IPO data:', ipoErr);
     } finally {
@@ -1128,17 +1144,17 @@ return (
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">IPO Tracker</h2>
           </div>
           <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
-            {(['upcoming', 'pending'] as const).map((tab) => (
+            {(['upcoming', 'recently_active', 'pending'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setIpoTab(tab)}
-                className={`px-4 py-1.5 text-xs font-medium transition-colors ${
+                className={`px-4 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
                   ipoTab === tab
                     ? 'bg-primary-600 text-white'
                     : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                 }`}
               >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {IPO_TAB_LABELS[tab]}
                 {ipoData[tab].length > 0 && (
                   <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs ${
                     ipoTab === tab ? 'bg-primary-500 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
@@ -1161,7 +1177,7 @@ return (
             <svg className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
             </svg>
-            <p className="text-gray-500 dark:text-gray-400">No {ipoTab} IPOs found</p>
+            <p className="text-gray-500 dark:text-gray-400">No {IPO_TAB_LABELS[ipoTab].toLowerCase()} IPOs found</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -1170,16 +1186,25 @@ return (
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Ticker</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Company</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Expected Date</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Price Range</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Offer Size</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    {ipoTab === 'upcoming' ? 'Expected Date' : 'Listed Date'}
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    {ipoTab === 'recently_active' ? 'Price' : 'Price Range'}
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">
+                    {ipoTab === 'recently_active' ? 'Change' : 'Offer Size'}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
                 {[...ipoData[ipoTab]].sort((a, b) => {
                   if (!a.listing_date) return 1;
                   if (!b.listing_date) return -1;
-                  return a.listing_date.localeCompare(b.listing_date);
+                  // Already-listed buckets read newest-first; upcoming reads soonest-first.
+                  return ipoTab === 'upcoming'
+                    ? a.listing_date.localeCompare(b.listing_date)
+                    : b.listing_date.localeCompare(a.listing_date);
                 }).map((ipo, idx) => (
                   <tr key={`${ipo.ticker}-${idx}`} className="hover:bg-gray-50 dark:hover:bg-gray-600/50 transition-colors">
                     <td className="px-4 py-3 whitespace-nowrap">
@@ -1217,7 +1242,15 @@ return (
                       )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-right">
-                      {ipo.lowest_offer_price && ipo.highest_offer_price ? (
+                      {ipoTab === 'recently_active' ? (
+                        ipo.current_price ? (
+                          <span className="text-sm font-medium text-gray-900 dark:text-white">
+                            ${ipo.current_price.toFixed(2)}
+                          </span>
+                        ) : (
+                          <span className="text-sm text-gray-400 dark:text-gray-500">—</span>
+                        )
+                      ) : ipo.lowest_offer_price && ipo.highest_offer_price ? (
                         <span className="text-sm text-gray-600 dark:text-gray-400">
                           ${ipo.lowest_offer_price.toFixed(2)} – ${ipo.highest_offer_price.toFixed(2)}
                         </span>
@@ -1226,7 +1259,15 @@ return (
                       )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-right">
-                      {ipo.total_offer_size ? (
+                      {ipoTab === 'recently_active' ? (
+                        ipo.change_percent !== null && ipo.change_percent !== undefined ? (
+                          <span className={`text-sm font-medium ${ipo.change_percent >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {ipo.change_percent >= 0 ? '+' : ''}{ipo.change_percent.toFixed(2)}%
+                          </span>
+                        ) : (
+                          <span className="text-sm text-gray-400 dark:text-gray-500">—</span>
+                        )
+                      ) : ipo.total_offer_size ? (
                         <span className="text-sm text-gray-600 dark:text-gray-400">
                           ${(ipo.total_offer_size / 1e6).toFixed(1)}M
                         </span>

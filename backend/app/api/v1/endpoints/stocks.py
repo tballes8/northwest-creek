@@ -620,7 +620,16 @@ async def get_index_quotes():
 async def get_ipos():
     """
     Get upcoming IPOs from FMP IPO calendar.
-    Returns upcoming (next 21 days) and recent (last 7 days) IPOs.
+
+    Three buckets:
+      - upcoming        — listing date in the next 21 days
+      - recently_active — listed in the last 7 days and already trading
+      - pending         — listed in the last 7 days but no trading data yet
+
+    The last two are split by a batch quote: a ticker with a real price is
+    trading, so it belongs in recently_active. Entries age out of both after
+    7 days because the calendar window itself is 7 days wide.
+
     Filters out warrants, rights, units, foreign listings, and SPAC shells.
     """
     today = datetime.now().strftime("%Y-%m-%d")
@@ -692,10 +701,14 @@ async def get_ipos():
             "currency_code": "USD",
             "min_shares_offered": None,
             "max_shares_offered": None,
+            "current_price": None,
+            "change_percent": None,
+            "volume": None,
         }
 
     results = {
         "upcoming": [],
+        "recently_active": [],
         "pending": [],
     }
 
@@ -717,15 +730,17 @@ async def get_ipos():
             return_exceptions=True,
         )
 
-        def _process_ipo_response(resp, status_label: str, key: str):
+        def _parse_ipo_response(resp, status_label: str, limit: int, label: str) -> list:
+            """Filter an FMP calendar response down to tradeable US listings."""
+            items = []
             if isinstance(resp, Exception):
-                print(f"IPO fetch error for {key}: {resp}")
-                return
+                print(f"IPO fetch error for {label}: {resp}")
+                return items
             if resp.status_code != 200:
-                return
+                return items
             data = resp.json()
             if not isinstance(data, list):
-                return
+                return items
             for ipo in data:
                 sym = ipo.get("symbol", "")
                 exchange = (ipo.get("exchange") or "").upper()
@@ -733,12 +748,40 @@ async def get_ipos():
                     continue
                 if exchange and exchange not in US_EXCHANGES:
                     continue
-                results[key].append(_build_ipo_item(ipo, status_label))
-                if len(results[key]) >= MAX_PER_TAB:
+                items.append(_build_ipo_item(ipo, status_label))
+                if len(items) >= limit:
                     break
+            return items
 
-        _process_ipo_response(upcoming_resp, "upcoming", "upcoming")
-        _process_ipo_response(recent_resp, "recent", "pending")
+        results["upcoming"] = _parse_ipo_response(
+            upcoming_resp, "upcoming", MAX_PER_TAB, "upcoming"
+        )
+
+        # Recent-window listings get split by whether they are actually trading.
+        # Pull up to 2x so neither bucket is starved by the other.
+        recent_items = _parse_ipo_response(
+            recent_resp, "recent", MAX_PER_TAB * 2, "recent"
+        )
+
+        quotes = {}
+        if recent_items:
+            quotes = await market_data_service.get_batch_quotes(
+                [i["ticker"] for i in recent_items if i["ticker"] != "N/A"]
+            )
+
+        for item in recent_items:
+            quote = quotes.get(item["ticker"].upper()) or {}
+            price = _safe_float(quote.get("price"))
+            if price and price > 0:
+                item["ipo_status"] = "trading"
+                item["current_price"] = price
+                item["change_percent"] = _safe_float(quote.get("change_percent"))
+                item["volume"] = quote.get("volume")
+                bucket = "recently_active"
+            else:
+                bucket = "pending"
+            if len(results[bucket]) < MAX_PER_TAB:
+                results[bucket].append(item)
 
         return results
 
