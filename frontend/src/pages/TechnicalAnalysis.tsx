@@ -842,7 +842,7 @@ const TechnicalAnalysis: React.FC = () => {
       },
       tooltip: {
         mode: 'index' as const,
-        intersect: false,
+        intersect: true,
       },
     },
     scales: {
