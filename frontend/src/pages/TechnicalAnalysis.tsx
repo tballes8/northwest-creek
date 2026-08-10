@@ -362,7 +362,8 @@ const TechnicalAnalysis: React.FC = () => {
     else if (name.includes('macd')) { chartId = 'chart-macd'; }
     // Volume indicators
     else if (name.includes('vwap')) { chartId = 'chart-vwap'; expandCategory = () => setShowVolume(true); }
-    else if (name.includes('obv') || name.includes('on-balance') || name.includes('a/d')) { chartId = 'chart-obv'; expandCategory = () => setShowVolume(true); }
+    else if (name.includes('a/d') || name.includes('accumulation')) { chartId = 'chart-ad'; expandCategory = () => setShowVolume(true); }
+    else if (name.includes('obv') || name.includes('on-balance')) { chartId = 'chart-obv'; expandCategory = () => setShowVolume(true); }
     // Momentum indicators
     else if (name.includes('stochastic') || name.includes('stoch')) { chartId = 'chart-stochastic'; expandCategory = () => setShowMomentum(true); }
     else if (name.includes('adx') || name.includes('directional')) { chartId = 'chart-adx'; expandCategory = () => setShowMomentum(true); }
@@ -1950,6 +1951,19 @@ const TechnicalAnalysis: React.FC = () => {
                       labels: analysisData.chart_data.map(d => d.date),
                       datasets: [
                         { label: 'OBV', data: analysisData.chart_data.map(d => d.obv), borderColor: 'rgb(16, 185, 129)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true, backgroundColor: 'rgba(16, 185, 129, 0.1)' },
+                      ]
+                    }} options={chartOptions} />
+                  </div>
+                </div>
+                {/* A/D Line Chart */}
+                <div id="chart-ad" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Accumulation/Distribution Line</h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">The A/D Line refines OBV by weighting each day's volume by where price closes within its range — a close near the high counts as accumulation, near the low as distribution. Like OBV it's a confirmation tool: a rising line supports an uptrend, while a divergence (price rising as the A/D Line falls) can warn the move is losing internal support — though divergences can persist for a long time before price turns, if it turns at all.</p>
+                  <div style={{ height: '250px' }}>
+                    <Line data={{
+                      labels: analysisData.chart_data.map(d => d.date),
+                      datasets: [
+                        { label: 'A/D Line', data: analysisData.chart_data.map(d => d.ad_line), borderColor: 'rgb(59, 130, 246)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true, backgroundColor: 'rgba(59, 130, 246, 0.1)' },
                       ]
                     }} options={chartOptions} />
                   </div>
