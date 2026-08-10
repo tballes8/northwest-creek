@@ -870,8 +870,8 @@ const TechnicalAnalysis: React.FC = () => {
     responsive: true,
     maintainAspectRatio: false,
     interaction: {
-        mode: 'index' as const,
-        intersect: false,
+        mode: 'nearest' as const,
+        intersect: true,
     },
     plugins: {
         legend: {
@@ -882,8 +882,8 @@ const TechnicalAnalysis: React.FC = () => {
         },
         },
         tooltip: {
-        mode: 'index' as const,
-        intersect: false,
+        mode: 'nearest' as const,
+        intersect: true,
         },
     },
     scales: {
