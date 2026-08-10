@@ -12,6 +12,7 @@ VALID_ALERT_TYPES = {
     "rsi_extreme",
     "macd_cross",
     "bollinger_breach",
+    "sar_flip",
     "dcf_valuation",
     "rule_of_40",
 }
@@ -22,9 +23,13 @@ ALERT_TYPE_LABELS = {
     "rsi_extreme": "RSI Extreme",
     "macd_cross": "MACD Cross",
     "bollinger_breach": "Bollinger Band Breach",
+    "sar_flip": "Parabolic SAR Flip",
     "dcf_valuation": "DCF Valuation",
     "rule_of_40": "Rule of 40",
 }
+
+SAR_DIRECTIONS = ("any", "bullish_flip", "bearish_flip")
+SAR_DEFAULT_MIN_PRIOR_BARS = 5
 
 
 def _validate_config(alert_type: str, config: dict) -> dict:
@@ -67,6 +72,23 @@ def _validate_config(alert_type: str, config: dict) -> dict:
             raise ValueError("bollinger_breach requires config.breach_type: 'upper' or 'lower'")
         return {"breach_type": breach_type}
 
+    elif alert_type == "sar_flip":
+        direction = config.get("direction") or "any"
+        if direction not in SAR_DIRECTIONS:
+            raise ValueError(
+                "sar_flip requires config.direction: 'any', 'bullish_flip', or 'bearish_flip'"
+            )
+        min_bars = config.get("min_prior_trend_bars")
+        if min_bars is None:
+            min_bars = SAR_DEFAULT_MIN_PRIOR_BARS
+        try:
+            min_bars = int(min_bars)
+        except (TypeError, ValueError):
+            raise ValueError("sar_flip min_prior_trend_bars must be a whole number")
+        if not (0 <= min_bars <= 60):
+            raise ValueError("sar_flip min_prior_trend_bars must be between 0-60")
+        return {"direction": direction, "min_prior_trend_bars": min_bars}
+
     elif alert_type == "dcf_valuation":
         target = config.get("target_rating")
         if target not in ("strong_buy", "buy", "sell", "strong_sell"):
@@ -104,6 +126,13 @@ def _config_display(alert_type: str, config: dict, ticker: str) -> str:
     elif alert_type == "bollinger_breach":
         label = "upper band" if config["breach_type"] == "upper" else "lower band"
         return f"Alert when {ticker} breaks {label}"
+    elif alert_type == "sar_flip":
+        label = {
+            "any": "SAR flips either direction",
+            "bullish_flip": "SAR flips bullish (dots move below price)",
+            "bearish_flip": "SAR flips bearish (dots move above price)",
+        }[config["direction"]]
+        return f"Alert when {ticker} {label}, after a trend of {config['min_prior_trend_bars']}+ bars"
     elif alert_type == "dcf_valuation":
         label = config["target_rating"].replace("_", " ").title()
         return f"Alert when {ticker} DCF rating turns {label}"

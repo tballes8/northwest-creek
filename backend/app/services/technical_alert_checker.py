@@ -22,8 +22,48 @@ settings = get_settings()
 EMAIL_ON_TRIGGER = True
 FMP_CONCURRENCY = 5  # max parallel FMP requests
 
-INDICATOR_ALERT_TYPES = {"sentiment_shift", "ma_crossover", "rsi_extreme", "macd_cross", "bollinger_breach"}
+INDICATOR_ALERT_TYPES = {"sentiment_shift", "ma_crossover", "rsi_extreme", "macd_cross", "bollinger_breach", "sar_flip"}
 FUNDAMENTAL_ALERT_TYPES = {"dcf_valuation", "rule_of_40"}
+
+
+def _sar_trend_runs(trend_history: list) -> Tuple[int, int]:
+    """
+    Return (current_run_bars, prior_run_bars) from a Parabolic SAR trend history
+    (a list of +1 / -1 values, one per bar).
+
+    Derived from the full history rather than accumulated across cron runs, so a
+    missed run or a re-seeded alert still yields the correct trend age.
+    """
+    if not trend_history:
+        return 0, 0
+
+    i = len(trend_history) - 1
+    current_trend = trend_history[-1]
+    current = 0
+    while i >= 0 and trend_history[i] == current_trend:
+        current += 1
+        i -= 1
+
+    if i < 0:
+        return current, 0
+
+    prior_trend = trend_history[i]
+    prior = 0
+    while i >= 0 and trend_history[i] == prior_trend:
+        prior += 1
+        i -= 1
+
+    return current, prior
+
+
+def _sar_snapshot(indicators: Dict[str, Any]) -> Optional[Tuple[str, int, int, Optional[float]]]:
+    """Extract (position, bars_in_trend, prior_trend_bars, sar_value) from computed indicators."""
+    sar = (indicators.get("advanced") or {}).get("parabolic_sar")
+    if not sar or not isinstance(sar, dict):
+        return None
+    position = "below" if sar.get("trend") == "uptrend" else "above"
+    bars_in_trend, prior_trend_bars = _sar_trend_runs(sar.get("trend_history") or [])
+    return position, bars_in_trend, prior_trend_bars, sar.get("value")
 
 # Sector DCF defaults: (growth_rate, terminal_growth, discount_rate, projection_years)
 _SECTOR_DEFAULTS = {
@@ -176,6 +216,7 @@ class TechnicalAlertChecker:
             "rsi_extreme": self._eval_rsi_extreme,
             "macd_cross": self._eval_macd_cross,
             "bollinger_breach": self._eval_bollinger_breach,
+            "sar_flip": self._eval_sar_flip,
         }
         evaluator = evaluators.get(atype)
         if not evaluator:
@@ -312,6 +353,52 @@ class TechnicalAlertChecker:
             "upper": round(bb["upper"], 2),
             "lower": round(bb["lower"], 2),
             "position": position,
+        }
+        return triggered, new_state, details
+
+    def _eval_sar_flip(self, alert, indicators):
+        """
+        Detect a Parabolic SAR flip (dots crossing from one side of price to the other).
+
+        Whipsaw guard: the flip only fires if the trend it replaced ran for at least
+        `min_prior_trend_bars` bars. Rejected flips still update last_state, so a
+        choppy stock produces one state change per flip rather than one alert.
+        """
+        snapshot = _sar_snapshot(indicators)
+        if snapshot is None:
+            return False, alert.last_state or {}, {}
+
+        position, bars_in_trend, prior_trend_bars, sar_value = snapshot
+        price = indicators["current_price"]
+
+        new_state = {
+            "sar_position": position,
+            "bars_in_trend": bars_in_trend,
+            "sar": sar_value,
+            "price": round(price, 2),
+        }
+
+        last_position = (alert.last_state or {}).get("sar_position")
+        if last_position is None or last_position == position:
+            return False, new_state, {}
+
+        flip_direction = "bullish_flip" if position == "below" else "bearish_flip"
+        wanted = alert.config.get("direction", "any")
+        min_prior = alert.config.get("min_prior_trend_bars", 5)
+
+        triggered = (
+            (wanted == "any" or wanted == flip_direction)
+            and prior_trend_bars >= min_prior
+        )
+
+        details = {
+            "flip_direction": flip_direction,
+            "from_position": last_position,
+            "to_position": position,
+            "sar": sar_value,
+            "price": round(price, 2),
+            "prior_trend_bars": prior_trend_bars,
+            "min_prior_trend_bars": min_prior,
         }
         return triggered, new_state, details
 
@@ -594,6 +681,13 @@ class TechnicalAlertChecker:
         elif alert_type == "bollinger_breach":
             band = "upper" if config.get("breach_type") == "upper" else "lower"
             return f"broke {band} Bollinger Band — price ${details.get('price', '?')}"
+        elif alert_type == "sar_flip":
+            label = "bullish" if details.get("flip_direction") == "bullish_flip" else "bearish"
+            return (
+                f"Parabolic SAR {label} flip — dots now {details.get('to_position')} price "
+                f"(SAR ${details.get('sar', '?')} vs ${details.get('price', '?')}, "
+                f"prior trend {details.get('prior_trend_bars', '?')} bars)"
+            )
         elif alert_type == "dcf_valuation":
             from_r = (details.get("from_rating") or "?").replace("_", " ").title()
             to_r = (details.get("to_rating") or "?").replace("_", " ").title()
@@ -735,6 +829,18 @@ class TechnicalAlertChecker:
                 "position": bb["position"],
                 "upper": round(bb["upper"], 2),
                 "lower": round(bb["lower"], 2),
+                "price": round(indicators["current_price"], 2),
+            }
+
+        elif alert_type == "sar_flip":
+            snapshot = _sar_snapshot(indicators)
+            if snapshot is None:
+                return {}
+            position, bars_in_trend, _prior, sar_value = snapshot
+            return {
+                "sar_position": position,
+                "bars_in_trend": bars_in_trend,
+                "sar": sar_value,
                 "price": round(indicators["current_price"], 2),
             }
 

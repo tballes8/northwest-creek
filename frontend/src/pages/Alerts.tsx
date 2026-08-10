@@ -40,6 +40,7 @@ const ALERT_TYPE_OPTIONS = [
   { value: 'rsi_extreme', label: 'RSI Extreme', description: 'RSI crosses overbought/oversold' },
   { value: 'macd_cross', label: 'MACD Cross', description: 'MACD histogram flips sign' },
   { value: 'bollinger_breach', label: 'Bollinger Breach', description: 'Price breaks Bollinger Bands' },
+  { value: 'sar_flip', label: 'Parabolic SAR Flip', description: 'Trend reversal signal — useful for trailing stops' },
   { value: 'dcf_valuation', label: 'DCF Valuation', description: 'DCF rating turns Buy/Sell' },
   { value: 'rule_of_40', label: 'Rule of 40', description: 'Rule of 40 crosses threshold' },
 ];
@@ -211,6 +212,9 @@ const Alerts: React.FC = () => {
       case 'bollinger_breach':
         setNewConfig({ breach_type: 'upper' });
         break;
+      case 'sar_flip':
+        setNewConfig({ direction: 'any', min_prior_trend_bars: 5 });
+        break;
       case 'dcf_valuation':
         setNewConfig({ target_rating: 'strong_buy' });
         break;
@@ -342,6 +346,39 @@ const Alerts: React.FC = () => {
               <option value="upper">Upper Band Breach (potentially overbought)</option>
               <option value="lower">Lower Band Breach (potentially oversold)</option>
             </select>
+          </div>
+        );
+      case 'sar_flip':
+        return (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Direction *</label>
+              <select
+                value={newConfig.direction || 'any'}
+                onChange={e => setNewConfig({ ...newConfig, direction: e.target.value })}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="any">Any Flip</option>
+                <option value="bullish_flip">Bullish Flip (dots move below price)</option>
+                <option value="bearish_flip">Bearish Flip (dots move above price)</option>
+              </select>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">SAR is a trailing stop signal — it confirms reversals in motion, it doesn't predict them.</p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Min Prior Trend (bars) *</label>
+              <input
+                type="number"
+                value={newConfig.min_prior_trend_bars ?? 5}
+                onChange={e => {
+                  const parsed = parseInt(e.target.value, 10);
+                  setNewConfig({ ...newConfig, min_prior_trend_bars: Number.isNaN(parsed) ? 0 : parsed });
+                }}
+                min={0}
+                max={60}
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Ignore flips that end a trend shorter than this. Filters out whipsaws in choppy markets. Default 5.</p>
+            </div>
           </div>
         );
       case 'dcf_valuation':

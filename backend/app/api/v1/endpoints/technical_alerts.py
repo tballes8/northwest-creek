@@ -62,6 +62,7 @@ async def create_technical_alert(
     - `rsi_extreme` — RSI crosses overbought/oversold threshold
     - `macd_cross` — MACD histogram flips sign
     - `bollinger_breach` — Price breaks above/below Bollinger Bands
+    - `sar_flip` — Parabolic SAR flips sides, filtered by prior trend length
 
     **Requires:** Active or Professional tier
     """
