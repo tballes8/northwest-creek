@@ -403,6 +403,13 @@ const TechnicalAnalysis: React.FC = () => {
   const drawnTrendLinesRef = useRef<Array<{ x1: number; y1: number; x2: number; y2: number }>>([]);
   const [trendLineCount, setTrendLineCount] = useState(0); // triggers chart re-draw
 
+  // Shared vertical reference line across every TA chart.
+  // `verticalLineTimestamp` is the single source of truth (epoch ms of the snapped
+  // data point); `verticalLineIndexRef` mirrors it as a chart_data index so the
+  // Chart.js plugin can read the current position without a stale closure.
+  const [verticalLineTimestamp, setVerticalLineTimestamp] = useState<number | null>(null);
+  const verticalLineIndexRef = useRef<number | null>(null);
+
   // Financials panel state
   const [showFinancials, setShowFinancials] = useState(false);
   const [showTrueVwap, setShowTrueVwap] = useState(false);
@@ -831,9 +838,101 @@ const TechnicalAnalysis: React.FC = () => {
     };
   };
 
+  // ─── Shared vertical reference line ────────────────────────────────────────
+  // Every TA chart registers itself through `verticalLinePlugin` so a click on
+  // any one of them can redraw the line on all of them.
+  const taChartsRef = useRef<Set<any>>(new Set());
+
+  const redrawTACharts = () => {
+    taChartsRef.current.forEach(chart => {
+      try {
+        chart.update('none');
+      } catch {
+        /* chart already torn down */
+      }
+    });
+  };
+
+  // Read-only: is any drawing tool currently armed? Vertical-line clicks defer
+  // to the tool's own click handler. New tools should be OR'd in here.
+  const isDrawingToolActive = trendDrawingMode;
+
+  const setVerticalLine = (index: number | null) => {
+    verticalLineIndexRef.current = index;
+    setVerticalLineTimestamp(
+      index === null || !analysisData?.chart_data[index]
+        ? null
+        : new Date(analysisData.chart_data[index].date).getTime()
+    );
+    redrawTACharts();
+  };
+
+  // A stale index would point at the wrong bar once new data loads.
+  React.useEffect(() => {
+    verticalLineIndexRef.current = null;
+    setVerticalLineTimestamp(null);
+  }, [analysisData]);
+
+  const verticalLinePlugin = useMemo(() => ({
+    id: 'sharedVerticalLine',
+    afterInit: (chart: any) => {
+      taChartsRef.current.add(chart);
+    },
+    afterDestroy: (chart: any) => {
+      taChartsRef.current.delete(chart);
+    },
+    afterDraw: (chart: any) => {
+      const index = verticalLineIndexRef.current;
+      if (index === null) return;
+      const area = chart.chartArea;
+      const xScale = chart.scales?.x;
+      if (!area || !xScale) return;
+      const px = xScale.getPixelForValue(index);
+      if (!isFinite(px) || px < area.left || px > area.right) return;
+
+      const ctx = chart.ctx;
+      const isDark = document.documentElement.classList.contains('dark');
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([4, 4]);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = isDark ? '#ffffff' : '#000000';
+      ctx.moveTo(px, area.top);
+      ctx.lineTo(px, area.bottom);
+      ctx.stroke();
+      ctx.restore();
+    },
+  }), []);
+
+  // Chart.js-level click: drops the shared line on the nearest data point.
+  const handleVerticalLineClick = (event: any, _elements: any[], chart: any) => {
+    if (isDrawingToolActive) return;
+    if (!analysisData?.chart_data.length) return;
+    const area = chart?.chartArea;
+    const xScale = chart?.scales?.x;
+    if (!area || !xScale) return;
+    const px = event?.x;
+    if (typeof px !== 'number' || px < area.left || px > area.right) return;
+    // CategoryScale.getValueForPixel already rounds to the nearest index
+    const raw = xScale.getValueForPixel(px);
+    if (raw == null || !isFinite(raw)) return;
+    setVerticalLine(Math.max(0, Math.min(analysisData.chart_data.length - 1, Math.round(raw))));
+  };
+
+  // Rendered inside each chart container (which must be `relative`).
+  const clearLineButton = verticalLineTimestamp !== null ? (
+    <button
+      onClick={() => setVerticalLine(null)}
+      className="absolute top-0 left-0 z-10 px-2 py-0.5 text-xs font-medium rounded border bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors"
+    >
+      Clear line
+    </button>
+  ) : null;
+
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    onClick: handleVerticalLineClick,
     plugins: {
       legend: {
         position: 'top' as const,
@@ -870,6 +969,7 @@ const TechnicalAnalysis: React.FC = () => {
   const priceChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    onClick: handleVerticalLineClick,
     interaction: {
         mode: 'index' as const,
         intersect: true,
@@ -999,6 +1099,7 @@ const TechnicalAnalysis: React.FC = () => {
   const maChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    onClick: handleVerticalLineClick,
     interaction: {
         mode: 'index' as const,
         intersect: true,
@@ -1612,9 +1713,10 @@ const TechnicalAnalysis: React.FC = () => {
                     <strong>Situations to Look For:</strong> When the bands squeeze tight, volatility is contracting — a breakout 
                     (in either direction) often follows. Watch for expanding volume to confirm the direction of the move.
                 </p>
-                <div style={{ height: '300px' }}>
+                <div className="relative" style={{ height: '300px' }}>
+                    {clearLineButton}
                     {getBBChartData() && (
-                    <Chart type="line" data={getBBChartData()!} options={priceChartOptions} />
+                    <Chart type="line" data={getBBChartData()!} options={priceChartOptions} plugins={[verticalLinePlugin]} />
                     )}
                 </div>
             </div>
@@ -1758,6 +1860,7 @@ const TechnicalAnalysis: React.FC = () => {
                   </p>
                 )}
                 <div className="relative" style={{ height: '300px' }}>
+                  {clearLineButton}
                   {/* Trend line controls — overlaid at top-right, flush with the legend row */}
                   <div className="absolute top-0 right-0 z-10 flex items-center gap-2" style={{ marginTop: '2px' }}>
                     <button
@@ -1802,7 +1905,7 @@ const TechnicalAnalysis: React.FC = () => {
                         type="line"
                         data={getMAChartData()!}
                         options={maChartOptions}
-                        plugins={[trendLinePlugin]}
+                        plugins={[trendLinePlugin, verticalLinePlugin]}
                       />
                     )}
                   </div>
@@ -1822,10 +1925,12 @@ const TechnicalAnalysis: React.FC = () => {
                     ⚠️ <strong>Warrant Note:</strong> Warrants often hit extreme RSI levels (below 30 or above 70) more frequently than common stocks.
                   </p>
                 )}
-                <div style={{ height: '300px' }}>
+                <div className="relative" style={{ height: '300px' }}>
+                    {clearLineButton}
                     {getRSIChartData() && (
-                    <Line 
-                        data={getRSIChartData()!} 
+                    <Line
+                        data={getRSIChartData()!}
+                        plugins={[verticalLinePlugin]}
                         options={{
                         ...chartOptions, 
                         scales: {
@@ -1851,9 +1956,10 @@ const TechnicalAnalysis: React.FC = () => {
                   {analysisData.indicators.macd.trend}
                 </strong> - {analysisData.indicators.macd.description}
               </p>
-              <div style={{ height: '300px' }}>
+              <div className="relative" style={{ height: '300px' }}>
+                {clearLineButton}
                 {getMACDChartData() && (
-                    <Chart type="bar" data={getMACDChartData()!} options={chartOptions} />
+                    <Chart type="bar" data={getMACDChartData()!} options={chartOptions} plugins={[verticalLinePlugin]} />
                 )}
               </div>
             </div>
@@ -1932,40 +2038,43 @@ const TechnicalAnalysis: React.FC = () => {
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     MVWAP (Multi-Day VWAP) accumulates cumulative (price × volume) from the start of the selected date range, giving the volume-weighted average cost basis over the entire period. This is useful for identifying long-term fair value and trend direction. For the true intraday VWAP — which resets each session and is used by institutional traders as a daily benchmark — click the MVWAP card below.
                   </p>
-                  <div style={{ height: '300px' }}>
+                  <div className="relative" style={{ height: '300px' }}>
+                    {clearLineButton}
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
                       datasets: [
                         { label: 'Price', data: analysisData.chart_data.map(d => d.close), borderColor: 'rgb(59, 130, 246)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: false },
                         { label: 'MVWAP', data: analysisData.chart_data.map(d => d.vwap), borderColor: 'rgb(245, 158, 11)', borderWidth: 2, pointRadius: 0, tension: 0.1, borderDash: [5,5], fill: false },
                       ]
-                    }} options={chartOptions} />
+                    }} options={chartOptions} plugins={[verticalLinePlugin]} />
                   </div>
                 </div>
                 {/* OBV Chart */}
                 <div id="chart-obv" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">On-Balance Volume (OBV)</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">OBV tracks cumulative buying and selling pressure by adding volume on up days and subtracting on down days. It's a confirmation tool, not a trigger: a rising OBV supports an uptrend, and a divergence (price rising while OBV falls) can warn the move is weakening — but divergences can persist for a long time before price turns, if it turns at all.</p>
-                  <div style={{ height: '250px' }}>
+                  <div className="relative" style={{ height: '250px' }}>
+                    {clearLineButton}
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
                       datasets: [
                         { label: 'OBV', data: analysisData.chart_data.map(d => d.obv), borderColor: 'rgb(16, 185, 129)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true, backgroundColor: 'rgba(16, 185, 129, 0.1)' },
                       ]
-                    }} options={chartOptions} />
+                    }} options={chartOptions} plugins={[verticalLinePlugin]} />
                   </div>
                 </div>
                 {/* A/D Line Chart */}
                 <div id="chart-ad" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Accumulation/Distribution Line</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">The A/D Line refines OBV by weighting each day's volume by where price closes within its range — a close near the high counts as accumulation, near the low as distribution. Like OBV it's a confirmation tool: a rising line supports an uptrend, while a divergence (price rising as the A/D Line falls) can warn the move is losing internal support — though divergences can persist for a long time before price turns, if it turns at all.</p>
-                  <div style={{ height: '250px' }}>
+                  <div className="relative" style={{ height: '250px' }}>
+                    {clearLineButton}
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
                       datasets: [
                         { label: 'A/D Line', data: analysisData.chart_data.map(d => d.ad_line), borderColor: 'rgb(59, 130, 246)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true, backgroundColor: 'rgba(59, 130, 246, 0.1)' },
                       ]
-                    }} options={chartOptions} />
+                    }} options={chartOptions} plugins={[verticalLinePlugin]} />
                   </div>
                 </div>
               </div>
@@ -2002,7 +2111,8 @@ const TechnicalAnalysis: React.FC = () => {
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     The Stochastic Oscillator compares the closing price to its recent high–low range. In a ranging market, readings above 80 (overbought) or below 20 (oversold) and %K/%D crossovers can flag reversals — but in a strong trend it can stay pinned in the extreme zone while price keeps moving, so an extreme reading isn't a trade on its own. Use it for context and divergences, confirmed by the trend.
                   </p>
-                  <div style={{ height: '250px' }}>
+                  <div className="relative" style={{ height: '250px' }}>
+                    {clearLineButton}
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
                       datasets: [
@@ -2011,7 +2121,7 @@ const TechnicalAnalysis: React.FC = () => {
                         { label: 'Overbought', data: Array(analysisData.chart_data.length).fill(80), borderColor: 'rgba(239,68,68,0.4)', borderWidth: 1, borderDash: [3,3], pointRadius: 0, fill: false },
                         { label: 'Oversold', data: Array(analysisData.chart_data.length).fill(20), borderColor: 'rgba(34,197,94,0.4)', borderWidth: 1, borderDash: [3,3], pointRadius: 0, fill: false },
                       ]
-                    }} options={{...chartOptions, scales: {...chartOptions.scales, y: {...chartOptions.scales.y, min: 0, max: 100}}}} />
+                    }} options={{...chartOptions, scales: {...chartOptions.scales, y: {...chartOptions.scales.y, min: 0, max: 100}}}} plugins={[verticalLinePlugin]} />
                   </div>
                 </div>
                 {/* ADX */}
@@ -2020,7 +2130,8 @@ const TechnicalAnalysis: React.FC = () => {
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     ADX measures trend strength, not direction — above 25 signals a strong trend, below 20 a weak or sideways market. Direction comes from the separate +DI/-DI lines (+DI above -DI is bullish, and vice versa). ADX lags and only tells you whether a trend exists, never whether to buy or sell, so pair it with a direction read before acting.
                   </p>
-                  <div style={{ height: '250px' }}>
+                  <div className="relative" style={{ height: '250px' }}>
+                    {clearLineButton}
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
                       datasets: [
@@ -2029,7 +2140,7 @@ const TechnicalAnalysis: React.FC = () => {
                         { label: '-DI', data: analysisData.chart_data.map(d => d.minus_di), borderColor: 'rgb(239, 68, 68)', borderWidth: 1.5, pointRadius: 0, tension: 0.1, fill: false },
                         { label: 'Trending (25)', data: Array(analysisData.chart_data.length).fill(25), borderColor: 'rgba(156,163,175,0.4)', borderWidth: 1, borderDash: [3,3], pointRadius: 0, fill: false },
                       ]
-                    }} options={chartOptions} />
+                    }} options={chartOptions} plugins={[verticalLinePlugin]} />
                   </div>
                 </div>
                 {/* CCI + ROC */}
@@ -2037,7 +2148,8 @@ const TechnicalAnalysis: React.FC = () => {
                   <div id="chart-cci" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                     <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">CCI (Commodity Channel Index)</h4>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">CCI measures how far price has moved from its recent average. In a range, readings above +100 or below −100 mark overbought/oversold extremes that may snap back — but CCI is unbounded and can stay extended through a strong trend, so an extreme reading is context, not a buy or sell signal on its own.</p>
-                    <div style={{ height: '200px' }}>
+                    <div className="relative" style={{ height: '200px' }}>
+                      {clearLineButton}
                       <Line data={{
                         labels: analysisData.chart_data.map(d => d.date),
                         datasets: [
@@ -2045,20 +2157,21 @@ const TechnicalAnalysis: React.FC = () => {
                           { label: '+100', data: Array(analysisData.chart_data.length).fill(100), borderColor: 'rgba(239,68,68,0.3)', borderWidth: 1, borderDash: [3,3], pointRadius: 0, fill: false },
                           { label: '-100', data: Array(analysisData.chart_data.length).fill(-100), borderColor: 'rgba(34,197,94,0.3)', borderWidth: 1, borderDash: [3,3], pointRadius: 0, fill: false },
                         ]
-                      }} options={chartOptions} />
+                      }} options={chartOptions} plugins={[verticalLinePlugin]} />
                     </div>
                   </div>
                   <div id="chart-roc" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                     <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ROC (Rate of Change)</h4>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">ROC measures the percentage change in price over a set period: above zero is bullish momentum, below zero is bearish. Extreme readings can precede a pullback, but momentum can stay elevated for a long time in a strong trend, so a high ROC alone isn't a reversal signal — use it to gauge momentum and divergences.</p>
-                    <div style={{ height: '200px' }}>
+                    <div className="relative" style={{ height: '200px' }}>
+                      {clearLineButton}
                       <Line data={{
                         labels: analysisData.chart_data.map(d => d.date),
                         datasets: [
                           { label: 'ROC %', data: analysisData.chart_data.map(d => d.roc), borderColor: 'rgb(99, 102, 241)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true, backgroundColor: 'rgba(99,102,241,0.1)' },
                           { label: 'Zero', data: Array(analysisData.chart_data.length).fill(0), borderColor: 'rgba(156,163,175,0.4)', borderWidth: 1, borderDash: [3,3], pointRadius: 0, fill: false },
                         ]
-                      }} options={chartOptions} />
+                      }} options={chartOptions} plugins={[verticalLinePlugin]} />
                     </div>
                   </div>
                 </div>
@@ -2087,20 +2200,22 @@ const TechnicalAnalysis: React.FC = () => {
                 <div id="chart-atr" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ATR (Average True Range)</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">ATR measures volatility as the average range between high and low prices over a period — higher ATR means wider swings. It's used to size positions and set stop-losses (avoiding stops too tight in volatile markets or too wide in calm ones). ATR gives no direction and reflects past movement, so it's never a buy or sell signal on its own.</p>
-                  <div style={{ height: '250px' }}>
+                  <div className="relative" style={{ height: '250px' }}>
+                    {clearLineButton}
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
                       datasets: [
                         { label: 'ATR', data: analysisData.chart_data.map(d => d.atr), borderColor: 'rgb(249, 115, 22)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: true, backgroundColor: 'rgba(249,115,22,0.1)' },
                       ]
-                    }} options={chartOptions} />
+                    }} options={chartOptions} plugins={[verticalLinePlugin]} />
                   </div>
                 </div>
                 {/* Keltner Channels (overlay on price) */}
                 <div id="chart-keltner" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Keltner Channels</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Keltner Channels plot an EMA with upper and lower bands set by ATR. A close beyond the upper or lower channel points to strong momentum and a possible breakout, while price inside the channels is normal trading — but breakouts can fail and reverse in choppy markets, so confirm with volume or trend rather than acting on the break alone. They're often paired with Bollinger Bands to spot squeeze setups.</p>
-                  <div style={{ height: '350px' }}>
+                  <div className="relative" style={{ height: '350px' }}>
+                    {clearLineButton}
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
                       datasets: [
@@ -2109,7 +2224,7 @@ const TechnicalAnalysis: React.FC = () => {
                         { label: 'KC Middle', data: analysisData.chart_data.map(d => d.keltner_middle), borderColor: 'rgb(156, 163, 175)', borderWidth: 1, pointRadius: 0, tension: 0.1, borderDash: [2,2], fill: false },
                         { label: 'KC Lower', data: analysisData.chart_data.map(d => d.keltner_lower), borderColor: 'rgb(34, 197, 94)', borderWidth: 1.5, pointRadius: 0, tension: 0.1, borderDash: [4,4], fill: false },
                       ]
-                    }} options={chartOptions} />
+                    }} options={chartOptions} plugins={[verticalLinePlugin]} />
                   </div>
                 </div>
               </div>
@@ -2141,7 +2256,8 @@ const TechnicalAnalysis: React.FC = () => {
                 <div id="chart-parabolic-sar" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Parabolic SAR</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Parabolic SAR (Stop and Reverse) places dots below price in an uptrend and above price in a downtrend; a flip to the other side flags a possible trend reversal, which makes it useful for trailing stop-losses. It works well in trending markets but whipsaws badly in sideways, choppy action — generating frequent false flips — so it's best for managing trend exits rather than as a standalone entry trigger.</p>
-                  <div style={{ height: '350px' }}>
+                  <div className="relative" style={{ height: '350px' }}>
+                    {clearLineButton}
                     <Chart type="line" data={{
                       labels: analysisData.chart_data.map(d => d.date),
                       datasets: [
@@ -2150,14 +2266,15 @@ const TechnicalAnalysis: React.FC = () => {
                           pointBackgroundColor: analysisData.chart_data.map(d => d.sar_trend === 1 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)'),
                           fill: false, type: 'line' as const, showLine: false },
                       ]
-                    }} options={chartOptions} />
+                    }} options={chartOptions} plugins={[verticalLinePlugin]} />
                   </div>
                 </div>
                 {/* Ichimoku Cloud */}
                 <div id="chart-ichimoku" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Ichimoku Cloud</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">The Ichimoku Cloud shows support/resistance, trend direction, and momentum at once: price above the cloud is bullish, below is bearish, inside is neutral, and Tenkan-Sen/Kijun-Sen crossovers act like moving-average signals. Like other trend tools it lags and produces conflicting, whipsaw-prone signals in flat or choppy markets, so it's most reliable when a clear trend is already in place.</p>
-                  <div style={{ height: '400px' }}>
+                  <div className="relative" style={{ height: '400px' }}>
+                    {clearLineButton}
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
                       datasets: [
@@ -2167,14 +2284,15 @@ const TechnicalAnalysis: React.FC = () => {
                         { label: 'Senkou A', data: analysisData.chart_data.map(d => d.ichimoku_senkou_a), borderColor: 'rgba(34, 197, 94, 0.6)', borderWidth: 1, pointRadius: 0, tension: 0.1, fill: '+1', backgroundColor: 'rgba(34, 197, 94, 0.08)' },
                         { label: 'Senkou B', data: analysisData.chart_data.map(d => d.ichimoku_senkou_b), borderColor: 'rgba(239, 68, 68, 0.6)', borderWidth: 1, pointRadius: 0, tension: 0.1, fill: false },
                       ]
-                    }} options={chartOptions} />
+                    }} options={chartOptions} plugins={[verticalLinePlugin]} />
                   </div>
                 </div>
                 {/* Donchian Channels */}
                 <div id="chart-donchian" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Donchian Channels</h4>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Donchian Channels plot the highest high and lowest low over a set period to define a breakout system: a break above the upper channel suggests a new uptrend, a break below the lower channel a new downtrend. Made famous by the "Turtle Traders," it shines in trending markets but produces frequent false breakouts in rangebound action, so confirm the break holds before treating it as a signal.</p>
-                  <div style={{ height: '350px' }}>
+                  <div className="relative" style={{ height: '350px' }}>
+                    {clearLineButton}
                     <Line data={{
                       labels: analysisData.chart_data.map(d => d.date),
                       datasets: [
@@ -2183,7 +2301,7 @@ const TechnicalAnalysis: React.FC = () => {
                         { label: 'DC Middle', data: analysisData.chart_data.map(d => d.donchian_middle), borderColor: 'rgb(156, 163, 175)', borderWidth: 1, pointRadius: 0, tension: 0, borderDash: [3,3], fill: false },
                         { label: 'DC Lower', data: analysisData.chart_data.map(d => d.donchian_lower), borderColor: 'rgb(239, 68, 68)', borderWidth: 1.5, pointRadius: 0, tension: 0, fill: false },
                       ]
-                    }} options={chartOptions} />
+                    }} options={chartOptions} plugins={[verticalLinePlugin]} />
                   </div>
                 </div>
               </div>
