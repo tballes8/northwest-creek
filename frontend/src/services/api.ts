@@ -139,7 +139,14 @@ export const stocksAPI = {
   
   getCompany: (ticker: string) =>
     axiosInstance.get(`/stocks/company/${ticker}`),
-  
+
+  // Bulk ticker -> sector lookup. Backed by stock_snapshots, so it agrees with the
+  // sector shown in Company Details. Max 250 tickers per call.
+  getSectors: (tickers: string[]) =>
+    axiosInstance.get<{ sectors: Record<string, string> }>(`/stocks/sectors`, {
+      params: { tickers: tickers.join(',') },
+    }),
+
   getHistorical: (ticker: string, days: number = 30) =>
     axiosInstance.get(`/stocks/historical/${ticker}`, { params: { days } }),
 

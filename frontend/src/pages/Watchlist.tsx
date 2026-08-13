@@ -11,7 +11,7 @@ import MarketStatusBadge from '../components/MarketStatusBadge';
 import UpgradeRequired from '../components/UpgradeRequired';
 import '../styles/livePrice.css';
 import axios from 'axios';
-import { getSector, SECTOR_COLORS } from '../utils/sectorMap';
+import { useSectors, SECTOR_COLORS } from '../utils/sectorMap';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -347,6 +347,9 @@ const Watchlist: React.FC = () => {
     }
   };
 
+  // Resolve sectors from the backend so they match the Company Details panel.
+  const getSector = useSectors(useMemo(() => watchlist.map(w => w.ticker), [watchlist]));
+
   const sortedWatchlist = useMemo(() => {
     if (!sortField) return watchlist;
     return [...watchlist].sort((a, b) => {
@@ -387,7 +390,7 @@ const Watchlist: React.FC = () => {
       }
       return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
     });
-  }, [watchlist, sortField, sortDirection, prices]);
+  }, [watchlist, sortField, sortDirection, prices, getSector]);
 
   if (loading) {
     return (

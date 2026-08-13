@@ -10,6 +10,7 @@
  * To regenerate with the latest data, run:
  *   python generate_sector_map.py
  */
+import { useEffect, useMemo, useState } from 'react';
 import { stocksAPI } from '../services/api';
 
 // ─── Sector color palette ───────────────────────────────────────────────
@@ -855,51 +856,101 @@ const TICKER_SECTOR_MAP: Record<string, string> = {
   WRN: 'Basic Materials', NMG: 'Basic Materials', 
 };
 
-// ─── Dynamic lookup cache (session-only) ────────────────────────────────
+// ─── Backend-resolved sectors (session-only cache) ──────────────────────
+// Filled by hydrateSectors() from GET /stocks/sectors. This is the authoritative
+// layer: the static map above is only a synchronous first-paint fallback, so
+// backend values deliberately take precedence over it.
 const dynamicCache = new Map<string, string>();
-const pendingLookups = new Map<string, Promise<string>>();
+const inFlight = new Map<string, Promise<void>>();
+
+const BATCH_SIZE = 250; // matches the endpoint's per-request cap
+
+const normalize = (tickers: string[]): string[] =>
+  Array.from(new Set(tickers.map(t => t.toUpperCase().trim()).filter(Boolean)));
 
 /**
- * Look up sector for a ticker. Returns instantly for known tickers.
- * Returns "Other" for unknown tickers (use getSectorAsync for backend lookup).
+ * Look up a sector synchronously. Backend value wins; falls back to the static
+ * map for first paint, then "Other". Call hydrateSectors() (or useSectors) first
+ * so the backend value is present.
  */
 export const getSector = (ticker: string): string => {
   const upper = ticker.toUpperCase().trim();
-  return TICKER_SECTOR_MAP[upper] || dynamicCache.get(upper) || 'Other';
+  return dynamicCache.get(upper) || TICKER_SECTOR_MAP[upper] || 'Other';
 };
 
 /**
- * Async sector lookup — tries static map first, falls back to backend API.
- * Results are cached for the session so each ticker is only fetched once.
+ * Resolve sectors for a batch of tickers from the backend and cache them for the
+ * session. Concurrent callers requesting the same ticker share one request.
+ *
+ * Resolves to true if any new sector landed, so callers know to re-render.
  */
-export const getSectorAsync = async (ticker: string): Promise<string> => {
-  const upper = ticker.toUpperCase().trim();
+export const hydrateSectors = async (tickers: string[]): Promise<boolean> => {
+  const wanted = normalize(tickers);
+  const need = wanted.filter(t => !dynamicCache.has(t));
+  if (need.length === 0) return false;
 
-  // Check static map
-  if (TICKER_SECTOR_MAP[upper]) return TICKER_SECTOR_MAP[upper];
+  const waits: Promise<void>[] = [];
+  const toFetch: string[] = [];
+  need.forEach(t => {
+    const pending = inFlight.get(t);
+    if (pending) waits.push(pending);
+    else toFetch.push(t);
+  });
 
-  // Check dynamic cache
-  if (dynamicCache.has(upper)) return dynamicCache.get(upper)!;
+  for (let i = 0; i < toFetch.length; i += BATCH_SIZE) {
+    const batch = toFetch.slice(i, i + BATCH_SIZE);
+    const request = stocksAPI.getSectors(batch)
+      .then(res => {
+        const resolved = res.data?.sectors || {};
+        batch.forEach(t => {
+          const sector = resolved[t];
+          if (sector) dynamicCache.set(t, sector);
+        });
+      })
+      .catch(() => {
+        // Leave uncached so a transient failure retries on the next mount —
+        // the static map / "Other" still renders in the meantime.
+      })
+      .finally(() => {
+        batch.forEach(t => inFlight.delete(t));
+      });
 
-  // Check if already fetching
-  if (pendingLookups.has(upper)) return pendingLookups.get(upper)!;
+    batch.forEach(t => inFlight.set(t, request));
+    waits.push(request);
+  }
 
-  // Fetch from backend (uses Polygon company info which has sector)
-  const promise = stocksAPI.getCompany(upper)
-    .then(res => {
-      const sector = res.data?.sector || 'Other';
-      dynamicCache.set(upper, sector);
-      pendingLookups.delete(upper);
-      return sector;
-    })
-    .catch(() => {
-      dynamicCache.set(upper, 'Other');
-      pendingLookups.delete(upper);
-      return 'Other';
+  await Promise.all(waits);
+  return need.some(t => dynamicCache.has(t));
+};
+
+/**
+ * Hydrate sectors for a set of tickers, re-rendering when they land.
+ *
+ * Returns a resolver whose identity changes on each hydration, so passing it as a
+ * useMemo/useEffect dependency recomputes anything derived from sectors (sorts,
+ * filters, breakdowns) once the real values arrive.
+ */
+export const useSectors = (tickers: string[]): ((ticker: string) => string) => {
+  const [version, setVersion] = useState(0);
+
+  // Stable key — a new array holding the same tickers must not refetch.
+  const key = useMemo(() => normalize(tickers).sort().join(','), [tickers]);
+
+  useEffect(() => {
+    if (!key) return;
+    let cancelled = false;
+    hydrateSectors(key.split(',')).then(changed => {
+      if (changed && !cancelled) setVersion(v => v + 1);
     });
+    return () => {
+      cancelled = true;
+    };
+  }, [key]);
 
-  pendingLookups.set(upper, promise);
-  return promise;
+  return useMemo(() => {
+    void version; // fresh identity per hydration
+    return (ticker: string) => getSector(ticker);
+  }, [version]);
 };
 
 /**
@@ -925,16 +976,20 @@ export interface SectorBreakdown {
  * Compute sector breakdown for a list of items.
  * For portfolio: pass items with { ticker, value } where value = total_value.
  * For watchlist: pass items with { ticker } — each stock is weighted equally.
+ *
+ * Pass the resolver from useSectors() so the breakdown recomputes once backend
+ * sectors land; defaults to the plain lookup for non-React callers.
  */
 export const computeSectorBreakdown = (
-  items: { ticker: string; value?: number }[]
+  items: { ticker: string; value?: number }[],
+  resolve: (ticker: string) => string = getSector
 ): SectorBreakdown[] => {
   if (items.length === 0) return [];
 
   const sectorMap = new Map<string, { count: number; value: number; tickers: string[] }>();
 
   items.forEach(item => {
-    const sector = getSector(item.ticker);
+    const sector = resolve(item.ticker);
     const existing = sectorMap.get(sector) || { count: 0, value: 0, tickers: [] };
     existing.count += 1;
     existing.value += item.value ?? 1;

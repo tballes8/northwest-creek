@@ -8,7 +8,7 @@ import ScreenerChartPanel from '../components/ScreenerChartPanel';
 import { useLivePriceContext } from '../contexts/LivePriceContext';
 import MarketStatusBadge from '../components/MarketStatusBadge';
 import '../styles/livePrice.css';
-import { getSector, SECTOR_COLORS } from '../utils/sectorMap';
+import { useSectors, SECTOR_COLORS } from '../utils/sectorMap';
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -540,6 +540,9 @@ const Portfolio: React.FC = () => {
 
   const sectorFilter = new URLSearchParams(location.search).get('sector') || '';
 
+  // Resolve sectors from the backend so they match the Company Details panel.
+  const getSector = useSectors(useMemo(() => portfolio.map(p => p.ticker), [portfolio]));
+
   const sortedPortfolio = useMemo(() => {
     let result = [...portfolio];
 
@@ -609,7 +612,7 @@ const Portfolio: React.FC = () => {
     }
 
     return result;
-  }, [portfolio, sectorFilter, sortColumn, sortDirection, prices, prevCloseMap]);
+  }, [portfolio, sectorFilter, sortColumn, sortDirection, prices, prevCloseMap, getSector]);
 
   if (loading) {
     return (

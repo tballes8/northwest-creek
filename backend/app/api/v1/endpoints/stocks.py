@@ -4,7 +4,7 @@ Stock API Endpoints
 import re
 from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, Date, or_
+from sqlalchemy import select, func, Date, or_, update
 from datetime import date, datetime, timedelta
 from typing import Optional
 import asyncio
@@ -195,6 +195,92 @@ async def get_company_info(ticker: str):
         raise HTTPException(status_code=404, detail=_safe_error(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching company info: {_safe_error(e)}")
+
+
+@router.get("/sectors")
+async def get_sectors(
+    tickers: str = Query(..., description="Comma-separated tickers (max 250)"),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """
+    Bulk ticker → sector lookup. Single source of truth for sector labels app-wide.
+
+    Reads `stock_snapshots.sector`, which the daily universe rebuild populates for
+    the whole screener universe from FMP /company-screener. Tickers with no stored
+    sector (ETFs — excluded from the universe — and brand-new listings) fall back to
+    the FMP profile, the same call behind `/company/{ticker}`, so this endpoint
+    always agrees with the Company Details panel. Fallback results are written back
+    when the symbol is already in the universe, so a ticker costs at most one
+    profile fetch.
+
+    **Returns:** `{"sectors": {"NFE": "Energy", ...}}` — every requested ticker is
+    present; anything unresolvable maps to "Other".
+    """
+    requested: list[str] = []
+    seen: set[str] = set()
+    for raw in tickers.split(","):
+        sym = raw.strip().upper()
+        if sym and sym not in seen:
+            seen.add(sym)
+            requested.append(sym)
+
+    if not requested:
+        return {"sectors": {}}
+    if len(requested) > 250:
+        raise HTTPException(status_code=400, detail="Too many tickers (max 250)")
+
+    resolved: dict[str, str] = {}
+
+    # 1. Stored sectors — one query for the whole batch
+    rows = await db.execute(
+        select(StockSnapshot.symbol, StockSnapshot.sector).where(
+            StockSnapshot.symbol.in_(requested),
+            StockSnapshot.sector.isnot(None),
+        )
+    )
+    for symbol, sector in rows.all():
+        if sector:
+            resolved[symbol.upper()] = sector
+
+    # 2. Fill gaps from the live profile. Bounded concurrency — these are FMP calls,
+    #    and get_company_info memoizes, so repeats within a session are free.
+    missing = [s for s in requested if s not in resolved]
+    if missing:
+        sem = asyncio.Semaphore(8)
+
+        async def _fetch(sym: str) -> tuple[str, Optional[str]]:
+            async with sem:
+                try:
+                    info = await market_data_service.get_company_info(sym)
+                    return sym, (info.get("sector") or None)
+                except Exception:
+                    return sym, None
+
+        fetched = await asyncio.gather(*(_fetch(s) for s in missing))
+
+        wrote = False
+        for sym, sector in fetched:
+            if not sector:
+                continue
+            resolved[sym] = sector
+            # Don't persist "Other" — get_company_info returns it when FMP has no
+            # sector, and the NULL guard below would then cache that non-answer
+            # forever, blocking a later rebuild from filling in the real value.
+            if sector == "Other":
+                continue
+            # UPDATE-only: never INSERT, so a non-universe ticker (ETF) can't leak
+            # into the screener. The NULL guard keeps a concurrent write from losing.
+            await db.execute(
+                update(StockSnapshot)
+                .where(StockSnapshot.symbol == sym, StockSnapshot.sector.is_(None))
+                .values(sector=sector)
+            )
+            wrote = True
+        if wrote:
+            await db.commit()
+
+    return {"sectors": {s: resolved.get(s, "Other") for s in requested}}
 
 
 @router.get("/historical/{ticker}", response_model=HistoricalData)

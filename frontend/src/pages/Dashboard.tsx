@@ -7,7 +7,7 @@ import BackToTop from '../components/BackToTop';
 import { useLivePriceContext } from '../contexts/LivePriceContext';
 import MarketStatusBadge from '../components/MarketStatusBadge';
 import SectorPieChart from '../components/SectorPieChart';
-import { computeSectorBreakdown, SECTOR_COLORS, SectorBreakdown } from '../utils/sectorMap';
+import { computeSectorBreakdown, useSectors, SECTOR_COLORS, SectorBreakdown } from '../utils/sectorMap';
 import '../styles/livePrice.css';
 import axios from 'axios';
 
@@ -50,6 +50,8 @@ interface IPOItem {
 }
 
 type IPOTab = 'upcoming' | 'recently_active' | 'pending';
+
+type IPOSortColumn = 'ticker' | 'company' | 'date' | 'price' | 'change';
 
 const IPO_TAB_LABELS: Record<IPOTab, string> = {
   upcoming: 'Upcoming',
@@ -101,6 +103,72 @@ const Dashboard: React.FC = () => {
   const [ipoLoading, setIpoLoading] = useState(false);
   const [ipoTab, setIpoTab] = useState<IPOTab>('upcoming');
 
+  // IPO column sorting. Null column = the default listing-date order below.
+  const [ipoSortColumn, setIpoSortColumn] = useState<IPOSortColumn | null>(null);
+  const [ipoSortDirection, setIpoSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const handleIpoSort = (column: IPOSortColumn) => {
+    if (ipoSortColumn === column) {
+      setIpoSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setIpoSortColumn(column);
+      // Text reads A→Z first; dates and numbers read newest/largest first.
+      setIpoSortDirection(column === 'ticker' || column === 'company' ? 'asc' : 'desc');
+    }
+  };
+
+  const sortedIpos = useMemo(() => {
+    const rows = [...ipoData[ipoTab]];
+
+    if (!ipoSortColumn) {
+      // Default: soonest-first while upcoming, newest-first once listed.
+      return rows.sort((a, b) => {
+        if (!a.listing_date) return 1;
+        if (!b.listing_date) return -1;
+        return ipoTab === 'upcoming'
+          ? a.listing_date.localeCompare(b.listing_date)
+          : b.listing_date.localeCompare(a.listing_date);
+      });
+    }
+
+    // The last two columns change meaning per tab — they show the offer range and
+    // offer size outside recently_active, matching the header labels.
+    const valueOf = (ipo: IPOItem): string | number | null => {
+      switch (ipoSortColumn) {
+        case 'ticker':
+          return ipo.ticker && ipo.ticker !== 'N/A' ? ipo.ticker : null;
+        case 'company':
+          return ipo.issuer_name || null;
+        case 'date':
+          return ipo.listing_date;
+        case 'price':
+          return ipoTab === 'recently_active'
+            ? ipo.current_price ?? null
+            : ipo.lowest_offer_price ?? null;
+        case 'change':
+          return ipoTab === 'recently_active'
+            ? ipo.change_percent ?? null
+            : ipo.total_offer_size ?? null;
+        default:
+          return null;
+      }
+    };
+
+    const dir = ipoSortDirection === 'asc' ? 1 : -1;
+    return rows.sort((a, b) => {
+      const aVal = valueOf(a);
+      const bVal = valueOf(b);
+      // Missing values sink to the bottom in both directions.
+      if (aVal === null && bVal === null) return 0;
+      if (aVal === null) return 1;
+      if (bVal === null) return -1;
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return aVal.localeCompare(bVal) * dir;
+      }
+      return ((aVal as number) - (bVal as number)) * dir;
+    });
+  }, [ipoData, ipoTab, ipoSortColumn, ipoSortDirection]);
+
   // IPO detail modal
   const [ipoModalOpen, setIpoModalOpen] = useState(false);
   const [ipoModalTicker, setIpoModalTicker] = useState<string>('');
@@ -130,19 +198,30 @@ const Dashboard: React.FC = () => {
   });
   const [aiLoading, setAiLoading] = useState(false);
 
-  // Sector breakdowns for pie charts
+  // Sector breakdowns for pie charts. useSectors resolves labels from the backend
+  // so the charts agree with the Portfolio/Watchlist tables; its identity changes
+  // once hydration lands, which recomputes both breakdowns.
+  const resolveSector = useSectors(
+    useMemo(
+      () => [...positions.map(p => p.ticker), ...watchlistTickers],
+      [positions, watchlistTickers]
+    )
+  );
+
   const portfolioSectors = useMemo(
     () => computeSectorBreakdown(
-      positions.map(p => ({ ticker: p.ticker, value: p.total_value || (p.current_price || p.buy_price) * p.quantity }))
+      positions.map(p => ({ ticker: p.ticker, value: p.total_value || (p.current_price || p.buy_price) * p.quantity })),
+      resolveSector
     ),
-    [positions]
+    [positions, resolveSector]
   );
 
   const watchlistSectors = useMemo(
     () => computeSectorBreakdown(
-      watchlistTickers.map(ticker => ({ ticker }))
+      watchlistTickers.map(ticker => ({ ticker })),
+      resolveSector
     ),
-    [watchlistTickers]
+    [watchlistTickers, resolveSector]
   );
 
   useEffect(() => {
@@ -1147,7 +1226,12 @@ return (
             {(['upcoming', 'recently_active', 'pending'] as const).map((tab) => (
               <button
                 key={tab}
-                onClick={() => setIpoTab(tab)}
+                onClick={() => {
+                  setIpoTab(tab);
+                  // Price/Change carry different meanings per tab — start each tab
+                  // in its own default order rather than inheriting a sort.
+                  setIpoSortColumn(null);
+                }}
                 className={`px-4 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
                   ipoTab === tab
                     ? 'bg-primary-600 text-white'
@@ -1184,28 +1268,32 @@ return (
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
               <thead className="bg-gray-800 dark:bg-gray-900">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Ticker</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Company</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    {ipoTab === 'upcoming' ? 'Expected Date' : 'Listed Date'}
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    {ipoTab === 'recently_active' ? 'Price' : 'Price Range'}
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">
-                    {ipoTab === 'recently_active' ? 'Change' : 'Offer Size'}
-                  </th>
+                  {([
+                    { key: 'ticker', label: 'Ticker', align: 'text-left' },
+                    { key: 'company', label: 'Company', align: 'text-left' },
+                    { key: 'date', label: ipoTab === 'upcoming' ? 'Expected Date' : 'Listed Date', align: 'text-left' },
+                    { key: 'price', label: ipoTab === 'recently_active' ? 'Price' : 'Price Range', align: 'text-right' },
+                    { key: 'change', label: ipoTab === 'recently_active' ? 'Change' : 'Offer Size', align: 'text-right' },
+                  ] as { key: IPOSortColumn; label: string; align: string }[]).map(col => (
+                    <th
+                      key={col.key}
+                      onClick={() => handleIpoSort(col.key)}
+                      className={`px-4 py-3 ${col.align} text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:text-white select-none transition-colors`}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        {col.label}
+                        {ipoSortColumn === col.key ? (
+                          <span className="text-primary-400">{ipoSortDirection === 'asc' ? '▲' : '▼'}</span>
+                        ) : (
+                          <span className="text-gray-500">⇅</span>
+                        )}
+                      </span>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
-                {[...ipoData[ipoTab]].sort((a, b) => {
-                  if (!a.listing_date) return 1;
-                  if (!b.listing_date) return -1;
-                  // Already-listed buckets read newest-first; upcoming reads soonest-first.
-                  return ipoTab === 'upcoming'
-                    ? a.listing_date.localeCompare(b.listing_date)
-                    : b.listing_date.localeCompare(a.listing_date);
-                }).map((ipo, idx) => (
+                {sortedIpos.map((ipo, idx) => (
                   <tr key={`${ipo.ticker}-${idx}`} className="hover:bg-gray-50 dark:hover:bg-gray-600/50 transition-colors">
                     <td className="px-4 py-3 whitespace-nowrap">
                       {ipo.ticker && ipo.ticker !== 'N/A' ? (
