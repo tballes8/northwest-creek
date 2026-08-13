@@ -34,9 +34,14 @@ MARKET_CLOSE = time(16, 0)
 # Exchanges that count as "US common stock" for the screener universe
 US_EXCHANGES = {"NYSE", "NASDAQ", "AMEX"}
 
-# (symbol, name, last_annual_dividend, beta, sector, industry) — captured from
+# (symbol, name, last_annual_dividend, beta) — fundamentals captured from
 # /company-screener on the daily rebuild; None means "don't touch the stored value".
-UniverseRow = tuple[str, str, float | None, float | None, str | None, str | None]
+#
+# Sector/industry are deliberately NOT sourced here. /company-screener disagrees with
+# /stable/profile on some tickers (NFE: screener says Utilities, profile says Energy),
+# and the profile is what /company/{ticker} shows the user. One source only — see
+# _update_company_profiles.
+UniverseRow = tuple[str, str, float | None, float | None]
 
 
 def _is_market_hours() -> bool:
@@ -74,10 +79,6 @@ async def _build_universe(api_key: str) -> list[UniverseRow]:
     last_annual_dividend (trailing per-share $, yield derived live against price) and
     beta. Refreshed here on the daily rebuild only — both change slowly enough that
     once-a-day is frequent enough.
-
-    Also carries sector/industry, which this response already includes at no extra
-    API cost. That gives the whole universe a sector every rebuild — /stocks/sectors
-    serves it, so the app's sector labels match the Company Details panel.
     """
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
@@ -115,9 +116,7 @@ async def _build_universe(api_key: str) -> list[UniverseRow]:
         if div is not None and div < 0:
             div = None
         beta = _num(s.get("beta"))
-        sector = (s.get("sector") or "").strip() or None
-        industry = (s.get("industry") or "").strip() or None
-        tickers.append((sym, name, div, beta, sector, industry))
+        tickers.append((sym, name, div, beta))
 
     print(f"📊 Universe built: {len(tickers)} CS tickers", flush=True)
     logger.info(f"Universe built: {len(tickers)} CS tickers")
@@ -138,14 +137,13 @@ async def _prune_universe(tickers: list[UniverseRow]) -> None:
 
 
 async def _existing_universe() -> list[UniverseRow]:
-    # Fundamentals and profile fields are None here so intraday refreshes never touch
-    # last_annual_dividend, beta, sector or industry; the values captured on the daily
-    # rebuild persist untouched (see _fetch_quotes).
+    # Fundamentals are None here so intraday refreshes never touch last_annual_dividend
+    # or beta; the values captured on the daily rebuild persist untouched (see _fetch_quotes).
     async with async_session() as session:
         rows = (await session.execute(
             select(StockSnapshot.symbol, StockSnapshot.name)
         )).all()
-    return [(r.symbol, r.name or "", None, None, None, None) for r in rows]
+    return [(r.symbol, r.name or "", None, None) for r in rows]
 
 
 async def _fetch_quotes(
@@ -156,8 +154,6 @@ async def _fetch_quotes(
     name_map = {t[0]: t[1] for t in tickers}
     div_map = {t[0]: t[2] for t in tickers}
     beta_map = {t[0]: t[3] for t in tickers}
-    sector_map = {t[0]: t[4] for t in tickers}
-    industry_map = {t[0]: t[5] for t in tickers}
     symbols = list(name_map)
     rows: list[dict] = []
     now_utc = datetime.now(timezone.utc)
@@ -217,8 +213,6 @@ async def _fetch_quotes(
                     if include_fundamentals:
                         row["last_annual_dividend"] = div_map.get(sym)
                         row["beta"] = beta_map.get(sym)
-                        row["sector"] = sector_map.get(sym)
-                        row["industry"] = industry_map.get(sym)
                     rows.append(row)
             except Exception as e:
                 print(f"⚠️ Batch {i}–{i + QUOTE_BATCH_SIZE} failed: {e}", flush=True)
@@ -227,12 +221,7 @@ async def _fetch_quotes(
     return rows
 
 
-_UPSERT_CHUNK = 1_000  # asyncpg caps params at 32767; 20 cols × 1000 = 20000
-
-# The screener leaves sector/industry blank for a handful of symbols. Coalesce those
-# so a blank response never wipes a value we already have.
-_PRESERVE_IF_NULL = {"sector", "industry"}
-
+_UPSERT_CHUNK = 1_000  # asyncpg caps params at 32767; 18 cols × 1000 = 18000
 
 async def _upsert(rows: list[dict]) -> None:
     if not rows:
@@ -244,14 +233,7 @@ async def _upsert(rows: list[dict]) -> None:
             stmt = pg_insert(StockSnapshot).values(chunk)
             stmt = stmt.on_conflict_do_update(
                 index_elements=["symbol"],
-                set_={
-                    col: (
-                        func.coalesce(stmt.excluded[col], getattr(StockSnapshot, col))
-                        if col in _PRESERVE_IF_NULL
-                        else stmt.excluded[col]
-                    )
-                    for col in update_cols
-                },
+                set_={col: stmt.excluded[col] for col in update_cols},
             )
             await session.execute(stmt)
         await session.commit()
@@ -260,21 +242,23 @@ async def _upsert(rows: list[dict]) -> None:
 
 async def _update_company_profiles(symbols: list[str], limit: int = 100) -> None:
     """
-    Update company descriptions for a random subset of stocks, for keyword search.
+    Update company profiles (sector, industry, description) for a subset of stocks.
     This runs less frequently than price updates since profiles rarely change.
 
-    Sector and industry are NOT written here — the daily rebuild sets those for the
-    entire universe from /company-screener (see _build_universe). This job only sees
-    a random `limit` symbols per run, and get_company_info falls back to "Other" when
-    FMP omits a sector, so letting it write those columns would both undo full
-    coverage and risk overwriting a good label with "Other".
+    /stable/profile is the ONLY source for stored sector/industry, because it is what
+    /company/{ticker} shows in Company Details and what /stocks/sectors falls back to.
+    Sourcing them anywhere else lets the same ticker carry two different sectors.
+
+    This job only reaches a random `limit` symbols per run, so it maintains rather
+    than establishes coverage — run scripts/populate_company_profiles.py to backfill
+    the full universe.
     """
     try:
         # Randomly select stocks to update profiles for (to spread the load)
         import random
         symbols_to_update = random.sample(symbols, min(limit, len(symbols)))
 
-        print(f"📊 Updating company descriptions for {len(symbols_to_update)} symbols", flush=True)
+        print(f"📊 Updating company profiles for {len(symbols_to_update)} symbols", flush=True)
 
         profile_data = []
         for symbol in symbols_to_update:
@@ -282,6 +266,8 @@ async def _update_company_profiles(symbols: list[str], limit: int = 100) -> None
                 info = await market_data_service.get_company_info(symbol)
                 profile_data.append({
                     "symbol": symbol,
+                    "sector": info.get("sector"),
+                    "industry": info.get("industry"),
                     "description": info.get("description"),
                 })
             except Exception as e:
@@ -291,17 +277,27 @@ async def _update_company_profiles(symbols: list[str], limit: int = 100) -> None
         if profile_data:
             # UPDATE-only — every symbol here came from the universe, so it already
             # has a row, and we must not resurrect one that _prune_universe removed.
+            updated = 0
             async with async_session() as session:
                 for profile in profile_data:
-                    if not profile["description"]:
+                    # Only write fields FMP actually returned. get_company_info
+                    # substitutes "Other" when the profile has no sector, which must
+                    # never overwrite a real label.
+                    values = {
+                        col: profile[col]
+                        for col in ("sector", "industry", "description")
+                        if profile[col] and not (col == "sector" and profile[col] == "Other")
+                    }
+                    if not values:
                         continue
                     await session.execute(
                         update(StockSnapshot)
                         .where(StockSnapshot.symbol == profile["symbol"])
-                        .values(description=profile["description"])
+                        .values(**values)
                     )
+                    updated += 1
                 await session.commit()
-            logger.info(f"Updated {len(profile_data)} company descriptions")
+            logger.info(f"Updated {updated} company profiles")
     except Exception as e:
         logger.warning(f"Failed to update company profiles: {e}")
 

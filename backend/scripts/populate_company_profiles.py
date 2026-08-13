@@ -93,15 +93,25 @@ async def update_stock_profiles():
             # Create a dictionary for quick lookup
             profile_dict = {p['ticker']: p for p in profiles}
 
-            # Update stocks with profile information
+            # Update stocks with profile information. Only overwrite a field FMP
+            # actually returned — a failed fetch or a sparse profile must not wipe
+            # data we already have. "Other" is get_company_info's stand-in for a
+            # missing sector, so it never overwrites a real label either.
             updated_count = 0
             for stock in stocks:
                 profile = profile_dict.get(stock.symbol, {})
 
-                if profile.get('sector') or profile.get('industry') or profile.get('description'):
-                    stock.sector = profile.get('sector')
-                    stock.industry = profile.get('industry')
-                    stock.description = profile.get('description')
+                changed = False
+                if profile.get('sector') and profile['sector'] != 'Other':
+                    stock.sector = profile['sector']
+                    changed = True
+                if profile.get('industry'):
+                    stock.industry = profile['industry']
+                    changed = True
+                if profile.get('description'):
+                    stock.description = profile['description']
+                    changed = True
+                if changed:
                     updated_count += 1
 
             # Commit all changes
