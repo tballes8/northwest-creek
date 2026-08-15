@@ -32,13 +32,23 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: List[str] = Field(default=["http://localhost:3000"], env="CORS_ORIGINS")
 
-    # SendGrid Email Settings
-    SENDGRID_API_KEY: str = Field(default="", env="SENDGRID_API_KEY")
+    # Postmark Email Settings
+    # Use the *Server* API token (Postmark server → API Tokens), not the Account token.
+    POSTMARK_SERVER_TOKEN: str = Field(default="", env="POSTMARK_SERVER_TOKEN")
+    # Postmark message stream ID — this server's transactional stream is
+    # "outbound-1" (verify under Servers → Message Streams before changing).
+    # Transactional mail must NOT go on a broadcast stream or deliverability suffers.
+    POSTMARK_MESSAGE_STREAM: str = Field(default="outbound-1", env="POSTMARK_MESSAGE_STREAM")
     FROM_EMAIL: str = Field(default="", env="FROM_EMAIL")
     SUPPORT_EMAIL: str = Field(default="", env="SUPPORT_EMAIL")
     SALES_EMAIL: str = Field(default="", env="SALES_EMAIL")
     FROM_NAME: str = Field(default="NWC-Analytics", env="FROM_NAME")
-    FRONTEND_URL: str = Field(default="http://localhost:3000", env="FRONTEND_URL")
+    # Every emailed link is built from this — verification, password reset, and
+    # alert CTAs. A wrong value fails SILENTLY: mail still sends and Postmark
+    # still reports Delivered, but every link is dead. There is no dev
+    # environment, so default to production rather than localhost; local work
+    # can override via .env. No trailing slash — paths are appended directly.
+    FRONTEND_URL: str = Field(default="https://nwc-analytics.com", env="FRONTEND_URL")
     # Recipient for the weekly FMP field-audit alert. Falls back to SUPPORT_EMAIL.
     AUDIT_ALERT_EMAIL: str = Field(default="", env="AUDIT_ALERT_EMAIL")
     
@@ -86,7 +96,7 @@ def get_settings() -> Settings:
         print(f"   FROM_EMAIL = {settings.FROM_EMAIL}")
         print(f"   SUPPORT_EMAIL = {settings.SUPPORT_EMAIL}")
         print(f"   SALES_EMAIL = {settings.SALES_EMAIL}")
-        print(f"   SENDGRID_API_KEY = {'✅ SET (' + settings.SENDGRID_API_KEY[:8] + '...)' if settings.SENDGRID_API_KEY else '❌ NOT SET'}")
+        print(f"   POSTMARK_SERVER_TOKEN = {'✅ SET (' + settings.POSTMARK_SERVER_TOKEN[:8] + '...)' if settings.POSTMARK_SERVER_TOKEN else '❌ NOT SET'}")
         print(f"   STRIPE_SECRET_KEY = {'✅ SET' if settings.STRIPE_SECRET_KEY else '❌ NOT SET'}")
         print(f"   STRIPE_PUBLISHABLE_KEY = {'✅ SET' if settings.STRIPE_PUBLISHABLE_KEY else '❌ NOT SET'}")
         print(f"   STRIPE_BEGINNER_PRICE_ID = {settings.STRIPE_BEGINNER_PRICE_ID or '❌ NOT SET'}")

@@ -1,10 +1,22 @@
 """
-Email Service - Send verification and notification emails using SendGrid
+Email Service - Send verification and notification emails using Postmark
+
+This is the single outbound send path for the whole app. Every email — account
+verification, password reset, payment, price alerts, technical alerts — goes
+through EmailService.send_email(), so there is exactly one place to configure
+the provider, the sender identity, and error handling.
 """
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, Email, To, Content
+import logging
+
+import requests
+
 from app.config import get_settings
 from app.core.tier_limits import TIER_LIMITS
+
+logger = logging.getLogger(__name__)
+
+POSTMARK_SEND_URL = "https://api.postmarkapp.com/email"
+POSTMARK_TIMEOUT_SECONDS = 10
 
 # Use get_settings() lazily to avoid circular imports at module load
 _settings = None
@@ -19,59 +31,98 @@ def _get_settings():
 class EmailService:
     def __init__(self):
         # Lazy init — settings may not be ready at import time
-        self._sg = None
+        self._token = None
         self._initialized = False
-    
+
     def _ensure_initialized(self):
-        """Lazy initialization of SendGrid client"""
+        """Lazy initialization of Postmark configuration"""
         if self._initialized:
             return
         self._initialized = True
-        
+
         settings = _get_settings()
-        self.api_key = settings.SENDGRID_API_KEY
+        self._token = settings.POSTMARK_SERVER_TOKEN
+        self.message_stream = settings.POSTMARK_MESSAGE_STREAM
         self.from_email = settings.FROM_EMAIL
         self.support_email = settings.SUPPORT_EMAIL
         self.sales_email = settings.SALES_EMAIL
         self.from_name = settings.FROM_NAME
-        
-        if self.api_key:
-            self._sg = SendGridAPIClient(self.api_key)
-            print(f"✅ SendGrid initialized (default: {self.from_email}, support: {self.support_email}, sales: {self.sales_email})")
-        else:
-            self._sg = None
-            print("⚠️ Warning: SENDGRID_API_KEY not configured — emails will NOT send")
-    
-    def send_email(self, to_email: str, subject: str, html_content: str, from_email_override: str = None) -> bool:
-        """Send an email using SendGrid. Optionally override the from address."""
-        self._ensure_initialized()
-        
-        if not self._sg:
-            print(f"❌ Cannot send email to {to_email}: SendGrid not configured")
-            return False
-        
-        sender = from_email_override or self.from_email
-            
-        try:
-            message = Mail(
-                from_email=Email(sender, self.from_name),
-                to_emails=To(to_email),
-                subject=subject,
-                html_content=Content("text/html", html_content)
+
+        if self._token:
+            logger.info(
+                "Postmark initialized (stream: %s, default: %s, support: %s, sales: %s)",
+                self.message_stream, self.from_email, self.support_email, self.sales_email,
             )
-            
-            response = self._sg.send(message)
-            
-            if response.status_code in [200, 202]:
-                print(f"✅ Email sent to {to_email} (Status: {response.status_code})")
+        else:
+            logger.error("POSTMARK_SERVER_TOKEN not configured — emails will NOT send")
+
+    def send_email(self, to_email: str, subject: str, html_content: str, from_email_override: str = None) -> bool:
+        """
+        Send an email via Postmark. Optionally override the from address.
+
+        Synchronous by design — async callers wrap this in asyncio.to_thread so
+        they don't block the event loop. Returns True only when Postmark accepted
+        the message; callers rely on that to decide whether to report success.
+        """
+        self._ensure_initialized()
+
+        if not self._token:
+            logger.error("Cannot send email to %s: Postmark not configured", to_email)
+            return False
+
+        sender = from_email_override or self.from_email
+        if not sender:
+            logger.error(
+                "Cannot send email to %s: no sender address configured "
+                "(FROM_EMAIL / SUPPORT_EMAIL / SALES_EMAIL)",
+                to_email,
+            )
+            return False
+
+        try:
+            response = requests.post(
+                POSTMARK_SEND_URL,
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "X-Postmark-Server-Token": self._token,
+                },
+                json={
+                    "From": f"{self.from_name} <{sender}>" if self.from_name else sender,
+                    "To": to_email,
+                    "Subject": subject,
+                    "HtmlBody": html_content,
+                    "MessageStream": self.message_stream,
+                },
+                timeout=POSTMARK_TIMEOUT_SECONDS,
+            )
+
+            # Postmark returns 200 with ErrorCode 0 on success. Anything else is a
+            # failure, and the ErrorCode is far more actionable than the status alone
+            # (e.g. 406 = recipient suppressed after a prior bounce/spam complaint,
+            # 400/401 = sender signature not confirmed for this domain).
+            try:
+                body = response.json()
+            except ValueError:
+                body = {}
+
+            error_code = body.get("ErrorCode")
+            if response.status_code == 200 and error_code == 0:
+                logger.info("Email sent to %s (MessageID: %s)", to_email, body.get("MessageID", "n/a"))
                 return True
-            else:
-                print(f"⚠️ Email send returned status {response.status_code} for {to_email}")
-                return False
-            
+
+            logger.error(
+                "Postmark rejected email to %s (HTTP %s, ErrorCode %s): %s",
+                to_email, response.status_code, error_code,
+                body.get("Message", response.text[:200]),
+            )
+            return False
+
+        except requests.Timeout:
+            logger.error("Timed out after %ss sending email to %s", POSTMARK_TIMEOUT_SECONDS, to_email)
+            return False
         except Exception as e:
-            error_body = getattr(getattr(e, "body", None), "decode", lambda: None)() or getattr(e, "body", None) or ""
-            print(f"❌ Failed to send email to {to_email}: {str(e)}{' — ' + str(error_body) if error_body else ''}")
+            logger.error("Failed to send email to %s: %s", to_email, e)
             return False
     
     def send_verification_email(self, to_email: str, verification_token: str, user_name: str, selected_tier: str = "beginner") -> bool:
@@ -83,8 +134,9 @@ class EmailService:
         tier_param = f"&tier={selected_tier}" if selected_tier else "&tier=beginner"
         verification_url = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}{tier_param}"
         
-        print(f"📧 Sending verification email to {to_email} (tier={selected_tier})")
-        print(f"   Verification URL: {verification_url}")
+        # Never log verification_url — it embeds the token, which is a bearer
+        # credential for taking over the account.
+        logger.info("Sending verification email to %s (tier=%s)", to_email, selected_tier)
         
         # Build dynamic features list from TIER_LIMITS
         limits = TIER_LIMITS.get(selected_tier, TIER_LIMITS.get("beginner", {}))
@@ -287,7 +339,7 @@ class EmailService:
         settings = _get_settings()
         dashboard_url = f"{settings.FRONTEND_URL}/dashboard"
         
-        print(f"📧 Sending payment success email to {to_email} (plan={plan_name})")
+        logger.info("Sending payment success email to %s (plan=%s)", to_email, plan_name)
         
         # Build features list for the purchased tier
         limits = TIER_LIMITS.get(tier, TIER_LIMITS.get("casual", {}))
@@ -427,8 +479,9 @@ class EmailService:
         settings = _get_settings()
         reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
 
-        print(f"📧 Sending password reset email to {to_email}")
-        print(f"   Reset URL: {reset_url}")
+        # Never log reset_url — it embeds the token, which is a bearer credential
+        # for taking over the account.
+        logger.info("Sending password reset email to %s", to_email)
 
         html_content = f"""
         <!DOCTYPE html>
@@ -524,7 +577,7 @@ class EmailService:
         settings = _get_settings()
         account_url = f"{settings.FRONTEND_URL}/account"
 
-        print(f"📧 Sending payment failed email to {to_email}")
+        logger.info("Sending payment failed email to %s", to_email)
 
         html_content = f"""
         <!DOCTYPE html>
@@ -576,7 +629,7 @@ class EmailService:
         settings = _get_settings()
         account_url = f"{settings.FRONTEND_URL}/account"
 
-        print(f"📧 Sending trial ending email to {to_email} ({days_remaining} days left)")
+        logger.info("Sending trial ending email to %s (%s days left)", to_email, days_remaining)
 
         html_content = f"""
         <!DOCTYPE html>

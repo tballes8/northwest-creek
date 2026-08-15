@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
+import ResendVerification from '../components/ResendVerification';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -9,6 +10,9 @@ const Login: React.FC = () => {
     password: '',
   });
   const [error, setError] = useState('');
+  // A 403 means the account exists but was never verified — usually because the
+  // verification email never arrived. Offer a resend instead of a dead end.
+  const [needsVerification, setNeedsVerification] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -22,18 +26,20 @@ const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setNeedsVerification(false);
     setLoading(true);
 
     try {
       const response = await authAPI.login(formData);
-      
+
       // Store token
       localStorage.setItem('access_token', response.data.access_token);
-      
+
       // Redirect to dashboard
       navigate('/dashboard');
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Invalid email or password');
+      setNeedsVerification(err.response?.status === 403);
     } finally {
       setLoading(false);
     }
@@ -98,6 +104,14 @@ const Login: React.FC = () => {
             {error && (
               <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 text-red-600 dark:text-red-400 px-4 py-3 rounded-lg">
                 {error}
+                {needsVerification && (
+                  <div className="mt-3 pt-3 border-t border-red-200 dark:border-red-700">
+                    <p className="text-sm text-red-700 dark:text-red-300 mb-3">
+                      Never got the email? We can send a new link.
+                    </p>
+                    <ResendVerification email={formData.email} />
+                  </div>
+                )}
               </div>
             )}
 

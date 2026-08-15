@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
+import ResendVerification from '../components/ResendVerification';
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
@@ -13,6 +14,10 @@ const Register: React.FC = () => {
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  // The account is created even when the verification email fails to send, so
+  // track delivery separately — telling the user to check an inbox that will
+  // never receive anything strands them with no idea what went wrong.
+  const [emailSent, setEmailSent] = useState(true);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -40,12 +45,14 @@ const Register: React.FC = () => {
     setLoading(true);
 
     try {
-      await authAPI.register({
+      const res = await authAPI.register({
         email: formData.email,
         password: formData.password,
         full_name: formData.full_name,
       });
-      
+
+      // Older responses omit the flag; treat only an explicit false as a failure
+      setEmailSent(res.data?.email_sent !== false);
       setSuccess(true);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Registration failed. Please try again.');
@@ -59,33 +66,60 @@ const Register: React.FC = () => {
       <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
         <div className="sm:mx-auto sm:w-full sm:max-w-md">
           <div className="bg-white dark:bg-gray-700 py-8 px-4 shadow-xl dark:shadow-gray-200/20 sm:rounded-lg sm:px-10 border dark:border-gray-500">
-            <div className="text-center">
-              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/50">
-                <svg className="h-6 w-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                </svg>
+            {emailSent ? (
+              <div className="text-center">
+                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 dark:bg-green-900/50">
+                  <svg className="h-6 w-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                </div>
+                <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">Check Your Email!</h3>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                  We've sent a verification link to <strong>{formData.email}</strong>
+                </p>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                  Click the link in the email to verify your account and start using NWC-Analytics.
+                </p>
+                <div className="mt-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                    <strong>📧 Can't find it?</strong> Check your <strong>spam or junk folder</strong> — verification emails sometimes end up there.
+                  </p>
+                </div>
+                <div className="mt-6">
+                  <Link
+                    to="/login"
+                    className="text-primary-600 dark:text-primary-400 hover:text-primary-500 dark:hover:text-primary-300 font-medium"
+                  >
+                    Go to Login
+                  </Link>
+                </div>
               </div>
-              <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">Check Your Email!</h3>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                We've sent a verification link to <strong>{formData.email}</strong>
-              </p>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                Click the link in the email to verify your account and start using NWC-Analytics.
-              </p>
-              <div className="mt-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3">
-                <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                  <strong>📧 Can't find it?</strong> Check your <strong>spam or junk folder</strong> — verification emails sometimes end up there.
+            ) : (
+              <div className="text-center">
+                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-yellow-100 dark:bg-yellow-900/50">
+                  <svg className="h-6 w-6 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path>
+                  </svg>
+                </div>
+                <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">
+                  Account created — but the email didn't send
+                </h3>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                  Your account for <strong>{formData.email}</strong> exists, but we couldn't
+                  deliver the verification link. You won't be able to log in until it's verified.
+                </p>
+                <ResendVerification email={formData.email} className="mt-6 text-left" />
+                <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+                  Still stuck? Email{' '}
+                  <a
+                    href="mailto:support@nwc-analytics.com"
+                    className="text-primary-600 dark:text-primary-400 hover:underline"
+                  >
+                    support@nwc-analytics.com
+                  </a>
                 </p>
               </div>
-              <div className="mt-6">
-                <Link
-                  to="/login"
-                  className="text-primary-600 dark:text-primary-400 hover:text-primary-500 dark:hover:text-primary-300 font-medium"
-                >
-                  Go to Login
-                </Link>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </div>

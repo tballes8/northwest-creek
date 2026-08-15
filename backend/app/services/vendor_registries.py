@@ -37,7 +37,7 @@ NWC-Analytics is a stock-analytics SaaS. Architecture:
   layer; no other CDN is enabled in front of either service.
 - Container/build: Docker + docker-compose for local dev only.
 - Third-party APIs NWC calls from code: Financial Modeling Prep (market data),
-  Stripe (billing), Anthropic (AI), Twilio (SMS), SendGrid (email).
+  Stripe (billing), Anthropic (AI), Twilio (SMS), Postmark (email).
 - Hosting/infra dependencies: Railway (deploy, runtime, cron, managed Postgres/
   Redis) + Cloudflare at the edge.
 
@@ -150,21 +150,27 @@ Watch items: changes to `messages.create` params or `Client` auth, A2P 10DLC /
 regulatory registration requirements that could block sends from an unregistered
 number, and sender-number / messaging-service policy changes."""
 
-SENDGRID_REGISTRY = """\
-SDK: `sendgrid` Python SDK — `SendGridAPIClient(SENDGRID_API_KEY)` and the mail
-helpers `from sendgrid.helpers.mail import Mail, Email, To, Content, HtmlContent`.
-- Construct `Mail(from_email=Email(addr, name), to_emails=, subject=, html_content=...)`
-- Send via `sg.send(message)` (expects a 2xx; v3 `mail/send` under the hood)
+POSTMARK_REGISTRY = """\
+API: Postmark REST (no SDK) — `requests.post` to `https://api.postmarkapp.com/email`
+with header `X-Postmark-Server-Token` (the *Server* token, not the Account token).
+- JSON body: `{From, To, Subject, HtmlBody, MessageStream}`
+- `From` is formatted as `"Display Name <addr>"`
+- Success is HTTP 200 AND `ErrorCode == 0`; any other combination is a failure.
+  Notable ErrorCodes: 406 recipient suppressed (prior bounce/spam complaint),
+  400/401 sender signature not confirmed, 429 rate limited.
 
 Files:
-- `services/email_service.py` — verification, password-reset, payment-success emails (multiple from-addresses: default/support/sales)
-- `services/alert_checker.py` — price-alert email
-- `services/technical_alert_checker.py` — technical-alert email
-Config: SENDGRID_API_KEY.
+- `services/email_service.py` — THE single outbound send path. All email flows
+  through `EmailService.send_email()`: verification, password-reset, payment,
+  price-alert, and technical-alert (multiple from-addresses: default/support/sales).
+  `services/alert_checker.py` and `services/technical_alert_checker.py` call into
+  it via `asyncio.to_thread` rather than constructing their own client.
+Config: POSTMARK_SERVER_TOKEN, POSTMARK_MESSAGE_STREAM.
 
-Watch items: changes to the `Mail`/`Email`/`Content` helper constructors or the
-`mail/send` payload, sender-identity / domain-authentication requirements that could
-block delivery, and `send()` response/exception behavior."""
+Watch items: changes to the `/email` payload keys or ErrorCode semantics, message
+stream requirements (transactional mail must stay off broadcast streams), sender
+signature / domain-authentication rules that could block delivery, and changes to
+Postmark's automatic suppression behavior on bounce."""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -198,11 +204,11 @@ VENDORS: dict[str, dict] = {
         "registry": TWILIO_REGISTRY,
         "aliases": [],
     },
-    "SendGrid": {
-        "display": "SendGrid",
+    "Postmark": {
+        "display": "Postmark",
         "summary": "email — verification, password reset, alerts.",
-        "registry": SENDGRID_REGISTRY,
-        "aliases": ["twilio sendgrid"],
+        "registry": POSTMARK_REGISTRY,
+        "aliases": ["postmarkapp", "activecampaign postmark"],
     },
 }
 

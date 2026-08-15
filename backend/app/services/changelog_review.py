@@ -5,7 +5,7 @@ assessment an admin can hand to Claude Code.
 
 Two paths:
 - GROUNDED: the vendor has a registry in `vendor_registries.py` (FMP, Stripe,
-  Anthropic, Twilio, SendGrid). Claude maps changelog items to the exact NWC code
+  Anthropic, Twilio, Postmark). Claude maps changelog items to the exact NWC code
   that would break, using the registry as source of truth.
 - GENERIC: any other vendor (e.g. Railway, Cloudflare). No field-level registry,
   so Claude does a best-effort impact review grounded only in NWC's stack profile,

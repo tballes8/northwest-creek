@@ -33,7 +33,7 @@ API docs: `http://localhost:8000/api/v1/docs`
 
 ## Architecture
 
-**Stack:** React 19 + TypeScript → FastAPI (async) → PostgreSQL (asyncpg) + Redis. External: FMP (market data), Stripe (payments), SendGrid (email), Twilio (SMS), Anthropic (AI).
+**Stack:** React 19 + TypeScript → FastAPI (async) → PostgreSQL (asyncpg) + Redis. External: FMP (market data), Stripe (payments), Postmark (email), Twilio (SMS), Anthropic (AI).
 
 ### Backend (`backend/app/`)
 
@@ -71,7 +71,8 @@ API docs: `http://localhost:8000/api/v1/docs`
 **Services** (`services/`):
 - `fmp_client.py` — persistent `httpx.AsyncClient`, base `https://financialmodelingprep.com/stable/`. All market data flows through here. The env var for the API key is `MASSIVE_API_KEY`.
 - `financials_service.py` — assembles the full financials payload; derives DCF suggestions including YoY revenue growth (date-based matching, not index-based) and a 20% conservative haircut on the suggested growth rate.
-- `alert_checker.py` — subscribes to the WebSocket price stream; on each tick, checks `PriceAlert` rows and triggers email + SMS when crossed.
+- `email_service.py` — **the single outbound email path.** Every email (verification, password reset, payment, alerts) goes through `EmailService.send_email()`, which posts to Postmark and returns `bool`. It is synchronous by design: async callers wrap it in `asyncio.to_thread`. Never construct a provider client elsewhere — route new email through here so there stays one place to swap providers.
+- `alert_checker.py` — subscribes to the WebSocket price stream; on each tick, checks `PriceAlert` rows and triggers email + SMS when crossed. **Alerts are one-shot**, so `triggered_at`/`is_active=False` is only set once a notification actually reached the user; if every channel fails the alert stays armed and retries after `NOTIFY_RETRY_SECONDS`. `technical_alert_checker.py` does the same by holding `last_state` at its pre-transition value.
 - `websocket_service.py` — manages per-ticker subscriber lists; broadcasts price ticks to connected frontend clients.
 - `technical_indicators.py` — TA-Lib based calculations (RSI, MACD, Bollinger Bands, etc.). CPU-bound; called via `/technical-analysis/analyze/{ticker}`.
 - `stock_analyzer.py` — Anthropic API calls for AI price targets and company analysis.
@@ -109,11 +110,21 @@ STRIPE_SECRET_KEY=
 STRIPE_PUBLISHABLE_KEY=
 STRIPE_WEBHOOK_SECRET=
 STRIPE_BEGINNER_PRICE_ID= / CASUAL / ACTIVE / PROFESSIONAL
-SENDGRID_API_KEY=
+POSTMARK_SERVER_TOKEN=     # Postmark *Server* token (not the Account token)
+POSTMARK_MESSAGE_STREAM=outbound-1 # this server's transactional stream; never a broadcast stream
+FROM_EMAIL=                # default sender — alert emails
+SUPPORT_EMAIL=             # verification, password reset, payment-failed
+SALES_EMAIL=               # payment success, trial ending
+FROM_NAME=NWC-Analytics
+AUDIT_ALERT_EMAIL=         # weekly FMP field-audit recipient; falls back to SUPPORT_EMAIL
 TWILIO_ACCOUNT_SID= / AUTH_TOKEN / FROM_NUMBER
-FRONTEND_URL=http://localhost:3000
+FRONTEND_URL=https://nwc-analytics.com   # no trailing slash; override locally if running a dev frontend
 ACCESS_TOKEN_EXPIRE_MINUTES=90
 ```
+
+> All four sender addresses default to `""`. If unset, every outbound email fails
+> with "no sender address configured" — the app boots fine and only fails at send
+> time. `get_settings()` echoes the resolved values at startup.
 
 ### Frontend (`.env.local`)
 ```

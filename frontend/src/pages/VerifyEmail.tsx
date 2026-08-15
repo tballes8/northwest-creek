@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import ResendVerification from '../components/ResendVerification';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -113,10 +114,18 @@ const VerifyEmail: React.FC = () => {
                 </div>
                 <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">Verification Failed</h3>
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{message}</p>
+
+                {/* The backend's expired-token message says "request a new one" —
+                    this is what makes that actually possible. The token is invalid
+                    so we no longer know who they are; ask for the address. */}
+                <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-600 text-left">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                    Need a new verification link? Enter your email and we'll send a fresh one.
+                  </p>
+                  <ResendVerification selectedTier={searchParams.get('tier') || undefined} />
+                </div>
+
                 <div className="mt-6 space-y-3">
-                  <Link to="/register" className="block text-primary-600 dark:text-primary-400 hover:text-primary-500 font-medium">
-                    Register Again
-                  </Link>
                   <Link to="/login" className="block text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white">
                     Back to Login
                   </Link>

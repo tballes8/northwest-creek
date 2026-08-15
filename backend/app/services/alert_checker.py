@@ -3,9 +3,12 @@ Alert Checker Service — Background price alert monitoring
 
 Hooks into the LivePriceService's price stream to check active alerts
 against real-time prices. When an alert triggers:
-  1. Sets triggered_at + is_active=False in the DB
-  2. Sends SMS via Twilio (if sms_enabled + phone verified)
-  3. Sends email notification via SendGrid
+  1. Sends SMS via Twilio (if sms_enabled + phone verified)
+  2. Sends email notification via EmailService
+  3. Sets triggered_at + is_active=False — but ONLY if a notification
+     actually reached the user. Alerts are one-shot, so consuming one
+     whose notification failed would destroy it permanently; instead it
+     stays armed and retries after NOTIFY_RETRY_SECONDS.
   4. Broadcasts a trigger event over the WebSocket to the user's browser
 
 Throttled to one check per ticker per THROTTLE_SECONDS to avoid
@@ -34,6 +37,7 @@ from sqlalchemy.orm import selectinload
 from app.config import get_settings
 from app.db.session import async_session as AsyncSessionLocal
 from app.db.models import User, PriceAlert
+from app.services.email_service import email_service
 from app.services.sms_service import send_alert_sms, build_price_alert_message
 
 settings = get_settings()
@@ -42,6 +46,7 @@ settings = get_settings()
 
 THROTTLE_SECONDS = 15  # Min seconds between checks for the same ticker
 EMAIL_ON_TRIGGER = True  # Send email notification on every trigger
+NOTIFY_RETRY_SECONDS = 600  # Cooldown before retrying an alert whose notification failed
 
 
 class AlertChecker:
@@ -58,6 +63,7 @@ class AlertChecker:
         self._last_check: Dict[str, float] = {}  # ticker → last check epoch
         self._broadcast_fn: Optional[Callable] = None
         self._processing: Set[str] = set()  # tickers currently being checked (prevent overlap)
+        self._notify_failed_at: Dict[str, float] = {}  # alert id → last failed-notify epoch
 
     def set_broadcast_fn(self, fn: Callable):
         """Set the WebSocket broadcast function for real-time UI notifications."""
@@ -115,6 +121,11 @@ class AlertChecker:
                     return
 
                 for alert in alerts:
+                    # An alert whose notification just failed stays armed, so skip
+                    # it briefly rather than retrying on every tick (see _trigger_alert)
+                    if self._in_notify_cooldown(alert.id):
+                        continue
+
                     triggered = self._evaluate_condition(
                         condition=alert.condition,
                         target_price=float(alert.target_price),
@@ -130,6 +141,20 @@ class AlertChecker:
                 await db.rollback()
                 print(f"❌ AlertChecker DB error for {ticker}: {e}")
                 raise
+
+    def _in_notify_cooldown(self, alert_id) -> bool:
+        """
+        True if this alert's notification recently failed and we should hold off
+        before trying again. Without this, an armed alert would re-attempt on
+        every throttle window and turn a provider outage into a retry storm.
+        """
+        failed_at = self._notify_failed_at.get(str(alert_id))
+        if failed_at is None:
+            return False
+        if asyncio.get_event_loop().time() - failed_at < NOTIFY_RETRY_SECONDS:
+            return True
+        self._notify_failed_at.pop(str(alert_id), None)
+        return False
 
     @staticmethod
     def _evaluate_condition(condition: str, target_price: float, current_price: float) -> bool:
@@ -157,12 +182,16 @@ class AlertChecker:
             f"(user: {user.email})"
         )
 
-        # ── 1. Update DB ─────────────────────────────────────
-        alert.triggered_at = now
-        alert.is_active = False
+        # ── 1. Notify the user BEFORE consuming the alert ─────
+        # This alert is one-shot: deactivating it first meant a provider
+        # outage destroyed the notification permanently. Track whether any
+        # channel actually reached the user, and only consume it if one did.
+        attempted = False
+        notified = False
 
-        # ── 2. Send SMS (fire-and-forget) ────────────────────
+        # SMS
         if alert.sms_enabled and user.phone_verified and user.phone_number:
+            attempted = True
             try:
                 message = build_price_alert_message(
                     ticker=ticker,
@@ -170,19 +199,23 @@ class AlertChecker:
                     target_price=target_price,
                     condition=condition,
                 )
-                send_alert_sms(
+                # Twilio call is synchronous — offload so we don't stall the price stream
+                await asyncio.to_thread(
+                    send_alert_sms,
                     phone_e164=user.phone_number,
                     ticker=ticker,
                     message=message,
                 )
+                notified = True
                 print(f"   📱 SMS sent to •••-{user.phone_number[-4:]}")
             except Exception as e:
                 print(f"   ❌ SMS failed: {e}")
 
-        # ── 3. Send email notification ───────────────────────
+        # Email
         if EMAIL_ON_TRIGGER:
+            attempted = True
             try:
-                await self._send_trigger_email(
+                if await self._send_trigger_email(
                     email=user.email,
                     full_name=user.full_name or user.email.split("@")[0],
                     ticker=ticker,
@@ -190,12 +223,29 @@ class AlertChecker:
                     target_price=target_price,
                     current_price=current_price,
                     triggered_at=now,
-                )
-                print(f"   📧 Email sent to {user.email}")
+                ):
+                    notified = True
+                    print(f"   📧 Email sent to {user.email}")
+                else:
+                    print(f"   ❌ Email rejected by provider for {user.email}")
             except Exception as e:
                 print(f"   ❌ Email failed: {e}")
 
-        # ── 4. Broadcast trigger event to WebSocket clients ──
+        # ── 2. Consume the alert only if the user was reached ─
+        # `not attempted` covers the case where no channel is configured at
+        # all — there is nothing to wait for, so don't leave it armed forever.
+        if notified or not attempted:
+            alert.triggered_at = now
+            alert.is_active = False
+            self._notify_failed_at.pop(str(alert.id), None)
+        else:
+            self._notify_failed_at[str(alert.id)] = asyncio.get_event_loop().time()
+            print(
+                f"   ⚠️  Alert {alert.id} left ARMED — every notification channel "
+                f"failed; retrying in ≥{NOTIFY_RETRY_SECONDS}s"
+            )
+
+        # ── 3. Broadcast trigger event to WebSocket clients ──
         if self._broadcast_fn:
             try:
                 await self._broadcast_fn({
@@ -224,22 +274,15 @@ class AlertChecker:
         target_price: float,
         current_price: float,
         triggered_at: datetime,
-    ):
+    ) -> bool:
         """
         Send a styled HTML email when an alert triggers.
-        Uses SendGrid via the existing config.
+
+        Routed through EmailService so every outbound path shares one provider,
+        one sender identity, and one place to swap providers. Returns True only
+        if the provider accepted the message — the caller relies on this to
+        decide whether the alert may be consumed.
         """
-        try:
-            from sendgrid import SendGridAPIClient
-            from sendgrid.helpers.mail import Mail, Email, To, Content, HtmlContent
-        except ImportError:
-            print("   ⚠️  sendgrid not installed — skipping email")
-            return
-
-        if not settings.SENDGRID_API_KEY:
-            print("   ⚠️  SENDGRID_API_KEY not set — skipping email")
-            return
-
         direction = "rose above" if condition == "above" else "dropped below"
         direction_emoji = "📈" if condition == "above" else "📉"
         time_str = triggered_at.strftime("%B %d, %Y at %I:%M %p UTC")
@@ -301,17 +344,14 @@ class AlertChecker:
         </div>
         """
 
-        try:
-            sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
-            message = Mail(
-                from_email=(settings.FROM_EMAIL, settings.FROM_NAME),
-                to_emails=email,
-                subject=subject,
-                html_content=html_body,
-            )
-            sg.send(message)
-        except Exception as e:
-            print(f"   ❌ SendGrid error: {e}")
+        # send_email is synchronous — offload so we don't stall the price stream.
+        # No from_email_override: alerts keep sending as FROM_EMAIL.
+        return await asyncio.to_thread(
+            email_service.send_email,
+            to_email=email,
+            subject=subject,
+            html_content=html_body,
+        )
 
     # ── Startup: subscribe to alert tickers ──────────────────
 

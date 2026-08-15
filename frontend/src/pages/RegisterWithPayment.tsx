@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { PRICING_TIERS, TierSlug } from '../data/pricingTiers';
+import ResendVerification from '../components/ResendVerification';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -26,6 +27,7 @@ const RegisterWithPayment: React.FC = () => {
   });
   
   const [error, setError] = useState('');
+  const [emailSent, setEmailSent] = useState(true);
   const [loading, setLoading] = useState(false);
 
   const handlePlanSelect = (tier: Tier) => {
@@ -57,7 +59,7 @@ const RegisterWithPayment: React.FC = () => {
 
     try {
       // Create account — pass selected tier so backend embeds it in verification email URL
-      await axios.post(
+      const res = await axios.post(
         `${API_URL}/api/v1/auth/register?selected_tier=${selectedTier}`,
         {
           email: formData.email,
@@ -65,6 +67,10 @@ const RegisterWithPayment: React.FC = () => {
           full_name: formData.full_name,
         }
       );
+
+      // The account is created even when the verification email fails to send;
+      // only an explicit false means delivery failed (older responses omit it).
+      setEmailSent(res.data?.email_sent !== false);
 
       // Show success — user must verify email first, then they'll be redirected to Stripe for paid tiers
       setStep('success');
@@ -351,40 +357,74 @@ const RegisterWithPayment: React.FC = () => {
         {step === 'success' && (
           <div className="max-w-md mx-auto">
             <div className="bg-white dark:bg-gray-700 py-8 px-6 shadow-xl rounded-lg border dark:border-gray-500 text-center">
-              <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 dark:bg-green-900/50 mb-4">
-                <svg className="h-10 w-10 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
-                </svg>
-              </div>
-              
-              <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                Check Your Email!
-              </h3>
-              
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
-                We've sent a verification link to <strong className="text-gray-900 dark:text-white">{formData.email}</strong>
-              </p>
+              {emailSent ? (
+                <>
+                  <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 dark:bg-green-900/50 mb-4">
+                    <svg className="h-10 w-10 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                  </div>
 
-              {selectedTier && (
-                <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-700 rounded-lg p-4 mb-4">
-                  <p className="text-sm text-primary-800 dark:text-primary-200">
-                    <strong>Next step:</strong> After verifying your email, you'll be automatically redirected to complete your <strong>{selectedTier}</strong> subscription payment.
+                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                    Check Your Email!
+                  </h3>
+
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
+                    We've sent a verification link to <strong className="text-gray-900 dark:text-white">{formData.email}</strong>
                   </p>
-                </div>
-              )}
 
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4 mb-6">
-                <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                  <strong>📧 Can't find the email?</strong> Check your <strong>spam or junk folder</strong> — verification emails sometimes end up there.
-                </p>
-              </div>
-              
-              <Link
-                to="/login"
-                className="inline-block px-6 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold rounded-lg transition-colors"
-              >
-                Go to Login
-              </Link>
+                  {selectedTier && (
+                    <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-700 rounded-lg p-4 mb-4">
+                      <p className="text-sm text-primary-800 dark:text-primary-200">
+                        <strong>Next step:</strong> After verifying your email, you'll be automatically redirected to complete your <strong>{selectedTier}</strong> subscription payment.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4 mb-6">
+                    <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                      <strong>📧 Can't find the email?</strong> Check your <strong>spam or junk folder</strong> — verification emails sometimes end up there.
+                    </p>
+                  </div>
+
+                  <Link
+                    to="/login"
+                    className="inline-block px-6 py-3 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold rounded-lg transition-colors"
+                  >
+                    Go to Login
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-yellow-100 dark:bg-yellow-900/50 mb-4">
+                    <svg className="h-10 w-10 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path>
+                    </svg>
+                  </div>
+
+                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                    Account created — but the email didn't send
+                  </h3>
+
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
+                    Your account for <strong className="text-gray-900 dark:text-white">{formData.email}</strong> exists,
+                    but we couldn't deliver the verification link. You won't be able to log in until it's verified.
+                  </p>
+
+                  <ResendVerification
+                    email={formData.email}
+                    selectedTier={selectedTier || undefined}
+                    className="mb-4 text-left"
+                  />
+
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Still stuck? Email{' '}
+                    <a href="mailto:support@nwc-analytics.com" className="text-primary-600 dark:text-primary-400 hover:underline">
+                      support@nwc-analytics.com
+                    </a>
+                  </p>
+                </>
+              )}
             </div>
           </div>
         )}

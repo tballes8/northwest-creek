@@ -35,8 +35,14 @@ export const authAPI = {
   getCurrentUser: () =>
     axiosInstance.get('/auth/me'),
 
-  verifyEmail: (token: string) => 
+  verifyEmail: (token: string) =>
     axiosInstance.get(`/auth/verify-email?token=${token}`),
+
+  resendVerification: (data: { email: string }, selectedTier?: string) =>
+    axiosInstance.post(
+      `/auth/resend-verification${selectedTier ? `?selected_tier=${selectedTier}` : ''}`,
+      data
+    ),
 
   forgotPassword: (data: { email: string }) =>
     axiosInstance.post('/auth/forgot-password', data),

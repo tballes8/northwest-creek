@@ -63,6 +63,13 @@ class TokenData(BaseModel):
     user_id: Optional[UUID] = None
 
 
+# --- Email Verification ---
+
+class ResendVerificationRequest(BaseModel):
+    """Schema for requesting a fresh account-verification email"""
+    email: EmailStr
+
+
 # --- Password Reset & Change ---
 
 class ForgotPasswordRequest(BaseModel):

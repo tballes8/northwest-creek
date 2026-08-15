@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
 from app.db.models import TechnicalAlert, User
+from app.services.email_service import email_service
 from app.services.market_data import market_data_service
 from app.services.technical_indicators import technical_indicators, generate_summary
 from app.services.sms_service import send_alert_sms, build_technical_alert_message
@@ -140,12 +141,21 @@ class TechnicalAlertChecker:
 
                         triggered, new_state, details = self._evaluate_alert(alert, indicators, fundamentals)
 
-                        # Always update last_state regardless of trigger
-                        alert.last_state = new_state
+                        if not triggered:
+                            alert.last_state = new_state
+                            continue
 
-                        if triggered:
-                            await self._trigger_alert(db, alert, details)
+                        if await self._trigger_alert(db, alert, details):
+                            alert.last_state = new_state
                             triggered_count += 1
+                        else:
+                            # Notification failed. Hold last_state at its pre-transition
+                            # value so this same transition is re-detected and retried on
+                            # the next cron run — advancing it would silently lose the alert.
+                            print(
+                                f"   ⚠️  {ticker} [{alert.alert_type}] left ARMED — "
+                                f"notification failed, will retry next run"
+                            )
 
                 except Exception as e:
                     print(f"   ❌ Error processing {ticker}: {e}")
@@ -594,8 +604,14 @@ class TechnicalAlertChecker:
 
     # ── Trigger & Notifications ───────────────────────────────────────
 
-    async def _trigger_alert(self, db: AsyncSession, alert: TechnicalAlert, trigger_details: dict):
-        """Mark alert as triggered, send SMS/Email/WebSocket notifications."""
+    async def _trigger_alert(self, db: AsyncSession, alert: TechnicalAlert, trigger_details: dict) -> bool:
+        """
+        Send SMS/Email/WebSocket notifications, then mark the alert triggered.
+
+        Returns True if the alert was consumed (the user was reached, or there was
+        no channel to reach them on). Returns False if every channel failed — the
+        caller must then hold `last_state` so the transition is retried next run.
+        """
         now = datetime.now(timezone.utc)
         user: User = alert.user
         ticker = alert.ticker
@@ -605,35 +621,42 @@ class TechnicalAlertChecker:
             f"[{alert.alert_type}] (user: {user.email})"
         )
 
-        # ── 1. Update DB
-        alert.triggered_at = now
-        alert.is_active = False
-        alert.trigger_details = trigger_details
-
-        # ── 2. Build human-readable summary
+        # ── 1. Build human-readable summary
         trigger_summary = self._build_trigger_summary(alert.alert_type, alert.config, trigger_details)
 
-        # ── 3. Send SMS (fire-and-forget)
+        # ── 2. Notify the user BEFORE consuming the alert
+        # This alert is one-shot: deactivating it first meant a provider outage
+        # destroyed the notification permanently. Track whether any channel
+        # actually reached the user, and only consume it if one did.
+        attempted = False
+        notified = False
+
+        # SMS
         if alert.sms_enabled and user.phone_verified and user.phone_number:
+            attempted = True
             try:
                 message = build_technical_alert_message(
                     ticker=ticker,
                     alert_type=alert.alert_type,
                     trigger_summary=trigger_summary,
                 )
-                send_alert_sms(
+                # Twilio call is synchronous — offload so we don't block the loop
+                await asyncio.to_thread(
+                    send_alert_sms,
                     phone_e164=user.phone_number,
                     ticker=ticker,
                     message=message,
                 )
+                notified = True
                 print(f"   📱 SMS sent to •••-{user.phone_number[-4:]}")
             except Exception as e:
                 print(f"   ❌ SMS failed: {e}")
 
-        # ── 4. Send email notification
+        # Email
         if EMAIL_ON_TRIGGER:
+            attempted = True
             try:
-                await self._send_trigger_email(
+                if await self._send_trigger_email(
                     email=user.email,
                     full_name=user.full_name or user.email.split("@")[0],
                     ticker=ticker,
@@ -642,12 +665,24 @@ class TechnicalAlertChecker:
                     trigger_details=trigger_details,
                     trigger_summary=trigger_summary,
                     triggered_at=now,
-                )
-                print(f"   📧 Email sent to {user.email}")
+                ):
+                    notified = True
+                    print(f"   📧 Email sent to {user.email}")
+                else:
+                    print(f"   ❌ Email rejected by provider for {user.email}")
             except Exception as e:
                 print(f"   ❌ Email failed: {e}")
 
-        # ── 5. Broadcast trigger event to WebSocket clients
+        # ── 3. Consume the alert only if the user was reached
+        # `not attempted` covers the case where no channel is configured at all —
+        # there is nothing to wait for, so don't leave it armed forever.
+        consumed = notified or not attempted
+        if consumed:
+            alert.triggered_at = now
+            alert.is_active = False
+            alert.trigger_details = trigger_details
+
+        # ── 4. Broadcast trigger event to WebSocket clients
         if self._broadcast_fn:
             try:
                 await self._broadcast_fn({
@@ -664,6 +699,8 @@ class TechnicalAlertChecker:
                 })
             except Exception as e:
                 print(f"   ❌ WS broadcast failed: {e}")
+
+        return consumed
 
     @staticmethod
     def _build_trigger_summary(alert_type: str, config: dict, details: dict) -> str:
@@ -709,19 +746,15 @@ class TechnicalAlertChecker:
         trigger_details: dict,
         trigger_summary: str,
         triggered_at: datetime,
-    ):
-        """Send a styled HTML email when a technical alert triggers."""
-        try:
-            from sendgrid import SendGridAPIClient
-            from sendgrid.helpers.mail import Mail
-        except ImportError:
-            print("   ⚠️  sendgrid not installed — skipping email")
-            return
+    ) -> bool:
+        """
+        Send a styled HTML email when a technical alert triggers.
 
-        if not settings.SENDGRID_API_KEY:
-            print("   ⚠️  SENDGRID_API_KEY not set — skipping email")
-            return
-
+        Routed through EmailService so every outbound path shares one provider,
+        one sender identity, and one place to swap providers. Returns True only
+        if the provider accepted the message — the caller relies on this to
+        decide whether the alert may be consumed.
+        """
         from app.schemas.technical_alert import ALERT_TYPE_LABELS
 
         type_label = ALERT_TYPE_LABELS.get(alert_type, alert_type)
@@ -753,7 +786,7 @@ class TechnicalAlertChecker:
               </tr>
             </table>
             <div style="text-align:center;margin-top:20px;">
-              <a href="https://nwc-analytics.com/technical-analysis?ticker={ticker}"
+              <a href="{settings.FRONTEND_URL}/technical-analysis?ticker={ticker}"
                  style="display:inline-block;background:#2dd4bf;color:#111827;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;">
                 View Technical Analysis
               </a>
@@ -765,15 +798,14 @@ class TechnicalAlertChecker:
         </div>
         """
 
-        msg = Mail(
-            from_email=settings.FROM_EMAIL,
-            to_emails=email,
+        # send_email is synchronous — offload so we don't block the loop.
+        # No from_email_override: alerts keep sending as FROM_EMAIL.
+        return await asyncio.to_thread(
+            email_service.send_email,
+            to_email=email,
             subject=subject,
             html_content=html,
         )
-
-        sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
-        sg.send(msg)
 
     # ── Initial state seeding ─────────────────────────────────────────
 

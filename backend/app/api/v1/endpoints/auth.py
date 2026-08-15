@@ -3,11 +3,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timedelta, timezone
+import asyncio
+import logging
 import secrets
 
 from app.db.models import User
 from app.schemas import UserCreate, UserLogin, Token, UserResponse
-from app.schemas.auth import ForgotPasswordRequest, ResetPasswordRequest, ChangePasswordRequest
+from app.schemas.auth import (
+    ForgotPasswordRequest,
+    ResendVerificationRequest,
+    ResetPasswordRequest,
+    ChangePasswordRequest,
+)
 from app.core.security import (
     get_password_hash,
     verify_password,
@@ -17,8 +24,14 @@ from app.core.security import (
 from app.db.session import get_db
 from app.services.email_service import email_service
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 security = HTTPBearer()
+
+# Minimum seconds between resend-verification requests for the same address
+RESEND_COOLDOWN_SECONDS = 60
+_last_resend_at: dict[str, datetime] = {}
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -55,20 +68,38 @@ async def register(
     await db.commit()
     await db.refresh(user)
     
-    # Send verification email (pass selected tier so it's embedded in the verification URL)
-    email_sent = email_service.send_verification_email(
+    # Send verification email (pass selected tier so it's embedded in the verification URL).
+    # send_verification_email is synchronous; offload so we don't block the event loop.
+    email_sent = await asyncio.to_thread(
+        email_service.send_verification_email,
         to_email=user.email,
         verification_token=verification_token,
         user_name=user.full_name or user.email,
-        selected_tier=selected_tier
+        selected_tier=selected_tier,
     )
-    
+
+    # The account is committed either way, so never claim we sent a message we
+    # didn't — an unverified account cannot log in, and telling the user to go
+    # check their inbox strands them with no idea anything went wrong.
     if not email_sent:
-        print(f"Warning: Verification email failed to send to {user.email}")
-    
+        logger.error(
+            "Verification email FAILED for %s — account created but cannot be "
+            "verified until a resend succeeds",
+            user.email,
+        )
+        return {
+            "message": (
+                "Your account was created, but we couldn't send the verification email. "
+                "Please use the resend option, or contact support@nwc-analytics.com."
+            ),
+            "email": user.email,
+            "email_sent": False,
+        }
+
     return {
         "message": "Registration successful! Please check your email (and spam/junk folder) to verify your account.",
-        "email": user.email
+        "email": user.email,
+        "email_sent": True,
     }
 
 
@@ -114,42 +145,75 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/resend-verification")
 async def resend_verification(
-    email: str,
+    request: ResendVerificationRequest,
     db: AsyncSession = Depends(get_db),
     selected_tier: str = Query(default="beginner", description="Selected subscription tier")
 ):
-    """Resend verification email"""
+    """
+    Resend the account verification email.
+
+    This is the only recovery path for a user whose original verification email
+    never arrived — without it they cannot log in (403), cannot re-register
+    (400 "Email already registered"), and password reset does not verify them.
+    """
+    email = request.email
+
     # Find user
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
-    
+
     if not user:
         # Don't reveal if email exists
         return {"message": "If that email is registered, a verification email will be sent."}
-    
+
     if user.is_verified:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already verified"
         )
-    
+
+    # Rate limit per address so this can't be used to mailbomb someone
+    now = datetime.now(timezone.utc)
+    last = _last_resend_at.get(email)
+    if last and (now - last).total_seconds() < RESEND_COOLDOWN_SECONDS:
+        wait = int(RESEND_COOLDOWN_SECONDS - (now - last).total_seconds())
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Please wait {wait} more second{'s' if wait != 1 else ''} before requesting another email."
+        )
+
     # Generate new token
     verification_token = secrets.token_urlsafe(32)
-    token_expires = datetime.now(timezone.utc) + timedelta(hours=24)
-    
+    token_expires = now + timedelta(hours=24)
+
     user.verification_token = verification_token
     user.verification_token_expires = token_expires
-    
+
     await db.commit()
-    
-    # Send email
-    email_service.send_verification_email(
+
+    # Synchronous send — offload so we don't block the event loop
+    email_sent = await asyncio.to_thread(
+        email_service.send_verification_email,
         to_email=user.email,
         verification_token=verification_token,
         user_name=user.full_name or user.email,
-        selected_tier=selected_tier
+        selected_tier=selected_tier,
     )
-    
+
+    if not email_sent:
+        logger.error("Resent verification email FAILED for %s", user.email)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "We couldn't send the verification email right now. "
+                "Please try again shortly, or contact support@nwc-analytics.com."
+            ),
+        )
+
+    # Only start the cooldown once a message actually went out, so a failed
+    # attempt doesn't lock the user out of retrying
+    _last_resend_at[email] = now
+
     return {"message": "Verification email sent! Please check your inbox (and spam/junk folder)."}
 
 
@@ -216,7 +280,7 @@ async def get_current_user(
         return user
         
     except Exception as e:
-        print(f"Error in /me endpoint: {e}")
+        logger.warning("Error in /me endpoint: %s", e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials"
@@ -251,13 +315,25 @@ async def forgot_password(
     user.password_reset_token_expires = datetime.now(timezone.utc) + timedelta(hours=1)
     await db.commit()
 
-    email_sent = email_service.send_password_reset_email(
+    # Synchronous send — offload so we don't block the event loop
+    email_sent = await asyncio.to_thread(
+        email_service.send_password_reset_email,
         to_email=user.email,
         reset_token=reset_token,
-        user_name=user.full_name or user.email
+        user_name=user.full_name or user.email,
     )
+
+    # This endpoint already reveals whether an account exists (404 above), so
+    # there's no enumeration reason to hide a delivery failure here either.
     if not email_sent:
-        print(f"Warning: Password reset email failed to send to {user.email}")
+        logger.error("Password reset email FAILED for %s", user.email)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "We couldn't send the password reset email right now. "
+                "Please try again shortly, or contact support@nwc-analytics.com."
+            ),
+        )
 
     return {
         "message": "A password reset link has been sent to your email. Please check your inbox and spam/junk folder."
