@@ -79,6 +79,19 @@ class EmailService:
             )
             return False
 
+        # The display name MUST be quoted. Unquoted, Postmark's parser reads
+        # "NWC-Analytics <addr>" as two addresses and rejects it with
+        # ErrorCode 300 ("Illegal email address 'NWC-Analytics'"). Strip quotes
+        # and CR/LF so a malformed FROM_NAME can't break the header either.
+        display_name = (
+            (self.from_name or "")
+            .replace('"', "")
+            .replace("\r", "")
+            .replace("\n", "")
+            .strip()
+        )
+        from_field = f'"{display_name}" <{sender}>' if display_name else sender
+
         try:
             response = requests.post(
                 POSTMARK_SEND_URL,
@@ -88,7 +101,7 @@ class EmailService:
                     "X-Postmark-Server-Token": self._token,
                 },
                 json={
-                    "From": f"{self.from_name} <{sender}>" if self.from_name else sender,
+                    "From": from_field,
                     "To": to_email,
                     "Subject": subject,
                     "HtmlBody": html_content,
