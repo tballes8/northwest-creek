@@ -204,15 +204,19 @@ async def get_sectors(
     current_user=Depends(get_current_user),
 ):
     """
-    Bulk ticker → sector lookup. Single source of truth for sector labels app-wide.
+    Bulk ticker → sector lookup for the app's sector labels.
 
-    Reads `stock_snapshots.sector`, which the daily universe rebuild populates for
-    the whole screener universe from FMP /company-screener. Tickers with no stored
-    sector (ETFs — excluded from the universe — and brand-new listings) fall back to
-    the FMP profile, the same call behind `/company/{ticker}`, so this endpoint
-    always agrees with the Company Details panel. Fallback results are written back
-    when the symbol is already in the universe, so a ticker costs at most one
-    profile fetch.
+    Resolves through `get_company_info` — the *same* call that backs
+    `/company/{ticker}` — so a ticker cannot show one sector here and another in the
+    Company Details panel. That match is structural, not eventual: an earlier version
+    of this endpoint read `stock_snapshots.sector` first, which made the stored value
+    an unversioned cache with no invalidation, so a stale or wrong row (NFE stored as
+    Utilities while the profile said Energy) could never correct itself.
+
+    `get_company_info` memoizes for an hour process-wide, so a ticker costs one FMP
+    call per hour no matter how many users ask for it. The stored sector is used only
+    when the profile call fails, so an FMP outage degrades to the last known label
+    rather than "Other".
 
     **Returns:** `{"sectors": {"NFE": "Energy", ...}}` — every requested ticker is
     present; anything unresolvable maps to "Other".
@@ -230,9 +234,9 @@ async def get_sectors(
     if len(requested) > 250:
         raise HTTPException(status_code=400, detail="Too many tickers (max 250)")
 
-    resolved: dict[str, str] = {}
-
-    # 1. Stored sectors — one query for the whole batch
+    # 1. Stored sectors — one query, used as the offline fallback and to decide which
+    #    rows the profile has since corrected.
+    stored: dict[str, str] = {}
     rows = await db.execute(
         select(StockSnapshot.symbol, StockSnapshot.sector).where(
             StockSnapshot.symbol.in_(requested),
@@ -241,46 +245,48 @@ async def get_sectors(
     )
     for symbol, sector in rows.all():
         if sector:
-            resolved[symbol.upper()] = sector
+            stored[symbol.upper()] = sector
 
-    # 2. Fill gaps from the live profile. Bounded concurrency — these are FMP calls,
-    #    and get_company_info memoizes, so repeats within a session are free.
-    missing = [s for s in requested if s not in resolved]
-    if missing:
-        sem = asyncio.Semaphore(8)
+    # 2. The authoritative read. Bounded concurrency so a large portfolio can't open
+    #    75 sockets at once; cache hits don't touch the network at all.
+    sem = asyncio.Semaphore(8)
 
-        async def _fetch(sym: str) -> tuple[str, Optional[str]]:
-            async with sem:
-                try:
-                    info = await market_data_service.get_company_info(sym)
-                    return sym, (info.get("sector") or None)
-                except Exception:
-                    return sym, None
+    async def _fetch(sym: str) -> tuple[str, Optional[str]]:
+        async with sem:
+            try:
+                info = await market_data_service.get_company_info(sym)
+                sector = info.get("sector")
+                # get_company_info substitutes "Other" when FMP omits a sector.
+                # Treat that as no answer so a real stored label still wins.
+                return sym, (sector if sector and sector != "Other" else None)
+            except Exception:
+                return sym, None
 
-        fetched = await asyncio.gather(*(_fetch(s) for s in missing))
+    fetched = dict(await asyncio.gather(*(_fetch(s) for s in requested)))
 
-        wrote = False
-        for sym, sector in fetched:
-            if not sector:
-                continue
-            resolved[sym] = sector
-            # Don't persist "Other" — get_company_info returns it when FMP has no
-            # sector, and the NULL guard below would then cache that non-answer
-            # forever, blocking a later rebuild from filling in the real value.
-            if sector == "Other":
-                continue
-            # UPDATE-only: never INSERT, so a non-universe ticker (ETF) can't leak
-            # into the screener. The NULL guard keeps a concurrent write from losing.
+    # 3. Keep stock_snapshots in step, so the screener's sector filter and keyword
+    #    search agree with the labels users see. UPDATE-only: never INSERT, so a
+    #    non-universe ticker (an ETF) can't leak into the screener universe.
+    changed = [
+        (sym, sector)
+        for sym, sector in fetched.items()
+        if sector and stored.get(sym) != sector
+    ]
+    if changed:
+        for sym, sector in changed:
             await db.execute(
                 update(StockSnapshot)
-                .where(StockSnapshot.symbol == sym, StockSnapshot.sector.is_(None))
+                .where(StockSnapshot.symbol == sym)
                 .values(sector=sector)
             )
-            wrote = True
-        if wrote:
-            await db.commit()
+        await db.commit()
 
-    return {"sectors": {s: resolved.get(s, "Other") for s in requested}}
+    return {
+        "sectors": {
+            s: fetched.get(s) or stored.get(s) or "Other"
+            for s in requested
+        }
+    }
 
 
 @router.get("/historical/{ticker}", response_model=HistoricalData)
