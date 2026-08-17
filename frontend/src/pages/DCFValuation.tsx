@@ -1401,6 +1401,11 @@ const DCFValuation: React.FC = () => {
                 // A single converged point is a point, not a band — don't dress
                 // it up as a range.
                 const isRange = rev.solved_points.length > 1 && lo !== hi;
+                // "-6–3%" reads as "-6 minus 3". Spell the range out whenever an
+                // endpoint is negative; keep the tighter en-dash for all-positive.
+                const bandLabel = !isRange
+                  ? `${lo}%`
+                  : (lo < 0 || hi < 0) ? `${lo}% to ${hi}%` : `${lo}–${hi}%`;
                 const rates = rev.solved_points.map(p => `${ratePct(p.discount_rate)}%`);
                 const rateList = rates.length === 1
                   ? `a discount rate of ${rates[0]}`
@@ -1410,10 +1415,14 @@ const DCFValuation: React.FC = () => {
                 // of the implied band. Measured against the band rather than a
                 // midpoint — collapsing the band to a point to compute a gap
                 // would reintroduce the false precision the band exists to avoid.
+                // Measured against the ROUNDED band edges actually on screen, so
+                // the three numbers in this row reconcile — a reader subtracting
+                // 3% from 7.8% should get the gap we print, not one point off it.
                 const yourG = dcfData.assumptions.growth_rate;
+                const yourPct = yourG * 100;
                 let gapPts = 0;
-                if (yourG < rev.band_low!) gapPts = -Math.round((rev.band_low! - yourG) * 100);
-                else if (yourG > rev.band_high!) gapPts = Math.round((yourG - rev.band_high!) * 100);
+                if (yourPct < lo) gapPts = -Math.round(lo - yourPct);
+                else if (yourPct > hi) gapPts = Math.round(yourPct - hi);
                 const gapValue = gapPts === 0 ? 'In range' : `${gapPts > 0 ? '+' : ''}${gapPts} pts`;
                 const gapNote = gapPts === 0
                   ? 'your assumption sits inside the implied band'
@@ -1437,7 +1446,8 @@ const DCFValuation: React.FC = () => {
                       <div>
                         <div className="text-sm text-gray-600 dark:text-gray-400">Market-Implied Growth</div>
                         <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                          roughly {isRange ? `${lo}–${hi}%` : `${lo}%`}
+                          <span className="text-base font-normal text-gray-500 dark:text-gray-400">roughly </span>
+                          {bandLabel}
                         </div>
                         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           solved at {rateList}, terminal growth {ratePct(dcfData.assumptions.terminal_growth)}%
