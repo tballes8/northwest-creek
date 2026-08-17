@@ -278,6 +278,19 @@ interface DCFData {
     color: string;
     message: string;
   };
+  reverse_dcf?: {
+    converged: boolean;
+    implied_growth_low: number | null;   // solved at discount_rate - 1%
+    implied_growth_mid: number | null;   // solved at discount_rate
+    implied_growth_high: number | null;  // solved at discount_rate + 1%
+    band_low: number | null;
+    band_high: number | null;
+    extreme_growth_flag: boolean;
+    // Only the discount rates that actually converged, so the sub-line never
+    // claims a solve that didn't happen.
+    solved_points: Array<{ discount_rate: number; implied_growth: number }>;
+    reason_if_unavailable: 'negative_fcf' | 'estimated_fcf' | 'invalid_ticker_type' | 'no_convergence' | null;
+  };
   fmp_benchmark?: {
     dcf_value: number | null;
     levered_dcf_value: number | null;
@@ -1313,6 +1326,10 @@ const DCFValuation: React.FC = () => {
                   </span>
                 )}
               </div>
+              {/* ── Row 1: Forward DCF — your assumptions produce a value ── */}
+              <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">
+                Forward DCF <span className="normal-case font-normal">· your growth assumption → intrinsic value</span>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                   <div className="text-sm text-gray-600 dark:text-gray-400">Current Price</div>
@@ -1341,34 +1358,116 @@ const DCFValuation: React.FC = () => {
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Recommendation */}
-            <div className={`rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border ${
-              dcfData.recommendation.color === 'green' 
-                ? 'bg-green-50 dark:bg-green-900/30 border-green-500 dark:border-green-600'
-                : dcfData.recommendation.color === 'yellow'
-                ? 'bg-yellow-50 dark:bg-yellow-900/30 border-yellow-500 dark:border-yellow-600'
-                : 'bg-red-50 dark:bg-red-900/30 border-red-500 dark:border-red-600'
-            }`}>
-              <div className="flex items-center gap-3 mb-2">
-                <div className="text-3xl">
-                  {dcfData.recommendation.color === 'green' ? '✅' : 
-                   dcfData.recommendation.color === 'yellow' ? '⚠️' : '❌'}
-                </div>
-                <h3 className={`text-xl font-bold ${
-                  dcfData.recommendation.color === 'green' 
-                    ? 'text-green-900 dark:text-green-200'
-                    : dcfData.recommendation.color === 'yellow'
-                    ? 'text-yellow-900 dark:text-yellow-200'
-                    : 'text-red-900 dark:text-red-200'
-                }`}>
-                  {dcfData.recommendation.rating}
-                </h3>
-              </div>
-              <div>
-                <p className="text-gray-700 dark:text-gray-300">{dcfData.recommendation.message}</p>
-              </div>
+              {/* ── Row 2: Reverse DCF — the price implies a growth rate ── */}
+              {dcfData.reverse_dcf && !isWarrant &&
+               dcfData.reverse_dcf.reason_if_unavailable !== 'invalid_ticker_type' && (() => {
+                const rev = dcfData.reverse_dcf!;
+                const years = dcfData.assumptions.projection_years;
+                // Whole percentages only — decimal precision on a solved growth
+                // rate implies a confidence this model doesn't have.
+                const pct = (v: number) => Math.round(v * 100);
+                // Trim trailing ".0" so 9.0% reads as 9% but 9.5% survives.
+                const ratePct = (v: number) => (v * 100).toFixed(1).replace(/\.0$/, '');
+
+                const heading = (
+                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-3">
+                    Reverse DCF <span className="normal-case font-normal">· market price → implied growth</span>
+                  </div>
+                );
+                const divider = "mt-6 pt-6 border-t border-gray-200 dark:border-gray-600";
+
+                if (!rev.converged) {
+                  const UNAVAILABLE_COPY: Record<string, string> = {
+                    negative_fcf:
+                      'Reverse DCF unavailable — company has negative trailing free cash flow. No positive growth rate produces a positive intrinsic value.',
+                    estimated_fcf:
+                      'Reverse DCF unavailable — no reported cash flow data for this company. The forward DCF above is working from a market-cap estimate rather than filed cash flow, and solving against that estimate would return the same implied growth for any ticker.',
+                    no_convergence:
+                      'Reverse DCF could not converge — the current price is outside the range this model can express with reasonable growth assumptions. Consider whether the market may be pricing in factors this model doesn’t capture (acquisition premium, event-driven pricing, etc.).',
+                  };
+                  const msg = UNAVAILABLE_COPY[rev.reason_if_unavailable ?? 'no_convergence']
+                    ?? UNAVAILABLE_COPY.no_convergence;
+                  return (
+                    <div className={divider}>
+                      {heading}
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{msg}</p>
+                    </div>
+                  );
+                }
+
+                const lo = pct(rev.band_low!);
+                const hi = pct(rev.band_high!);
+                // A single converged point is a point, not a band — don't dress
+                // it up as a range.
+                const isRange = rev.solved_points.length > 1 && lo !== hi;
+                const rates = rev.solved_points.map(p => `${ratePct(p.discount_rate)}%`);
+                const rateList = rates.length === 1
+                  ? `a discount rate of ${rates[0]}`
+                  : `discount rates of ${rates.slice(0, -1).join(', ')} and ${rates[rates.length - 1]}`;
+
+                // Growth gap: distance from your assumption to the nearest edge
+                // of the implied band. Measured against the band rather than a
+                // midpoint — collapsing the band to a point to compute a gap
+                // would reintroduce the false precision the band exists to avoid.
+                const yourG = dcfData.assumptions.growth_rate;
+                let gapPts = 0;
+                if (yourG < rev.band_low!) gapPts = -Math.round((rev.band_low! - yourG) * 100);
+                else if (yourG > rev.band_high!) gapPts = Math.round((yourG - rev.band_high!) * 100);
+                const gapValue = gapPts === 0 ? 'In range' : `${gapPts > 0 ? '+' : ''}${gapPts} pts`;
+                const gapNote = gapPts === 0
+                  ? 'your assumption sits inside the implied band'
+                  : gapPts < 0
+                  ? 'you assume less growth than the market'
+                  : 'you assume more growth than the market';
+
+                return (
+                  <div className={divider}>
+                    {heading}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">Your Growth Assumption</div>
+                        <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                          {ratePct(yourG)}%
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          over {years} years
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">Market-Implied Growth</div>
+                        <div className="text-2xl font-bold text-gray-900 dark:text-white">
+                          roughly {isRange ? `${lo}–${hi}%` : `${lo}%`}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          solved at {rateList}, terminal growth {ratePct(dcfData.assumptions.terminal_growth)}%
+                        </div>
+                      </div>
+                      <div>
+                        {/* Deliberately uncoloured — being above or below the
+                            market is not good or bad, and a red/green tint here
+                            would smuggle back the verdict we just removed. */}
+                        <div className="text-sm text-gray-600 dark:text-gray-400">Growth Gap</div>
+                        <div className="text-2xl font-bold text-gray-900 dark:text-white">{gapValue}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{gapNote}</div>
+                      </div>
+                    </div>
+
+                    {rev.extreme_growth_flag && (
+                      <div className="mt-4 rounded-lg border border-yellow-500 dark:border-yellow-600 bg-yellow-50 dark:bg-yellow-900/30 p-4">
+                        <p className="text-sm text-yellow-900 dark:text-yellow-200">
+                          <strong>⚠️ For context:</strong> sustaining FCF growth above 25% for {years} years
+                          is historically rare — the market is pricing in an aggressive expectation.
+                        </p>
+                      </div>
+                    )}
+
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-4">
+                      Ask yourself: is this growth realistic for a business of this size?
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* FMP Benchmark Comparison */}
@@ -1458,7 +1557,7 @@ const DCFValuation: React.FC = () => {
                       approximation of FCF derived from market capitalization.
                     </p>
                     <div className="text-xs text-orange-700 dark:text-orange-400 space-y-1">
-                      <p><strong>What this means:</strong> The intrinsic value, margin of safety, and recommendation above may be significantly
+                      <p><strong>What this means:</strong> The intrinsic value and margin of safety above may be significantly
                       inaccurate. Use this output as a rough directional indicator only — not as a basis for investment decisions.</p>
                       <p><strong>For higher-confidence results:</strong> Look for stocks that display the <span className="inline-flex items-center text-green-700 dark:text-green-400 font-semibold">✓ Actual TTM</span> badge
                       next to Current FCF in the input fields above, which indicates the model is using real financial data from quarterly and annual filings.</p>

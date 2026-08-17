@@ -15,6 +15,7 @@ from app.db.session import get_db
 from app.services.market_data import market_data_service
 from app.services.financials_service import get_company_financials
 from app.services.fmp_client import get_fmp_client, API_KEY
+from app.services.dcf_service import compute_dcf, calculate_reverse_dcf
 from app.core.tier_limits import get_tier_limit, get_review_period, get_upgrade_tier
 
 
@@ -597,39 +598,62 @@ async def calculate_dcf(
                 shares_outstanding = 1000000
                 shares_source = "estimated_default"
 
-        # Project future cash flows
-        projected_cash_flows = []
-        for year in range(1, projection_years + 1):
-            fcf = current_fcf * ((1 + growth_rate) ** year)
-            pv = fcf / ((1 + discount_rate) ** year)
-            projected_cash_flows.append({
-                "year": year,
-                "cash_flow": round(fcf, 2),
-                "present_value": round(pv, 2),
-                "discount_factor": round(1 / ((1 + discount_rate) ** year), 4)
-            })
-        
-        # Calculate terminal value
-        final_year_fcf = projected_cash_flows[-1]["cash_flow"]
-        terminal_value = (final_year_fcf * (1 + terminal_growth)) / (discount_rate - terminal_growth)
-        terminal_pv = terminal_value / ((1 + discount_rate) ** projection_years)
-        
-        # Calculate enterprise value
-        sum_pv_cash_flows = sum(cf["present_value"] for cf in projected_cash_flows)
-        enterprise_value = sum_pv_cash_flows + terminal_pv
-        
         # ── Equity bridge: Enterprise Value + Cash - Debt ─────────────
         net_debt_adjustment = 0
         has_equity_bridge = False
         if cash_and_equivalents is not None and total_debt is not None:
             net_debt_adjustment = cash_and_equivalents - total_debt
             has_equity_bridge = True
-        
-        equity_value = enterprise_value + net_debt_adjustment
-        
-        # Calculate intrinsic value per share
-        intrinsic_value = equity_value / shares_outstanding
-        
+
+        # Forward DCF — the discounting math lives in services/dcf_service.py so
+        # the reverse solver can run the identical engine instead of a copy.
+        dcf = compute_dcf(
+            current_fcf=current_fcf,
+            growth_rate=growth_rate,
+            discount_rate=discount_rate,
+            terminal_growth=terminal_growth,
+            projection_years=projection_years,
+            shares_outstanding=shares_outstanding,
+            net_debt_adjustment=net_debt_adjustment,
+        )
+        projected_cash_flows = dcf["projections"]
+        terminal_value = dcf["terminal_value"]
+        terminal_pv = dcf["terminal_pv"]
+        sum_pv_cash_flows = dcf["sum_pv_cash_flows"]
+        enterprise_value = dcf["enterprise_value"]
+        equity_value = dcf["equity_value"]
+        intrinsic_value = dcf["intrinsic_value_per_share"]
+
+        # ── Reverse DCF: what growth rate does the current price imply? ──────
+        # Runs automatically on the same inputs — no extra user parameters, and
+        # no extra usage charge. Failures here must never break the forward DCF.
+        try:
+            reverse_dcf = calculate_reverse_dcf(
+                current_price=current_price,
+                fcf=current_fcf,
+                discount_rate=discount_rate,
+                terminal_growth=terminal_growth,
+                projection_years=projection_years,
+                shares=shares_outstanding,
+                net_debt_adjustment=net_debt_adjustment,
+                security_type=security_type,
+                fcf_source=fcf_source,
+            )
+        except Exception as rev_err:
+            print(f"⚠️ Reverse DCF failed for {ticker}: {_safe_error(rev_err)}")
+            reverse_dcf = {
+                "converged": False,
+                "implied_growth_low": None,
+                "implied_growth_mid": None,
+                "implied_growth_high": None,
+                "band_low": None,
+                "band_high": None,
+                "extreme_growth_flag": False,
+                "solved_points": [],
+                "reason_if_unavailable": "no_convergence",
+            }
+
+
         # Calculate margin of safety
         margin_of_safety = ((intrinsic_value - current_price) / current_price) * 100
         
@@ -696,6 +720,7 @@ async def calculate_dcf(
                 "color": recommendation_color,
                 "message": recommendation_message
             },
+            "reverse_dcf": reverse_dcf,
             "fmp_benchmark": {
                 "dcf_value": fmp_dcf.get("dcf"),
                 "levered_dcf_value": fmp_dcf.get("levered_dcf"),
