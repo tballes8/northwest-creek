@@ -10,7 +10,7 @@ from typing import Optional
 import asyncio
 import httpx
 from app.api.dependencies import get_current_user
-from app.services.market_data import market_data_service
+from app.services.market_data import market_data_service, evaluate_dividend
 from app.services.fmp_client import get_fmp_client, API_KEY
 from app.db.session import get_db
 from app.schemas.daily_snapshot import DailySnapshotItem, DailySnapshotResponse
@@ -898,46 +898,25 @@ async def get_dividends(ticker: str):
         if isinstance(div_result, Exception):
             div_result = {"ticker": ticker.upper(), "dividends": [], "has_dividends": False}
 
-        # Compute annual yield if we have both price and dividend data
-        annual_dividend = None
-        annual_yield = None
-        frequency_label = None
+        price = None
+        if not isinstance(quote_result, Exception) and quote_result:
+            price = _safe_float(quote_result.get("price"))
 
+        # Annualize the latest payment into a yield — gated on recency, so a
+        # lapsed dividend reports as suspended instead of as a huge yield
+        # against today's price. See evaluate_dividend().
         divs = div_result.get("dividends", [])
-        if divs:
-            latest = divs[0]
-            cash = latest.get("cash_amount")
-            freq = latest.get("frequency")
-
-            # Map frequency integer to readable label
-            freq_map = {
-                0: "One-time",
-                1: "Annual",
-                2: "Semi-Annual",
-                3: "Trimester",
-                4: "Quarterly",
-                12: "Monthly",
-                24: "Bi-Monthly",
-                52: "Weekly",
-            }
-            frequency_label = freq_map.get(freq, "Unknown")
-
-            if cash and freq and freq > 0:
-                annual_dividend = round(cash * freq, 4)
-
-                # Yield = annual dividend / current price * 100
-                if not isinstance(quote_result, Exception) and quote_result:
-                    price = quote_result.get("price")
-                    if price and price > 0:
-                        annual_yield = round((annual_dividend / price) * 100, 2)
+        assessment = evaluate_dividend(divs, price)
 
         return {
             "ticker": ticker.upper(),
             "has_dividends": div_result.get("has_dividends", False),
             "dividends": divs,
-            "annual_dividend": annual_dividend,
-            "annual_yield": annual_yield,
-            "frequency_label": frequency_label,
+            "annual_dividend": assessment["annual_dividend"],
+            "annual_yield": assessment["annual_yield"],
+            "frequency_label": assessment["frequency_label"],
+            "dividend_status": assessment["dividend_status"],
+            "last_ex_date": assessment["last_ex_date"],
         }
 
     except Exception as e:

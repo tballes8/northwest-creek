@@ -55,6 +55,11 @@ export interface DividendRecord {
   distribution_type: string | null;
 }
 
+// "active" is the only status whose annual_yield can be shown as income.
+// "suspended" = latest payment is too old to still be in effect; "review" =
+// annualized to an implausible figure; "unknown" = history that can't be annualized.
+export type DividendStatus = 'active' | 'suspended' | 'review' | 'unknown' | 'none';
+
 export interface DividendInfo {
   ticker: string;
   has_dividends: boolean;
@@ -62,6 +67,8 @@ export interface DividendInfo {
   annual_dividend: number | null;
   annual_yield: number | null;
   frequency_label: string | null;
+  dividend_status: DividendStatus;
+  last_ex_date: string | null;
 }
 
 export interface Alert {

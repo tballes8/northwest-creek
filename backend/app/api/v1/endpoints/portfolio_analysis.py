@@ -11,7 +11,7 @@ from datetime import datetime, timezone, timedelta
 from app.db.session import get_db
 from app.api.dependencies import get_current_user
 from app.db.models import User, Portfolio, FeatureUsage
-from app.services.market_data import market_data_service
+from app.services.market_data import market_data_service, evaluate_dividend
 from app.services.portfolio_analyzer import analyze_portfolio
 from app.core.tier_limits import get_tier_limit, get_review_period, get_upgrade_tier
 
@@ -117,18 +117,15 @@ async def analyze_user_portfolio(
         total_value += tv
         total_cost += cost
 
-        # Compute dividend yield and estimated annual income
+        # Compute dividend yield and estimated annual income. Only project income
+        # from a dividend that is still in effect — a lapsed one is not income.
         dividend_yield = None
         annual_income = None
         div_info = dividend_data.get(p.ticker.upper(), {})
-        if div_info.get("has_dividends") and div_info.get("dividends"):
-            recent = div_info["dividends"][0]
-            cash = recent.get("cash_amount")
-            freq = recent.get("frequency")
-            if cash and freq and current_price > 0:
-                annual_dps = float(cash) * int(freq)
-                dividend_yield = round(annual_dps / current_price * 100, 2)
-                annual_income = round(annual_dps * quantity, 2)
+        assessment = evaluate_dividend(div_info.get("dividends") or [], current_price)
+        if assessment["dividend_status"] == "active":
+            dividend_yield = assessment["annual_yield"]
+            annual_income = round((assessment["annual_dividend"] or 0) * quantity, 2)
 
         positions.append({
             "ticker": p.ticker,

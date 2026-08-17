@@ -1,6 +1,6 @@
 # NWC-Analytics — Shipped Features Log
 
-**Last Updated:** July 17, 2026  
+**Last Updated:** August 17, 2026  
 **Purpose:** Cross-project reference document. Attach to NWC Marketing, NWC Blog/SM Post, NWC Enhancements, and NWC Sandbox projects so all workstreams have visibility into what has shipped, what tier it lives on, and what content angles it unlocks.
 
 ---
@@ -1139,6 +1139,46 @@ Each entry follows a consistent format:
 **Marketing Angle:** None directly — internal reliability tooling. Indirect benefit: valuation inputs and forward-looking estimates that had silently broken are restored, and the weekly audit shortens the gap between a data vendor changing their API and the team catching it — reinforcing the platform's data-quality and reliability positioning.
 
 **Blog/Content Hooks:** None — internal infrastructure. Possible behind-the-scenes/meta angle: "How we catch it when our market-data vendor silently changes their API."
+
+---
+
+### August 17, 2026
+
+---
+
+#### DCF Valuation — Reverse DCF Implied Growth Band
+
+**What It Does:** Added a Reverse DCF to the DCF Valuation page that inverts the model: instead of asking "given my growth assumption, what is this worth?", it solves for the FCF growth rate that would make the model's intrinsic value equal the stock's current market price — in other words, what the market is already pricing in. It runs automatically every time a user calculates a forward DCF, using the inputs they already entered, with no new fields to fill in and no additional charge against their tier's valuation allowance. The output is deliberately a **band, not a number**: the solver runs three times, at the user's discount rate and at ±1% around it, and reports the range (e.g. "roughly 22–32%"), along with a note of exactly which discount rates were solved. If only some of the three converge, only those are shown and the sub-line says so, so a single point is never dressed up as a range. The results card was restructured into two labeled rows that read as a pair — **Forward DCF** (your growth assumption → intrinsic value) above, **Reverse DCF** (market price → implied growth) below — with the reverse row showing the user's own assumption, the market-implied band, and a **Growth Gap** in percentage points telling them how far their thesis sits from the market's. Both directions run through the same shared calculation engine, so the two rows can never drift apart. Critically, the panel refuses to answer rather than guess: it suppresses with a plain-language reason for companies with negative trailing free cash flow (no growth rate makes negative cash flow positive), for companies with no filed cash-flow data where the model is working from a market-cap estimate (an estimate that would return an identical implied growth for any ticker), for warrants/ETFs/funds, and for prices that fall outside the −20% to +50% growth bracket the model is willing to express. When implied growth exceeds 40%, the band still displays but carries a context callout noting that sustaining that rate is historically rare.
+
+**Tier Availability:** All paid tiers (Beginner through Professional) — same access as the DCF Valuation calculator. Runs automatically with each forward DCF and does not consume an extra valuation from the user's allowance.
+
+**Marketing Angle:** This is the single strongest trust feature on the valuation side of the platform. The biggest failure mode of a DIY DCF is that the user tunes the growth rate until the model tells them what they already wanted to hear — the output is only ever as honest as the input. A reverse DCF removes that degree of freedom entirely: the market's implied growth rate is not tunable, and putting it directly beside the user's own assumption turns a valuation exercise into a falsifiable question — *"the market says this company has to grow FCF 28% a year for five years; do I believe that?"* It reframes the whole page from "here is a price target" to "here is what would have to be true," which is how professional analysts actually use a DCF and is a materially more defensible position than any single intrinsic-value number. The refusal states carry the same message: a model that says "I can't answer this one, and here's why" is more credible than one that always produces a number.
+
+**Blog/Content Hooks:**
+- What is a reverse DCF — and why professionals trust it more than a forward one
+- "What would have to be true?" — inverting the valuation question to test a thesis
+- Why implied growth should always be a range, not a single number
+- How to sanity-check your own growth assumption against what the market already expects
+- When a valuation model should refuse to answer — negative cash flow, missing filings, and the limits of DCF
+- How much growth is realistic? What sustained 25%+ FCF growth actually looks like historically
+- Reverse DCF vs. relative valuation — two different ways to ask if a price makes sense
+
+> **Content note:** The previously drafted reverse-DCF blog post was held pending this ship. Its "Platform Feature" callout — which described doing this calculation manually — should now be rewritten to point at the panel and republished.
+
+---
+
+#### DCF Valuation — Buy/Sell Verdict Removed from Results Card
+
+**What It Does:** Removed the Strong Buy / Buy / Hold / Sell / Strong Sell recommendation card that previously sat beneath the DCF results. It restated information already on screen — the rating was derived purely from the margin-of-safety percentage displayed directly above it — and added a directive label on top. More importantly, it was capable of laundering a broken calculation into a confident instruction: for a company with negative free cash flow, the model produces a nonsensical negative intrinsic value, and the card would stamp "Strong Sell" on it as though that were a finding. The underlying rating is still calculated and retained internally, where it continues to gate the "Trade This — Suggest Options Strategy" flow and label the trade modal.
+
+**Tier Availability:** All paid tiers (DCF Valuation page)
+
+**Marketing Angle:** Reinforces the platform's core positioning: NWC-Analytics gives users evidence and tools to reach their own conclusion, it does not issue calls. "Margin of safety: +61%" and "the market is pricing in 28% growth" are model outputs a user can interrogate and disagree with; "Strong Sell" is an instruction that invites them to stop thinking. Removing it is consistent with how the rest of the valuation suite is deliberately built — ranges instead of hero numbers, peer sets the user can curate and cut, and a reverse DCF that ends on a question rather than an answer.
+
+**Blog/Content Hooks:**
+- Why we removed buy/sell ratings from our DCF tool
+- Model output vs. investment advice — where the line actually sits, and why it matters
+- What "margin of safety" tells you that a star rating never will
 
 ---
 

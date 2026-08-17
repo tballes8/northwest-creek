@@ -95,6 +95,8 @@ interface DividendInfo {
   annual_dividend: number | null;
   annual_yield: number | null;
   frequency_label: string | null;
+  dividend_status: 'active' | 'suspended' | 'review' | 'unknown' | 'none';
+  last_ex_date: string | null;
 }
 
 interface DailySnapshot {
@@ -2475,14 +2477,41 @@ const Stocks: React.FC = () => {
                   </div>
                 ) : dividendInfo && dividendInfo.has_dividends && dividendInfo.dividends.length > 0 ? (
                   <div className="space-y-3">
-                    {dividendInfo.annual_yield !== null && (
+                    {/* Green yield only for a dividend still in effect. A lapsed one gets
+                        a banner instead — the history below stays, it's just historical. */}
+                    {dividendInfo.dividend_status === 'active' && dividendInfo.annual_yield !== null ? (
                       <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 text-center">
                         <div className="text-2xl font-bold text-green-700 dark:text-green-300">
                           {dividendInfo.annual_yield.toFixed(2)}%
                         </div>
                         <div className="text-xs text-green-600 dark:text-green-400 font-medium">Annual Dividend Yield</div>
                       </div>
-                    )}
+                    ) : dividendInfo.dividend_status === 'suspended' ? (
+                      <div className="rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-amber-700 dark:text-amber-300">
+                          ⚠ Dividend Suspended
+                        </div>
+                        <p className="text-xs text-amber-700/90 dark:text-amber-300/90 mt-1">
+                          No dividend has gone ex since {formatDividendDate(dividendInfo.last_ex_date)} — well past the next
+                          expected payment on the prior
+                          {dividendInfo.frequency_label && dividendInfo.frequency_label !== 'Unknown'
+                            ? ` ${dividendInfo.frequency_label.toLowerCase()} `
+                            : ' '}
+                          schedule. Yield is withheld; the payment history below is historical.
+                        </p>
+                      </div>
+                    ) : dividendInfo.dividend_status === 'review' ? (
+                      <div className="rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-amber-700 dark:text-amber-300">
+                          ⚠ Yield Unavailable
+                        </div>
+                        <p className="text-xs text-amber-700/90 dark:text-amber-300/90 mt-1">
+                          Annualizing the last payment gives an implausibly high yield against the current price — usually a
+                          one-off special dividend, a collapsed share price, or bad source data rather than real income.
+                          The figure is withheld; the payment history below is unchanged.
+                        </p>
+                      </div>
+                    ) : null}
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>

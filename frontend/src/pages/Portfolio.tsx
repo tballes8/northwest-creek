@@ -66,6 +66,8 @@ const Portfolio: React.FC = () => {
     frequency_label: string | null;
     has_dividends: boolean;
     dividends: any[];
+    dividend_status: 'active' | 'suspended' | 'review' | 'unknown' | 'none';
+    last_ex_date: string | null;
   }>>({});
   const [dividendsLoading, setDividendsLoading] = useState(false);
   const [showDividendModal, setShowDividendModal] = useState(false);
@@ -122,6 +124,8 @@ const Portfolio: React.FC = () => {
               frequency_label: d.frequency_label,
               has_dividends: d.has_dividends,
               dividends: d.dividends || [],
+              dividend_status: d.dividend_status ?? 'none',
+              last_ex_date: d.last_ex_date ?? null,
             };
           }
         });
@@ -1178,7 +1182,9 @@ const Portfolio: React.FC = () => {
                                 <td className="py-3 text-right text-gray-900 dark:text-white">{pos.quantity}</td>
                                 <td className="py-3 text-right text-gray-900 dark:text-white">${divInfo.annual_dividend?.toFixed(2)}</td>
                                 <td className="py-3 text-right text-gray-600 dark:text-gray-400">{divInfo.frequency_label || '—'}</td>
-                                <td className="py-3 text-right text-green-600 dark:text-green-400 font-medium">{divInfo.annual_yield?.toFixed(2)}%</td>
+                                <td className="py-3 text-right text-green-600 dark:text-green-400 font-medium">
+                                  {divInfo.annual_yield != null ? `${divInfo.annual_yield.toFixed(2)}%` : '—'}
+                                </td>
                                 <td className="py-3 text-right text-green-600 dark:text-green-400 font-bold">${income.toFixed(2)}</td>
                               </tr>
                               {/* Dividend history for this position */}

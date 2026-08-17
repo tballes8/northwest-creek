@@ -3,8 +3,8 @@ Market data service - Financial Modeling Prep (FMP) integration
 """
 import re
 import httpx
-from typing import Dict, Any, List
-from datetime import datetime, timezone, timedelta
+from typing import Dict, Any, List, Optional
+from datetime import datetime, timezone, timedelta, date
 from app.config import get_settings
 from app.services.fmp_client import get_fmp_client
 from app.utils.cache import SimpleCache
@@ -20,6 +20,133 @@ def _safe_error(e: Exception) -> str:
     msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
     msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg)
     return msg
+
+
+# --- Dividend annualization -------------------------------------------------
+# The two tunable knobs; everything else in evaluate_dividend() is deterministic.
+DIVIDEND_STALE_INTERVAL_MULTIPLIER = 1.5   # missed more than this many expected intervals => suspended
+DIVIDEND_MAX_PLAUSIBLE_YIELD = 50.0        # nothing legitimate sustains a 50% yield
+
+# Used for the staleness window when FMP reports no usable frequency.
+_DIVIDEND_FALLBACK_INTERVAL_DAYS = 365.0
+
+FREQ_INT_TO_LABEL = {
+    0: "One-time",
+    1: "Annual",
+    2: "Semi-Annual",
+    3: "Trimester",
+    4: "Quarterly",
+    6: "Bi-Monthly",
+    12: "Monthly",
+    24: "Semi-Monthly",
+    26: "Bi-Weekly",
+    52: "Weekly",
+}
+
+
+def parse_dividend_date(value: Any) -> Optional[date]:
+    """Parse an FMP date field ('YYYY-MM-DD', occasionally with a time suffix)."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.strptime(value.strip()[:10], "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return None
+
+
+def evaluate_dividend(
+    dividends: List[Dict[str, Any]],
+    price: Optional[float],
+    *,
+    today: Optional[date] = None,
+) -> Dict[str, Any]:
+    """
+    Annualize a dividend history into a yield, gated on recency.
+
+    The newest payment only describes the *current* rate if it is recent enough
+    to still be in effect. Expected interval is 365 / frequency, so the gate
+    scales across schedules (quarterly ~91d, monthly ~30d, annual 365d). A payer
+    a few weeks late survives; one that stopped paying does not. NFE is the
+    motivating case: last ex-date 2024-09-13, quarterly, ~700 days elapsed
+    against a ~137-day trip line — annualizing it against a collapsed price
+    produced a 124% "yield" for a dividend that was suspended and never paid.
+
+    dividend_status:
+      "none"      - no dividend records at all
+      "active"    - recent and annualizable; annual_yield is trustworthy
+      "suspended" - newest payment is too old to still be in effect; no figures
+      "review"    - annualized, but the result is implausible (bad denominator,
+                    special dividend treated as recurring, bad upstream data)
+      "unknown"   - recent history that cannot be annualized (no frequency,
+                    one-time payment, or no price available)
+    """
+    result: Dict[str, Any] = {
+        "annual_dividend": None,
+        "annual_yield": None,
+        "frequency_label": None,
+        "dividend_status": "none",
+        "last_ex_date": None,
+    }
+    if not dividends:
+        return result
+
+    # Don't trust upstream ordering — take the record with the newest ex-date.
+    with_dates = [
+        (dt, d) for dt, d in
+        ((parse_dividend_date(d.get("ex_dividend_date")), d) for d in dividends)
+        if dt is not None
+    ]
+    if with_dates:
+        last_ex, latest = max(with_dates, key=lambda pair: pair[0])
+    else:
+        last_ex, latest = None, dividends[0]
+
+    raw_freq = latest.get("frequency")
+    result["frequency_label"] = FREQ_INT_TO_LABEL.get(raw_freq, "Unknown")
+    result["last_ex_date"] = last_ex.isoformat() if last_ex else None
+
+    try:
+        freq: Optional[int] = int(raw_freq) if raw_freq is not None else None
+    except (TypeError, ValueError):
+        freq = None
+    if freq is not None and freq <= 0:
+        freq = None
+
+    try:
+        cash = float(latest["cash_amount"]) if latest.get("cash_amount") is not None else None
+    except (TypeError, ValueError):
+        cash = None
+
+    # Recency gate — the real fix. Refuse to quote a rate that lapsed.
+    if last_ex is not None:
+        interval_days = (365.0 / freq) if freq else _DIVIDEND_FALLBACK_INTERVAL_DAYS
+        days_since = ((today or datetime.now(timezone.utc).date()) - last_ex).days
+        if days_since > interval_days * DIVIDEND_STALE_INTERVAL_MULTIPLIER:
+            result["dividend_status"] = "suspended"
+            return result
+
+    # Recent, but nothing to annualize from (one-time/special payment, or FMP
+    # gave us no frequency). No yield to quote, but nothing to flag either.
+    if cash is None or cash <= 0 or freq is None:
+        result["dividend_status"] = "unknown"
+        return result
+
+    result["annual_dividend"] = round(cash * freq, 4)
+
+    if price is None or price <= 0:
+        result["dividend_status"] = "unknown"
+        return result
+
+    computed = round(result["annual_dividend"] / price * 100, 2)
+    if computed > DIVIDEND_MAX_PLAUSIBLE_YIELD:
+        # Backstop for the failure modes recency can't catch. Hand back a flag
+        # rather than a clean-looking number.
+        result["dividend_status"] = "review"
+        return result
+
+    result["annual_yield"] = computed
+    result["dividend_status"] = "active"
+    return result
 
 
 class MarketDataService:
@@ -381,6 +508,14 @@ class MarketDataService:
                     "dividends": [],
                     "has_dividends": False,
                 }
+
+            # FMP normally returns newest-first, but the limit slice below has to
+            # keep the most recent payments for the recency gate to mean anything.
+            data = sorted(
+                data,
+                key=lambda d: parse_dividend_date(d.get("date")) or date.min,
+                reverse=True,
+            )
 
             dividends = []
             for d in data[:limit]:
