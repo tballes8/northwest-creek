@@ -149,7 +149,9 @@ const Portfolio: React.FC = () => {
 
     for (const pos of portfolio) {
       const divInfo = dividendMap[pos.ticker];
-      if (!divInfo?.has_dividends || !divInfo.annual_dividend) continue;
+      // Gate on actual payments, not on the projection — this export is payment
+      // history, which stays true even when the annualized figure is withheld.
+      if (!divInfo?.dividends?.length) continue;
       for (const d of (divInfo.dividends || [])) {
         const exDate = d.ex_dividend_date || '';
         const payDate = d.pay_date || '';
@@ -409,16 +411,24 @@ const Portfolio: React.FC = () => {
     const dayChange = totalPrevClose > 0 ? totalValue - totalPrevClose : 0;
     const dayChangePercent = totalPrevClose > 0 ? (dayChange / totalPrevClose) * 100 : 0;
 
+    // Only aggregate dividends we stand behind per-position. A "review" or
+    // "suspended" figure is withheld in the rows below, so folding it into the
+    // headline would make the total disagree with what's displayed.
+    const excludedDividendPositions = portfolio.filter(pos => {
+      const d = dividendMap[pos.ticker];
+      return d?.annual_dividend && d.dividend_status !== 'active';
+    }).length;
+
     const totalAnnualDividends = portfolio.reduce((sum, pos) => {
       const divInfo = dividendMap[pos.ticker];
-      if (divInfo?.annual_dividend) {
+      if (divInfo?.dividend_status === 'active' && divInfo.annual_dividend) {
         return sum + (divInfo.annual_dividend * pos.quantity);
       }
       return sum;
     }, 0);
     const portfolioDividendYield = totalValue > 0 ? (totalAnnualDividends / totalValue) * 100 : 0;
 
-    return { totalValue, totalCost, totalPL, totalPLPercent, dayChange, dayChangePercent, totalAnnualDividends, portfolioDividendYield };
+    return { totalValue, totalCost, totalPL, totalPLPercent, dayChange, dayChangePercent, totalAnnualDividends, portfolioDividendYield, excludedDividendPositions };
   };
 
   const handleAddPosition = async (e: React.FormEvent) => {
@@ -1121,6 +1131,12 @@ const Portfolio: React.FC = () => {
                       Projected annual income: <span className="text-green-600 dark:text-green-400 font-semibold">${totals.totalAnnualDividends.toFixed(2)}</span>
                       {' · '}Portfolio yield: <span className="text-green-600 dark:text-green-400 font-semibold">{totals.portfolioDividendYield.toFixed(2)}%</span>
                     </p>
+                    {/* Say so explicitly — a silently smaller headline reads as a bug. */}
+                    {totals.excludedDividendPositions > 0 && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                        {totals.excludedDividendPositions} position{totals.excludedDividendPositions === 1 ? '' : 's'} excluded — annualized figure flagged for review
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -1165,7 +1181,7 @@ const Portfolio: React.FC = () => {
                         <tr className="border-b dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                           <th className="text-left py-2 font-medium">Ticker</th>
                           <th className="text-right py-2 font-medium">Shares</th>
-                          <th className="text-right py-2 font-medium">Div/Share</th>
+                          <th className="text-right py-2 font-medium">Annual/Share</th>
                           <th className="text-right py-2 font-medium">Frequency</th>
                           <th className="text-right py-2 font-medium">Yield</th>
                           <th className="text-right py-2 font-medium">Annual Income</th>
@@ -1175,17 +1191,29 @@ const Portfolio: React.FC = () => {
                         {dividendPositions.map(pos => {
                           const divInfo = dividendMap[pos.ticker]!;
                           const income = (divInfo.annual_dividend || 0) * pos.quantity;
+                          // Figures for a flagged position are shown but muted, and are the
+                          // ones left out of the header total — green means "counted".
+                          const counted = divInfo.dividend_status === 'active';
+                          const flagTitle = counted
+                            ? undefined
+                            : 'Annualized from a single payment that looks unrepresentative — excluded from portfolio totals';
+                          const muted = 'text-gray-400 dark:text-gray-500';
                           return (
                             <React.Fragment key={pos.id}>
-                              <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                              <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors" title={flagTitle}>
                                 <td className="py-3 font-bold text-primary-600 dark:text-primary-400">{pos.ticker}</td>
                                 <td className="py-3 text-right text-gray-900 dark:text-white">{pos.quantity}</td>
-                                <td className="py-3 text-right text-gray-900 dark:text-white">${divInfo.annual_dividend?.toFixed(2)}</td>
+                                <td className={`py-3 text-right ${counted ? 'text-gray-900 dark:text-white' : muted}`}>
+                                  ${divInfo.annual_dividend?.toFixed(2)}
+                                </td>
                                 <td className="py-3 text-right text-gray-600 dark:text-gray-400">{divInfo.frequency_label || '—'}</td>
-                                <td className="py-3 text-right text-green-600 dark:text-green-400 font-medium">
+                                <td className={`py-3 text-right font-medium ${counted ? 'text-green-600 dark:text-green-400' : muted}`}>
                                   {divInfo.annual_yield != null ? `${divInfo.annual_yield.toFixed(2)}%` : '—'}
                                 </td>
-                                <td className="py-3 text-right text-green-600 dark:text-green-400 font-bold">${income.toFixed(2)}</td>
+                                <td className={`py-3 text-right font-bold ${counted ? 'text-green-600 dark:text-green-400' : muted}`}>
+                                  ${income.toFixed(2)}
+                                  {!counted && <span className="ml-1 text-[10px] font-normal uppercase tracking-wide">excl</span>}
+                                </td>
                               </tr>
                               {/* Dividend history for this position */}
                               {divInfo.dividends && divInfo.dividends.length > 0 && (
