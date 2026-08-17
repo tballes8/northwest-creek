@@ -23,9 +23,14 @@ def _safe_error(e: Exception) -> str:
 
 
 # --- Dividend annualization -------------------------------------------------
-# The two tunable knobs; everything else in evaluate_dividend() is deterministic.
+# The one tunable knob; everything else in evaluate_dividend() is deterministic.
 DIVIDEND_STALE_INTERVAL_MULTIPLIER = 1.5   # missed more than this many expected intervals => suspended
-DIVIDEND_MAX_PLAUSIBLE_YIELD = 50.0        # nothing legitimate sustains a 50% yield
+
+# Deliberately no upper bound on yield. Option-income ETFs (YieldMax and similar)
+# genuinely distribute at annualized rates well past 100% — they are income
+# vehicles, not growth vehicles, and their holders expect volatile payouts. A
+# "too high to be real" cap suppresses their normal behaviour, so recency is the
+# only gate: a payer that is still paying gets its number reported as-is.
 
 # Used for the staleness window when FMP reports no usable frequency.
 _DIVIDEND_FALLBACK_INTERVAL_DAYS = 365.0
@@ -71,12 +76,13 @@ def evaluate_dividend(
     against a ~137-day trip line — annualizing it against a collapsed price
     produced a 124% "yield" for a dividend that was suspended and never paid.
 
+    The rate is taken from the most recent payment (cash x frequency) and reported
+    as-is; there is deliberately no upper bound on the result (see module note).
+
     dividend_status:
       "none"      - no dividend records at all
-      "active"    - recent and annualizable; annual_yield is trustworthy
+      "active"    - recent and annualizable; annual_yield is populated
       "suspended" - newest payment is too old to still be in effect; no figures
-      "review"    - annualized, but the result is implausible (bad denominator,
-                    special dividend treated as recurring, bad upstream data)
       "unknown"   - recent history that cannot be annualized (no frequency,
                     one-time payment, or no price available)
     """
@@ -144,14 +150,7 @@ def evaluate_dividend(
         result["dividend_status"] = "unknown"
         return result
 
-    computed = round(result["annual_dividend"] / price * 100, 2)
-    if computed > DIVIDEND_MAX_PLAUSIBLE_YIELD:
-        # Backstop for the failure modes recency can't catch. Hand back a flag
-        # rather than a clean-looking number.
-        result["dividend_status"] = "review"
-        return result
-
-    result["annual_yield"] = computed
+    result["annual_yield"] = round(result["annual_dividend"] / price * 100, 2)
     result["dividend_status"] = "active"
     return result
 

@@ -55,10 +55,10 @@ export interface DividendRecord {
   distribution_type: string | null;
 }
 
-// "active" is the only status whose annual_yield can be shown as income.
-// "suspended" = latest payment is too old to still be in effect; "review" =
-// annualized to an implausible figure; "unknown" = history that can't be annualized.
-export type DividendStatus = 'active' | 'suspended' | 'review' | 'unknown' | 'none';
+// "suspended" = latest payment is too old to still be in effect (no figures);
+// "unknown" = history that can't be annualized. High yields are not filtered —
+// option-income ETFs legitimately run past 100%.
+export type DividendStatus = 'active' | 'suspended' | 'unknown' | 'none';
 
 export interface DividendInfo {
   ticker: string;

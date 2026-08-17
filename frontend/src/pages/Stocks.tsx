@@ -95,7 +95,7 @@ interface DividendInfo {
   annual_dividend: number | null;
   annual_yield: number | null;
   frequency_label: string | null;
-  dividend_status: 'active' | 'suspended' | 'review' | 'unknown' | 'none';
+  dividend_status: 'active' | 'suspended' | 'unknown' | 'none';
   last_ex_date: string | null;
 }
 
@@ -2498,17 +2498,6 @@ const Stocks: React.FC = () => {
                             ? ` ${dividendInfo.frequency_label.toLowerCase()} `
                             : ' '}
                           schedule. Yield is withheld; the payment history below is historical.
-                        </p>
-                      </div>
-                    ) : dividendInfo.dividend_status === 'review' ? (
-                      <div className="rounded-md border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3">
-                        <div className="flex items-center gap-2 text-sm font-semibold text-amber-700 dark:text-amber-300">
-                          ⚠ Yield Unavailable
-                        </div>
-                        <p className="text-xs text-amber-700/90 dark:text-amber-300/90 mt-1">
-                          Annualizing the last payment gives an implausibly high yield against the current price — usually a
-                          one-off special dividend, a collapsed share price, or bad source data rather than real income.
-                          The figure is withheld; the payment history below is unchanged.
                         </p>
                       </div>
                     ) : null}
