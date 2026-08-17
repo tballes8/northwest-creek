@@ -900,7 +900,7 @@ async def get_dividends(ticker: str):
 
         price = None
         if not isinstance(quote_result, Exception) and quote_result:
-            price = _safe_float(quote_result.get("price"))
+            price = quote_result.get("price")
 
         # Annualize the latest payment into a yield — gated on recency, so a
         # lapsed dividend reports as suspended instead of as a huge yield

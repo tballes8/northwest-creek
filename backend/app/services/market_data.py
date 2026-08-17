@@ -56,7 +56,7 @@ def parse_dividend_date(value: Any) -> Optional[date]:
 
 def evaluate_dividend(
     dividends: List[Dict[str, Any]],
-    price: Optional[float],
+    price: Any = None,
     *,
     today: Optional[date] = None,
 ) -> Dict[str, Any]:
@@ -116,6 +116,13 @@ def evaluate_dividend(
         cash = float(latest["cash_amount"]) if latest.get("cash_amount") is not None else None
     except (TypeError, ValueError):
         cash = None
+
+    # Coerce price here rather than at each call site — callers hand us whatever
+    # the quote payload held (str, Decimal, None).
+    try:
+        price = float(price) if price is not None else None
+    except (TypeError, ValueError):
+        price = None
 
     # Recency gate — the real fix. Refuse to quote a rate that lapsed.
     if last_ex is not None:
