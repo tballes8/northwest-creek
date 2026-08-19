@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Numeric, Date, Index, Integer, UniqueConstraint
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Numeric, Date, Index, Integer, UniqueConstraint, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -71,7 +71,7 @@ class Portfolio(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     ticker = Column(String(10), nullable=False)
-    quantity = Column(Integer, default=0, nullable=False)
+    quantity = Column(Numeric(precision=18, scale=8), nullable=False)
     buy_price = Column(Numeric(precision=18, scale=4), nullable=False)
     buy_date = Column(Date, nullable=False)
     notes = Column(Text, nullable=True)
@@ -80,6 +80,96 @@ class Portfolio(Base):
     
     # Relationship to user
     user = relationship("User", back_populates="portfolio")
+
+
+class PortfolioTransaction(Base):
+    """Append-only buy/sell ledger. Source of truth for realized P/L.
+
+    NOTHING IS EVER DELETED FROM THIS TABLE. A mistyped sale is corrected by
+    appending a REVERSAL row that carries the negated realized_pl, so the
+    history records both the error and the correction.
+
+    `portfolio` remains a materialized projection of *current* holdings
+    (quantity + average cost). Every mutation writes one row here AND updates
+    the projection in the same transaction, which keeps this invariant true:
+
+        remaining_qty   = SUM(BUY.qty) - SUM(SELL.qty) + SUM(REVERSAL.qty)
+        remaining_basis = SUM(BUY.qty * BUY.price)
+                          - SUM(SELL.qty * SELL.cost_basis_per_share)
+                          + SUM(REVERSAL.qty * REVERSAL.cost_basis_per_share)
+
+    ...counting forward from the most recent ADJUST checkpoint for the ticker.
+
+    Deliberately NOT FK'd to portfolio.id: the holdings row is deleted on a
+    full exit, and a later re-buy of the same ticker gets a new position id.
+    The durable identity of a holding is (user_id, ticker).
+    """
+    __tablename__ = "portfolio_transactions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    ticker = Column(String(10), nullable=False)
+
+    # BUY | SELL | ADJUST | REVERSAL. String + CHECK rather than a PG enum so
+    # adding DIVIDEND/SPLIT later is a CHECK swap, not an ALTER TYPE migration.
+    transaction_type = Column(String(10), nullable=False)
+
+    # Always a positive magnitude; direction lives in transaction_type, so a
+    # "negative BUY" can never exist. ADJUST is a restatement checkpoint and
+    # may be 0 (position removed).
+    quantity = Column(Numeric(precision=18, scale=8), nullable=False)
+    price = Column(Numeric(precision=18, scale=4), nullable=False)
+    transaction_date = Column(Date, nullable=False)
+
+    # SELL/REVERSAL only: the projection's average cost at the moment of sale.
+    # Freezes realized P/L against future rounding changes, makes the projection
+    # exactly recomputable, and is the forward-compat seam for FIFO.
+    cost_basis_per_share = Column(Numeric(precision=18, scale=4), nullable=True)
+
+    # SELL/REVERSAL only. Stored so the realized aggregate is a plain SUM().
+    # A REVERSAL carries the negative of the sale it voids, so SUM() nets to
+    # zero with no special-casing at any call site.
+    realized_pl = Column(Numeric(precision=18, scale=4), nullable=True)
+
+    # REVERSAL only: the SELL row this voids. Self-referential; nothing is ever
+    # deleted from this table, so no ondelete behavior is required. The unique
+    # constraint is what prevents the same sale being voided twice.
+    reverses_transaction_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey('portfolio_transactions.id'),
+        nullable=True,
+        unique=True,
+    )
+
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # No updated_at — this table is append-only.
+
+    __table_args__ = (
+        CheckConstraint(
+            "transaction_type IN ('BUY', 'SELL', 'ADJUST', 'REVERSAL')",
+            name='ck_portfolio_tx_type',
+        ),
+        CheckConstraint(
+            "(transaction_type IN ('BUY', 'SELL', 'REVERSAL') AND quantity > 0) "
+            "OR (transaction_type = 'ADJUST' AND quantity >= 0)",
+            name='ck_portfolio_tx_quantity',
+        ),
+        CheckConstraint('price > 0', name='ck_portfolio_tx_price'),
+        # Guards the realized aggregate: a SELL with a NULL realized_pl would
+        # drop silently out of SUM() and understate the user's gains.
+        CheckConstraint(
+            "transaction_type NOT IN ('SELL', 'REVERSAL') "
+            "OR (cost_basis_per_share IS NOT NULL AND realized_pl IS NOT NULL)",
+            name='ck_portfolio_tx_sell_basis',
+        ),
+        CheckConstraint(
+            "(transaction_type = 'REVERSAL') = (reverses_transaction_id IS NOT NULL)",
+            name='ck_portfolio_tx_reversal_link',
+        ),
+        Index('idx_portfolio_tx_user_date', 'user_id', 'transaction_date'),
+        Index('idx_portfolio_tx_user_ticker', 'user_id', 'ticker'),
+    )
 
 
 class PriceAlert(Base):

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { PortfolioPosition } from '../types';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL 
   ? `${process.env.REACT_APP_API_URL}/api/v1`
@@ -70,6 +71,65 @@ export const watchlistAPI = {
 };
 
 // Portfolio API
+export type TransactionType = 'BUY' | 'SELL' | 'ADJUST' | 'REVERSAL';
+
+export interface SellPositionPayload {
+  quantity: number;
+  sell_price: number;
+  sell_date: string;          // YYYY-MM-DD
+  notes?: string;
+}
+
+export interface SellPositionResponse {
+  transaction_id: string;
+  ticker: string;
+  quantity_sold: number;
+  sell_price: number;
+  sell_date: string;
+  cost_basis_per_share: number;
+  realized_pl: number;
+  realized_pl_percent: number;
+  proceeds: number;
+  remaining_quantity: number;
+  position_closed: boolean;
+  // Null when the sale closed the position and its holdings row was removed.
+  position: PortfolioPosition | null;
+}
+
+export interface VoidTransactionResponse {
+  reversal_transaction_id: string;
+  voided_transaction_id: string;
+  ticker: string;
+  quantity_restored: number;
+  realized_pl_removed: number;
+  position_reopened: boolean;
+  position: PortfolioPosition | null;
+}
+
+export interface PortfolioTransaction {
+  id: string;
+  ticker: string;
+  transaction_type: TransactionType;
+  quantity: number;
+  price: number;
+  transaction_date: string;   // YYYY-MM-DD
+  amount: number;
+  cost_basis_per_share: number | null;
+  realized_pl: number | null;         // null on buys and adjustments
+  realized_pl_percent: number | null;
+  reverses_transaction_id: string | null;
+  is_voided: boolean;
+  notes?: string;
+  created_at: string;
+}
+
+export interface PortfolioTransactionsResponse {
+  transactions: PortfolioTransaction[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export const portfolioAPI = {
   getAll: () =>
     axiosInstance.get('/portfolio'),
@@ -80,8 +140,17 @@ export const portfolioAPI = {
   remove: (id: string) =>
     axiosInstance.delete(`/portfolio/positions/${id}`),
 
-  update: (id: string, data: any) =>
+  update: (id: string, data: { quantity?: number; buy_price?: number; buy_date?: string; notes?: string }) =>
     axiosInstance.put(`/portfolio/positions/${id}`, data),
+
+  sell: (id: string, data: SellPositionPayload) =>
+    axiosInstance.post<SellPositionResponse>(`/portfolio/positions/${id}/sell`, data),
+
+  voidTransaction: (transactionId: string) =>
+    axiosInstance.post<VoidTransactionResponse>(`/portfolio/transactions/${transactionId}/void`),
+
+  getTransactions: (params?: { ticker?: string; transaction_type?: TransactionType; limit?: number; offset?: number }) =>
+    axiosInstance.get<PortfolioTransactionsResponse>('/portfolio/transactions', { params }),
 
   analyze: () =>
     axiosInstance.post('/portfolio/analyze'),

@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { authAPI, portfolioAPI, stocksAPI } from '../services/api';
+import { authAPI, portfolioAPI, stocksAPI, SellPositionResponse } from '../services/api';
+import SellPositionModal from '../components/SellPositionModal';
+import TransactionHistoryModal from '../components/TransactionHistoryModal';
 import { User } from '../types';
 import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
@@ -27,6 +29,25 @@ interface PortfolioPosition {
   created_at: string;
 }
 
+// Single source of truth for a position's derived value figures. Previously
+// duplicated in the WebSocket tick handler, the 30s refresh, and loadData, all
+// of which had to agree. The buy_price guard matters: the backend enforces
+// buy_price > 0, but an unguarded divide would surface as Infinity in the UI.
+const deriveValues = (
+  pos: { quantity: number; buy_price: number },
+  price?: number
+): Partial<PortfolioPosition> => {
+  if (!price) return {};
+  const totalValue = price * pos.quantity;
+  const cost = pos.buy_price * pos.quantity;
+  return {
+    current_price: price,
+    total_value: totalValue,
+    profit_loss: totalValue - cost,
+    profit_loss_percent: cost > 0 ? ((totalValue - cost) / cost) * 100 : 0,
+  };
+};
+
 const Portfolio: React.FC = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
@@ -46,6 +67,12 @@ const Portfolio: React.FC = () => {
   const { prices, isConnected, subscribe, unsubscribe } = useLivePriceContext();
   const [priceFlash, setPriceFlash] = useState<Record<string, 'green' | 'red' | null>>({});
   const [editingPosition, setEditingPosition] = useState<string | null>(null);
+  // Store the id, not the row: the WebSocket tick and the 30s refresh both
+  // replace objects in `portfolio`, so a snapshot would freeze the modal's
+  // basis and price and make its realized-P/L preview drift.
+  const [sellPositionId, setSellPositionId] = useState<string | null>(null);
+  const [realizedPL, setRealizedPL] = useState(0);
+  const [showTransactionsModal, setShowTransactionsModal] = useState(false);
   const [editQuantity, setEditQuantity] = useState('');
   const [editBuyPrice, setEditBuyPrice] = useState('');
   const [editNotes, setEditNotes] = useState('');
@@ -218,18 +245,8 @@ const Portfolio: React.FC = () => {
           }, 600);
           
           previousPricesRef.current.set(pos.ticker, livePrice.price);
-          
-          const totalValue = livePrice.price * pos.quantity;
-          const profitLoss = totalValue - (pos.buy_price * pos.quantity);
-          const profitLossPercent = ((livePrice.price - pos.buy_price) / pos.buy_price) * 100;
-          
-          return {
-            ...pos,
-            current_price: livePrice.price,
-            total_value: totalValue,
-            profit_loss: profitLoss,
-            profit_loss_percent: profitLossPercent
-          };
+
+          return { ...pos, ...deriveValues(pos, livePrice.price) };
         }
         
         return pos;
@@ -286,10 +303,7 @@ const Portfolio: React.FC = () => {
             setPriceFlash(pf => ({ ...pf, [pos.ticker]: isUp ? 'green' : 'red' }));
             setTimeout(() => setPriceFlash(pf => ({ ...pf, [pos.ticker]: null })), 600);
 
-            const totalValue = freshPrice * pos.quantity;
-            const profitLoss = totalValue - (pos.buy_price * pos.quantity);
-            const profitLossPercent = ((freshPrice - pos.buy_price) / pos.buy_price) * 100;
-            return { ...pos, current_price: freshPrice, total_value: totalValue, profit_loss: profitLoss, profit_loss_percent: profitLossPercent };
+            return { ...pos, ...deriveValues(pos, freshPrice) };
           }
           return pos;
         }));
@@ -309,6 +323,10 @@ const Portfolio: React.FC = () => {
 
       const portfolioResponse = await portfolioAPI.getAll();
       const positions = portfolioResponse.data.positions || [];
+      // Realized P/L is server-side only: it comes from the ledger and cannot be
+      // derived from open positions, so it must not go through calculateTotals.
+      // `?? 0` keeps this safe if the backend field is not deployed yet.
+      setRealizedPL(portfolioResponse.data.total_realized_pl ?? 0);
       
       if (positions.length > 0) {
         try {
@@ -353,16 +371,7 @@ const Portfolio: React.FC = () => {
           const updatedPositions = positions.map((pos: PortfolioPosition) => {
             const freshPrice = freshPrices[pos.ticker];
             if (freshPrice) {
-              const totalValue = freshPrice * pos.quantity;
-              const profitLoss = totalValue - (pos.buy_price * pos.quantity);
-              const profitLossPercent = ((freshPrice - pos.buy_price) / pos.buy_price) * 100;
-              return {
-                ...pos,
-                current_price: freshPrice,
-                total_value: totalValue,
-                profit_loss: profitLoss,
-                profit_loss_percent: profitLossPercent,
-              };
+              return { ...pos, ...deriveValues(pos, freshPrice) };
             }
             return pos;
           });
@@ -467,6 +476,37 @@ const Portfolio: React.FC = () => {
     }
   };
 
+  // Patch state from the server's response rather than calling loadData():
+  // a sale needs no new sector/dividend/price hydration, and loadData would
+  // spend 3 round trips and overwrite every row's live price, discarding the
+  // WebSocket deltas accumulated since the last fetch.
+  const handleSold = (positionId: string, result: SellPositionResponse) => {
+    if (result.position_closed) {
+      setPortfolio(prev => prev.filter(pos => pos.id !== positionId));
+    } else {
+      setPortfolio(prev => prev.map(pos => {
+        if (pos.id !== positionId) return pos;
+        // Deliberately keep the row's existing current_price: the price on
+        // result.position comes from the batch-quote source that loadData
+        // overrides with fresh intraday data, so spreading it in would put a
+        // stale price back on this one row.
+        const next = {
+          ...pos,
+          quantity: result.remaining_quantity,
+          buy_price: result.position?.buy_price ?? pos.buy_price,
+        };
+        // Without a price, deriveValues is a no-op, which would leave
+        // total_value/profit_loss sitting at figures computed for the
+        // pre-sale quantity. Clear them instead of showing stale numbers.
+        return pos.current_price
+          ? { ...next, ...deriveValues(next, pos.current_price) }
+          : { ...next, total_value: undefined, profit_loss: undefined, profit_loss_percent: undefined };
+      }));
+    }
+    setRealizedPL(prev => prev + result.realized_pl);
+    setSellPositionId(null);
+  };
+
   const handleRemovePosition = async (id: string) => {
     if (!window.confirm('Remove this position from your portfolio?')) {
       return;
@@ -520,7 +560,7 @@ const Portfolio: React.FC = () => {
       setEditNotes('');
     } catch (err: any) {
       console.error('Update position error:', err);
-      alert('Failed to update position. Please try again.');
+      setError(err.response?.data?.detail || 'Failed to update position. Please try again.');
     }
   };  
 
@@ -622,6 +662,12 @@ const Portfolio: React.FC = () => {
     return result;
   }, [portfolio, sectorFilter, sortColumn, sortDirection, prices, prevCloseMap, getSector]);
 
+  // Re-derived every render so the modal always sees current price and basis,
+  // and self-closes if the row disappears underneath it.
+  const sellPosition = sellPositionId
+    ? portfolio.find(pos => pos.id === sellPositionId) ?? null
+    : null;
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
@@ -663,19 +709,34 @@ const Portfolio: React.FC = () => {
             <div className="text-2xl font-bold text-gray-900 dark:text-white">${totals.totalValue.toFixed(2)}</div>
           </div>
           <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total P&L</div>
+            {/* Relabelled from "Total P&L": once a realized figure sits beside
+                it, calling the open-position figure "total" is misleading. The
+                percentage moved here as a subline so no information was lost. */}
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Unrealized P&L</div>
             <div className={`text-2xl font-bold ${
               totals.totalPL >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
             }`}>
               {totals.totalPL >= 0 ? '+' : ''}${totals.totalPL.toFixed(2)}
             </div>
-          </div>
-          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total P&L %</div>
-            <div className={`text-2xl font-bold ${
+            <div className={`text-xs mt-0.5 ${
               totals.totalPLPercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
             }`}>
               {totals.totalPLPercent >= 0 ? '+' : ''}{totals.totalPLPercent.toFixed(2)}%
+            </div>
+          </div>
+          <div
+            className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500 cursor-pointer hover:ring-2 hover:ring-primary-500 transition-all"
+            onClick={() => setShowTransactionsModal(true)}
+            title="Click to view transaction history"
+          >
+            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Realized P&L</div>
+            <div className={`text-2xl font-bold ${
+              realizedPL >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+            }`}>
+              {realizedPL >= 0 ? '+' : ''}${realizedPL.toFixed(2)}
+            </div>
+            <div className="text-xs mt-0.5 text-gray-500 dark:text-gray-400">
+              Closed trades &middot; <span className="text-primary-500">View history</span>
             </div>
           </div>
           <div
@@ -858,6 +919,7 @@ const Portfolio: React.FC = () => {
           </div>
         ) : (
           <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 border dark:border-gray-500 overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
@@ -1076,6 +1138,18 @@ const Portfolio: React.FC = () => {
                         </div>
                       ) : (
                         <div className="flex gap-2 justify-end">
+                          {/* Sell first, so the button that records a real trade
+                              is not adjacent to the one that discards the row.
+                              `refreshing` guard: loadData sets portfolio from a
+                              pre-sell snapshot, which could briefly resurrect a
+                              sold row if the two overlap. */}
+                          <button
+                            onClick={() => setSellPositionId(position.id)}
+                            disabled={refreshing || position.quantity <= 0}
+                            className="text-primary-600 hover:text-primary-900 dark:text-primary-400 dark:hover:text-primary-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            Sell
+                          </button>
                           <button
                             onClick={() => handleStartEdit(position)}
                             className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
@@ -1095,6 +1169,7 @@ const Portfolio: React.FC = () => {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>
@@ -1107,6 +1182,23 @@ const Portfolio: React.FC = () => {
           displayMode="modal"
         />
       )}
+      {sellPosition && (
+        <SellPositionModal
+          position={sellPosition}
+          livePrice={prices.get(sellPosition.ticker)?.price ?? sellPosition.current_price}
+          onClose={() => setSellPositionId(null)}
+          onSold={(result) => handleSold(sellPosition.id, result)}
+        />
+      )}
+
+      {showTransactionsModal && (
+        <TransactionHistoryModal
+          totalRealizedPL={realizedPL}
+          onClose={() => setShowTransactionsModal(false)}
+          onVoided={loadData}
+        />
+      )}
+
       {/* Dividend Details Modal */}
       {showDividendModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
