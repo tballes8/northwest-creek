@@ -164,7 +164,7 @@ async def add_position(
         avg_cost = (old_total + new_total) / combined_qty
 
         existing.quantity = combined_qty
-        existing.buy_price = round(avg_cost, 2)
+        existing.buy_price = round(avg_cost, 4)
         # Keep the earlier buy_date
         if position_data.buy_date < existing.buy_date:
             existing.buy_date = position_data.buy_date

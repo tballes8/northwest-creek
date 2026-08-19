@@ -72,7 +72,7 @@ class Portfolio(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     ticker = Column(String(10), nullable=False)
     quantity = Column(Integer, default=0, nullable=False)
-    buy_price = Column(Numeric(precision=18, scale=2), nullable=False)
+    buy_price = Column(Numeric(precision=18, scale=4), nullable=False)
     buy_date = Column(Date, nullable=False)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

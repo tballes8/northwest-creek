@@ -485,7 +485,7 @@ const Portfolio: React.FC = () => {
   const handleStartEdit = (position: PortfolioPosition) => {
     setEditingPosition(position.id);
     setEditQuantity(position.quantity.toString());
-    setEditBuyPrice(position.buy_price.toFixed(2));
+    setEditBuyPrice(position.buy_price.toString());
     setEditNotes(position.notes || '');
   };
 
@@ -774,8 +774,8 @@ const Portfolio: React.FC = () => {
                     type="number"
                     value={newBuyPrice}
                     onChange={(e) => setNewBuyPrice(e.target.value)}
-                    placeholder="150.00"
-                    step="0.01"
+                    placeholder="150.0000"
+                    step="0.0001"
                     min="0"
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     required
@@ -940,7 +940,7 @@ const Portfolio: React.FC = () => {
                           type="number"
                           value={editBuyPrice}
                           onChange={(e) => setEditBuyPrice(e.target.value)}
-                          step="0.01"
+                          step="0.0001"
                           min="0"
                           className="w-24 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-right"
                         />
