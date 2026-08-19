@@ -5,4 +5,7 @@ nixPkgs = ["python312", "postgresql"]
 cmds = ["python -m pip install --upgrade pip", "python -m pip install -r requirements.txt"]
 
 [start]
-cmd = "python -m alembic upgrade head && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+# migration_runner.py wraps `alembic upgrade head` in a wait_for_db() retry loop
+# (30 attempts / 2s) so a deploy landing during a Postgres restart — e.g. one of
+# Railway's automatic CVE patches — waits instead of hard-failing the migration.
+cmd = "python migration_runner.py && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT"

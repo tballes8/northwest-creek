@@ -5,11 +5,11 @@ Fetches all stock snapshots from FMP API and stores in database
 import asyncio
 import os
 from sqlalchemy import delete, insert, select, func
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker
 from datetime import date
 import httpx
 
+from app.db.engine import make_async_engine
 from app.db.models import DailyStockSnapshot
 from app.db.models import WaitlistSignup
 
@@ -39,15 +39,9 @@ async def fetch_and_store_snapshots():
         masked_url = database_url.split('@')[1] if '@' in database_url else database_url
         print(f"🔍 Connecting to: {masked_url}")
 
-    # Convert postgresql:// to postgresql+asyncpg://
-    if database_url.startswith("postgresql://"):
-        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://")
-
     # Create database engine and session for this script
-    engine = create_async_engine(database_url, echo=False)
-    async_session_factory = sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
+    engine = make_async_engine(database_url)
+    async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
     try:
         # Step 1: Get list of all tradable stocks from FMP
@@ -236,13 +230,8 @@ async def fetch_waitlist_report():
         print("❌ ERROR: No DATABASE_URL found")
         return
 
-    if database_url.startswith("postgresql://"):
-        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://")
-
-    engine = create_async_engine(database_url, echo=False)
-    async_session_factory = sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
+    engine = make_async_engine(database_url)
+    async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
     try:
         async with async_session_factory() as session:

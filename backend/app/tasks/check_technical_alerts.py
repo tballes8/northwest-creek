@@ -7,9 +7,9 @@ import asyncio
 import os
 from datetime import datetime, timezone
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.db.engine import make_async_engine
 from app.services.technical_alert_checker import technical_alert_checker
 from app.services.fmp_client import init_fmp_client, close_fmp_client
 
@@ -27,14 +27,8 @@ async def run_check():
         print("❌ ERROR: MASSIVE_API_KEY not set")
         return
 
-    # Convert for asyncpg
-    if database_url.startswith("postgresql://"):
-        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://")
-
-    engine = create_async_engine(database_url, echo=False)
-    async_session_factory = sessionmaker(
-        engine, class_=AsyncSession, expire_on_commit=False
-    )
+    engine = make_async_engine(database_url)
+    async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
     # Initialize FMP HTTP client
     await init_fmp_client()
