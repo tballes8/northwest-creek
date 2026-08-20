@@ -220,6 +220,9 @@ interface ScreenerPreset {
 interface SavedScreenItem {
   id: string;
   name: string;
+  // 'screener' → criteria is the screener filter payload (Screener tab).
+  // 'search'   → criteria is { query } from the Stock Search keyword box.
+  kind?: 'screener' | 'search';
   criteria: Record<string, any>;
   created_at: string;
 }
@@ -337,6 +340,14 @@ const Stocks: React.FC = () => {
   const [searchMode, setSearchMode] = useState<'ticker' | 'keywords'>('ticker'); // New state for search mode
   const [keywordResults, setKeywordResults] = useState<any[]>([]); // Results from keyword search
   const [showKeywordResults, setShowKeywordResults] = useState(false);
+  // Saved keyword searches — same backing store as the Screener's saved screens (kind: 'search'),
+  // so they draw on the same saved_screens tier allowance.
+  const [savedSearches, setSavedSearches] = useState<SavedScreenItem[]>([]);
+  const [showSaveSearchForm, setShowSaveSearchForm] = useState(false);
+  const [saveSearchName, setSaveSearchName] = useState('');
+  const [savingSearch, setSavingSearch] = useState(false);
+  const [saveSearchError, setSaveSearchError] = useState('');
+  const savedSearchesLoadedRef = useRef(false);
   const [quote, setQuote] = useState<StockQuote | null>(null);
   const [company, setCompany] = useState<CompanyInfo | null>(null);
   const [historical, setHistorical] = useState<HistoricalPrice[]>([]);
@@ -505,6 +516,43 @@ const Stocks: React.FC = () => {
       setSuggestionsLoading(false);
     }
   }, []);
+
+  const applySavedSearch = (item: SavedScreenItem) => {
+    const query: string = item.criteria?.query || '';
+    if (!query) return;
+    // A debounce timer from earlier typing would otherwise re-run the stale query on top of this one.
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setSearchMode('keywords');
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setSearchInput(query);
+    searchByKeywords(query);
+  };
+
+  const saveCurrentSearch = async () => {
+    const query = searchInput.trim();
+    const name = saveSearchName.trim() || query;
+    if (!query || !name) return;
+    setSavingSearch(true);
+    setSaveSearchError('');
+    try {
+      const r = await screenerAPI.saveScreen({ name, criteria: { query }, kind: 'search' });
+      setSavedSearches(prev => [r.data, ...prev]);
+      setSaveSearchName('');
+      setShowSaveSearchForm(false);
+    } catch (e: any) {
+      setSaveSearchError(e.response?.data?.detail || 'Failed to save search');
+    } finally {
+      setSavingSearch(false);
+    }
+  };
+
+  const deleteSavedSearch = async (id: string) => {
+    try {
+      await screenerAPI.deleteSavedScreen(id);
+      setSavedSearches(prev => prev.filter(s => s.id !== id));
+    } catch {}
+  };
 
   const handleSearchInputChange = (value: string) => {
     setSearchInput(value);
@@ -1440,6 +1488,13 @@ const Stocks: React.FC = () => {
     }
   }, [activeTab]);
 
+  useEffect(() => {
+    if (activeTab === 'search' && searchMode === 'keywords' && !savedSearchesLoadedRef.current) {
+      savedSearchesLoadedRef.current = true;
+      screenerAPI.getSavedScreens('search').then(r => setSavedSearches(r.data.screens)).catch(() => {});
+    }
+  }, [activeTab, searchMode]);
+
   const runScreener = async (
     page: number,
     form: ScreenerFormState,
@@ -1587,6 +1642,12 @@ const Stocks: React.FC = () => {
 
   const screenerInputCls = "w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500";
 
+  // Saving screens/searches is an Active+ feature (saved_screens limit is 0 below it).
+  const canSaveScreens = user?.subscription_tier === 'active' || user?.subscription_tier === 'professional';
+  // Derived, not state: the chip lights up whenever the box holds that saved query.
+  const activeSavedSearchId =
+    savedSearches.find(s => (s.criteria?.query || '') === searchInput.trim())?.id ?? null;
+
   // Recent bankruptcy/receivership 8-K (Item 1.03) on record — suppresses going-concern valuation.
   const bankruptcy = ownershipData?.bankruptcy ?? null;
   const inBankruptcy = !!bankruptcy?.detected;
@@ -1701,6 +1762,99 @@ const Stocks: React.FC = () => {
                   </button>
                 ))}
               </div>
+
+              {savedSearches.length > 0 && (
+                <div className="flex flex-wrap gap-2 items-center mt-3">
+                  <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">Saved:</span>
+                  {savedSearches.map(s => {
+                    const isActive = activeSavedSearchId === s.id;
+                    return (
+                      <div
+                        key={s.id}
+                        className={`flex items-center gap-0.5 pl-3 pr-1 py-1.5 border rounded-full transition-colors ${
+                          isActive
+                            ? 'bg-teal-600 border-teal-600'
+                            : 'bg-gray-100 dark:bg-gray-700 border-transparent'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => applySavedSearch(s)}
+                          title={`Search "${s.criteria?.query || ''}"`}
+                          className={`text-xs transition-colors ${
+                            isActive
+                              ? 'text-white'
+                              : 'text-gray-700 dark:text-gray-300 hover:text-teal-700 dark:hover:text-teal-300'
+                          }`}
+                        >
+                          {s.name}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteSavedSearch(s.id)}
+                          className={`ml-1.5 transition-colors text-base leading-none pb-0.5 ${
+                            isActive ? 'text-teal-200 hover:text-white' : 'text-gray-400 hover:text-red-500'
+                          }`}
+                          title="Delete saved search"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {canSaveScreens && searchInput.trim().length >= 2 && !activeSavedSearchId && (
+                <div className="mt-3">
+                  {!showSaveSearchForm ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSaveSearchForm(true);
+                        setSaveSearchName(searchInput.trim());
+                        setSaveSearchError('');
+                      }}
+                      className="text-xs font-medium text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 transition-colors"
+                    >
+                      + Save current search
+                    </button>
+                  ) : (
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <input
+                        type="text"
+                        placeholder="Search name..."
+                        value={saveSearchName}
+                        onChange={e => setSaveSearchName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { e.preventDefault(); saveCurrentSearch(); }
+                          if (e.key === 'Escape') { setShowSaveSearchForm(false); setSaveSearchError(''); }
+                        }}
+                        className="px-3 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500 w-48"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={saveCurrentSearch}
+                        disabled={savingSearch || !saveSearchName.trim()}
+                        className="px-3 py-1.5 text-xs bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors"
+                      >
+                        {savingSearch ? 'Saving…' : 'Save'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowSaveSearchForm(false); setSaveSearchName(''); setSaveSearchError(''); }}
+                        className="px-3 py-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      {saveSearchError && (
+                        <span className="text-xs text-red-600 dark:text-red-400">{saveSearchError}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

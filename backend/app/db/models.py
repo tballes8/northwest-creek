@@ -370,6 +370,10 @@ class SavedScreen(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(100), nullable=False)
+    # "screener" → criteria is the screener filter payload.
+    # "search"   → criteria is {"query": "<keyword search text>"} from Stock Search.
+    # Both kinds share this table and the single "saved_screens" tier limit.
+    kind = Column(String(20), nullable=False, server_default="screener")
     criteria = Column(JSONB, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

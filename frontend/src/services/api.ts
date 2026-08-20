@@ -373,9 +373,11 @@ export const screenerAPI = {
     axiosInstance.get('/screener/presets'),
   getFilterOptions: () =>
     axiosInstance.get('/screener/filter-options'),
-  getSavedScreens: () =>
-    axiosInstance.get('/screener/saved'),
-  saveScreen: (data: { name: string; criteria: object }) =>
+  // kind: 'screener' = screener filter payload, 'search' = Stock Search keyword query.
+  // Both share the saved_screens table and the single saved_screens tier limit.
+  getSavedScreens: (kind: 'screener' | 'search' = 'screener') =>
+    axiosInstance.get('/screener/saved', { params: { kind } }),
+  saveScreen: (data: { name: string; criteria: object; kind?: 'screener' | 'search' }) =>
     axiosInstance.post('/screener/saved', data),
   deleteSavedScreen: (id: string) =>
     axiosInstance.delete(`/screener/saved/${id}`),

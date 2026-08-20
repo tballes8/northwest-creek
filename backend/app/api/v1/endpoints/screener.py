@@ -1,5 +1,5 @@
 import math
-from typing import Optional
+from typing import Literal, Optional
 from datetime import timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -501,9 +501,27 @@ async def get_presets():
     return {"presets": _PRESETS}
 
 
+SavedKind = Literal["screener", "search"]
+
+
 class SaveScreenBody(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     criteria: dict
+    # "screener" = screener filter payload; "search" = Stock Search keyword query.
+    kind: SavedKind = "screener"
+
+
+def _serialize_saved(s: SavedScreen) -> dict:
+    ts = s.created_at
+    if ts and ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    return {
+        "id": str(s.id),
+        "name": s.name,
+        "kind": s.kind or "screener",
+        "criteria": s.criteria,
+        "created_at": ts.isoformat() if ts else None,
+    }
 
 
 @router.post("/saved", status_code=201)
@@ -512,59 +530,62 @@ async def save_screen(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if body.kind == "search":
+        query = (body.criteria or {}).get("query")
+        if not isinstance(query, str) or not query.strip():
+            raise HTTPException(status_code=422, detail="criteria.query is required for a saved search")
+        if len(query) > 200:
+            raise HTTPException(status_code=422, detail="Search query is too long (200 characters max)")
+        body.criteria = {"query": query.strip()}
+
     tier = current_user.subscription_tier or "beginner"
     limit = get_tier_limit(tier, "saved_screens")
+    # Screens and searches draw from one shared allowance, so the count is unfiltered by kind.
     count_result = await db.execute(
         select(func.count(SavedScreen.id)).where(SavedScreen.user_id == current_user.id)
     )
     count = count_result.scalar() or 0
     if count >= limit:
+        noun = "search" if body.kind == "search" else "screen"
         raise HTTPException(
             status_code=403,
-            detail=f"Saved screen limit reached ({limit} for {tier} plan). Upgrade to save more screens.",
+            detail=(
+                f"Saved screen limit reached ({limit} for {tier} plan) — saved screens and "
+                f"searches share this limit. Upgrade to save more than {limit}."
+                if limit
+                else f"Saving a {noun} is not available on the {tier} plan. Upgrade to save screens and searches."
+            ),
         )
     screen = SavedScreen(
         user_id=current_user.id,
         name=body.name.strip(),
+        kind=body.kind,
         criteria=body.criteria,
     )
     db.add(screen)
     await db.commit()
     await db.refresh(screen)
-    ts = screen.created_at
-    if ts and ts.tzinfo is None:
-        ts = ts.replace(tzinfo=timezone.utc)
-    return {
-        "id": str(screen.id),
-        "name": screen.name,
-        "criteria": screen.criteria,
-        "created_at": ts.isoformat() if ts else None,
-    }
+    return _serialize_saved(screen)
 
 
 @router.get("/saved")
 async def get_saved_screens(
+    kind: SavedKind = "screener",
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Rows predating the kind column are NULL and belong to the screener tab.
+    kind_filter = (
+        or_(SavedScreen.kind == "screener", SavedScreen.kind.is_(None))
+        if kind == "screener"
+        else SavedScreen.kind == kind
+    )
     result = await db.execute(
         select(SavedScreen)
-        .where(SavedScreen.user_id == current_user.id)
+        .where(SavedScreen.user_id == current_user.id, kind_filter)
         .order_by(SavedScreen.created_at.desc())
     )
-    screens = result.scalars().all()
-    out = []
-    for s in screens:
-        ts = s.created_at
-        if ts and ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
-        out.append({
-            "id": str(s.id),
-            "name": s.name,
-            "criteria": s.criteria,
-            "created_at": ts.isoformat() if ts else None,
-        })
-    return {"screens": out}
+    return {"screens": [_serialize_saved(s) for s in result.scalars().all()]}
 
 
 @router.delete("/saved/{screen_id}", status_code=204)
