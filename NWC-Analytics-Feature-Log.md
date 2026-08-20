@@ -1,6 +1,6 @@
 # NWC-Analytics — Shipped Features Log
 
-**Last Updated:** August 17, 2026  
+**Last Updated:** August 19, 2026  
 **Purpose:** Cross-project reference document. Attach to NWC Marketing, NWC Blog/SM Post, NWC Enhancements, and NWC Sandbox projects so all workstreams have visibility into what has shipped, what tier it lives on, and what content angles it unlocks.
 
 ---
@@ -1179,6 +1179,68 @@ Each entry follows a consistent format:
 - Why we removed buy/sell ratings from our DCF tool
 - Model output vs. investment advice — where the line actually sits, and why it matters
 - What "margin of safety" tells you that a star rating never will
+
+---
+
+### August 19, 2026
+
+---
+
+#### Portfolio — Sub-Cent Cost Basis Precision (Four Decimal Places)
+
+**What It Does:** The Add Position form's Buy Price field previously accepted only two decimal places, and rejected anything finer with a browser validation error ("the two nearest valid values are 0.32 and 0.33"). The database column behind it also stored only two decimals, so even a price that slipped past the form would have been silently rounded on save. Both were widened to four decimal places. A cost basis is now recorded exactly as paid — $0.3272, not $0.33 — while every figure on screen continues to round to two decimals for readability, so the precision lives in the stored data rather than cluttering the display. Two related places that were quietly discarding precision were fixed at the same time: the weighted-average cost basis calculation that runs when adding shares to a holding you already own now carries four decimals through the arithmetic, and the inline edit field no longer re-rounds a stored four-decimal basis back down to two the moment a row is opened for editing.
+
+**Tier Availability:** All tiers (Portfolio page)
+
+**Marketing Angle:** Anyone holding a sub-dollar position — a penny stock, a post-reverse-split name, a distressed ticker — has a cost basis that two decimal places physically cannot express. Rounding $0.3272 up to $0.33 bakes a 0.86% error permanently into every profit-and-loss figure for that position, and it does so precisely where it hurts most: low-priced, high-share-count holdings are exactly the ones where percentage moves are largest. Recording what the user actually paid is a small change that removes a whole class of quietly wrong numbers.
+
+**Blog/Content Hooks:**
+- Why cost basis precision matters more for sub-dollar stocks than for blue chips
+- How small rounding errors compound across a portfolio's performance figures
+- Tracking penny stocks and post-reverse-split positions — what most portfolio tools round away
+
+---
+
+#### Portfolio — Sell Positions, Realized P&L, and the Transaction Ledger
+
+**What It Does:** The Portfolio page could previously only ever *add*. Shares could be reduced by editing a quantity or deleting a row, but neither recorded what actually happened, so a closed trade simply disappeared and Total P&L only ever reflected positions still open. This adds a real **Sell** action and an append-only transaction ledger beneath it.
+
+Each holding row now carries a Sell button that opens a modal pre-filled with that ticker, the shares held as the maximum, and the current live price as the default sale price. As the user types, the modal previews the trade in real time — proceeds, cost basis sold, the resulting realized gain or loss in both dollars and percent, and the shares that will remain — and warns plainly when the quantity entered would close the position entirely. Attempting to sell more shares than held is rejected with the actual holding quoted back.
+
+Critically, **a sale does not change the cost basis per share.** Under average-cost accounting a sale only reduces quantity and realizes a gain; the price you sold at never blends into what you paid. (Total cost basis falls proportionally on its own, because it is simply shares times average cost.) Selling every share removes the holding from the table, but the trade itself is retained.
+
+Underneath, every buy and sell now writes a row to a new append-only ledger, backfilled on release with an opening purchase for each position already being tracked. Two summary cards changed to expose it: "Total P&L" was relabeled **Unrealized P&L** (with its percentage folded in as a subline) — leaving it labeled "Total" would have been misleading once a separate realized figure existed — and "Total P&L %" was replaced by a clickable **Realized P&L** card that opens a full **Transaction History** view showing date, ticker, type, shares, price, amount, realized P&L, and notes for every transaction, filterable by ticker.
+
+**Nothing is ever deleted from the ledger.** A mistyped sale is corrected with a **Void** action that appends a reversing entry — the shares come back, the realized P&L is backed out, and the history shows both the error and the correction rather than quietly erasing it. The existing Remove button still exists for positions entered by mistake, but now leaves a checkpoint noting the position was removed and *not* sold, so the record never implies a trade that did not happen. Concurrent sales of the same holding are serialized at the database level, so two overlapping requests can never sell more shares than exist.
+
+**Tier Availability:** All tiers (Portfolio page). Selling and transaction history are deliberately **not** tier-gated — a user must always be able to record an exit and see their own trade record regardless of plan. Tier limits continue to govern how many *open* positions can be tracked, and a full exit now frees a slot.
+
+**Marketing Angle:** A portfolio tracker that can only add positions is a watchlist with prices on it. The trades a user has actually closed are the ones with the most to teach them, and they were the exact trades the platform threw away — which also meant the headline P&L figure was structurally incomplete, showing only what had not been sold yet. Splitting realized from unrealized turns the page into an actual record of performance rather than a snapshot of what happens to be open today.
+
+The append-only design is the part worth leading with. Financial records that can be silently edited or deleted are not records, and the Void-by-reversing-entry approach is how real books have been kept for centuries: you correct a mistake by writing the correction down, not by rewriting history. That is the same trustworthy-signal positioning the valuation suite is built on — ranges instead of hero numbers, a reverse DCF that ends on a question, and now a trade history that cannot quietly change what it said last year.
+
+**Blog/Content Hooks:**
+- Realized vs. unrealized gains — why the difference matters more than most investors think
+- Why selling shares doesn't change your cost basis (the most common portfolio-math mistake)
+- Average cost vs. FIFO — two ways to answer "what did those shares cost me?"
+- What your closed trades tell you that your open positions never will
+- Why we never delete a transaction — reversing entries, audit trails, and trusting your own records
+- Reading a transaction ledger — how to audit your own performance from the ground up
+- The hidden cost of a portfolio tracker that only lets you add
+
+> **Groundwork note:** This ledger is the data foundation for the planned portfolio-history export (Excel/CSV covering every buy and sell). That export was deliberately scoped out of this release, but it is now a reporting layer over existing data rather than a feature needing new plumbing. One honest limitation to carry into any tax-oriented content: positions built from multiple purchases *before* this release were already stored as a single blended average, so their individual purchase lots cannot be reconstructed — that data was never recorded. Purchases from this release forward are captured individually, which is also what makes true FIFO/tax-lot accounting possible as a later addition.
+
+---
+
+#### Portfolio — Fixed Spurious Limit Error When Adding to an Existing Holding
+
+**What It Does:** A user at their tier's portfolio limit (10 positions on Beginner, 75 on Professional) was blocked with a "portfolio limit reached" error when trying to add shares to a stock they *already owned* — even though buying more of an existing holding merges into that position and creates no new row at all. The limit check ran before the platform looked to see whether the ticker was already in the portfolio. It now runs only when a genuinely new position is being created.
+
+**Tier Availability:** All tiers (Portfolio page); most visible to users at or near their position limit
+
+**Marketing Angle:** Being told you are out of room while adding to a position you already hold reads as a broken paywall rather than a plan limit, and it hit hardest on the lowest tier where the cap is tightest. The limit now does what it says it does: it governs how many separate positions can be tracked, not how actively they can be managed.
+
+**Blog/Content Hooks:** None — bug fix
 
 ---
 
