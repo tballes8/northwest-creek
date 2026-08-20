@@ -155,6 +155,46 @@ def evaluate_dividend(
     return result
 
 
+# --- Cross-listing news collision guard -------------------------------------
+# FMP's news index tags each article with the *bare* ticker and no exchange
+# qualification, so a US symbol that also exists on a foreign venue pulls the
+# other company's press releases onto the US page: NASDAQ:HMR (Heidmar Maritime)
+# was served TSXV:HMR (Homerun Resources) releases. A news article carries no
+# exchange or company field, so the only discriminator available is the company
+# name from /stable/profile — keep the articles that actually name the company
+# we asked for. A sector piece that never names the company is dropped too;
+# that is the accepted cost (the frontend falls back to general market news),
+# because showing another company's news is the worse failure.
+
+_NAME_STOPWORDS = {
+    "inc", "incorporated", "corp", "corporation", "company", "companies",
+    "ltd", "limited", "plc", "llc", "holdings", "holding", "group",
+    "the", "and", "for", "new", "class", "common", "stock", "shares",
+    "international", "global", "national", "american", "america",
+    "technologies", "technology", "industries", "industrial", "enterprises",
+    "solutions", "systems", "services", "partners", "resources", "capital",
+    "trust", "fund", "funds", "index",
+}
+
+# Fund news legitimately discusses the index rather than the issuer's name, so
+# these profile types are exempted from the gate rather than emptied out.
+_FUND_PROFILE_TYPES = {"ETF", "FUND", "TRUST"}
+
+
+def _company_name_tokens(name: str) -> set:
+    """Distinctive lowercase words from a company name — the ones worth matching
+    against an article. Legal suffixes and filler identify nothing ('Holdings',
+    'Inc'), and anything under four characters matches by accident."""
+    words = re.split(r"[^A-Za-z0-9]+", (name or "").lower())
+    return {w for w in words if len(w) >= 4 and w not in _NAME_STOPWORDS}
+
+
+def _article_names_company(article: Dict[str, Any], tokens: set) -> bool:
+    """True if the article headline or snippet names the company."""
+    haystack = f"{article.get('title') or ''} {article.get('text') or ''}".lower()
+    return any(token in haystack for token in tokens)
+
+
 class MarketDataService:
 
     def __init__(self):
@@ -386,6 +426,22 @@ class MarketDataService:
         except Exception as e:
             raise ValueError(f"Error fetching historical data for {ticker}: {_safe_error(e)}")
 
+    async def _news_name_tokens(self, ticker: str) -> set:
+        """Name tokens used to gate news for `ticker`. An empty set means no
+        gating: either the profile lookup failed — never drop news because a
+        side lookup broke — or the ticker is a fund (see _FUND_PROFILE_TYPES).
+        get_company_info() is cached for an hour, so on the stock page this is
+        already warm from the profile the user is looking at."""
+        try:
+            profile = await self.get_company_info(ticker)
+        except Exception as e:
+            print(f"news/{ticker}: profile unavailable, skipping collision "
+                  f"guard ({_safe_error(e)})")
+            return set()
+        if str(profile.get("type") or "").upper() in _FUND_PROFILE_TYPES:
+            return set()
+        return _company_name_tokens(profile.get("name", ""))
+
     async def get_stock_news(self, ticker: str, limit: int = 3) -> List[Dict[str, Any]]:
         """
         Fetch latest news articles for a stock ticker from FMP.
@@ -397,19 +453,31 @@ class MarketDataService:
 
             data = await self._fmp_get("news/stock", {
                 "symbols": ticker,
-                "limit": limit * 3,
+                # Headroom: the collision guard below drops rows, so ask for
+                # more than we intend to return.
+                "limit": max(limit * 5, 20),
             })
 
             if not data or not isinstance(data, list):
                 return []
 
+            name_tokens = await self._news_name_tokens(ticker)
+
             filtered = []
+            dropped = 0
             for article in data:
-                article_ticker = article.get("symbol", "")
-                if article_ticker.upper() == ticker:
-                    filtered.append(article)
-                    if len(filtered) >= limit:
-                        break
+                if (article.get("symbol") or "").upper() != ticker:
+                    continue
+                if name_tokens and not _article_names_company(article, name_tokens):
+                    dropped += 1
+                    continue
+                filtered.append(article)
+                if len(filtered) >= limit:
+                    break
+
+            if dropped:
+                print(f"news/{ticker}: dropped {dropped} article(s) that never name "
+                      f"the company (cross-listing ticker collision guard)")
 
             articles = []
             for article in filtered[:limit]:

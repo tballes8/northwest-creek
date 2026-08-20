@@ -104,6 +104,11 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
      "key_fields": ["formType", "filingDate", "acceptedDate", "finalLink", "link"]},
 
     # ── News & dividends ─────────────────────────────────────────────
+    # NOTE: articles carry no exchange field — `symbol` is the bare ticker, so a
+    # US symbol that also trades on TSXV/CSE/LSE/ASX returns both companies'
+    # articles in one bucket. market_data._article_names_company() filters on the
+    # company name because there is nothing better to filter on. If FMP ever adds
+    # an exchange/company field here, that guard should switch to it.
     {"path": "news/stock", "description": "Latest news for a ticker",
      "used_by": ["services/market_data.py:261"],
      "key_fields": ["symbol", "title", "text", "url", "publishedDate", "site", "image"]},
