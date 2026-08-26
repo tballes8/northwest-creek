@@ -141,13 +141,21 @@ async def _fetch(path: str, params: dict) -> Any:
         return []
 
 
-async def get_company_financials(ticker: str) -> Dict[str, Any]:
+async def get_company_financials(
+    ticker: str, include_raw: bool = False
+) -> Dict[str, Any]:
     """
     Fetch all financials endpoints in parallel and return unified payload.
 
     Returns dict with keys:
       ticker, company_name, income_statement, balance_sheet, cash_flow,
       ratios, quarterly_trend, dcf_suggestions, growth_profile
+
+    include_raw=True additionally attaches a `_raw` key carrying the unsummarised
+    FMP quarter arrays (income, balance sheet, cash flow). The AI financials read
+    needs fields the summary dicts drop (interest expense, inventory, receivables)
+    and needs balance-sheet *history* to talk about leverage direction. Underscore
+    prefix: internal, not part of the /financials/{ticker} frontend contract.
     """
     ticker = ticker.upper()
 
@@ -155,8 +163,11 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
     income_quarterly_task = _fetch("income-statement", {
         "symbol": ticker, "period": "quarter", "limit": 12,
     })
+    # 9 quarters, not 1 — the summary below only reads balance[0], but the AI fact
+    # block compares leverage and working capital against 4 quarters back, which
+    # needs a full window either side. Same request either way: no extra FMP call.
     balance_task = _fetch("balance-sheet-statement", {
-        "symbol": ticker, "period": "quarter", "limit": 1,
+        "symbol": ticker, "period": "quarter", "limit": 9,
     })
     cashflow_quarterly_task = _fetch("cash-flow-statement", {
         "symbol": ticker, "period": "quarter", "limit": 8,
@@ -297,9 +308,17 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
     }
 
     # ── Cash Flow summary (TTM) ───────────────────────────────────────
-    dividends_ttm = _sum_quarters(ttm_cf, "dividendsPaid")
-    investing_ttm = _sum_quarters(ttm_cf, "netCashUsedForInvestingActivites")
-    financing_ttm = _sum_quarters(ttm_cf, "netCashUsedProvidedByFinancingActivities")
+    # These three field names were carried over from FMP's legacy v3 schema and do
+    # not exist on /stable/cash-flow-statement, so all three silently resolved to
+    # None. `dividends` is user-visible — it is why the Dividends card on the
+    # Financial Summary panel read "—" for every company, including payers like
+    # PFE (~$9.8B/yr). Verified against a live /stable/ response 2026-08-26.
+    #   dividendsPaid                            -> netDividendsPaid
+    #   netCashUsedForInvestingActivites (typo)  -> netCashProvidedByInvestingActivities
+    #   netCashUsedProvidedByFinancingActivities -> netCashProvidedByFinancingActivities
+    dividends_ttm = _sum_quarters(ttm_cf, "netDividendsPaid")
+    investing_ttm = _sum_quarters(ttm_cf, "netCashProvidedByInvestingActivities")
+    financing_ttm = _sum_quarters(ttm_cf, "netCashProvidedByFinancingActivities")
     da_ttm = _sum_quarters(ttm_cf, "depreciationAndAmortization")
 
     cash_flow = {
@@ -376,7 +395,7 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
     # ── Company name from FMP profile ─────────────────────────────────
     company_name = profile.get("companyName") or ticker
 
-    return {
+    result = {
         "ticker": ticker,
         "company_name": company_name,
         "income_statement": income_statement,
@@ -387,6 +406,15 @@ async def get_company_financials(ticker: str) -> Dict[str, Any]:
         "dcf_suggestions": dcf_suggestions,
         "growth_profile": growth_profile,
     }
+
+    if include_raw:
+        result["_raw"] = {
+            "income_quarters": income_quarters,
+            "balance_quarters": balance_list,
+            "cashflow_quarters": cashflow_quarters,
+        }
+
+    return result
 
 
 def _derive_dcf_suggestions(

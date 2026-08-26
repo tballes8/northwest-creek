@@ -330,6 +330,14 @@ export const financialsAPI = {
     axiosInstance.get(`/financials/${ticker}`),
   getAnalystEstimates: (ticker: string) =>
     axiosInstance.get(`/stocks/analyst-estimates/${ticker}`),
+  // AI read of the financial statements. Route lives under /stocks/ but this is
+  // financials data, so it groups with financialsAPI.get that the panel already calls.
+  // `refresh` bypasses the backend's 24h per-ticker cache and always spends a use.
+  aiFinancials: (ticker: string, refresh = false) =>
+    axiosInstance.get(
+      `/stocks/${ticker}/ai-financials`,
+      refresh ? { params: { refresh: true } } : undefined
+    ),
 };
 
 // Stripe / Subscription API

@@ -5,7 +5,8 @@ technical indicators.  Shares the same ai_analysis usage pool as portfolio analy
 import re
 import time
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException, status
+import logging
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
 
@@ -15,14 +16,35 @@ from app.db.models import User, FeatureUsage
 from app.services.market_data import market_data_service
 from app.services.technical_indicators import technical_indicators, generate_summary
 from app.services.stock_analyzer import analyze_stock, forecast_stock_price
+from app.services.financials_service import get_company_financials
+from app.services.financial_fact_block import (
+    build_fact_block,
+    find_unsupported_numerals,
+    MIN_QUARTERS,
+)
+from app.services.financial_analyzer import analyze_financials, NOTHING_NOTABLE
+from app.services.sec_filings import detect_bankruptcy
+from app.services.dcf_service import UNSUITABLE_SECURITY_TYPES
 from app.api.v1.endpoints.portfolio_analysis import check_ai_analysis_access
+from app.core.tier_limits import get_tier_limit, get_upgrade_tier
 from app.services.fmp_client import get_fmp_client, API_KEY
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 # In-memory cache for price forecasts: ticker -> (timestamp, result_dict)
 _forecast_cache: dict[str, tuple[float, dict]] = {}
 _FORECAST_TTL = 6 * 3600  # 6 hours
+
+# In-memory cache for the AI financials read: ticker -> (timestamp, payload).
+# Mirrors _forecast_cache rather than reaching for app/db/cache.py, which has no
+# callers anywhere in the app and is therefore unverified against production.
+# Consequences, both already true of _forecast_cache and both fine: the cache is
+# per-worker, and it is lost on redeploy.
+_financials_ai_cache: dict[str, tuple[float, dict]] = {}
+_FINANCIALS_AI_TTL = 24 * 3600      # statements change quarterly; 24h caps cost
+_FINANCIALS_AI_SUPPRESSED_TTL = 3600  # shorter, so a mid-refresh ticker recovers same-day
 
 
 def _safe_error(e: Exception) -> str:
@@ -461,3 +483,179 @@ async def stock_price_forecast(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Could not generate price forecast for {sym}: {_safe_error(e)}",
         )
+
+
+def _require_ai_tier(user: User) -> None:
+    """Tier eligibility only — no usage counting, no DB read.
+
+    Split out from check_ai_analysis_access so it can run *before* the cache read.
+    Otherwise a tier with no AI entitlement could read a summary another user had
+    already paid to generate. The quota count still runs after the cache check, on
+    a miss only, so a paying user who is out of uses can still see a cached read.
+    """
+    if get_tier_limit(user.subscription_tier, "ai_analysis") == 0:
+        next_tier = get_upgrade_tier(user.subscription_tier)
+        upgrade = (
+            f" Upgrade to {next_tier.capitalize()} to unlock AI analysis."
+            if next_tier else ""
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"AI financial analysis is not available on the "
+                f"{user.subscription_tier.capitalize()} plan.{upgrade}"
+            ),
+        )
+
+
+def _financials_ai_response(
+    sym: str,
+    summary: str | None,
+    suppression_reason: str | None,
+    generated_at: str,
+    cached: bool = False,
+) -> dict:
+    """Uniform payload. Suppression is a normal outcome, not an error, so it comes
+    back as HTTP 200 with summary=None — the frontend renders nothing and needs no
+    status-code switch."""
+    return {
+        "ticker": sym,
+        "summary": summary,
+        "generated_at": generated_at,
+        "suppressed": summary is None,
+        "suppression_reason": suppression_reason,
+        "cached": cached,
+    }
+
+
+@router.get("/stocks/{ticker}/ai-financials")
+async def stock_ai_financials(
+    ticker: str,
+    refresh: bool = Query(False, description="Bypass the 24h cache and regenerate."),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """AI plain-language read of a company's financial statements.
+
+    Not a valuation call, not a recommendation, and not a restatement of the ratio
+    cards — see app/services/financial_analyzer.py for the enforced constraints.
+
+    Every suppression check runs before both the Claude call and the FeatureUsage
+    write: a user must never spend quota to be told this isn't available for ETFs.
+    """
+    sym = ticker.strip().upper()
+    if not sym or len(sym) > 10:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid ticker symbol",
+        )
+
+    # Tier gate first, so an unentitled plan cannot read a cached summary.
+    _require_ai_tier(current_user)
+
+    # ── Serve from cache ─────────────────────────────────────────────────
+    # A cache hit costs the user nothing: no Claude call, no usage row. Whoever
+    # pays the quota on a cold ticker funds free reads for the next 24 hours.
+    # Same economics as /price-forecast, and it errs toward the user.
+    if not refresh:
+        entry = _financials_ai_cache.get(sym)
+        if entry is not None:
+            ts, payload = entry
+            ttl = _FINANCIALS_AI_TTL if payload.get("summary") else _FINANCIALS_AI_SUPPRESSED_TTL
+            if time.time() - ts < ttl:
+                return {**payload, "cached": True}
+
+    await check_ai_analysis_access(current_user, db)
+
+    generated_at = datetime.now(timezone.utc).isoformat()
+
+    def suppress(reason: str) -> dict:
+        payload = _financials_ai_response(sym, None, reason, generated_at)
+        _financials_ai_cache[sym] = (time.time(), payload)
+        return payload
+
+    # ── Suppression: security type ───────────────────────────────────────
+    # API-driven, not the ticker-suffix heuristic — suffix matching has false
+    # positives on legitimate tickers. A failed profile lookup is not treated as
+    # a suppression signal; the no_data check below catches those tickers anyway.
+    try:
+        company = await market_data_service.get_company_info(sym)
+    except Exception:
+        company = {}
+    if (company.get("type") or "").upper() in UNSUITABLE_SECURITY_TYPES:
+        return suppress("unsuitable_security_type")
+
+    # ── Load financials ──────────────────────────────────────────────────
+    try:
+        financials = await get_company_financials(sym, include_raw=True)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Could not load financials for {sym}: {_safe_error(e)}",
+        )
+
+    growth = financials.get("growth_profile") or {}
+    income = financials.get("income_statement") or {}
+    balance = financials.get("balance_sheet") or {}
+    raw = financials.get("_raw") or {}
+    quarters_available = len(raw.get("income_quarters") or [])
+
+    # growth_profile is None when there is no revenue history at all.
+    if not financials.get("growth_profile") or (
+        income.get("revenue") is None and balance.get("total_assets") is None
+    ):
+        return suppress("no_data")
+
+    # CIK mismatch (ticker reused by a different entity) or filings older than
+    # ~9 months. A narrative built on another company's filings is the worst
+    # output this feature could produce.
+    if growth.get("is_stale"):
+        logger.info(
+            "Financials read for %s suppressed: stale (%s)", sym, growth.get("stale_reason")
+        )
+        return suppress("stale_financials")
+
+    if quarters_available < MIN_QUARTERS:
+        return suppress("insufficient_history")
+
+    # ── Suppression: bankruptcy ──────────────────────────────────────────
+    # The Stock Details page already explains the situation authoritatively with
+    # the filing date and an EDGAR link; a second AI paraphrase adds nothing and
+    # could contradict it.
+    bankruptcy = await detect_bankruptcy(growth.get("current_cik"))
+    if bankruptcy and bankruptcy.get("detected"):
+        return suppress("bankruptcy")
+
+    # ── Build the fact block ─────────────────────────────────────────────
+    fact_block = build_fact_block(financials)
+    if not fact_block.notable:
+        logger.info("Financials read for %s suppressed: nothing notable", sym)
+        return suppress("nothing_notable")
+
+    summary = await analyze_financials(sym, fact_block.text)
+
+    if summary is None:
+        # Never cached and never metered — a timeout must not lock a ticker out
+        # for 24 hours or cost the user a use.
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Unable to generate a financials read at this time. Please try again.",
+        )
+
+    if summary == NOTHING_NOTABLE:
+        return suppress("nothing_notable")
+
+    # ── Numeral validation — log only (see financial_fact_block §4.2) ─────
+    untraceable = find_unsupported_numerals(summary, fact_block.numeral_allowlist)
+    if untraceable:
+        logger.warning(
+            "Financials read for %s cited untraceable numerals %s | reasons=%s | summary=%r",
+            sym, untraceable, fact_block.reasons, summary,
+        )
+
+    db.add(FeatureUsage(user_id=current_user.id, feature="ai_analysis"))
+    await db.commit()
+
+    payload = _financials_ai_response(sym, summary, None, generated_at)
+    _financials_ai_cache[sym] = (time.time(), payload)
+    return payload

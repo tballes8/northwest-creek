@@ -417,6 +417,14 @@ const TechnicalAnalysis: React.FC = () => {
   const [financialsLoading, setFinancialsLoading] = useState(false);
   const [financialsError, setFinancialsError] = useState<string | null>(null);
 
+  // AI read of the financial statements (separate from the technicals AI summary
+  // above; both share the same ai_analysis usage pool on the backend)
+  const [finAiSummary, setFinAiSummary] = useState<string | null>(null);
+  const [finAiGeneratedAt, setFinAiGeneratedAt] = useState<string | null>(null);
+  const [finAiLoading, setFinAiLoading] = useState(false);
+  const [finAiError, setFinAiError] = useState<string | null>(null);
+  const [finAiSuppressed, setFinAiSuppressed] = useState(false);
+
   // Warrant detection is now API-driven using Polygon's `type` field (CS, WARRANT, ETF, etc.)
   // These helpers are only used as a pre-fetch hint for explicit separator patterns
   const detectWarrantHint = (tickerSymbol: string): boolean => {
@@ -483,6 +491,7 @@ const TechnicalAnalysis: React.FC = () => {
     setFinancialsError(null);
     setAiSummary(null);
     setAiGeneratedAt(null);
+    resetFinancialsAi();
 
     try {
       const response = await technicalAPI.analyze(symbol.toUpperCase());
@@ -545,6 +554,55 @@ const TechnicalAnalysis: React.FC = () => {
       setAiGeneratedAt(null);
     } finally {
       setAiLoading(false);
+    }
+  };
+
+  const resetFinancialsAi = () => {
+    setFinAiSummary(null);
+    setFinAiGeneratedAt(null);
+    setFinAiError(null);
+    setFinAiSuppressed(false);
+    setFinAiLoading(false);
+  };
+
+  // Explicit click only — never on page load or on opening the panel. Most users
+  // open Financial Summary just to read the ratios, and auto-firing would spend an
+  // ai_analysis use every time (a Casual user only gets 5 a week).
+  const handleFinancialsAi = async (refresh = false) => {
+    const t = analysisData?.ticker || ticker.trim().toUpperCase();
+    if (!t) return;
+
+    setFinAiLoading(true);
+    setFinAiError(null);
+    try {
+      const response = await financialsAPI.aiFinancials(t, refresh);
+      if (response.data?.suppressed || !response.data?.summary) {
+        // Suppressed is a normal outcome (fund, warrant, stale filings, nothing
+        // notable). Render nothing rather than explaining why the AI declined.
+        setFinAiSuppressed(true);
+        setFinAiSummary(null);
+        setFinAiGeneratedAt(null);
+      } else {
+        setFinAiSuppressed(false);
+        setFinAiSummary(response.data.summary);
+        setFinAiGeneratedAt(response.data.generated_at);
+      }
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      if (err?.response?.status === 403) {
+        const msg = typeof detail === 'object' ? detail.message : detail;
+        setFinAiError(msg || 'AI analysis is not available on your current plan.');
+      } else {
+        setFinAiError(
+          typeof detail === 'string'
+            ? detail
+            : 'Unable to generate a financials read at this time. Please try again.'
+        );
+      }
+      setFinAiSummary(null);
+      setFinAiGeneratedAt(null);
+    } finally {
+      setFinAiLoading(false);
     }
   };
 
@@ -612,6 +670,16 @@ const TechnicalAnalysis: React.FC = () => {
     return val.toFixed(decimals);
   };
 
+  // Cash + short-term investments. Mirrors `liquid_assets` in the backend's
+  // financial_fact_block so this card and the AI read above it cannot disagree:
+  // absent short-term investments count as zero, but absent cash is unknown, not
+  // zero. Showing cash alone understated PFE by 10.7B (976M vs 11.70B).
+  const liquidAssets = (bs: any): number | null => {
+    const cash = bs?.cash_and_equivalents;
+    if (cash == null) return null;
+    return cash + (bs?.short_term_investments ?? 0);
+  };
+
   const handleFetchFinancials = async () => {
     const t = analysisData?.ticker || ticker.trim().toUpperCase();
     if (!t) return;
@@ -648,6 +716,7 @@ const TechnicalAnalysis: React.FC = () => {
     setFinancialsData(null);
     setShowFinancials(false);
     setFinancialsError(null);
+    resetFinancialsAi();
   }, [ticker]);
 
   // Chart configurations
@@ -1478,6 +1547,73 @@ const TechnicalAnalysis: React.FC = () => {
                 {financialsData && !financialsLoading && (
                   <div className="space-y-6">
 
+                    {/* ── AI Financial Read ──────────────────────────────
+                        Sits above the grids on purpose: the figures it discusses
+                        are directly below it. Renders nothing when the backend
+                        suppresses (fund, warrant, stale filings, bankruptcy,
+                        nothing notable) — absence is the right message there. */}
+                    {!finAiSuppressed && (
+                      <div>
+                        {finAiSummary ? (
+                          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="text-indigo-600 dark:text-indigo-400 text-base">✦</span>
+                                  <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 uppercase tracking-wide">AI financial read</span>
+                                  {finAiGeneratedAt && (
+                                    <span className="text-xs text-gray-400 dark:text-gray-500">
+                                      · {new Date(finAiGeneratedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">{finAiSummary}</p>
+                              </div>
+                              <button
+                                onClick={() => handleFinancialsAi(true)}
+                                disabled={finAiLoading}
+                                className="flex-shrink-0 text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                              >
+                                Refresh
+                              </button>
+                            </div>
+                          </div>
+                        ) : finAiError ? (
+                          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 rounded-lg px-4 py-3 text-sm flex items-center justify-between gap-4">
+                            <span>{finAiError}</span>
+                            <button
+                              onClick={() => handleFinancialsAi(false)}
+                              disabled={finAiLoading}
+                              className="flex-shrink-0 text-xs font-medium underline disabled:opacity-50 whitespace-nowrap"
+                            >
+                              Try again
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleFinancialsAi(false)}
+                            disabled={finAiLoading}
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white rounded-lg font-medium text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {finAiLoading ? (
+                              <>
+                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                </svg>
+                                Analyzing...
+                              </>
+                            ) : (
+                              <>
+                                <span className="text-base leading-none">✦</span>
+                                Generate AI read of these financials
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
                     {/* ── Valuation & Ratios Row ── */}
                     <div>
                       <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Valuation & Ratios</h4>
@@ -1524,8 +1660,11 @@ const TechnicalAnalysis: React.FC = () => {
                       <h4 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Financial Health</h4>
                       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                         {[
-                          { label: 'Cash', value: fmtB(financialsData.balance_sheet?.cash_and_equivalents) },
-                          { label: 'Total Debt', value: fmtB(financialsData.balance_sheet?.long_term_debt) },
+                          { label: 'Cash & ST Inv.', value: fmtB(liquidAssets(financialsData.balance_sheet)) },
+                          // total_debt, not long_term_debt — the card was labelled
+                          // "Total Debt" while showing only the long-term portion,
+                          // which would visibly contradict the AI read above it.
+                          { label: 'Total Debt', value: fmtB(financialsData.balance_sheet?.total_debt) },
                           { label: 'Total Equity', value: fmtB(financialsData.balance_sheet?.total_equity) },
                           { label: 'D/E Ratio', value: fmtNum(financialsData.ratios?.debt_to_equity) },
                           { label: 'Current Ratio', value: fmtNum(financialsData.ratios?.current_ratio) },

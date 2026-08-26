@@ -399,6 +399,9 @@ const Stocks: React.FC = () => {
   const [dividendInfo, setDividendInfo] = useState<DividendInfo | null>(null);
   const [dividendLoading, setDividendLoading] = useState(false);
   const [etfHoldings, setEtfHoldings] = useState<EtfHolding[]>([]);
+  // Total holdings in the fund before the API truncated to the top N. Drives the
+  // "top 10 of 93" caption that replaced the old dominating "Other" wedge.
+  const [etfHoldingsTotal, setEtfHoldingsTotal] = useState(0);
   const [holdingsLoading, setHoldingsLoading] = useState(false);
   const [ownershipData, setOwnershipData] = useState<OwnershipData | null>(null);
   const [ownershipLoading, setOwnershipLoading] = useState(false);
@@ -585,6 +588,7 @@ const Stocks: React.FC = () => {
     setFallbackNews([]);
     setDividendInfo(null);
     setEtfHoldings([]);
+      setEtfHoldingsTotal(0);
     setOwnershipData(null);
     setPeRatio(null);
     setAnalystEstimates(null);
@@ -816,6 +820,7 @@ const Stocks: React.FC = () => {
         loadEtfInfo(symbol);
       } else {
         setEtfHoldings([]);
+      setEtfHoldingsTotal(0);
       }
     } catch (err: any) {
       console.error('Stock API Error:', err);
@@ -825,6 +830,7 @@ const Stocks: React.FC = () => {
       setHistorical([]);
       setDividendInfo(null);
       setEtfHoldings([]);
+      setEtfHoldingsTotal(0);
     } finally {
       setLoading(false);
     }
@@ -885,9 +891,15 @@ const Stocks: React.FC = () => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setEtfHoldings(response.data.holdings || []);
+      // 0 means "unknown" — never fall back to holdings.length, which would let
+      // the caption claim "All 10 holdings" for a fund that actually has 93.
+      setEtfHoldingsTotal(
+        typeof response.data.total_count === 'number' ? response.data.total_count : 0
+      );
     } catch (err) {
       console.error('Failed to load ETF holdings:', err);
       setEtfHoldings([]);
+      setEtfHoldingsTotal(0);
     } finally {
       setHoldingsLoading(false);
     }
@@ -2521,26 +2533,46 @@ const Stocks: React.FC = () => {
                           '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
                           '#EC4899', '#14B8A6', '#F97316', '#6366F1', '#84CC16',
                         ];
-                        const OTHER_COLOR = '#6B7280';
 
-                        const buildSlices = (holdings: EtfHolding[]) => {
-                          const top = holdings.reduce((sum, h) => sum + (h.weight || 0), 0);
-                          // "Other" is the signed remainder so weights still reconcile
-                          // to ~100% even when a leveraged/inverse fund nets out below it.
-                          const other = 100 - top;
-                          return [
-                            ...holdings.map((h, i) => ({
-                              label: h.ticker || h.name,
-                              weight: h.weight || 0,
-                              color: CHART_COLORS[i],
-                            })),
-                            ...(Math.abs(other) > 0.5 ? [{ label: 'Other', weight: other, color: OTHER_COLOR }] : []),
-                          ];
-                        };
+                        // No "Other" remainder slice. A donut implies parts-of-a-whole,
+                        // so a grey wedge for everything un-shown dominates the ring on
+                        // any diversified fund (56% for ULTY, ~65% for SPY) and reads as
+                        // concealment. The ring now shows the top holdings in proportion
+                        // to each other, and the caption below states the coverage.
+                        const buildSlices = (holdings: EtfHolding[]) =>
+                          holdings.map((h, i) => ({
+                            // Option legs, money-market sweeps and "Cash & Other" come
+                            // back with an empty `asset`, so fall through to the name.
+                            // For option-income funds this is the common case, not the
+                            // edge case — ULTY returns 67 such rows out of 93.
+                            label: h.ticker || h.name,
+                            weight: h.weight || 0,
+                            // Modulo so the palette can't run out and emit fill=undefined
+                            // (black slices) if the requested holdings limit is raised.
+                            color: CHART_COLORS[i % CHART_COLORS.length],
+                          }));
 
-                        // Wheel chart shows the top 10; the legend shows the top 5.
-                        const chartSlices = buildSlices(etfHoldings.slice(0, 10));
-                        const listSlices = buildSlices(etfHoldings.slice(0, 5));
+                        // Wheel and legend render the SAME slices, so every wedge in the
+                        // ring is identifiable. Built once rather than from two different
+                        // slices of the array, which is what guarantees the colours line up.
+                        const chartHoldings = etfHoldings.slice(0, 10);
+                        const chartSlices = buildSlices(chartHoldings);
+
+                        // Coverage caption. Weights can legitimately exceed 100% before
+                        // short legs net out, and could in principle be non-positive, so
+                        // only claim a share of net assets when the number is sane.
+                        const coverage = chartHoldings.reduce((sum, h) => sum + (h.weight || 0), 0);
+                        const totalKnown = etfHoldingsTotal > 0;
+                        const showsEverything = totalKnown && etfHoldingsTotal <= chartHoldings.length;
+                        const captionCount = showsEverything
+                          ? `All ${etfHoldingsTotal} holding${etfHoldingsTotal === 1 ? '' : 's'}`
+                          : totalKnown
+                            ? `Top ${chartHoldings.length} of ${etfHoldingsTotal} holdings`
+                            : `Top ${chartHoldings.length} holdings`;
+                        const caption =
+                          coverage > 0 && coverage <= 100.5 && !showsEverything
+                            ? `${captionCount} · ${coverage.toFixed(1)}% of net assets`
+                            : captionCount;
 
                         // A donut can't render negative values geometrically, and some
                         // leveraged/inverse ETFs hold short or cash-offset positions with
@@ -2581,35 +2613,44 @@ const Stocks: React.FC = () => {
                         });
 
                         return (
-                          <div className="flex items-start gap-4">
-                            {/* Donut Chart — top 10 holdings */}
-                            <div className="flex-shrink-0">
-                              <svg width="160" height="160" viewBox="-1.15 -1.15 2.3 2.3">
-                                {paths.map((p, i) => (
-                                  <path key={i} d={p.d} fill={p.color} stroke="white" strokeWidth="0.02" className="dark:stroke-gray-700" />
-                                ))}
-                              </svg>
-                            </div>
+                          <div>
+                            <div className="flex items-start gap-4">
+                              {/* Donut Chart — top 10 holdings, in proportion to each other */}
+                              <div className="flex-shrink-0">
+                                <svg width="160" height="160" viewBox="-1.15 -1.15 2.3 2.3">
+                                  {paths.map((p, i) => (
+                                    <path key={i} d={p.d} fill={p.color} stroke="white" strokeWidth="0.02" className="dark:stroke-gray-700" />
+                                  ))}
+                                </svg>
+                              </div>
 
-                            {/* Legend — top 5 holdings */}
-                            <div className="flex-1 space-y-1.5 min-w-0">
-                              {listSlices.map((slice, i) => (
-                                <div key={i} className="flex items-center justify-between gap-2">
-                                  <div className="flex items-center gap-1.5 min-w-0">
-                                    <span
-                                      className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
-                                      style={{ backgroundColor: slice.color }}
-                                    />
-                                    <span className="text-xs text-gray-700 dark:text-gray-300 truncate">
-                                      {slice.label}
+                              {/* Legend — one row per wedge, weights as a share of the
+                                  whole fund (not of the ring, which is normalised) */}
+                              <div className="flex-1 space-y-1.5 min-w-0">
+                                {chartSlices.map((slice, i) => (
+                                  <div key={i} className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                      <span
+                                        className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                        style={{ backgroundColor: slice.color }}
+                                      />
+                                      <span className="text-xs text-gray-700 dark:text-gray-300 truncate">
+                                        {slice.label}
+                                      </span>
+                                    </div>
+                                    <span className="text-xs font-semibold text-gray-900 dark:text-white flex-shrink-0">
+                                      {slice.weight.toFixed(1)}%
                                     </span>
                                   </div>
-                                  <span className="text-xs font-semibold text-gray-900 dark:text-white flex-shrink-0">
-                                    {slice.weight.toFixed(1)}%
-                                  </span>
-                                </div>
-                              ))}
+                                ))}
+                              </div>
                             </div>
+
+                            {/* States what is and isn't shown, so the un-charted
+                                remainder is explicit rather than an unexplained wedge. */}
+                            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                              {caption}
+                            </p>
                           </div>
                         );
                       })()
