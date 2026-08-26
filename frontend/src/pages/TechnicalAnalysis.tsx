@@ -1528,7 +1528,7 @@ const TechnicalAnalysis: React.FC = () => {
                   📄 Financial Summary — {analysisData.ticker}
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-                  SEC filings via Massive API • Data updates daily
+                  SEC filings via Financial Modeling Prep • Data updates daily
                 </p>
 
                 {financialsLoading && (
