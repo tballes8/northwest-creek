@@ -44,3 +44,6 @@ frontend/dist/
 *.tfstate
 *.tfstate.backup
 .terraform/
+
+# FMP bulk data dumps (~29 MB each, downloaded ad hoc for analysis)
+profile_bulk_*.csv

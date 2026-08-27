@@ -11,12 +11,13 @@ Initial population: if the table is empty, fetches /stock-list first to build
 the universe (US common stocks on NYSE/NASDAQ/AMEX, no ETFs, no warrants).
 Subsequent runs only re-fetch quotes for the existing symbol universe.
 """
+import asyncio
 import logging
 from datetime import datetime, time, timedelta, timezone
 
 import httpx
 import pytz
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import String, Text, bindparam, delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.models import StockSnapshot
@@ -30,6 +31,13 @@ FMP_BASE = "https://financialmodelingprep.com/stable"
 QUOTE_BATCH_SIZE = 1000
 MARKET_OPEN = time(9, 30)
 MARKET_CLOSE = time(16, 0)
+
+# Company-profile backfill. Runs once per trading day against whatever is still missing,
+# so the limit only has to outpace the daily inflow of new universe members plus drain
+# the standing backlog within a run or two. At PROFILE_CONCURRENCY=8 a full 5000 costs
+# roughly three minutes and ~5000 FMP calls — comfortably inside the rate allowance.
+PROFILE_FILL_LIMIT = 5000
+PROFILE_CONCURRENCY = 8
 
 # Exchanges that count as "US common stock" for the screener universe
 US_EXCHANGES = {"NYSE", "NASDAQ", "AMEX"}
@@ -240,66 +248,126 @@ async def _upsert(rows: list[dict]) -> None:
     logger.info(f"Upserted {len(rows)} snapshots")
 
 
-async def _update_company_profiles(symbols: list[str], limit: int = 100) -> None:
+_MISSING_PROFILE = or_(
+    StockSnapshot.sector.is_(None),
+    StockSnapshot.description.is_(None),
+)
+
+_PROFILE_CHUNK = 1_000
+
+
+async def _update_company_profiles(limit: int = PROFILE_FILL_LIMIT) -> int | None:
     """
-    Update company profiles (sector, industry, description) for a subset of stocks.
-    This runs less frequently than price updates since profiles rarely change.
+    Fill in missing company profiles (sector, industry, description) from /stable/profile.
 
     /stable/profile is the ONLY source for stored sector/industry, because it is what
-    /company/{ticker} shows in Company Details and what /stocks/sectors falls back to.
-    Sourcing them anywhere else lets the same ticker carry two different sectors.
+    /company/{ticker} shows in Company Details and what /stocks/sectors reads. Sourcing
+    them anywhere else lets the same ticker carry two different sectors.
 
-    This job only reaches a random `limit` symbols per run, so it maintains rather
-    than establishes coverage — run scripts/populate_company_profiles.py to backfill
-    the full universe.
+    Targets rows that are actually missing data rather than a random sample. The previous
+    version sampled 200 random symbols per run and so never converged: the universe is
+    rebuilt daily and every new member arrives with sector = NULL, replenishing the backlog
+    at least as fast as it drained. Ordered by market cap so the symbols users are most
+    likely to look at are filled first.
+
+    Symbols FMP has no profile for stay NULL and are retried every run. That is cheap while
+    they are few — watch the "still missing" count logged below. If it plateaus well above
+    zero, those symbols need excluding from `_MISSING_PROFILE` rather than being retried
+    forever.
+
+    **Returns:** how many symbols still match `_MISSING_PROFILE` afterwards, or None if the
+    run failed. `_drain_company_profiles` uses this to stop once the count stops falling.
     """
     try:
-        # Randomly select stocks to update profiles for (to spread the load)
-        import random
-        symbols_to_update = random.sample(symbols, min(limit, len(symbols)))
+        async with async_session() as session:
+            symbols = (await session.execute(
+                select(StockSnapshot.symbol)
+                .where(_MISSING_PROFILE)
+                .order_by(StockSnapshot.market_cap.desc().nulls_last())
+                .limit(limit)
+            )).scalars().all()
 
-        print(f"📊 Updating company profiles for {len(symbols_to_update)} symbols", flush=True)
+        if not symbols:
+            print("📊 Company profiles: nothing missing", flush=True)
+            return 0
 
-        profile_data = []
-        for symbol in symbols_to_update:
-            try:
-                info = await market_data_service.get_company_info(symbol)
-                profile_data.append({
-                    "symbol": symbol,
-                    "sector": info.get("sector"),
-                    "industry": info.get("industry"),
-                    "description": info.get("description"),
-                })
-            except Exception as e:
-                logger.debug(f"Failed to fetch profile for {symbol}: {e}")
-                continue
+        print(f"📊 Filling company profiles for {len(symbols)} symbols", flush=True)
 
-        if profile_data:
-            # UPDATE-only — every symbol here came from the universe, so it already
-            # has a row, and we must not resurrect one that _prune_universe removed.
-            updated = 0
-            async with async_session() as session:
-                for profile in profile_data:
-                    # Only write fields FMP actually returned. get_company_info
-                    # substitutes "Other" when the profile has no sector, which must
-                    # never overwrite a real label.
-                    values = {
-                        col: profile[col]
-                        for col in ("sector", "industry", "description")
-                        if profile[col] and not (col == "sector" and profile[col] == "Other")
-                    }
-                    if not values:
-                        continue
-                    await session.execute(
-                        update(StockSnapshot)
-                        .where(StockSnapshot.symbol == profile["symbol"])
-                        .values(**values)
-                    )
-                    updated += 1
-                await session.commit()
-            logger.info(f"Updated {updated} company profiles")
+        # Bounded so a 5000-symbol backfill can't open 5000 sockets at once. Matches the
+        # concurrency /stocks/sectors uses for the same call.
+        sem = asyncio.Semaphore(PROFILE_CONCURRENCY)
+
+        async def _fetch(symbol: str) -> dict | None:
+            async with sem:
+                try:
+                    info = await market_data_service.get_company_info(symbol)
+                except Exception as e:
+                    logger.debug(f"Failed to fetch profile for {symbol}: {e}")
+                    return None
+
+            # get_company_info substitutes "Other" when the profile carries no sector.
+            # That must never overwrite a real label, and /stocks/sectors treats it as
+            # "no answer" too. None here means "leave whatever is stored alone".
+            sector = info.get("sector")
+            if not sector or sector == "Other":
+                sector = None
+
+            return {
+                "b_symbol": symbol,
+                "b_sector": sector,
+                "b_industry": info.get("industry") or None,
+                "b_description": info.get("description") or None,
+            }
+
+        fetched = await asyncio.gather(*(_fetch(s) for s in symbols))
+        rows = [
+            r for r in fetched
+            if r and (r["b_sector"] or r["b_industry"] or r["b_description"])
+        ]
+
+        if not rows:
+            logger.info("No company profiles resolved")
+            return len(symbols)
+
+        # UPDATE-only — every symbol here came from the universe, so it already has a row,
+        # and we must not resurrect one that _prune_universe removed.
+        #
+        # COALESCE keeps the stored value wherever FMP returned nothing for that field.
+        # That is what lets every row carry an identical parameter set, which in turn lets
+        # this be one executemany per chunk instead of the previous statement-per-symbol
+        # loop — the difference between ~5000 round trips and 5.
+        tbl = StockSnapshot.__table__
+        stmt = (
+            update(tbl)
+            .where(tbl.c.symbol == bindparam("b_symbol"))
+            .values(
+                sector=func.coalesce(bindparam("b_sector", type_=String), tbl.c.sector),
+                industry=func.coalesce(bindparam("b_industry", type_=String), tbl.c.industry),
+                description=func.coalesce(bindparam("b_description", type_=Text), tbl.c.description),
+            )
+        )
+
+        async with async_session() as session:
+            for i in range(0, len(rows), _PROFILE_CHUNK):
+                await session.execute(stmt, rows[i:i + _PROFILE_CHUNK])
+            await session.commit()
+
+            remaining = await session.scalar(
+                select(func.count()).select_from(tbl).where(_MISSING_PROFILE)
+            )
+
+        print(
+            f"📊 Company profiles: resolved {len(rows)}/{len(symbols)}, "
+            f"{remaining} still missing",
+            flush=True,
+        )
+        logger.info(
+            f"Company profiles: resolved {len(rows)}/{len(symbols)}, {remaining} still missing"
+        )
+        return remaining
     except Exception as e:
         logger.warning(f"Failed to update company profiles: {e}")
+        return None
 
 
 async def refresh_stock_snapshots_job(api_key: str) -> None:
@@ -333,14 +401,50 @@ async def refresh_stock_snapshots_job(api_key: str) -> None:
         rows = await _fetch_quotes(api_key, tickers, include_fundamentals=should_rebuild)
         await _upsert(rows)
 
-        # Update company profiles periodically (once per day or on rebuild)
+        # Fill in missing company profiles (once per trading day, after the rebuild so
+        # the day's new universe members are already in the table and visible to it)
         if should_rebuild:
-            # Update profiles for a subset of stocks to avoid rate limits
-            symbols = [t[0] for t in tickers]
-            await _update_company_profiles(symbols, limit=200)
+            await _update_company_profiles()
 
         print(f"✅ Snapshot refresh complete — {len(rows)} symbols", flush=True)
         logger.info(f"Snapshot refresh complete — {len(rows)} symbols")
     except Exception as exc:
         print(f"❌ Snapshot refresh failed: {exc}", flush=True)
         logger.exception("Snapshot refresh failed")
+
+
+async def _drain_company_profiles() -> None:
+    """Run the profile fill repeatedly until coverage stops improving.
+
+    For clearing a standing backlog in one sitting rather than waiting for the daily
+    trigger. Stops on no progress, which is the signal that the remaining symbols have no
+    profile at FMP — retrying those forever would just burn calls.
+
+        railway run python -m app.tasks.refresh_stock_snapshots
+    """
+    from app.services.fmp_client import close_fmp_client, init_fmp_client
+
+    await init_fmp_client()
+    try:
+        previous: int | None = None
+        while True:
+            remaining = await _update_company_profiles()
+            if remaining is None:
+                print("❌ Profile fill failed — see log; stopping", flush=True)
+                return
+            if remaining == 0:
+                print("✅ Company profile coverage complete", flush=True)
+                return
+            if previous is not None and remaining >= previous:
+                print(
+                    f"⚠️ No progress — {remaining} symbols have no profile at FMP; stopping",
+                    flush=True,
+                )
+                return
+            previous = remaining
+    finally:
+        await close_fmp_client()
+
+
+if __name__ == "__main__":
+    asyncio.run(_drain_company_profiles())

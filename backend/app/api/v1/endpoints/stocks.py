@@ -202,17 +202,22 @@ async def get_sectors(
     """
     Bulk ticker → sector lookup for the app's sector labels.
 
-    Resolves through `get_company_info` — the *same* call that backs
-    `/company/{ticker}` — so a ticker cannot show one sector here and another in the
-    Company Details panel. That match is structural, not eventual: an earlier version
-    of this endpoint read `stock_snapshots.sector` first, which made the stored value
-    an unversioned cache with no invalidation, so a stale or wrong row (NFE stored as
-    Utilities while the profile said Energy) could never correct itself.
+    Reads `stock_snapshots.sector` first and only calls FMP for what the table cannot
+    answer. Dashboard and Watchlist call this on every load with the user's whole ticker
+    list, so the previous behaviour — a live `get_company_info` for all 250 — put up to
+    250 profile calls behind a page load.
 
-    `get_company_info` memoizes for an hour process-wide, so a ticker costs one FMP
-    call per hour no matter how many users ask for it. The stored sector is used only
-    when the profile call fails, so an FMP outage degrades to the last known label
-    rather than "Other".
+    That fan-out existed for a real reason: the stored column used to be an unversioned
+    cache with no invalidation, so a wrong row (NFE stored as Utilities while the profile
+    said Energy) could never correct itself. `_update_company_profiles` in
+    `app/tasks/refresh_stock_snapshots.py` is now that invalidation — it refreshes every
+    universe symbol missing a profile from `/stable/profile` daily, which is the same
+    source `/company/{ticker}` renders. One source, so a ticker still cannot show one
+    sector here and another in the Company Details panel.
+
+    The live path remains for symbols the table has no sector for — typically ETFs and
+    other non-universe tickers a user holds, which `_prune_universe` keeps out of
+    `stock_snapshots`. Those are written back when they resolve.
 
     **Returns:** `{"sectors": {"NFE": "Energy", ...}}` — every requested ticker is
     present; anything unresolvable maps to "Other".
@@ -230,8 +235,7 @@ async def get_sectors(
     if len(requested) > 250:
         raise HTTPException(status_code=400, detail="Too many tickers (max 250)")
 
-    # 1. Stored sectors — one query, used as the offline fallback and to decide which
-    #    rows the profile has since corrected.
+    # 1. The authoritative read: one query for everything the table already knows.
     stored: dict[str, str] = {}
     rows = await db.execute(
         select(StockSnapshot.symbol, StockSnapshot.sector).where(
@@ -243,43 +247,45 @@ async def get_sectors(
         if sector:
             stored[symbol.upper()] = sector
 
-    # 2. The authoritative read. Bounded concurrency so a large portfolio can't open
-    #    75 sockets at once; cache hits don't touch the network at all.
-    sem = asyncio.Semaphore(8)
+    # 2. Live fallback for the remainder only — non-universe tickers (ETFs a user holds)
+    #    and universe symbols the daily profile fill hasn't reached yet. Bounded
+    #    concurrency so a large portfolio can't open 75 sockets at once; cache hits
+    #    don't touch the network at all.
+    unresolved = [s for s in requested if s not in stored]
+    fetched: dict[str, Optional[str]] = {}
 
-    async def _fetch(sym: str) -> tuple[str, Optional[str]]:
-        async with sem:
-            try:
-                info = await market_data_service.get_company_info(sym)
-                sector = info.get("sector")
-                # get_company_info substitutes "Other" when FMP omits a sector.
-                # Treat that as no answer so a real stored label still wins.
-                return sym, (sector if sector and sector != "Other" else None)
-            except Exception:
-                return sym, None
+    if unresolved:
+        sem = asyncio.Semaphore(8)
 
-    fetched = dict(await asyncio.gather(*(_fetch(s) for s in requested)))
+        async def _fetch(sym: str) -> tuple[str, Optional[str]]:
+            async with sem:
+                try:
+                    info = await market_data_service.get_company_info(sym)
+                    sector = info.get("sector")
+                    # get_company_info substitutes "Other" when FMP omits a sector.
+                    # Treat that as no answer rather than storing a placeholder.
+                    return sym, (sector if sector and sector != "Other" else None)
+                except Exception:
+                    return sym, None
 
-    # 3. Keep stock_snapshots in step, so the screener's sector filter and keyword
-    #    search agree with the labels users see. UPDATE-only: never INSERT, so a
-    #    non-universe ticker (an ETF) can't leak into the screener universe.
-    changed = [
-        (sym, sector)
-        for sym, sector in fetched.items()
-        if sector and stored.get(sym) != sector
-    ]
-    if changed:
-        for sym, sector in changed:
-            await db.execute(
-                update(StockSnapshot)
-                .where(StockSnapshot.symbol == sym)
-                .values(sector=sector)
-            )
-        await db.commit()
+        fetched = dict(await asyncio.gather(*(_fetch(s) for s in unresolved)))
+
+        # 3. Keep stock_snapshots in step, so the screener's sector filter and keyword
+        #    search agree with the labels users see. UPDATE-only: never INSERT, so a
+        #    non-universe ticker (an ETF) can't leak into the screener universe.
+        changed = [(sym, sector) for sym, sector in fetched.items() if sector]
+        if changed:
+            for sym, sector in changed:
+                await db.execute(
+                    update(StockSnapshot)
+                    .where(StockSnapshot.symbol == sym)
+                    .values(sector=sector)
+                )
+            await db.commit()
 
     return {
         "sectors": {
-            s: fetched.get(s) or stored.get(s) or "Other"
+            s: stored.get(s) or fetched.get(s) or "Other"
             for s in requested
         }
     }
