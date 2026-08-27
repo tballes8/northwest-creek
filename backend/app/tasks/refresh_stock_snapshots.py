@@ -39,6 +39,14 @@ MARKET_CLOSE = time(16, 0)
 PROFILE_FILL_LIMIT = 5000
 PROFILE_CONCURRENCY = 8
 
+# Drift correction budget, spent on rows that ALREADY have a profile. Filling only NULLs
+# would freeze whatever was written first, and /stocks/sectors now trusts the stored value
+# instead of re-fetching per request — so without this pass a sector that changed at FMP,
+# or was wrong when first written, could never be corrected. A rotating window covers the
+# whole populated set every ceil(populated / this) days: ~8 days at a ~7.5k universe.
+# Sector and industry move on corporate actions, not daily, so weekly-ish is proportionate.
+PROFILE_REFRESH_LIMIT = 1000
+
 # Exchanges that count as "US common stock" for the screener universe
 US_EXCHANGES = {"NYSE", "NASDAQ", "AMEX"}
 
@@ -256,7 +264,19 @@ _MISSING_PROFILE = or_(
 _PROFILE_CHUNK = 1_000
 
 
-async def _update_company_profiles(limit: int = PROFILE_FILL_LIMIT) -> int | None:
+async def _missing_profile_count() -> int:
+    async with async_session() as session:
+        return await session.scalar(
+            select(func.count())
+            .select_from(StockSnapshot.__table__)
+            .where(_MISSING_PROFILE)
+        ) or 0
+
+
+async def _update_company_profiles(
+    limit: int = PROFILE_FILL_LIMIT,
+    refresh_limit: int = PROFILE_REFRESH_LIMIT,
+) -> int | None:
     """
     Fill in missing company profiles (sector, industry, description) from /stable/profile.
 
@@ -275,23 +295,60 @@ async def _update_company_profiles(limit: int = PROFILE_FILL_LIMIT) -> int | Non
     zero, those symbols need excluding from `_MISSING_PROFILE` rather than being retried
     forever.
 
+    A second, smaller pass re-fetches rows that already have a profile, so stored values
+    cannot drift permanently out of step with FMP — see `PROFILE_REFRESH_LIMIT`. Pass
+    `refresh_limit=0` to skip it when only coverage matters.
+
     **Returns:** how many symbols still match `_MISSING_PROFILE` afterwards, or None if the
     run failed. `_drain_company_profiles` uses this to stop once the count stops falling.
+    Note the refresh pass cannot change that count: COALESCE only ever fills a field, so a
+    stored value is never nulled back out.
     """
     try:
         async with async_session() as session:
-            symbols = (await session.execute(
+            missing = list((await session.execute(
                 select(StockSnapshot.symbol)
                 .where(_MISSING_PROFILE)
                 .order_by(StockSnapshot.market_cap.desc().nulls_last())
                 .limit(limit)
-            )).scalars().all()
+            )).scalars().all())
+
+            # Rotating drift-correction window over the already-populated rows.
+            # `~_MISSING_PROFILE` rather than a separate predicate, so the two pools are
+            # provably complementary and cannot drift apart if _MISSING_PROFILE changes.
+            # The window advances by day-of-year; if the universe size shifts, a symbol may
+            # be covered twice or skipped for a cycle, which is fine for best-effort drift
+            # correction.
+            refresh: list[str] = []
+            if refresh_limit > 0:
+                populated = await session.scalar(
+                    select(func.count())
+                    .select_from(StockSnapshot.__table__)
+                    .where(~_MISSING_PROFILE)
+                ) or 0
+                if populated:
+                    cycles = (populated + refresh_limit - 1) // refresh_limit
+                    window = datetime.now(timezone.utc).timetuple().tm_yday % cycles
+                    refresh = list((await session.execute(
+                        select(StockSnapshot.symbol)
+                        .where(~_MISSING_PROFILE)
+                        .order_by(StockSnapshot.symbol)
+                        .limit(refresh_limit)
+                        .offset(window * refresh_limit)
+                    )).scalars().all())
+
+        # Disjoint by construction — one pool is exactly the complement of the other.
+        symbols = missing + refresh
 
         if not symbols:
-            print("📊 Company profiles: nothing missing", flush=True)
+            print("📊 Company profiles: nothing to do", flush=True)
             return 0
 
-        print(f"📊 Filling company profiles for {len(symbols)} symbols", flush=True)
+        print(
+            f"📊 Company profiles: filling {len(missing)} missing, "
+            f"refreshing {len(refresh)} stored",
+            flush=True,
+        )
 
         # Bounded so a 5000-symbol backfill can't open 5000 sockets at once. Matches the
         # concurrency /stocks/sectors uses for the same call.
@@ -327,7 +384,7 @@ async def _update_company_profiles(limit: int = PROFILE_FILL_LIMIT) -> int | Non
 
         if not rows:
             logger.info("No company profiles resolved")
-            return len(symbols)
+            return await _missing_profile_count()
 
         # UPDATE-only — every symbol here came from the universe, so it already has a row,
         # and we must not resurrect one that _prune_universe removed.
@@ -352,18 +409,14 @@ async def _update_company_profiles(limit: int = PROFILE_FILL_LIMIT) -> int | Non
                 await session.execute(stmt, rows[i:i + _PROFILE_CHUNK])
             await session.commit()
 
-            remaining = await session.scalar(
-                select(func.count()).select_from(tbl).where(_MISSING_PROFILE)
-            )
+        remaining = await _missing_profile_count()
 
-        print(
-            f"📊 Company profiles: resolved {len(rows)}/{len(symbols)}, "
-            f"{remaining} still missing",
-            flush=True,
+        summary = (
+            f"Company profiles: resolved {len(rows)}/{len(symbols)} "
+            f"({len(missing)} fill + {len(refresh)} refresh), {remaining} still missing"
         )
-        logger.info(
-            f"Company profiles: resolved {len(rows)}/{len(symbols)}, {remaining} still missing"
-        )
+        print(f"📊 {summary}", flush=True)
+        logger.info(summary)
         return remaining
     except Exception as e:
         logger.warning(f"Failed to update company profiles: {e}")
@@ -420,6 +473,10 @@ async def _drain_company_profiles() -> None:
     trigger. Stops on no progress, which is the signal that the remaining symbols have no
     profile at FMP — retrying those forever would just burn calls.
 
+    Skips the drift-correction pass (`refresh_limit=0`): it cannot reduce the missing count,
+    so on a multi-iteration drain it would re-fetch the same window every pass for nothing.
+    The daily job still runs it.
+
         railway run python -m app.tasks.refresh_stock_snapshots
     """
     from app.services.fmp_client import close_fmp_client, init_fmp_client
@@ -428,7 +485,7 @@ async def _drain_company_profiles() -> None:
     try:
         previous: int | None = None
         while True:
-            remaining = await _update_company_profiles()
+            remaining = await _update_company_profiles(refresh_limit=0)
             if remaining is None:
                 print("❌ Profile fill failed — see log; stopping", flush=True)
                 return
