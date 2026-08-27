@@ -176,6 +176,9 @@ interface ScreenerResult {
   pct_from_52wk_low: number | null;
   dollar_volume: number | null;
   dividend_yield: number | null;
+  // Recency-gated status from evaluate_dividend(): a payer that stopped reads 'suspended'
+  // with no yield, rather than being indistinguishable from one that never paid.
+  dividend_status: 'none' | 'active' | 'suspended' | 'unknown' | null;
   beta: number | null;
   last_refreshed: string | null;
   squeeze_state: 'on' | 'fired' | 'none' | null;
@@ -3553,7 +3556,20 @@ const Stocks: React.FC = () => {
                               </td>
                               <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap">{fmtMarketCap(r.market_cap)}</td>
                               <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap">{fmtVolume(r.volume)}</td>
-                              <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums">{r.dividend_yield != null ? `${r.dividend_yield.toFixed(2)}%` : '—'}</td>
+                              <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums">
+                                {r.dividend_yield != null ? (
+                                  `${r.dividend_yield.toFixed(2)}%`
+                                ) : r.dividend_status === 'suspended' ? (
+                                  <span
+                                    className="text-amber-600 dark:text-amber-500"
+                                    title="Dividend suspended — no payment has gone ex since the expected schedule lapsed. Yield withheld."
+                                  >
+                                    Susp.
+                                  </span>
+                                ) : (
+                                  '—'
+                                )}
+                              </td>
                               <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums">{r.beta != null ? r.beta.toFixed(2) : '—'}</td>
                               <td className="px-3 py-2.5">
                                 {pos != null ? (

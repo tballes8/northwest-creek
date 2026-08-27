@@ -282,6 +282,13 @@ class StockSnapshot(Base):
     last_annual_dividend = Column(Numeric(precision=18, scale=4), nullable=True)
     # 5-year beta vs. market (from /company-screener, daily rebuild). Volatility filter.
     beta = Column(Numeric(precision=10, scale=4), nullable=True)
+    # Recency-gated dividend, from market_data.evaluate_dividend() on the daily rebuild.
+    # last_annual_dividend above is FMP's raw trailing figure and carries no ex-date, so it
+    # keeps quoting a rate for payers that stopped (NFE: ~124%). These are the gated values
+    # the screener actually reads; dividend_annual is NULL when suspended or unannualizable.
+    dividend_annual = Column(Numeric(precision=18, scale=4), nullable=True)
+    dividend_status = Column(String(12), nullable=True)  # none|active|suspended|unknown
+    dividend_last_ex_date = Column(Date, nullable=True)
     price_avg_50 = Column(Numeric(precision=18, scale=4), nullable=True)
     price_avg_200 = Column(Numeric(precision=18, scale=4), nullable=True)
     exchange = Column(String(20), nullable=True)

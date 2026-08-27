@@ -13,16 +13,20 @@ Subsequent runs only re-fetch quotes for the existing symbol universe.
 """
 import asyncio
 import logging
-from datetime import datetime, time, timedelta, timezone
+from collections import Counter
+from datetime import date, datetime, time, timedelta, timezone
+from decimal import Decimal
 
 import httpx
 import pytz
-from sqlalchemy import String, Text, bindparam, delete, func, or_, select, update
+from sqlalchemy import (
+    Boolean, Date, Numeric, String, Text, bindparam, delete, func, or_, select, update,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.models import StockSnapshot
 from app.db.session import async_session
-from app.services.market_data import market_data_service
+from app.services.market_data import evaluate_dividend, market_data_service
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +46,19 @@ PROFILE_CONCURRENCY = 8
 # Drift correction budget, spent on rows that ALREADY have a profile. Filling only NULLs
 # would freeze whatever was written first, and /stocks/sectors now trusts the stored value
 # instead of re-fetching per request — so without this pass a sector that changed at FMP,
-# or was wrong when first written, could never be corrected. A rotating window covers the
-# whole populated set every ceil(populated / this) days: ~8 days at a ~7.5k universe.
-# Sector and industry move on corporate actions, not daily, so weekly-ish is proportionate.
-PROFILE_REFRESH_LIMIT = 1000
+# or was wrong when first written, could never be corrected.
+#
+# Set deliberately above the universe size so the rotation collapses to a single window and
+# EVERY stored profile is re-verified on every daily run — accuracy is the priority here,
+# and the cost is minor: ~4.4k calls in ~3.5 min at PROFILE_CONCURRENCY=8, against a
+# ~3000/min allowance. Lowering this below the row count re-enables the rotating window
+# (a full cycle every ceil(populated / this) days) if that trade ever needs revisiting.
+PROFILE_REFRESH_LIMIT = 25_000
+
+# Dividend gate concurrency. Only tickers /company-screener reports a nonzero dividend for
+# are evaluated: one it reports as zero cannot produce a false *high* yield, which is the
+# failure mode being fixed, and this roughly halves the added calls.
+DIVIDEND_CONCURRENCY = 8
 
 # Exchanges that count as "US common stock" for the screener universe
 US_EXCHANGES = {"NYSE", "NASDAQ", "AMEX"}
@@ -171,7 +184,15 @@ async def _fetch_quotes(
     div_map = {t[0]: t[2] for t in tickers}
     beta_map = {t[0]: t[3] for t in tickers}
     symbols = list(name_map)
-    rows: list[dict] = []
+    # Keyed by symbol so a symbol echoed in more than one batch response collapses to one
+    # row. Previously these accumulated in a list, which both inflated the "N symbols"
+    # figure in the logs and sent redundant params through the upsert.
+    by_symbol: dict[str, dict] = {}
+    duplicates = 0
+    # Exchange values that failed the US_EXCHANGES gate. Logged so a silent mismatch —
+    # FMP returning "NASDAQ Global Select" where we expect "NASDAQ", say — shows up as a
+    # dropped-stock count rather than quietly shrinking the screener universe.
+    rejected_exchanges: Counter = Counter()
     now_utc = datetime.now(timezone.utc)
 
     async with httpx.AsyncClient(timeout=20.0) as client:
@@ -192,6 +213,7 @@ async def _fetch_quotes(
                     if not sym or "." in sym or len(sym) > 10:
                         continue
                     if q.get("exchange") not in US_EXCHANGES:
+                        rejected_exchanges[q.get("exchange")] += 1
                         continue
                     ts_raw = q.get("timestamp")
                     fmp_ts = (
@@ -221,7 +243,12 @@ async def _fetch_quotes(
                         "previous_close": q.get("previousClose"),
                         "fmp_timestamp": fmp_ts,
                         "last_refreshed": now_utc,
-                        "is_etf": False,
+                        # is_etf is deliberately NOT set here. It used to be hardcoded
+                        # False on every row, which was fabricated data — batch-quote
+                        # carries no such flag. _update_company_profiles now owns the
+                        # column and derives it from /stable/profile. Omitting the key
+                        # leaves the stored value untouched, the same way beta and
+                        # last_annual_dividend are preserved intraday below.
                     }
                     # Only written on the daily rebuild (include_fundamentals). Every row
                     # in the batch carries these keys so the multi-row upsert stays uniform;
@@ -229,12 +256,31 @@ async def _fetch_quotes(
                     if include_fundamentals:
                         row["last_annual_dividend"] = div_map.get(sym)
                         row["beta"] = beta_map.get(sym)
-                    rows.append(row)
+                    if sym in by_symbol:
+                        duplicates += 1
+                    by_symbol[sym] = row
             except Exception as e:
                 print(f"⚠️ Batch {i}–{i + QUOTE_BATCH_SIZE} failed: {e}", flush=True)
                 logger.warning(f"Batch {i}–{i + QUOTE_BATCH_SIZE} failed: {e}")
 
-    return rows
+    if duplicates:
+        msg = f"batch-quote echoed {duplicates} duplicate symbol(s); collapsed to one row each"
+        print(f"⚠️ {msg}", flush=True)
+        logger.warning(msg)
+
+    if rejected_exchanges:
+        top = ", ".join(
+            f"{val!r}={cnt}" for val, cnt in rejected_exchanges.most_common(10)
+        )
+        dropped = sum(rejected_exchanges.values())
+        msg = (
+            f"{dropped} quote(s) dropped by the {sorted(US_EXCHANGES)} gate — "
+            f"top exchanges: {top}"
+        )
+        print(f"📊 {msg}", flush=True)
+        logger.info(msg)
+
+    return list(by_symbol.values())
 
 
 _UPSERT_CHUNK = 1_000  # asyncpg caps params at 32767; 18 cols × 1000 = 18000
@@ -374,6 +420,11 @@ async def _update_company_profiles(
                 "b_sector": sector,
                 "b_industry": info.get("industry") or None,
                 "b_description": info.get("description") or None,
+                # get_company_info sets type == "ETF" exactly when the profile's isEtf
+                # is true, so this is a real answer rather than the False that used to be
+                # hardcoded into every quote refresh. Always a bool — this dict is only
+                # built on a successful profile fetch — so it needs no COALESCE guard.
+                "b_is_etf": info.get("type") == "ETF",
             }
 
         fetched = await asyncio.gather(*(_fetch(s) for s in symbols))
@@ -401,6 +452,7 @@ async def _update_company_profiles(
                 sector=func.coalesce(bindparam("b_sector", type_=String), tbl.c.sector),
                 industry=func.coalesce(bindparam("b_industry", type_=String), tbl.c.industry),
                 description=func.coalesce(bindparam("b_description", type_=Text), tbl.c.description),
+                is_etf=bindparam("b_is_etf", type_=Boolean),
             )
         )
 
@@ -420,6 +472,104 @@ async def _update_company_profiles(
         return remaining
     except Exception as e:
         logger.warning(f"Failed to update company profiles: {e}")
+        return None
+
+
+async def _update_dividends() -> int | None:
+    """
+    Store recency-gated dividend figures for every ticker that reports a dividend.
+
+    The screener derives its yield from `last_annual_dividend`, FMP's raw trailing
+    per-share figure from /company-screener. That column carries no ex-date, so a payer
+    that stopped still annualizes against a collapsed price — NFE reported ~124%. The gate
+    that fixes this already exists in `evaluate_dividend`, and /dividends/{ticker} and
+    portfolio analysis both use it; the screener was the one path bypassing it.
+
+    So rather than reimplement the gate in SQL, this runs the real function and stores its
+    output. Yield stays derived live against price in screener.py, so it tracks the 15-min
+    quote refresh instead of freezing at fetch time.
+
+    Assignments here are deliberately NOT wrapped in COALESCE, unlike the profile pass: a
+    payer that lapses must be able to clear a previously stored figure back to NULL. That
+    is the entire point.
+
+    **Returns:** number of tickers evaluated, or None if the run failed.
+    """
+    try:
+        async with async_session() as session:
+            payers = (await session.execute(
+                select(StockSnapshot.symbol, StockSnapshot.price)
+                .where(
+                    StockSnapshot.last_annual_dividend.isnot(None),
+                    StockSnapshot.last_annual_dividend > 0,
+                )
+                .order_by(StockSnapshot.market_cap.desc().nulls_last())
+            )).all()
+
+        if not payers:
+            print("📊 Dividends: no payers to evaluate", flush=True)
+            return 0
+
+        print(f"📊 Dividends: evaluating {len(payers)} payers", flush=True)
+
+        sem = asyncio.Semaphore(DIVIDEND_CONCURRENCY)
+
+        async def _fetch(symbol: str, price) -> dict | None:
+            async with sem:
+                try:
+                    info = await market_data_service.get_dividends(symbol)
+                except Exception as e:
+                    logger.debug(f"Failed to fetch dividends for {symbol}: {e}")
+                    return None
+
+            # Price matters: evaluate_dividend reports "unknown" rather than "active"
+            # when it has no price to quote a yield against.
+            assessment = evaluate_dividend(info.get("dividends") or [], price)
+
+            annual = assessment["annual_dividend"]
+            last_ex = assessment["last_ex_date"]
+            return {
+                "b_symbol": symbol,
+                # str() first — the column is Numeric and asyncpg is strict about
+                # float-to-numeric coercion.
+                "b_dividend_annual": Decimal(str(annual)) if annual is not None else None,
+                "b_dividend_status": assessment["dividend_status"],
+                "b_dividend_last_ex_date": date.fromisoformat(last_ex) if last_ex else None,
+            }
+
+        fetched = await asyncio.gather(*(_fetch(sym, px) for sym, px in payers))
+        rows = [r for r in fetched if r]
+
+        if not rows:
+            logger.info("No dividends resolved")
+            return 0
+
+        tbl = StockSnapshot.__table__
+        stmt = (
+            update(tbl)
+            .where(tbl.c.symbol == bindparam("b_symbol"))
+            .values(
+                dividend_annual=bindparam("b_dividend_annual", type_=Numeric(18, 4)),
+                dividend_status=bindparam("b_dividend_status", type_=String),
+                dividend_last_ex_date=bindparam("b_dividend_last_ex_date", type_=Date),
+            )
+        )
+
+        async with async_session() as session:
+            for i in range(0, len(rows), _PROFILE_CHUNK):
+                await session.execute(stmt, rows[i:i + _PROFILE_CHUNK])
+            await session.commit()
+
+        by_status = Counter(r["b_dividend_status"] for r in rows)
+        summary = (
+            f"Dividends: evaluated {len(rows)}/{len(payers)} payers — "
+            + ", ".join(f"{k}={v}" for k, v in sorted(by_status.items()))
+        )
+        print(f"📊 {summary}", flush=True)
+        logger.info(summary)
+        return len(rows)
+    except Exception as e:
+        logger.warning(f"Failed to update dividends: {e}")
         return None
 
 
@@ -458,6 +608,9 @@ async def refresh_stock_snapshots_job(api_key: str) -> None:
         # the day's new universe members are already in the table and visible to it)
         if should_rebuild:
             await _update_company_profiles()
+            # After profiles: needs the price written by _upsert above, and reads
+            # last_annual_dividend which the rebuild just refreshed.
+            await _update_dividends()
 
         print(f"✅ Snapshot refresh complete — {len(rows)} symbols", flush=True)
         logger.info(f"Snapshot refresh complete — {len(rows)} symbols")

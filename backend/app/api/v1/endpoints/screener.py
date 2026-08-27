@@ -14,11 +14,19 @@ from app.db.session import get_db
 
 router = APIRouter()
 
-# Dividend yield is derived, not stored: trailing annual dividend $ ÷ current price.
+# Dividend yield is derived, not stored: annual dividend $ ÷ current price, so it tracks
+# the 15-min quote refresh rather than freezing at fetch time.
+#
+# Sourced from `dividend_annual`, which holds the output of market_data.evaluate_dividend()
+# written by the daily rebuild — NOT from `last_annual_dividend`, FMP's raw trailing figure.
+# That raw column carries no ex-date, so a payer that stopped kept annualizing against a
+# collapsed price (NFE reported ~124%). A suspended payer now has dividend_annual = NULL and
+# so reads as 0%, with `dividend_status` on the row saying why.
+#
 # coalesce(dividend, 0) so non-payers read as 0% (a "max yield" screen includes them,
 # a "min yield" screen excludes them); nullif guards the rare zero/NULL price.
 DIV_YIELD_EXPR = (
-    func.coalesce(StockSnapshot.last_annual_dividend, 0)
+    func.coalesce(StockSnapshot.dividend_annual, 0)
     / func.nullif(StockSnapshot.price, 0)
     * 100
 )
@@ -107,7 +115,9 @@ def _build_row(row: StockSnapshot) -> dict:
     dollar_vol = round(price * volume, 2) if price and volume else None
     gap_pct = round((open_p - prev_c) / prev_c * 100, 2) if open_p and prev_c else None
 
-    annual_div = _f(row.last_annual_dividend)
+    # Gated figure — NULL for a suspended or unannualizable payer, so they show no yield
+    # rather than a stale one. dividend_status below tells the UI which case it is.
+    annual_div = _f(row.dividend_annual)
     # None (—) for non-payers; only payers get a yield number shown in the table.
     div_yield = round(annual_div / price * 100, 2) if annual_div and price else None
 
@@ -134,6 +144,7 @@ def _build_row(row: StockSnapshot) -> dict:
         "dollar_volume": dollar_vol,
         "gap_percent": gap_pct,
         "dividend_yield": div_yield,
+        "dividend_status": row.dividend_status,
         "beta": _f(row.beta),
         "last_refreshed": ts.isoformat() if ts else None,
         "is_etf": row.is_etf,
