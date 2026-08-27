@@ -11,6 +11,7 @@ import { useLivePriceContext } from '../contexts/LivePriceContext';
 import MarketStatusBadge from '../components/MarketStatusBadge';
 import '../styles/livePrice.css';
 import { useSectors, SECTOR_COLORS } from '../utils/sectorMap';
+import { downloadCSV } from '../utils/csv';
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -163,12 +164,6 @@ const Portfolio: React.FC = () => {
   }, [tickerList]);
 
   const exportDividendsCSV = () => {
-    const csvEscape = (v: string | number | null | undefined): string => {
-      const s = v == null ? '' : String(v);
-      if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-      return s;
-    };
-
     const rows: Array<{
       ticker: string; shares: number; exDate: string; payDate: string;
       divPerShare: number; total: number; type: string;
@@ -200,30 +195,14 @@ const Portfolio: React.FC = () => {
       return db.localeCompare(da);
     });
 
-    const header = ['Ticker', 'Shares Held', 'Ex-Date', 'Pay Date', 'Dividend Per Share', 'Total Payment', 'Distribution Type'];
-    const lines = [header.join(',')];
-    for (const r of rows) {
-      lines.push([
-        csvEscape(r.ticker),
-        csvEscape(r.shares),
-        csvEscape(r.exDate),
-        csvEscape(r.payDate),
-        csvEscape(r.divPerShare.toFixed(4)),
-        csvEscape(r.total.toFixed(2)),
-        csvEscape(r.type),
-      ].join(','));
-    }
-    const csv = lines.join('\r\n');
-
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `portfolio_dividends_${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    downloadCSV(
+      `portfolio_dividends_${new Date().toISOString().slice(0, 10)}.csv`,
+      ['Ticker', 'Shares Held', 'Ex-Date', 'Pay Date', 'Dividend Per Share', 'Total Payment', 'Distribution Type'],
+      rows.map(r => [
+        r.ticker, r.shares, r.exDate, r.payDate,
+        r.divPerShare.toFixed(4), r.total.toFixed(2), r.type,
+      ])
+    );
   };
 
   useEffect(() => {

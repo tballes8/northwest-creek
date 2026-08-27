@@ -4,6 +4,7 @@ import {
   PortfolioTransaction,
   TransactionType,
 } from '../services/api';
+import { downloadCSV } from '../utils/csv';
 
 interface TransactionHistoryModalProps {
   onClose: () => void;
@@ -85,6 +86,36 @@ const TransactionHistoryModal: React.FC<TransactionHistoryModalProps> = ({
     }
   };
 
+  // Exports exactly what is on screen, filter included — a per-ticker export is
+  // the common case when reconciling one holding against a broker statement.
+  // Voided rows are kept with a flag rather than dropped: they are struck
+  // through here, not deleted, and a reconciliation needs to see them.
+  const exportCSV = () => {
+    const header = [
+      'Date', 'Ticker', 'Type', 'Shares', 'Price', 'Amount',
+      'Cost Basis Per Share', 'Realized P&L', 'Realized P&L %', 'Voided', 'Notes',
+    ];
+    const rows = visible.map(txn => [
+      txn.transaction_date,
+      txn.ticker,
+      txn.transaction_type,
+      txn.quantity,
+      txn.price.toFixed(2),
+      txn.amount.toFixed(2),
+      txn.cost_basis_per_share == null ? '' : txn.cost_basis_per_share.toFixed(4),
+      txn.realized_pl == null ? '' : txn.realized_pl.toFixed(2),
+      txn.realized_pl_percent == null ? '' : txn.realized_pl_percent.toFixed(2),
+      txn.is_voided ? 'Yes' : 'No',
+      txn.notes || '',
+    ]);
+    const scope = tickerFilter ? `${tickerFilter}_` : '';
+    downloadCSV(
+      `transaction_history_${scope}${new Date().toISOString().slice(0, 10)}.csv`,
+      header,
+      rows
+    );
+  };
+
   const gainClass = (value: number) =>
     value >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
 
@@ -104,6 +135,17 @@ const TransactionHistoryModal: React.FC<TransactionHistoryModalProps> = ({
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={exportCSV}
+              disabled={visible.length === 0}
+              title={visible.length ? 'Download transaction history as CSV' : 'No transactions to export'}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-teal-500/50 text-teal-600 dark:text-teal-400 hover:bg-teal-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M7 1v8m-3-3l3 3 3-3M1 11h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Export CSV
+            </button>
             {tickers.length > 1 && (
               <select
                 value={tickerFilter}
