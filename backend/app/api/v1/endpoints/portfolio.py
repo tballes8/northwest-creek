@@ -335,6 +335,10 @@ async def remove_position(
         )
 
     # price carries the last known basis (informative, and satisfies price > 0).
+    # The checkpoint quantity is 0 by definition, so the shares that went away
+    # are recorded in the notes instead - without them, restoring a position
+    # removed by mistake means reconstructing the count from every prior BUY
+    # and SELL row for the ticker.
     await ledger.record_adjustment(
         db,
         user_id=current_user.id,
@@ -342,7 +346,11 @@ async def remove_position(
         quantity=0,
         price=ledger.to_money(db_item.buy_price),
         transaction_date=db_item.buy_date,
-        notes="Position removed from portfolio (not a sale)",
+        notes=(
+            f"Position removed from portfolio (not a sale): "
+            f"{ledger.fmt_qty(db_item.quantity)} shares @ "
+            f"${ledger.fmt_money(db_item.buy_price)} avg cost"
+        ),
     )
 
     await db.delete(db_item)

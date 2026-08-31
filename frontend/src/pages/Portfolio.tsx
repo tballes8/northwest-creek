@@ -72,6 +72,8 @@ const Portfolio: React.FC = () => {
   // replace objects in `portfolio`, so a snapshot would freeze the modal's
   // basis and price and make its realized-P/L preview drift.
   const [sellPositionId, setSellPositionId] = useState<string | null>(null);
+  const [removePositionId, setRemovePositionId] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
   const [realizedPL, setRealizedPL] = useState(0);
   const [showTransactionsModal, setShowTransactionsModal] = useState(false);
   const [editQuantity, setEditQuantity] = useState('');
@@ -486,18 +488,24 @@ const Portfolio: React.FC = () => {
     setSellPositionId(null);
   };
 
-  const handleRemovePosition = async (id: string) => {
-    if (!window.confirm('Remove this position from your portfolio?')) {
-      return;
-    }
-
+  // Removing and selling are one click apart and only one of them realizes a
+  // gain, so the confirmation is a real dialog that names the distinction and
+  // offers the sell path, not a window.confirm the user clicks through.
+  const handleConfirmRemove = async () => {
+    if (!removePositionId) return;
+    const id = removePositionId;
+    setRemoving(true);
     try {
       await portfolioAPI.remove(id);
       setPortfolio(prevList => prevList.filter(pos => pos.id !== id));
+      setRemovePositionId(null);
     } catch (err) {
       console.error('Failed to remove position:', err);
       setError('Failed to remove position');
+      setRemovePositionId(null);
       await loadData();
+    } finally {
+      setRemoving(false);
     }
   };
 
@@ -645,6 +653,10 @@ const Portfolio: React.FC = () => {
   // and self-closes if the row disappears underneath it.
   const sellPosition = sellPositionId
     ? portfolio.find(pos => pos.id === sellPositionId) ?? null
+    : null;
+
+  const removePosition = removePositionId
+    ? portfolio.find(pos => pos.id === removePositionId) ?? null
     : null;
 
   if (loading) {
@@ -1136,7 +1148,7 @@ const Portfolio: React.FC = () => {
                             Edit
                           </button>
                           <button
-                            onClick={() => handleRemovePosition(position.id)}
+                            onClick={() => setRemovePositionId(position.id)}
                             className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
                           >
                             Remove
@@ -1168,6 +1180,75 @@ const Portfolio: React.FC = () => {
           onClose={() => setSellPositionId(null)}
           onSold={(result) => handleSold(sellPosition.id, result)}
         />
+      )}
+
+      {removePosition && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/60"
+            onClick={() => !removing && setRemovePositionId(null)}
+          />
+          <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl border dark:border-gray-600 w-full max-w-md">
+            <div className="px-6 py-5">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                Remove {removePosition.ticker}, or sell it?
+              </h2>
+              <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
+                You are about to remove{' '}
+                <span className="font-semibold text-gray-900 dark:text-white">
+                  {removePosition.quantity} {removePosition.ticker}
+                </span>{' '}
+                from your portfolio.
+              </p>
+              <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
+                <span className="font-semibold text-gray-900 dark:text-white">Remove</span> is for a
+                position you entered by mistake or no longer want to track. It records{' '}
+                <span className="font-semibold">no sale</span> and realizes{' '}
+                <span className="font-semibold">no gain or loss</span>.
+              </p>
+              <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
+                If you actually sold these shares, use{' '}
+                <span className="font-semibold text-gray-900 dark:text-white">Sell</span> instead so
+                the realized P&amp;L lands in your history.
+              </p>
+              <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                Either way the position is logged in your transaction history, so a removal can be
+                undone by re-adding it.
+              </p>
+            </div>
+            {/* Sell sits apart from Remove: the button that records a real trade
+                should not be adjacent to the one that discards the row. */}
+            <div className="flex items-center justify-between gap-3 px-6 py-4 border-t dark:border-gray-700">
+              <button
+                onClick={() => {
+                  const id = removePosition.id;
+                  setRemovePositionId(null);
+                  setSellPositionId(id);
+                }}
+                disabled={removing || refreshing || removePosition.quantity <= 0}
+                className="px-4 py-2 text-sm font-medium rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Sell instead
+              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setRemovePositionId(null)}
+                  disabled={removing}
+                  className="px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmRemove}
+                  disabled={removing}
+                  className="px-4 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {removing ? 'Removing…' : 'Remove'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {showTransactionsModal && (
