@@ -276,10 +276,11 @@ const BLOG_PATH_RE = /^\/blogs\/([^/]+)\/?$/;
 
 // Renamed post slugs — old slug -> current slug.
 // RULE: any time a published post's slug changes, add an entry here.
-const SLUG_REDIRECTS = {
+const SLUG_REDIRECTS = Object.assign(Object.create(null), {
   'a-deep-dive-into-options-trading-strategies':
     'options-strategies-a-full-breakdown-of-all-8',
-};
+  'what-is-the-6040-portfolio-and-does-it-still-work': 'what-is-the-60-40-portfolio',
+});
 
 const server = http.createServer(async (req, res) => {
   try {
