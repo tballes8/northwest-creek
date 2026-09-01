@@ -130,17 +130,41 @@ NWC calls the Anthropic Messages API directly over HTTP (no SDK), via httpx.
 Pinned model ID (a model retirement/deprecation directly breaks all AI services):
 - `config.ANTHROPIC_MODEL` (default `claude-sonnet-4-6`, overridable via the ANTHROPIC_MODEL
   env var) — single source of truth read by `services/stock_analyzer.py` (price target +
-  analysis), `services/cycle_phase_analyzer.py`, `services/changelog_review.py` (this reviewer),
-  and `services/portfolio_analyzer.py`. Bump it in one place when migrating Sonnet versions.
+  analysis), `services/cycle_phase_analyzer.py`, `services/financial_analyzer.py`,
+  `services/changelog_review.py` (this reviewer), and `services/portfolio_analyzer.py`.
+  Bump it in one place when migrating Sonnet versions.
 
-Files: `services/stock_analyzer.py`, `services/cycle_phase_analyzer.py`, `services/portfolio_analyzer.py`, `services/changelog_review.py`, `services/anthropic_response.py`.
+Files: `services/stock_analyzer.py`, `services/cycle_phase_analyzer.py`, `services/financial_analyzer.py`, `services/portfolio_analyzer.py`, `services/changelog_review.py`, `services/anthropic_response.py`.
+
+Output caps per caller (Claude's reasoning + visible text must both fit in these):
+- `stock_analyzer.forecast_stock_price`  max_tokens=200   (JSON out — most exposed)
+- `stock_analyzer.analyze_stock`         max_tokens=400
+- `portfolio_analyzer`                   max_tokens=500
+- `cycle_phase_analyzer`                 max_tokens=700
+- `financial_analyzer`                   max_tokens=700   (guards `stop_reason`)
+- `changelog_review`                     max_tokens=2000  (guards `stop_reason`)
+Only the two marked callers treat `stop_reason: "max_tokens"` as a failure; the other
+four return a silently truncated string.
 
 Watch items: model deprecation/retirement dates (especially the older pinned model),
 `anthropic-version` date requirements, changes to the Messages request params or to the
-`content` block response shape, and any max_tokens / rate-limit changes. Note that a
-model bump also changes request-parameter validity — newer models reject `temperature`
-/ `top_p` / `top_k` and the old `thinking.budget_tokens` shape. NWC sends none of those
-today, so the bump itself is currently just the ANTHROPIC_MODEL value.
+`content` block response shape, and any max_tokens / rate-limit changes.
+
+A MODEL BUMP IS NOT ALWAYS A ONE-LINE CHANGE. Two things travel with it:
+1. Request-parameter validity — newer models reject `temperature` / `top_p` / `top_k`,
+   the old `thinking.budget_tokens` shape, and assistant-message prefill. NWC sends none
+   of those today, so this half is currently safe on any target model.
+2. Default thinking — on Sonnet 5, Opus 5 and Fable 5, OMITTING the `thinking` field
+   runs adaptive thinking ON by default (on the pinned Sonnet 4.6, and on Opus 4.7/4.8,
+   omitting it leaves thinking off). All six NWC call sites omit `thinking`, and thinking
+   tokens are billed and counted against `max_tokens`. Against the caps listed above,
+   bumping to a thinking-by-default model can spend the whole budget on reasoning and
+   return no text block at all — `extract_text()` then raises ValueError, the caller's
+   broad `except Exception` swallows it, and the feature degrades to its fallback with
+   nothing surfaced to the user. So a bump to Sonnet 5 / Opus 5 / Fable 5 REQUIRES either
+   raising the caps or sending `thinking: {"type": "disabled"}` explicitly — accepted on
+   Sonnet 5, accepted on Opus 5 only at effort `high` or below, and rejected with 400 on
+   Fable 5 (where thinking cannot be turned off at all).
 Config: ANTHROPIC_API_KEY."""
 
 TWILIO_REGISTRY = """\

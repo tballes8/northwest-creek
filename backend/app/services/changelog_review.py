@@ -26,6 +26,11 @@ from app.services.vendor_registries import (
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 
+# Output cap for the review. The report is a summary + findings table + checklist,
+# so it is the longest thing NWC asks Claude for — and the one most likely to be
+# truncated when an admin pastes a large changelog.
+MAX_TOKENS = 2000
+
 
 def _grounded_system_prompt(vendor_display: str) -> str:
     return f"""You are a senior backend engineer reviewing a third-party vendor's \
@@ -172,11 +177,23 @@ async def assess_changelog(changelog_text: str, vendor: str | None = None) -> st
             },
             json={
                 "model": settings.ANTHROPIC_MODEL,
-                "max_tokens": 2000,
+                "max_tokens": MAX_TOKENS,
                 "system": system_prompt,
                 "messages": [{"role": "user", "content": prompt}],
             },
         )
         response.raise_for_status()
         data = response.json()
+
+        # A truncated report is worse than no report: it ends mid-table, and the
+        # admin has no way to tell it was cut off before it is persisted as a
+        # MaintenanceReport. Fail loudly instead — the endpoint turns this into a
+        # 502 whose detail tells the admin what to do about it.
+        if data.get("stop_reason") == "max_tokens":
+            raise ValueError(
+                f"the review hit the {MAX_TOKENS}-token output cap and was truncated. "
+                "Paste a smaller section of the changelog, or raise MAX_TOKENS in "
+                "services/changelog_review.py."
+            )
+
         return extract_text(data)
