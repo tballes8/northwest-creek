@@ -63,6 +63,18 @@ DIVIDEND_CONCURRENCY = 8
 # Exchanges that count as "US common stock" for the screener universe
 US_EXCHANGES = {"NYSE", "NASDAQ", "AMEX"}
 
+# /company-screener page size. The request is unpaginated, so a universe that outgrows
+# this would be silently clipped — _build_universe warns when a response arrives at the
+# cap, which is the signal to start passing `page`.
+SCREENER_LIMIT = 10_000
+
+# Share of the stored universe _prune_universe may delete in one run. A truncated or
+# partially-served company-screener response is indistinguishable from a mass delisting,
+# and the prune takes those symbols out of the screener until a later rebuild puts them
+# back. Past this share the delete is skipped for a human to look at; real daily churn is
+# a handful of rows.
+PRUNE_MAX_DELETE_FRACTION = 0.10
+
 # (symbol, name, last_annual_dividend, beta) — fundamentals captured from
 # /company-screener on the daily rebuild; None means "don't touch the stored value".
 #
@@ -117,7 +129,7 @@ async def _build_universe(api_key: str) -> list[UniverseRow]:
                 "isFund": "false",
                 "isActivelyTrading": "true",
                 "country": "US",
-                "limit": 10000,
+                "limit": SCREENER_LIMIT,
                 "apikey": api_key,
             },
         )
@@ -125,6 +137,14 @@ async def _build_universe(api_key: str) -> list[UniverseRow]:
         stock_list = resp.json()
 
     print(f"📊 company-screener raw count: {len(stock_list) if isinstance(stock_list, list) else type(stock_list).__name__}", flush=True)
+
+    if isinstance(stock_list, list) and len(stock_list) >= SCREENER_LIMIT:
+        msg = (
+            f"company-screener returned {len(stock_list)} rows, at the {SCREENER_LIMIT} "
+            "limit — the universe is being clipped; add `page` pagination to the request"
+        )
+        print(f"⚠️ {msg}", flush=True)
+        logger.warning(msg)
 
     def _num(raw) -> float | None:
         try:
@@ -153,16 +173,34 @@ async def _build_universe(api_key: str) -> list[UniverseRow]:
 
 
 async def _prune_universe(tickers: list[UniverseRow]) -> None:
-    """Remove DB rows for symbols no longer in the filtered universe (ETFs/funds that slipped in)."""
+    """Remove DB rows for symbols no longer in the filtered universe (ETFs/funds that slipped in).
+
+    Bounded by PRUNE_MAX_DELETE_FRACTION — see the constant for why. When the bound trips
+    the universe is left intact and the run continues: quotes still refresh for whatever
+    the screener did return, so the unmatched rows simply keep the prices they had rather
+    than disappearing from the screener.
+    """
     current = {t[0] for t in tickers}
     async with async_session() as session:
         db_symbols = set((await session.execute(select(StockSnapshot.symbol))).scalars().all())
         stale = db_symbols - current
-        if stale:
-            await session.execute(delete(StockSnapshot).where(StockSnapshot.symbol.in_(stale)))
-            await session.commit()
-            print(f"📊 Pruned {len(stale)} stale/excluded symbols from universe", flush=True)
-            logger.info(f"Pruned {len(stale)} stale/excluded symbols from universe")
+        if not stale:
+            return
+        share = len(stale) / len(db_symbols)
+        if share > PRUNE_MAX_DELETE_FRACTION:
+            msg = (
+                f"Prune skipped: {len(stale)} of {len(db_symbols)} stored symbols ({share:.0%}) "
+                f"are missing from a {len(current)}-symbol company-screener response, over the "
+                f"{PRUNE_MAX_DELETE_FRACTION:.0%} cap — reads as a partial response, not a "
+                "delisting. Universe left intact; investigate before forcing a rebuild."
+            )
+            print(f"⚠️ {msg}", flush=True)
+            logger.warning(msg)
+            return
+        await session.execute(delete(StockSnapshot).where(StockSnapshot.symbol.in_(stale)))
+        await session.commit()
+        print(f"📊 Pruned {len(stale)} stale/excluded symbols from universe", flush=True)
+        logger.info(f"Pruned {len(stale)} stale/excluded symbols from universe")
 
 
 async def _existing_universe() -> list[UniverseRow]:
