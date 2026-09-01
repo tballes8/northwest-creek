@@ -175,6 +175,10 @@ interface ScreenerResult {
   pct_from_52wk_high: number | null;
   pct_from_52wk_low: number | null;
   dollar_volume: number | null;
+  // Average daily volume from /stable/profile, and today's volume as a multiple of it.
+  // Both null until the daily profile pass has filled avg_volume for the symbol.
+  avg_volume: number | null;
+  rvol: number | null;
   dividend_yield: number | null;
   // Recency-gated status from evaluate_dividend(): a payer that stopped reads 'suspended'
   // with no yield, rather than being indistinguishable from one that never paid.
@@ -195,6 +199,7 @@ interface ScreenerFormState {
   betaMin: string; betaMax: string;
   dollarVolMinM: string;
   volumeMinM: string; volumeMaxM: string;
+  rvolMin: string; rvolMax: string;
   pctFromHighMin: string; pctFromHighMax: string;
   pctFromLowMin: string; pctFromLowMax: string;
   goldenCross: boolean | null;
@@ -244,6 +249,7 @@ const defaultScreenerForm: ScreenerFormState = {
   betaMin: '', betaMax: '',
   dollarVolMinM: '',
   volumeMinM: '', volumeMaxM: '',
+  rvolMin: '', rvolMax: '',
   pctFromHighMin: '', pctFromHighMax: '',
   pctFromLowMin: '', pctFromLowMax: '',
   goldenCross: null,
@@ -310,6 +316,8 @@ function buildScreenerCriteria(
     form.volumeMaxM !== '' ? (parseFloat(form.volumeMaxM) * 1e6).toString() : '',
   );
   if (vol) c.volume = vol;
+  const rv = nr(form.rvolMin, form.rvolMax);
+  if (rv) c.rvol = rv;
   const ph = nr(form.pctFromHighMin, form.pctFromHighMax);
   if (ph) c.pct_from_52wk_high = ph;
   const pl = nr(form.pctFromLowMin, form.pctFromLowMax);
@@ -1556,6 +1564,8 @@ const Stocks: React.FC = () => {
       dollarVolMinM: c.dollar_volume?.min != null ? (c.dollar_volume.min / 1e6).toString() : '',
       volumeMinM: c.volume?.min != null ? (c.volume.min / 1e6).toString() : '',
       volumeMaxM: c.volume?.max != null ? (c.volume.max / 1e6).toString() : '',
+      rvolMin: c.rvol?.min?.toString() ?? '',
+      rvolMax: c.rvol?.max?.toString() ?? '',
       pctFromHighMin: c.pct_from_52wk_high?.min?.toString() ?? '',
       pctFromHighMax: c.pct_from_52wk_high?.max?.toString() ?? '',
       pctFromLowMin: c.pct_from_52wk_low?.min?.toString() ?? '',
@@ -1601,6 +1611,8 @@ const Stocks: React.FC = () => {
       dollarVolMinM: c.dollar_volume?.min != null ? (c.dollar_volume.min / 1e6).toString() : '',
       volumeMinM: c.volume?.min != null ? (c.volume.min / 1e6).toString() : '',
       volumeMaxM: c.volume?.max != null ? (c.volume.max / 1e6).toString() : '',
+      rvolMin: c.rvol?.min?.toString() ?? '',
+      rvolMax: c.rvol?.max?.toString() ?? '',
       pctFromHighMin: c.pct_from_52wk_high?.min?.toString() ?? '',
       pctFromHighMax: c.pct_from_52wk_high?.max?.toString() ?? '',
       pctFromLowMin: c.pct_from_52wk_low?.min?.toString() ?? '',
@@ -3307,6 +3319,24 @@ const Stocks: React.FC = () => {
                 </div>
               </div>
 
+              {/* Relative Volume */}
+              <div className="mb-3">
+                <div
+                  className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1"
+                  title="Today's volume ÷ average daily volume. 1 = a full average day already traded, so mid-session values climb toward 1 as the day goes on."
+                >
+                  Relative Volume (x avg)
+                </div>
+                <div className="flex gap-1.5">
+                  <input type="number" step="0.1" placeholder="Min" value={screenerForm.rvolMin}
+                    onChange={e => setScreenerForm(f => ({ ...f, rvolMin: e.target.value }))}
+                    className={screenerInputCls} />
+                  <input type="number" step="0.1" placeholder="Max" value={screenerForm.rvolMax}
+                    onChange={e => setScreenerForm(f => ({ ...f, rvolMax: e.target.value }))}
+                    className={screenerInputCls} />
+                </div>
+              </div>
+
               {/* % from 52-Wk High */}
               <div className="mb-3">
                 <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">% from 52-Wk High</div>
@@ -3495,6 +3525,7 @@ const Stocks: React.FC = () => {
                             { key: 'change_percentage', label: 'Chg%' },
                             { key: 'market_cap', label: 'Mkt Cap' },
                             { key: 'volume', label: 'Volume' },
+                            { key: 'rvol', label: 'RVOL' },
                             { key: 'dividend_yield', label: 'Div Yld' },
                             { key: 'beta', label: 'Beta' },
                           ] as const).map(col => (
@@ -3556,6 +3587,12 @@ const Stocks: React.FC = () => {
                               </td>
                               <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap">{fmtMarketCap(r.market_cap)}</td>
                               <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap">{fmtVolume(r.volume)}</td>
+                              <td
+                                className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums"
+                                title={r.avg_volume != null ? `Avg daily volume ${fmtVolume(r.avg_volume)}` : undefined}
+                              >
+                                {r.rvol != null ? `${r.rvol.toFixed(2)}x` : '—'}
+                              </td>
                               <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums">
                                 {r.dividend_yield != null ? (
                                   `${r.dividend_yield.toFixed(2)}%`

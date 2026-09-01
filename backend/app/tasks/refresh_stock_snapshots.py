@@ -362,7 +362,8 @@ async def _update_company_profiles(
     refresh_limit: int = PROFILE_REFRESH_LIMIT,
 ) -> int | None:
     """
-    Fill in missing company profiles (sector, industry, description) from /stable/profile.
+    Fill in missing company profiles (sector, industry, description, avg_volume) from
+    /stable/profile.
 
     /stable/profile is the ONLY source for stored sector/industry, because it is what
     /company/{ticker} shows in Company Details and what /stocks/sectors reads. Sourcing
@@ -453,9 +454,24 @@ async def _update_company_profiles(
             if not sector or sector == "Other":
                 sector = None
 
+            # avg_volume rides along on this pass because /stable/profile is the only
+            # universe-wide source for it (batch-quote has none) and this pass already
+            # fetches every symbol's profile daily — so it costs zero extra FMP calls.
+            # Coerced to int for the Numeric(20, 0) column rather than letting Postgres
+            # round a float; <= 0 is treated as no answer, since it can only produce a
+            # meaningless RVOL denominator.
+            raw_avg_vol = info.get("average_volume")
+            try:
+                avg_vol = int(float(raw_avg_vol)) if raw_avg_vol is not None else None
+            except (TypeError, ValueError):
+                avg_vol = None
+            if avg_vol is not None and avg_vol <= 0:
+                avg_vol = None
+
             return {
                 "b_symbol": symbol,
                 "b_sector": sector,
+                "b_avg_volume": avg_vol,
                 "b_industry": info.get("industry") or None,
                 "b_description": info.get("description") or None,
                 # get_company_info sets type == "ETF" exactly when the profile's isEtf
@@ -490,6 +506,7 @@ async def _update_company_profiles(
                 sector=func.coalesce(bindparam("b_sector", type_=String), tbl.c.sector),
                 industry=func.coalesce(bindparam("b_industry", type_=String), tbl.c.industry),
                 description=func.coalesce(bindparam("b_description", type_=Text), tbl.c.description),
+                avg_volume=func.coalesce(bindparam("b_avg_volume", type_=Numeric), tbl.c.avg_volume),
                 is_etf=bindparam("b_is_etf", type_=Boolean),
             )
         )

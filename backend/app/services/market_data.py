@@ -347,6 +347,11 @@ class MarketDataService:
                 "exchange": result.get("exchange") or result.get("exchangeShortName") or "",
                 # /stable/profile returns `marketCap`; older API used `mktCap`.
                 "market_cap": result.get("marketCap") or result.get("mktCap"),
+                # The only universe-wide source of average daily volume: batch-quote has no
+                # avgVolume field, so the daily profile pass in refresh_stock_snapshots is
+                # what fills stock_snapshots.avg_volume — which the screener's RVOL filter
+                # divides today's volume into. Already-fetched data; costs no extra call.
+                "average_volume": result.get("averageVolume"),
                 "phone": result.get("phone", ""),
                 "employees": result.get("fullTimeEmployees"),
                 "country": result.get("country", "US"),

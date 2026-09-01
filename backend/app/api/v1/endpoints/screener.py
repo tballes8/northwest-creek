@@ -31,9 +31,27 @@ DIV_YIELD_EXPR = (
     * 100
 )
 
+# Relative volume: today's volume against a normal full day. avg_volume comes from
+# /stable/profile on the daily rebuild (see refresh_stock_snapshots._update_company_profiles).
+#
+# Derived in SQL, not in _passes_derived, so an RVOL screen stays a pushdown WHERE instead
+# of loading the whole table into Python the way the pct_from_52wk/gap filters do.
+#
+# NULL semantics differ deliberately from DIV_YIELD_EXPR: there is no coalesce to 0 here.
+# A missing avg_volume means "unknown", not "no relative volume" — nullif makes the quotient
+# NULL, and a NULL fails both >= and <=, so unknown-volume rows drop out of any RVOL screen
+# rather than being scored as zero.
+#
+# Read it as "share of an average day traded so far": mid-session a normal day sits well
+# below 1.0 and climbs toward it by the close, so RVOL >= 1 means a full average day's
+# volume is already done — unusual at any hour, and the reason the presets below key off 1.0
+# rather than a multiple that only becomes reachable late in the session.
+RVOL_EXPR = StockSnapshot.volume / func.nullif(StockSnapshot.avg_volume, 0)
+
 SORTABLE = {
     "price", "market_cap", "change_percentage", "volume",
     "price_avg_50", "price_avg_200", "symbol", "name", "dividend_yield", "beta",
+    "avg_volume", "rvol",
 }
 
 SORT_COL = {
@@ -47,6 +65,8 @@ SORT_COL = {
     "name": StockSnapshot.name,
     "dividend_yield": DIV_YIELD_EXPR,
     "beta": StockSnapshot.beta,
+    "avg_volume": StockSnapshot.avg_volume,
+    "rvol": RVOL_EXPR,
 }
 
 
@@ -70,6 +90,8 @@ class ScreenerCriteria(BaseModel):
     pct_from_52wk_low: Optional[NumericRange] = None
     dollar_volume: Optional[NumericRange] = None
     gap_percent: Optional[NumericRange] = None
+    # Relative volume, e.g. min 1 = an average day's volume already traded. See RVOL_EXPR.
+    rvol: Optional[NumericRange] = None
 
     golden_cross: Optional[bool] = None
     death_cross: Optional[bool] = None
@@ -101,6 +123,7 @@ def _build_row(row: StockSnapshot) -> dict:
     year_high = _f(row.year_high)
     year_low = _f(row.year_low)
     volume = _f(row.volume)
+    avg_vol = _f(row.avg_volume)
     open_p = _f(row.open_price)
     prev_c = _f(row.previous_close)
 
@@ -143,6 +166,10 @@ def _build_row(row: StockSnapshot) -> dict:
         "pct_from_52wk_low": pct_from_low,
         "dollar_volume": dollar_vol,
         "gap_percent": gap_pct,
+        "avg_volume": avg_vol,
+        # Mirrors RVOL_EXPR — None when avg_volume is unknown, matching the SQL filter's
+        # behaviour rather than showing a fabricated 0.
+        "rvol": round(volume / avg_vol, 2) if volume and avg_vol else None,
         "dividend_yield": div_yield,
         "dividend_status": row.dividend_status,
         "beta": _f(row.beta),
@@ -198,6 +225,7 @@ async def run_screener(
     add_range(StockSnapshot.price_avg_200, criteria.price_avg_200)
     add_range(DIV_YIELD_EXPR, criteria.dividend_yield)
     add_range(StockSnapshot.beta, criteria.beta)
+    add_range(RVOL_EXPR, criteria.rvol)
 
     if criteria.exchange:
         conditions.append(StockSnapshot.exchange.in_(criteria.exchange))
@@ -377,12 +405,32 @@ _PRESETS = [
     {
         "id": "high_volume_breakout",
         "name": "High Volume Breakout",
-        "description": "Stocks up 3%+ today with at least $50M in dollar volume",
+        "description": (
+            "Stocks up 3%+ today that have already traded a full average day's volume, "
+            "with at least $50M in dollar volume"
+        ),
         "criteria": {
             "change_percentage": {"min": 3},
+            # Dollar volume stays as the tradability floor; RVOL is what makes the
+            # participation actually unusual rather than just large.
             "dollar_volume": {"min": 50_000_000},
+            "rvol": {"min": 1},
             "market_cap": {"min": 200_000_000},
-            "sort_by": "change_percentage",
+            "sort_by": "rvol",
+            "sort_desc": True,
+        },
+    },
+    {
+        "id": "unusual_volume",
+        "name": "Unusual Volume",
+        "description": (
+            "Stocks that have already traded 2x an average day's volume — direction-agnostic, "
+            "so it catches accumulation and capitulation alike"
+        ),
+        "criteria": {
+            "rvol": {"min": 2},
+            "market_cap": {"min": 200_000_000},
+            "sort_by": "rvol",
             "sort_desc": True,
         },
     },

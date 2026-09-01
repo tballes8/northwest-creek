@@ -47,8 +47,11 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
                  "api/v1/endpoints/relative_valuation.py (peer-ratios)"],
      # Stable profile uses `exchange` (not `exchangeShortName`) and has no `type` field
      # (use isEtf/isFund/isAdr booleans). See scripts/audit_fmp_fields.py.
+     # averageVolume is read here and ONLY here — it is the source for
+     # stock_snapshots.avg_volume and therefore the screener's RVOL filter.
      "key_fields": ["symbol", "companyName", "sector", "industry", "website", "fullTimeEmployees",
-                    "country", "description", "exchange", "marketCap", "isEtf", "ipoDate"]},
+                    "country", "description", "exchange", "marketCap", "isEtf", "ipoDate",
+                    "averageVolume"]},
     {"path": "income-statement", "description": "Quarterly/annual income statement",
      "used_by": ["services/financials_service.py:72",
                  "api/v1/endpoints/relative_valuation.py (peer-ratios: growth/margin context)"],
