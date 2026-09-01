@@ -326,6 +326,42 @@ const TrueVwapModal: React.FC<{ ticker: string; onClose: () => void }> = ({ tick
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Maps a signal's indicator name to the chart section that renders it, plus the
+// collapsible category that section lives under (null = always visible).
+// Single source of truth for both the Trading Signals scroll targets and the
+// signal badge shown in each chart header.
+type ChartCategory = 'volume' | 'momentum' | 'volatility' | 'trend' | null;
+
+const chartTargetForIndicator = (indicator: string): { chartId: string; category: ChartCategory } | null => {
+  const name = indicator.toLowerCase();
+  // Basic charts (always visible)
+  if (name.includes('bollinger')) return { chartId: 'chart-bollinger', category: null };
+  if (name.includes('moving average') || name.includes('golden cross') || name.includes('death cross') || name === 'sma' || name === 'ema') return { chartId: 'chart-moving-averages', category: null };
+  if (name.includes('rsi') || name === 'relative strength index') return { chartId: 'chart-rsi', category: null };
+  if (name.includes('macd')) return { chartId: 'chart-macd', category: null };
+  // Volume indicators
+  if (name.includes('vwap')) return { chartId: 'chart-vwap', category: 'volume' };
+  if (name.includes('a/d') || name.includes('accumulation')) return { chartId: 'chart-ad', category: 'volume' };
+  if (name.includes('obv') || name.includes('on-balance')) return { chartId: 'chart-obv', category: 'volume' };
+  // Momentum indicators
+  if (name.includes('stochastic') || name.includes('stoch')) return { chartId: 'chart-stochastic', category: 'momentum' };
+  if (name.includes('adx') || name.includes('directional')) return { chartId: 'chart-adx', category: 'momentum' };
+  if (name.includes('cci')) return { chartId: 'chart-cci', category: 'momentum' };
+  if (name.includes('roc') || name.includes('rate of change')) return { chartId: 'chart-roc', category: 'momentum' };
+  // Volatility indicators
+  if (name.includes('atr') || name.includes('average true range')) return { chartId: 'chart-atr', category: 'volatility' };
+  if (name.includes('keltner')) return { chartId: 'chart-keltner', category: 'volatility' };
+  if (name.includes('std') || name.includes('standard dev')) return { chartId: 'chart-volatility-summary', category: 'volatility' };
+  // Trend indicators
+  if (name.includes('parabolic') || name.includes('sar')) return { chartId: 'chart-parabolic-sar', category: 'trend' };
+  if (name.includes('ichimoku')) return { chartId: 'chart-ichimoku', category: 'trend' };
+  if (name.includes('donchian')) return { chartId: 'chart-donchian', category: 'trend' };
+  return null;
+};
+
+const signalPillClass = (type: string): string =>
+  type === 'bullish' ? 'bg-green-500' : type === 'bearish' ? 'bg-red-500' : 'bg-amber-500';
+
 const TechnicalAnalysis: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -349,46 +385,45 @@ const TechnicalAnalysis: React.FC = () => {
   const [showVolatility, setShowVolatility] = useState(false);
   const [showTrend, setShowTrend] = useState(false);
 
-  // Map signal indicator names to chart section IDs and their category toggle
+  // Jump to the chart section a Trading Signals card refers to, expanding its
+  // collapsible category first when the section is hidden.
   const scrollToChart = (indicator: string) => {
-    const name = indicator.toLowerCase();
-    let chartId = '';
-    let expandCategory: (() => void) | null = null;
+    const target = chartTargetForIndicator(indicator);
+    if (!target) return;
 
-    // Basic charts (always visible)
-    if (name.includes('bollinger')) { chartId = 'chart-bollinger'; }
-    else if (name.includes('moving average') || name.includes('golden cross') || name.includes('death cross') || name === 'sma' || name === 'ema') { chartId = 'chart-moving-averages'; }
-    else if (name.includes('rsi') || name === 'relative strength index') { chartId = 'chart-rsi'; }
-    else if (name.includes('macd')) { chartId = 'chart-macd'; }
-    // Volume indicators
-    else if (name.includes('vwap')) { chartId = 'chart-vwap'; expandCategory = () => setShowVolume(true); }
-    else if (name.includes('a/d') || name.includes('accumulation')) { chartId = 'chart-ad'; expandCategory = () => setShowVolume(true); }
-    else if (name.includes('obv') || name.includes('on-balance')) { chartId = 'chart-obv'; expandCategory = () => setShowVolume(true); }
-    // Momentum indicators
-    else if (name.includes('stochastic') || name.includes('stoch')) { chartId = 'chart-stochastic'; expandCategory = () => setShowMomentum(true); }
-    else if (name.includes('adx') || name.includes('directional')) { chartId = 'chart-adx'; expandCategory = () => setShowMomentum(true); }
-    else if (name.includes('cci')) { chartId = 'chart-cci'; expandCategory = () => setShowMomentum(true); }
-    else if (name.includes('roc') || name.includes('rate of change')) { chartId = 'chart-roc'; expandCategory = () => setShowMomentum(true); }
-    // Volatility indicators
-    else if (name.includes('atr') || name.includes('average true range')) { chartId = 'chart-atr'; expandCategory = () => setShowVolatility(true); }
-    else if (name.includes('keltner')) { chartId = 'chart-keltner'; expandCategory = () => setShowVolatility(true); }
-    else if (name.includes('std') || name.includes('standard dev')) { chartId = 'chart-volatility-summary'; expandCategory = () => setShowVolatility(true); }
-    // Trend indicators
-    else if (name.includes('parabolic') || name.includes('sar')) { chartId = 'chart-parabolic-sar'; expandCategory = () => setShowTrend(true); }
-    else if (name.includes('ichimoku')) { chartId = 'chart-ichimoku'; expandCategory = () => setShowTrend(true); }
-    else if (name.includes('donchian')) { chartId = 'chart-donchian'; expandCategory = () => setShowTrend(true); }
-
-    if (!chartId) return;
+    const expanders: Record<string, () => void> = {
+      volume: () => setShowVolume(true),
+      momentum: () => setShowMomentum(true),
+      volatility: () => setShowVolatility(true),
+      trend: () => setShowTrend(true),
+    };
+    const expandCategory = target.category ? expanders[target.category] : null;
 
     // Expand the category if needed, then scroll after React re-renders
     if (expandCategory) {
       expandCategory();
       setTimeout(() => {
-        document.getElementById(chartId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.getElementById(target.chartId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 100);
     } else {
-      document.getElementById(chartId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById(target.chartId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+  };
+
+  // Right-justified restatement of the Trading Signals card for a given chart
+  // section, so the read is available without scrolling back up. Renders
+  // nothing when no signal maps to this chart (e.g. ATR).
+  const renderChartSignal = (chartId: string) => {
+    const signal = analysisData?.signals?.find(s => chartTargetForIndicator(s.indicator)?.chartId === chartId);
+    if (!signal) return null;
+    return (
+      <div className="sm:flex-shrink-0 sm:max-w-[400px] sm:text-right">
+        <span className={`inline-block px-2 py-0.5 rounded text-xs font-bold text-white ${signalPillClass(signal.type)}`}>
+          {signal.type.charAt(0).toUpperCase() + signal.type.slice(1)}
+        </span>
+        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 font-normal">{signal.message}</p>
+      </div>
+    );
   };
 
   const [watchlistMsg, setWatchlistMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -1814,13 +1849,7 @@ const TechnicalAnalysis: React.FC = () => {
                         ? 'border border-teal-500 dark:border-teal-600'
                         : 'border border-transparent'
                     }`} onClick={() => scrollToChart(signal.indicator)}>
-                      <span className={`flex-shrink-0 px-2 py-1 rounded text-xs font-bold text-center min-w-[64px] text-white ${
-                        signal.type === 'bullish'
-                          ? 'bg-green-500'
-                          : signal.type === 'bearish'
-                          ? 'bg-red-500'
-                          : 'bg-amber-500'
-                      }`}>
+                      <span className={`flex-shrink-0 px-2 py-1 rounded text-xs font-bold text-center min-w-[64px] text-white ${signalPillClass(signal.type)}`}>
                         {signal.type.charAt(0).toUpperCase() + signal.type.slice(1)}
                       </span>
                       <div className="min-w-0">
@@ -1835,7 +1864,10 @@ const TechnicalAnalysis: React.FC = () => {
 
             {/* Bollinger Bands + Volume Chart */}
             <div id="chart-bollinger" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Bollinger Bands &amp; Volume</h3>
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-4">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Bollinger Bands &amp; Volume</h3>
+                  {renderChartSignal('chart-bollinger')}
+                </div>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     📊 <strong>How to read:</strong> Green dashed line = Lower Bollinger Band,
                     Red dashed line = Upper Bollinger Band; the bands widen and narrow with volatility.
@@ -1978,7 +2010,10 @@ const TechnicalAnalysis: React.FC = () => {
 
             {/* Moving Averages Chart with Golden/Death Cross */}
             <div id="chart-moving-averages" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Moving Averages — Trend &amp; Crossovers</h3>
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-4">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">Moving Averages — Trend &amp; Crossovers</h3>
+                  {renderChartSignal('chart-moving-averages')}
+                </div>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     📊 <strong>How to read:</strong> Yellow line = 20-day SMA (short-term trend), 
                     Purple line = 50-day SMA (medium-term trend). 
@@ -2053,7 +2088,10 @@ const TechnicalAnalysis: React.FC = () => {
 
             {/* RSI Chart */}
             <div id="chart-rsi" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">RSI (Relative Strength Index)</h3>
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                  <h3 className="text-xl font-bold text-gray-900 dark:text-white">RSI (Relative Strength Index)</h3>
+                  {renderChartSignal('chart-rsi')}
+                </div>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     Current RSI: <strong className={analysisData.indicators.rsi.value && analysisData.indicators.rsi.value < 30 ? 'text-green-500' : analysisData.indicators.rsi.value && analysisData.indicators.rsi.value > 70 ? 'text-red-500' : 'text-gray-900 dark:text-white'}>
                     {analysisData.indicators.rsi.value?.toFixed(2) || 'N/A'}
@@ -2089,7 +2127,10 @@ const TechnicalAnalysis: React.FC = () => {
 
             {/* MACD Chart */}
             <div id="chart-macd" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">MACD (Moving Average Convergence Divergence)</h3>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white">MACD (Moving Average Convergence Divergence)</h3>
+                {renderChartSignal('chart-macd')}
+              </div>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                 Current Trend: <strong className={analysisData.indicators.macd.trend === 'bullish' ? 'text-green-500' : 'text-red-500'}>
                   {analysisData.indicators.macd.trend}
@@ -2173,7 +2214,10 @@ const TechnicalAnalysis: React.FC = () => {
                 </div>
                 {/* VWAP Chart */}
                 <div id="chart-vwap" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">MVWAP (Multi-Day VWAP)</h4>
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-white">MVWAP (Multi-Day VWAP)</h4>
+                    {renderChartSignal('chart-vwap')}
+                  </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     MVWAP (Multi-Day VWAP) accumulates cumulative (price × volume) from the start of the selected date range, giving the volume-weighted average cost basis over the entire period. This is useful for identifying long-term fair value and trend direction. For the true intraday VWAP — which resets each session and is used by institutional traders as a daily benchmark — click the MVWAP card below.
                   </p>
@@ -2190,7 +2234,10 @@ const TechnicalAnalysis: React.FC = () => {
                 </div>
                 {/* OBV Chart */}
                 <div id="chart-obv" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">On-Balance Volume (OBV)</h4>
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-white">On-Balance Volume (OBV)</h4>
+                    {renderChartSignal('chart-obv')}
+                  </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">OBV tracks cumulative buying and selling pressure by adding volume on up days and subtracting on down days. It's a confirmation tool, not a trigger: a rising OBV supports an uptrend, and a divergence (price rising while OBV falls) can warn the move is weakening — but divergences can persist for a long time before price turns, if it turns at all.</p>
                   <div className="relative" style={{ height: '250px' }}>
                     {clearLineButton}
@@ -2204,7 +2251,10 @@ const TechnicalAnalysis: React.FC = () => {
                 </div>
                 {/* A/D Line Chart */}
                 <div id="chart-ad" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Accumulation/Distribution Line</h4>
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-white">Accumulation/Distribution Line</h4>
+                    {renderChartSignal('chart-ad')}
+                  </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">The A/D Line refines OBV by weighting each day's volume by where price closes within its range — a close near the high counts as accumulation, near the low as distribution. Like OBV it's a confirmation tool: a rising line supports an uptrend, while a divergence (price rising as the A/D Line falls) can warn the move is losing internal support — though divergences can persist for a long time before price turns, if it turns at all.</p>
                   <div className="relative" style={{ height: '250px' }}>
                     {clearLineButton}
@@ -2246,7 +2296,10 @@ const TechnicalAnalysis: React.FC = () => {
                 </div>
                 {/* Stochastic Oscillator */}
                 <div id="chart-stochastic" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Stochastic Oscillator</h4>
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-white">Stochastic Oscillator</h4>
+                    {renderChartSignal('chart-stochastic')}
+                  </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     The Stochastic Oscillator compares the closing price to its recent high–low range. In a ranging market, readings above 80 (overbought) or below 20 (oversold) and %K/%D crossovers can flag reversals — but in a strong trend it can stay pinned in the extreme zone while price keeps moving, so an extreme reading isn't a trade on its own. Use it for context and divergences, confirmed by the trend.
                   </p>
@@ -2265,7 +2318,10 @@ const TechnicalAnalysis: React.FC = () => {
                 </div>
                 {/* ADX */}
                 <div id="chart-adx" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ADX (Average Directional Index)</h4>
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-white">ADX (Average Directional Index)</h4>
+                    {renderChartSignal('chart-adx')}
+                  </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                     ADX measures trend strength, not direction — above 25 signals a strong trend, below 20 a weak or sideways market. Direction comes from the separate +DI/-DI lines (+DI above -DI is bullish, and vice versa). ADX lags and only tells you whether a trend exists, never whether to buy or sell, so pair it with a direction read before acting.
                   </p>
@@ -2285,7 +2341,10 @@ const TechnicalAnalysis: React.FC = () => {
                 {/* CCI + ROC */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div id="chart-cci" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                    <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">CCI (Commodity Channel Index)</h4>
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                      <h4 className="text-lg font-bold text-gray-900 dark:text-white">CCI (Commodity Channel Index)</h4>
+                      {renderChartSignal('chart-cci')}
+                    </div>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">CCI measures how far price has moved from its recent average. In a range, readings above +100 or below −100 mark overbought/oversold extremes that may snap back — but CCI is unbounded and can stay extended through a strong trend, so an extreme reading is context, not a buy or sell signal on its own.</p>
                     <div className="relative" style={{ height: '200px' }}>
                       {clearLineButton}
@@ -2300,7 +2359,10 @@ const TechnicalAnalysis: React.FC = () => {
                     </div>
                   </div>
                   <div id="chart-roc" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                    <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ROC (Rate of Change)</h4>
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                      <h4 className="text-lg font-bold text-gray-900 dark:text-white">ROC (Rate of Change)</h4>
+                      {renderChartSignal('chart-roc')}
+                    </div>
                     <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">ROC measures the percentage change in price over a set period: above zero is bullish momentum, below zero is bearish. Extreme readings can precede a pullback, but momentum can stay elevated for a long time in a strong trend, so a high ROC alone isn't a reversal signal — use it to gauge momentum and divergences.</p>
                     <div className="relative" style={{ height: '200px' }}>
                       {clearLineButton}
@@ -2337,7 +2399,10 @@ const TechnicalAnalysis: React.FC = () => {
                 </div>
                 {/* ATR Chart */}
                 <div id="chart-atr" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ATR (Average True Range)</h4>
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-white">ATR (Average True Range)</h4>
+                    {renderChartSignal('chart-atr')}
+                  </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">ATR measures volatility as the average range between high and low prices over a period — higher ATR means wider swings. It's used to size positions and set stop-losses (avoiding stops too tight in volatile markets or too wide in calm ones). ATR gives no direction and reflects past movement, so it's never a buy or sell signal on its own.</p>
                   <div className="relative" style={{ height: '250px' }}>
                     {clearLineButton}
@@ -2351,7 +2416,10 @@ const TechnicalAnalysis: React.FC = () => {
                 </div>
                 {/* Keltner Channels (overlay on price) */}
                 <div id="chart-keltner" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Keltner Channels</h4>
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-white">Keltner Channels</h4>
+                    {renderChartSignal('chart-keltner')}
+                  </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Keltner Channels plot an EMA with upper and lower bands set by ATR. A close beyond the upper or lower channel points to strong momentum and a possible breakout, while price inside the channels is normal trading — but breakouts can fail and reverse in choppy markets, so confirm with volume or trend rather than acting on the break alone. They're often paired with Bollinger Bands to spot squeeze setups.</p>
                   <div className="relative" style={{ height: '350px' }}>
                     {clearLineButton}
@@ -2393,7 +2461,10 @@ const TechnicalAnalysis: React.FC = () => {
                 </div>
                 {/* Parabolic SAR (dots on price chart) */}
                 <div id="chart-parabolic-sar" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Parabolic SAR</h4>
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-white">Parabolic SAR</h4>
+                    {renderChartSignal('chart-parabolic-sar')}
+                  </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Parabolic SAR (Stop and Reverse) places dots below price in an uptrend and above price in a downtrend; a flip to the other side flags a possible trend reversal, which makes it useful for trailing stop-losses. It works well in trending markets but whipsaws badly in sideways, choppy action — generating frequent false flips — so it's best for managing trend exits rather than as a standalone entry trigger.</p>
                   <div className="relative" style={{ height: '350px' }}>
                     {clearLineButton}
@@ -2410,7 +2481,10 @@ const TechnicalAnalysis: React.FC = () => {
                 </div>
                 {/* Ichimoku Cloud */}
                 <div id="chart-ichimoku" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Ichimoku Cloud</h4>
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-white">Ichimoku Cloud</h4>
+                    {renderChartSignal('chart-ichimoku')}
+                  </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">The Ichimoku Cloud shows support/resistance, trend direction, and momentum at once: price above the cloud is bullish, below is bearish, inside is neutral, and Tenkan-Sen/Kijun-Sen crossovers act like moving-average signals. Like other trend tools it lags and produces conflicting, whipsaw-prone signals in flat or choppy markets, so it's most reliable when a clear trend is already in place.</p>
                   <div className="relative" style={{ height: '400px' }}>
                     {clearLineButton}
@@ -2428,7 +2502,10 @@ const TechnicalAnalysis: React.FC = () => {
                 </div>
                 {/* Donchian Channels */}
                 <div id="chart-donchian" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Donchian Channels</h4>
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                    <h4 className="text-lg font-bold text-gray-900 dark:text-white">Donchian Channels</h4>
+                    {renderChartSignal('chart-donchian')}
+                  </div>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Donchian Channels plot the highest high and lowest low over a set period to define a breakout system: a break above the upper channel suggests a new uptrend, a break below the lower channel a new downtrend. Made famous by the "Turtle Traders," it shines in trending markets but produces frequent false breakouts in rangebound action, so confirm the break holds before treating it as a signal.</p>
                   <div className="relative" style={{ height: '350px' }}>
                     {clearLineButton}
