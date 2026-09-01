@@ -11,11 +11,13 @@ FMP Stable endpoints used:
   /stable/ratios-ttm?symbol=X          (pre-computed trailing-twelve-month ratios)
   /stable/key-metrics-ttm?symbol=X     (pre-computed trailing-twelve-month metrics)
   /stable/historical-price-eod/full?symbol=X  (quarter-end closes for trailing P/E)
+  /stable/analyst-estimates?symbol=X&period=annual  (via services/analyst_estimates)
 """
 import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional, List
 from app.services.fmp_client import get_fmp_client, API_KEY
+from app.services.analyst_estimates import fetch_estimates, derive_consensus_growth
 
 
 def _fmt(value: Optional[float], decimals: int = 2) -> Optional[float]:
@@ -182,6 +184,10 @@ async def get_company_financials(
     profile_task = _fetch("profile", {
         "symbol": ticker,
     })
+    # Forward analyst consensus — seeds the DCF growth suggestion with a genuine
+    # forward estimate instead of haircut trailing growth. Parallel with the rest,
+    # so it costs no extra latency; degrades to [] on failure.
+    estimates_task = fetch_estimates(ticker)
     # Daily closes covering the 12-quarter window (+ fiscal-calendar margin),
     # used to compute trailing P/E at each quarter end
     now_utc = datetime.now(timezone.utc)
@@ -199,6 +205,7 @@ async def get_company_financials(
         key_metrics_list,
         profile_list,
         price_rows,
+        estimates,
     ) = await asyncio.gather(
         income_quarterly_task,
         balance_task,
@@ -207,6 +214,7 @@ async def get_company_financials(
         key_metrics_task,
         profile_task,
         prices_task,
+        estimates_task,
     )
 
     # ── Normalise to lists (FMP returns arrays directly) ──────────────
@@ -226,6 +234,9 @@ async def get_company_financials(
         price_rows = price_rows.get("historical", [])
     if not isinstance(price_rows, list):
         price_rows = []
+    if not isinstance(estimates, dict):
+        estimates = {"rows": []}
+    estimate_rows = estimates.get("rows") or []
 
     # Extract current CIK from profile for staleness detection
     profile = profile_list[0] if profile_list else {}
@@ -384,7 +395,8 @@ async def get_company_financials(
     # ── DCF Suggestions (derived from actuals) ────────────────────────
     dcf_suggestions = _derive_dcf_suggestions(
         income_quarters, revenue_ttm, operating_income_ttm, net_income_ttm,
-        ebitda_ttm, operating_cf_ttm, capex_ttm, fcf_ttm, ratios
+        ebitda_ttm, operating_cf_ttm, capex_ttm, fcf_ttm, ratios,
+        estimate_rows, latest_q.get("date")
     )
 
     # ── Growth Profile (3-year trend data for charts) ─────────────────
@@ -427,10 +439,17 @@ def _derive_dcf_suggestions(
     capex_ttm: Optional[float],
     fcf_ttm: Optional[float],
     ratios: dict,
+    estimate_rows: Optional[List[dict]] = None,
+    latest_quarter_date: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Derive DCF model input suggestions from actual financials.
     These replace generic sector defaults with company-specific values.
+
+    `estimate_rows` are forward analyst-estimate rows from
+    `services/analyst_estimates.forward_rows`. When present they drive the growth
+    suggestion; the trailing-growth haircut below is the fallback for names with
+    no coverage.
     """
     # ── YoY revenue growth from quarterly data ────────────────────────
     # Use date-based matching — index [3] is NOT reliably same Q last year if FMP
@@ -458,15 +477,32 @@ def _derive_dcf_suggestions(
         except (ValueError, TypeError):
             pass
 
-    # ── Suggested growth rate: haircut trailing growth ────────────────
-    # Discount actual growth by ~20% as a conservative forward projection
+    # ── Suggested growth rate ─────────────────────────────────────────
+    # Preferred: analyst consensus, which is an actual forward estimate and so is
+    # used un-haircut. Fallback: trailing growth, which is only a proxy for the
+    # future — hence the ~20% discount, an arbitrary constant that exists purely
+    # to blunt the extrapolation.
+    consensus = derive_consensus_growth(
+        estimate_rows or [], revenue_ttm, latest_quarter_date
+    )
     suggested_growth = None
-    if revenue_growth_yoy is not None:
+    growth_basis = None
+    consensus_growth_pct = None
+
+    if consensus is not None:
+        consensus_growth_pct = round(consensus["growth_pct"], 1)
+        suggested_growth = consensus_growth_pct
+        growth_basis = consensus["basis"]
+    elif revenue_growth_yoy is not None:
         if revenue_growth_yoy > 0:
             suggested_growth = round(revenue_growth_yoy * 0.8, 1)  # 20% discount
         else:
             suggested_growth = round(revenue_growth_yoy * 1.2, 1)  # amplify negative slightly
-        # Clamp to reasonable range
+        growth_basis = "trailing_haircut"
+
+    # Clamp to reasonable range — applies to both bases; consensus can be wild for
+    # pre-revenue or recovering names.
+    if suggested_growth is not None:
         suggested_growth = max(-10, min(suggested_growth, 40))
 
     # ── Operating margin ──────────────────────────────────────────────
@@ -503,6 +539,12 @@ def _derive_dcf_suggestions(
         "fcf_ttm": fcf_ttm,
         "revenue_growth_yoy_pct": revenue_growth_yoy,
         "suggested_growth_rate": suggested_growth,
+        # How suggested_growth_rate was derived: consensus_yoy | consensus_vs_ttm
+        # | trailing_haircut | None. The endpoint badges the input from this.
+        "suggested_growth_basis": growth_basis,
+        "consensus_growth_pct": consensus_growth_pct,
+        "consensus_estimate_year": consensus["estimate_year"] if consensus else None,
+        "consensus_num_analysts": consensus["num_analysts"] if consensus else None,
         "operating_margin_pct": operating_margin,
         "net_margin_pct": _pct(net_income_ttm, revenue_ttm),
         "estimated_wacc": estimated_wacc,

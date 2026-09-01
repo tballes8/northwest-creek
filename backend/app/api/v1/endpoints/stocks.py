@@ -11,6 +11,7 @@ import asyncio
 from app.api.dependencies import get_current_user
 from app.services.market_data import market_data_service, evaluate_dividend
 from app.services.fmp_client import get_fmp_client, API_KEY
+from app.services.analyst_estimates import fetch_estimates
 from app.services.sec_filings import detect_bankruptcy
 from app.db.session import get_db
 from app.schemas.daily_snapshot import DailySnapshotItem, DailySnapshotResponse
@@ -35,14 +36,6 @@ def _safe_error(e: Exception) -> str:
     return msg
 
 
-def _pick(d: dict, *keys):
-    """Return d[k] for the first PRESENT key (not first truthy), so a legit 0 /
-    negative value isn't skipped. Tolerates FMP field renames (stable dropped the
-    `estimated` prefix on analyst-estimates: estimatedEpsAvg -> epsAvg)."""
-    for k in keys:
-        if k in d:
-            return d[k]
-    return None
 
 
 router = APIRouter()
@@ -1423,43 +1416,23 @@ async def get_analyst_estimates(ticker: str):
     try:
         client = get_fmp_client()
 
-        estimates_resp, targets_resp = await asyncio.gather(
-            client.get("analyst-estimates", params={"symbol": sym, "apikey": API_KEY, "period": "annual", "limit": 4}),
+        # analyst-estimates goes through services/analyst_estimates, which owns the
+        # FMP schema and the forward-row selection for every consumer.
+        estimates, targets_resp = await asyncio.gather(
+            fetch_estimates(sym),
             client.get("price-target-consensus", params={"symbol": sym, "apikey": API_KEY}),
             return_exceptions=True,
         )
 
         # ── Analyst EPS estimates ───────────────────────────────────────────
-        forward_eps = None
-        forward_eps_high = None
-        forward_eps_low = None
-        forward_revenue_avg = None
-        num_analysts_eps = None
-        estimate_year = None
-
-        if not isinstance(estimates_resp, Exception) and estimates_resp.status_code == 200:
-            estimates_data = estimates_resp.json()
-            if isinstance(estimates_data, list) and estimates_data:
-                from datetime import date as _date
-                current_year = _date.today().year
-                # Pick the first entry whose date year is >= current year (forward-looking)
-                for entry in estimates_data:
-                    entry_year = None
-                    try:
-                        entry_year = int(str(entry.get("date", ""))[:4])
-                    except (ValueError, TypeError):
-                        pass
-                    if entry_year and entry_year >= current_year:
-                        # Stable analyst-estimates dropped the `estimated` prefix;
-                        # old names kept as fallback in case FMP reverts.
-                        forward_eps = _pick(entry, "epsAvg", "estimatedEpsAvg")
-                        forward_eps_high = _pick(entry, "epsHigh", "estimatedEpsHigh")
-                        forward_eps_low = _pick(entry, "epsLow", "estimatedEpsLow")
-                        forward_revenue_avg = _pick(entry, "revenueAvg", "estimatedRevenueAvg")
-                        num_analysts_eps = _pick(entry, "numAnalystsEps", "numberAnalystsEps",
-                                                 "numberAnalystEstimatedEps")
-                        estimate_year = entry_year
-                        break
+        if isinstance(estimates, BaseException) or not isinstance(estimates, dict):
+            estimates = {}
+        forward_eps = estimates.get("forward_eps")
+        forward_eps_high = estimates.get("forward_eps_high")
+        forward_eps_low = estimates.get("forward_eps_low")
+        forward_revenue_avg = estimates.get("forward_revenue")
+        num_analysts_eps = estimates.get("num_analysts_eps")
+        estimate_year = estimates.get("estimate_year")
 
         # ── Price target consensus ──────────────────────────────────────────
         price_target_consensus = None

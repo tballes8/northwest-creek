@@ -1118,7 +1118,9 @@ const DCFValuation: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Growth Rate (%)
-                  {(prefilledFromTA?.growth != null || suggestions?.sources?.growth_rate === 'sec_filings') && (
+                  {suggestions?.sources?.growth_rate === 'analyst_consensus' ? (
+                    <span className="ml-2 text-[10px] font-medium text-teal-600 dark:text-teal-400">✓ Analyst consensus</span>
+                  ) : (prefilledFromTA?.growth != null || suggestions?.sources?.growth_rate === 'sec_filings') && (
                     <span className="ml-2 text-[10px] font-medium text-green-600 dark:text-green-400">✓ From SEC filings</span>
                   )}
                 </label>

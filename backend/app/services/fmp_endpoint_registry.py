@@ -85,8 +85,10 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
     # IMPORTANT: stable dropped the `estimated` prefix AND requires period=annual|quarter.
     # Fields are epsAvg/revenueAvg/ebitdaAvg (NOT estimatedEpsAvg/...).
     {"path": "analyst-estimates", "description": "EPS/revenue/EBITDA analyst estimates (requires period param)",
-     "used_by": ["api/v1/endpoints/stocks.py:1353", "api/v1/endpoints/dcf_valuation.py:52",
-                 "api/v1/endpoints/relative_valuation.py (inputs)"],
+     # Single caller: services/analyst_estimates.py owns the schema. Its consumers are
+     # financials_service (DCF growth suggestion), relative_valuation (forward multiples)
+     # and stocks.py (/analyst-estimates/{ticker}).
+     "used_by": ["services/analyst_estimates.py (fetch_estimates)"],
      "key_fields": ["date", "revenueAvg", "epsAvg", "epsHigh", "epsLow", "ebitdaAvg", "numAnalystsEps"]},
     {"path": "price-target-consensus", "description": "Analyst price-target consensus",
      "used_by": ["api/v1/endpoints/stocks.py:1354", "services/stock_analysis.py:249"],

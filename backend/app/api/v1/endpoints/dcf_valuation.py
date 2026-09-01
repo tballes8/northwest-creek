@@ -403,11 +403,24 @@ async def get_dcf_suggestions(
 
             # Override sector defaults with actual-derived values when available
             growth_from_actuals = False
+            growth_from_consensus = False
             discount_from_actuals = False
             if dcf_sug:
                 if dcf_sug.get("suggested_growth_rate") is not None:
                     suggested_growth = max(-0.10, min(0.30, dcf_sug["suggested_growth_rate"] / 100))
-                    growth_reasoning = f"Based on trailing revenue growth of {dcf_sug['revenue_growth_yoy_pct']:.1f}%, conservatively adjusted" if dcf_sug.get("revenue_growth_yoy_pct") is not None else growth_reasoning
+                    basis = dcf_sug.get("suggested_growth_basis")
+                    if basis in ("consensus_yoy", "consensus_vs_ttm"):
+                        est_year = dcf_sug.get("consensus_estimate_year")
+                        n_analysts = dcf_sug.get("consensus_num_analysts")
+                        growth_reasoning = (
+                            f"Analyst consensus revenue growth of "
+                            f"{dcf_sug['consensus_growth_pct']:.1f}%"
+                            + (f" for FY{est_year}" if est_year else "")
+                            + (f" ({n_analysts} analysts)" if n_analysts else "")
+                        )
+                        growth_from_consensus = True
+                    elif dcf_sug.get("revenue_growth_yoy_pct") is not None:
+                        growth_reasoning = f"Based on trailing revenue growth of {dcf_sug['revenue_growth_yoy_pct']:.1f}%, conservatively adjusted"
                     growth_from_actuals = True
                 if dcf_sug.get("estimated_wacc") is not None:
                     suggested_discount = max(0.06, min(0.20, dcf_sug["estimated_wacc"] / 100))
@@ -417,6 +430,7 @@ async def get_dcf_suggestions(
         except Exception as fin_err:
             print(f"⚠️ Could not fetch financials for DCF suggestions ({ticker}): {_safe_error(fin_err)}")
             growth_from_actuals = False
+            growth_from_consensus = False
             discount_from_actuals = False
 
         return {
@@ -436,7 +450,12 @@ async def get_dcf_suggestions(
                 "projection_years": suggested_years
             },
             "sources": {
-                "growth_rate": "sec_filings" if growth_from_actuals else "sector_default",
+                # analyst_consensus > sec_filings (trailing actuals) > sector_default
+                "growth_rate": (
+                    "analyst_consensus" if growth_from_consensus
+                    else "sec_filings" if growth_from_actuals
+                    else "sector_default"
+                ),
                 "discount_rate": "sec_filings" if discount_from_actuals else "sector_default",
                 "terminal_growth": "sector_default",
                 "projection_years": "sector_default",

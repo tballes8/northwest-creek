@@ -27,6 +27,7 @@ from app.db.session import get_db
 from app.db.models import User, FeatureUsage
 from app.services.market_data import market_data_service
 from app.services.financials_service import get_company_financials, compute_peer_fundamentals
+from app.services.analyst_estimates import fetch_estimates
 from app.services.fmp_client import get_fmp_client, API_KEY
 from app.core.tier_limits import get_tier_limit, get_review_period, get_upgrade_tier
 
@@ -46,16 +47,6 @@ def _safe_error(e: Exception) -> str:
     msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
     msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg)
     return msg
-
-
-def _pick(d: dict, *keys):
-    """Return d[k] for the first key that is PRESENT (not first truthy), so a
-    legitimate 0 / negative value isn't skipped. Used to tolerate FMP field
-    renames (e.g. stable `epsAvg` vs legacy `estimatedEpsAvg`)."""
-    for k in keys:
-        if k in d:
-            return d[k]
-    return None
 
 
 router = APIRouter()
@@ -131,43 +122,19 @@ async def record_relval_usage(user: User, db: AsyncSession) -> None:
 
 # ── Forward estimates (mirrors stocks.py:get_analyst_estimates) ──────────
 async def _fetch_forward_estimates(ticker: str) -> Dict[str, Any]:
-    """Fetch forward EPS / revenue / EBITDA consensus from FMP analyst-estimates.
+    """Forward EPS / revenue / EBITDA consensus for the nearest forward fiscal year.
 
-    Picks the first estimate row whose fiscal year is >= the current year so the
-    figures are genuinely forward-looking. Returns empty dict values on failure.
+    Thin adapter over `services/analyst_estimates` — that module owns the FMP
+    schema and the forward-row selection; this keeps the flat shape the relval
+    input builder below expects.
     """
-    out: Dict[str, Any] = {
-        "forward_eps": None,
-        "forward_revenue": None,
-        "forward_ebitda": None,
-        "estimate_year": None,
+    est = await fetch_estimates(ticker)
+    return {
+        "forward_eps": est["forward_eps"],
+        "forward_revenue": est["forward_revenue"],
+        "forward_ebitda": est["forward_ebitda"],
+        "estimate_year": est["estimate_year"],
     }
-    try:
-        client = get_fmp_client()
-        resp = await client.get(
-            "analyst-estimates",
-            params={"symbol": ticker, "apikey": API_KEY, "period": "annual", "limit": 4},
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        if isinstance(data, list) and data:
-            current_year = date.today().year
-            for entry in data:
-                try:
-                    entry_year = int(str(entry.get("date", ""))[:4])
-                except (ValueError, TypeError):
-                    continue
-                if entry_year >= current_year:
-                    # Stable analyst-estimates dropped the `estimated` prefix
-                    # (estimatedEpsAvg -> epsAvg). Old names kept as fallback.
-                    out["forward_eps"] = _pick(entry, "epsAvg", "estimatedEpsAvg")
-                    out["forward_revenue"] = _pick(entry, "revenueAvg", "estimatedRevenueAvg")
-                    out["forward_ebitda"] = _pick(entry, "ebitdaAvg", "estimatedEbitdaAvg")
-                    out["estimate_year"] = entry_year
-                    break
-    except Exception as e:
-        print(f"⚠️ Forward estimates fetch failed for {ticker}: {_safe_error(e)}")
-    return out
 
 
 @router.get("/inputs/{ticker}")
