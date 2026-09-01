@@ -26,8 +26,8 @@ from app.services.fmp_endpoint_registry import render_registry_for_prompt as _re
 NWC_STACK_PROFILE = """\
 NWC-Analytics is a stock-analytics SaaS. Architecture:
 - Backend: Python FastAPI (async), SQLAlchemy + asyncpg, deployed on Railway
-  (web service + scheduled cron jobs) at api.nwc-analytics.com. Postgres and Redis
-  run as Railway services. The API sets no Cache-Control headers on any response.
+  (web service + scheduled cron jobs) at api.nwc-analytics.com. Postgres runs as a
+  Railway service. The API sets no Cache-Control headers on any response.
 - Frontend: React 19 + TypeScript (CRA build). NOT Railway static hosting — it runs
   a custom Node http server (`frontend/server.js`, started by `npm run serve`) that
   wraps `serve-handler` to add server-side Open Graph injection for /blogs/:slug.
@@ -38,18 +38,25 @@ NWC-Analytics is a stock-analytics SaaS. Architecture:
 - Container/build: Docker + docker-compose for local dev only.
 - Third-party APIs NWC calls from code: Financial Modeling Prep (market data),
   Stripe (billing), Anthropic (AI), Twilio (SMS), Postmark (email).
-- Hosting/infra dependencies: Railway (deploy, runtime, cron, managed Postgres/
-  Redis) + Cloudflare at the edge.
+- Hosting/infra dependencies: Railway (deploy, runtime, cron, managed Postgres)
+  + Cloudflare at the edge.
 
 Known NEGATIVE facts — things NWC does NOT use. Treat these as authoritative;
 a changelog item that only touches one of them is "Irrelevant", not "Heads-up":
 - No CI/CD pipeline of any kind. There is no `.github/workflows` directory, no
   Jenkins/CircleCI/GitLab config, no Makefile. Deploys are Railway-native, driven by
   the build/deploy blocks in `frontend/railway.json` and the backend service config.
-- Railway CLI is essentially unused in the codebase. The only reference anywhere is
-  a `railway run` example inside a docstring in
-  `backend/app/tasks/backfill_sector_rotation.py`. In particular NWC does not use
+- Railway CLI is essentially unused in the codebase. The only references anywhere
+  are `railway run` examples inside docstrings in
+  `backend/app/tasks/backfill_sector_rotation.py` and
+  `backend/app/tasks/refresh_stock_snapshots.py`. In particular NWC does not use
   `railway config pull` / `railway config push`, `railway cdn`, or `railway flag`.
+- No Redis, and no cache/KV/queue service of any kind. There is no Redis service in
+  the Railway project, `redis` is not in `backend/requirements.txt`, and no code
+  connects to one. The only caches are per-process in-memory dicts
+  (`app/api/v1/endpoints/stock_analysis.py`) and the post/OG-image caches in
+  `frontend/server.js`. Changelog items about Redis, KV stores, caching services,
+  or their HA/failover behaviour are "Irrelevant".
 - No Railway CDN. No Railway feature flags. No infrastructure-as-code and no
   version-controlled Railway config beyond `frontend/railway.json` and
   `backend/railway-cron.toml`.

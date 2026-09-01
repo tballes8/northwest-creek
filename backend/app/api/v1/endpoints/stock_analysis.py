@@ -38,10 +38,9 @@ _forecast_cache: dict[str, tuple[float, dict]] = {}
 _FORECAST_TTL = 6 * 3600  # 6 hours
 
 # In-memory cache for the AI financials read: ticker -> (timestamp, payload).
-# Mirrors _forecast_cache rather than reaching for app/db/cache.py, which has no
-# callers anywhere in the app and is therefore unverified against production.
-# Consequences, both already true of _forecast_cache and both fine: the cache is
-# per-worker, and it is lost on redeploy.
+# Mirrors _forecast_cache. There is no shared cache service to reach for: NWC runs
+# no Redis/KV anywhere. Consequences, both already true of _forecast_cache and both
+# fine: the cache is per-worker, and it is lost on redeploy.
 _financials_ai_cache: dict[str, tuple[float, dict]] = {}
 _FINANCIALS_AI_TTL = 24 * 3600      # statements change quarterly; 24h caps cost
 _FINANCIALS_AI_SUPPRESSED_TTL = 3600  # shorter, so a mid-refresh ticker recovers same-day

@@ -24,7 +24,7 @@ npm run build    # production build
 
 ### Database / Infrastructure
 ```bash
-docker-compose up -d   # PostgreSQL (:5432) + Redis (:6379)
+docker-compose up -d   # PostgreSQL (:5432)
 ```
 
 API docs: `http://localhost:8000/api/v1/docs`
@@ -33,7 +33,7 @@ API docs: `http://localhost:8000/api/v1/docs`
 
 ## Architecture
 
-**Stack:** React 19 + TypeScript → FastAPI (async) → PostgreSQL (asyncpg) + Redis. External: FMP (market data), Stripe (payments), Postmark (email), Twilio (SMS), Anthropic (AI).
+**Stack:** React 19 + TypeScript → FastAPI (async) → PostgreSQL (asyncpg). External: FMP (market data), Stripe (payments), Postmark (email), Twilio (SMS), Anthropic (AI).
 
 ### Backend (`backend/app/`)
 

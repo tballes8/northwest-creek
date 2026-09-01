@@ -18,9 +18,6 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = Field(..., env="DATABASE_URL")
     
-    # Redis
-    REDIS_URL: str = Field(default="redis://localhost:6379/0", env="REDIS_URL")
-    
     # JWT Settings
     SECRET_KEY: str = Field(..., env="SECRET_KEY")
     ALGORITHM: str = Field(default="HS256", env="ALGORITHM")
