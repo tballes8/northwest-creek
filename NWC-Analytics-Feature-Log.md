@@ -1,6 +1,6 @@
 # NWC-Analytics — Shipped Features Log
 
-**Last Updated:** August 19, 2026  
+**Last Updated:** September 1, 2026  
 **Purpose:** Cross-project reference document. Attach to NWC Marketing, NWC Blog/SM Post, NWC Enhancements, and NWC Sandbox projects so all workstreams have visibility into what has shipped, what tier it lives on, and what content angles it unlocks.
 
 ---
@@ -1241,6 +1241,32 @@ The append-only design is the part worth leading with. Financial records that ca
 **Marketing Angle:** Being told you are out of room while adding to a position you already hold reads as a broken paywall rather than a plan limit, and it hit hardest on the lowest tier where the cap is tightest. The limit now does what it says it does: it governs how many separate positions can be tracked, not how actively they can be managed.
 
 **Blog/Content Hooks:** None — bug fix
+
+### September 1, 2026
+
+---
+
+#### Technical Analysis — Signal Read Attached to Every Chart
+
+**What It Does:** The Technical Analysis page carries a Trading Signals panel that reads every indicator at once and states each one plainly — "MACD line below its signal line — bearish momentum," "Neutral (RSI 66.4) — momentum within the normal 30–70 range." That panel sits near the top of the page, above roughly a dozen charts. By the time a user had scrolled down to the RSI chart and read its axis, the sentence explaining what RSI was currently saying was several screens behind them.
+
+Each chart header now restates its own signal in place: the same colour-coded Bullish / Bearish / Neutral pill and the same plain-language reading, right-justified opposite the chart title. Charts with no directional signal — ATR, which measures volatility and gives no direction — correctly show nothing rather than inventing a verdict.
+
+The wording is deliberately not duplicated in the code. Both the panel at the top and the badge on each chart read from a single mapping of indicator to chart, so the two can never drift apart or disagree — the badge shown beside a chart is the same signal that scores the outlook summary, by construction. On narrow screens the reading stacks beneath the chart title rather than squeezing it.
+
+**Tier Availability:** All tiers with Technical Analysis access
+
+**Marketing Angle:** This is a small change that fixes a real reading problem. A chart is evidence, not a conclusion — an RSI line at 66 means nothing until someone tells you 66 is inside the normal band and not a sell signal. Splitting the evidence from the interpretation by ten screens of scrolling meant most users were looking at one without the other, and a chart read without its interpretation is exactly where beginners invent the wrong story. Putting the sentence beside the picture is the difference between a platform that displays indicators and one that teaches a user to read them.
+
+It also reinforces the positioning the rest of the platform is built on: the badge says "extended in an uptrend, not a standalone reversal signal," not "SELL." Every reading is hedged where the indicator genuinely is ambiguous, because the honest answer to most single-indicator readings is *it depends on the trend*.
+
+**Blog/Content Hooks:**
+- How to actually read a technical chart — what the line is telling you vs. what it isn't
+- Why one indicator is never enough (and why our signals say so out loud)
+- Overbought doesn't mean sell — the most expensive misreading in technical analysis
+- The difference between an indicator and a signal — and why the gap matters
+
+---
 
 ---
 
