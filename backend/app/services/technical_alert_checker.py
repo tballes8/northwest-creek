@@ -18,6 +18,7 @@ from app.services.market_data import market_data_service
 from app.services.technical_indicators import technical_indicators, generate_summary
 from app.services.sms_service import send_alert_sms, build_technical_alert_message
 from app.services.financials_service import get_company_financials
+from app.services.edgar_identity import is_contradicted
 
 settings = get_settings()
 EMAIL_ON_TRIGGER = True
@@ -427,6 +428,22 @@ class TechnicalAlertChecker:
                 return None
             if isinstance(financials, BaseException):
                 financials = None
+
+            # Wrong entity: refuse to evaluate at all. Returning None makes
+            # every fundamental-based evaluator bail, which is the only safe
+            # outcome — these alerts send email and SMS, so a rating shift
+            # computed from another company's filings is a notification the
+            # user cannot tell is wrong. One guard here rather than one per
+            # evaluator: `_eval_dcf_valuation` was firing on this data while
+            # `_eval_rule_of_40` guarded correctly twelve lines away.
+            if financials is not None and is_contradicted(
+                financials.get("entity_trust")
+            ):
+                print(
+                    f"   Skipping fundamental alerts for {ticker}: "
+                    f"vendor is serving a different entity's financials"
+                )
+                return None
 
             current_price = float(quote.get("price", 0))
             if current_price == 0:

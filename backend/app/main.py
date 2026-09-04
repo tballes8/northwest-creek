@@ -18,6 +18,8 @@ from apscheduler.triggers.cron import CronTrigger
 from app.services.alert_checker import alert_checker
 from app.services.websocket_service import live_price_service
 from app.services.fmp_client import init_fmp_client, close_fmp_client
+from app.services.edgar_client import init_edgar_client, close_edgar_client
+from app.services.edgar_identity import warm_ticker_map
 from datetime import datetime, timezone
 from app.tasks.refresh_stock_snapshots import refresh_stock_snapshots_job
 from app.tasks.fetch_macro_indicators import macro_indicators_job
@@ -35,6 +37,12 @@ async def lifespan(app: FastAPI):
 
     # Persistent HTTP client for FMP API calls
     await init_fmp_client()
+
+    # Persistent HTTP client for SEC EDGAR, plus a warm ticker→CIK map so no
+    # user request pays for the first ~1MB fetch of company_tickers.json.
+    # Identity resolution is an in-memory dict lookup from here on.
+    await init_edgar_client()
+    await warm_ticker_map()
 
     # Wire alert checker into price stream
     alert_checker.set_broadcast_fn(live_price_service.broadcast_to_clients)
@@ -105,6 +113,7 @@ async def lifespan(app: FastAPI):
     _scheduler.shutdown(wait=False)
     await live_price_service.stop()
     await close_fmp_client()
+    await close_edgar_client()
     print("👋 NWC-Analytics API shutting down...")
 
 

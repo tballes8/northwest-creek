@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { authAPI, technicalAPI, watchlistAPI, financialsAPI, intradayAPI } from '../services/api';
+import { authAPI, technicalAPI, watchlistAPI, financialsAPI, intradayAPI, isEntityContradicted } from '../services/api';
 import { User } from '../types';
 import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
 import UpgradeRequired from '../components/UpgradeRequired';
+import EntityTrustBlock from '../components/EntityTrustBlock';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -1562,9 +1563,18 @@ const TechnicalAnalysis: React.FC = () => {
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">
                   📄 Financial Summary — {analysisData.ticker}
                 </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-                  SEC filings via Financial Modeling Prep • Data updates daily
-                </p>
+                {/* The provenance line is itself a trust claim, so it is
+                    withheld along with the figures when the vendor has attached
+                    the wrong company's filings to this ticker. */}
+                {!isEntityContradicted(financialsData?.entity_trust) && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                    SEC filings via Financial Modeling Prep • Data updates daily
+                  </p>
+                )}
+
+                {isEntityContradicted(financialsData?.entity_trust) && (
+                  <EntityTrustBlock trust={financialsData.entity_trust} className="mb-2" />
+                )}
 
                 {financialsLoading && (
                   <div className="flex items-center justify-center py-12">
@@ -1579,7 +1589,7 @@ const TechnicalAnalysis: React.FC = () => {
                   </div>
                 )}
 
-                {financialsData && !financialsLoading && (
+                {financialsData && !financialsLoading && !isEntityContradicted(financialsData.entity_trust) && (
                   <div className="space-y-6">
 
                     {/* ── AI Financial Read ──────────────────────────────

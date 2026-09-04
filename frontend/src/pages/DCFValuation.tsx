@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { authAPI, dcfAPI, stocksAPI, watchlistAPI } from '../services/api';
+import { authAPI, dcfAPI, stocksAPI, watchlistAPI, EntityTrust, isEntityContradicted } from '../services/api';
 import { User } from '../types';
 import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
 import UpgradeRequired from '../components/UpgradeRequired';
 import RelativeValuation from '../components/RelativeValuation';
+import EntityTrustBlock from '../components/EntityTrustBlock';
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid,
@@ -227,13 +228,15 @@ interface DCFSuggestions {
     is_stale: boolean;
     stale_reason: string | null;
     newest_period_end: string | null;
-    financials_cik: string | null;
-    current_cik: string | null;
   } | null;
+  // The one verdict every surface on this page gates on. Null/absent means the
+  // backend did not report it; treat that as "not contradicted".
+  entity_trust?: EntityTrust | null;
 }
 
 interface DCFData {
   ticker: string;
+  entity_trust?: EntityTrust | null;
   company_name: string;
   security_type?: string;  // CS, WARRANT, ETF, etc. from Polygon
   current_price: number;
@@ -383,6 +386,12 @@ const DCFValuation: React.FC = () => {
     }
   }, [navigate]);
   
+  // One derived flag for the whole page. Every trust badge and every result
+  // block reads this rather than testing the verdict itself — inconsistent
+  // per-badge enforcement is exactly how green "✓ From SEC filings" checks
+  // ended up rendering beside a wrong-entity warning.
+  const identityBlocked = isEntityContradicted(suggestions?.entity_trust);
+
   const loadSuggestions = useCallback(async (symbol: string, skipParamOverride: boolean = false) => {
     if (!symbol.trim()) return;
 
@@ -411,8 +420,14 @@ const DCFValuation: React.FC = () => {
       }
       // If apiType is empty/unknown, keep the hint-based detection as-is
       
-      // Only set parameters if NOT pre-filled from Technical Analysis
-      if (!skipParamOverride) {
+      // Only set parameters if NOT pre-filled from Technical Analysis, and
+      // never when the vendor is serving a different entity's filings — the
+      // payload's `suggestions` is null in that case, so this guard is also
+      // what keeps the reads below from throwing.
+      // Read off the fresh response, not the `identityBlocked` state flag above —
+      // setSuggestions hasn't committed yet at this point.
+      const blockedForPrefill = isEntityContradicted(response.data.entity_trust);
+      if (!skipParamOverride && !blockedForPrefill && response.data.suggestions) {
         setGrowthRate(response.data.suggestions.growth_rate * 100);
         setTerminalGrowth(response.data.suggestions.terminal_growth * 100);
         setDiscountRate(response.data.suggestions.discount_rate * 100);
@@ -799,8 +814,16 @@ const DCFValuation: React.FC = () => {
               </div>
             </div>
 
+            {/* Wrong entity — one blocking state that REPLACES the suggested
+                parameters, the growth-profile charts (the backend nulls
+                growth_profile, so that panel drops out on its own) and every
+                data-source badge below. Not a caveat alongside them. */}
+            {showSuggestions && isEntityContradicted(suggestions?.entity_trust) && (
+              <EntityTrustBlock trust={suggestions?.entity_trust} />
+            )}
+
             {/* Show Suggestions */}
-            {showSuggestions && suggestions && (
+            {showSuggestions && suggestions && !isEntityContradicted(suggestions.entity_trust) && (
               <div className="bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
                 <h3 className="text-lg font-bold text-blue-900 dark:text-blue-200 mb-2">
                   AI-Suggested Parameters for {suggestions.company_name}
@@ -909,15 +932,10 @@ const DCFValuation: React.FC = () => {
                         <span className="text-orange-500 text-lg leading-none">⚠️</span>
                         <div>
                           <p className="text-sm font-semibold text-orange-800 dark:text-orange-200">
-                            {suggestions.growth_profile.stale_reason === 'cik_mismatch'
-                              ? 'Wrong Entity — Ticker Reuse Detected'
-                              : 'Stale Financial Data'}
+                            Stale Financial Data
                           </p>
                           <p className="text-xs text-orange-700 dark:text-orange-300 mt-0.5">
-                            {suggestions.growth_profile.stale_reason === 'cik_mismatch'
-                              ? `This financial data belongs to a different company (CIK: ${suggestions.growth_profile.financials_cik}) that previously used this ticker. The current entity (CIK: ${suggestions.growth_profile.current_cik}) has different or no SEC filings available.`
-                              : `The most recent quarterly filing is from ${suggestions.growth_profile.newest_period_end || 'unknown date'}. This data may belong to a previous company that used this ticker symbol.`
-                            }
+                            {`The most recent quarterly filing is from ${suggestions.growth_profile.newest_period_end || 'unknown date'}, over nine months ago.`}
                           </p>
                           <p className="text-xs text-orange-600 dark:text-orange-400 mt-1 font-medium">
                             Charts are shown for reference but should not be used for investment decisions.
@@ -1118,7 +1136,7 @@ const DCFValuation: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Growth Rate (%)
-                  {suggestions?.sources?.growth_rate === 'analyst_consensus' ? (
+                  {identityBlocked ? null : suggestions?.sources?.growth_rate === 'analyst_consensus' ? (
                     <span className="ml-2 text-[10px] font-medium text-teal-600 dark:text-teal-400">✓ Analyst consensus</span>
                   ) : (prefilledFromTA?.growth != null || suggestions?.sources?.growth_rate === 'sec_filings') && (
                     <span className="ml-2 text-[10px] font-medium text-green-600 dark:text-green-400">✓ From SEC filings</span>
@@ -1131,7 +1149,7 @@ const DCFValuation: React.FC = () => {
                   step="0.1"
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-white"
                 />
-                {suggestions && (
+                {suggestions?.reasoning && (
                   <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                     💡 {suggestions.reasoning.growth_rate}
                   </p>
@@ -1150,7 +1168,7 @@ const DCFValuation: React.FC = () => {
                   step="0.1"
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-white"
                 />
-                {suggestions && (
+                {suggestions?.reasoning && (
                   <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                     💡 {suggestions.reasoning.terminal_growth}
                   </p>
@@ -1160,10 +1178,10 @@ const DCFValuation: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Current FCF
-                  {suggestions?.actuals?.fcf_ttm != null && (
+                  {!identityBlocked && suggestions?.actuals?.fcf_ttm != null && (
                     <span className="ml-2 text-[10px] font-medium text-green-600 dark:text-green-400">✓ Actual TTM</span>
                   )}
-                  {suggestions && !suggestions.actuals?.fcf_ttm && (
+                  {!identityBlocked && suggestions && !suggestions.actuals?.fcf_ttm && (
                     <span className="ml-2 text-[10px] font-medium text-orange-600 dark:text-orange-400">⚠ Estimated</span>
                   )}
                 </label>
@@ -1178,7 +1196,7 @@ const DCFValuation: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Discount Rate (%)
-                  {(prefilledFromTA?.wacc != null || suggestions?.sources?.discount_rate === 'sec_filings') && (
+                  {!identityBlocked && (prefilledFromTA?.wacc != null || suggestions?.sources?.discount_rate === 'sec_filings') && (
                     <span className="ml-2 text-[10px] font-medium text-green-600 dark:text-green-400">✓ Est. WACC</span>
                   )}
                 </label>
@@ -1189,7 +1207,7 @@ const DCFValuation: React.FC = () => {
                   step="0.1"
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-white"
                 />
-                {suggestions && (
+                {suggestions?.reasoning && (
                   <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                     💡 {suggestions.reasoning.discount_rate}
                   </p>
@@ -1208,7 +1226,7 @@ const DCFValuation: React.FC = () => {
                   max="15"
                   className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-white"
                 />
-                {suggestions && (
+                {suggestions?.reasoning && (
                   <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                     💡 {suggestions.reasoning.projection_years}
                   </p>
@@ -1218,10 +1236,10 @@ const DCFValuation: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Shares Outstanding
-                  {suggestions?.shares_outstanding != null && (
+                  {!identityBlocked && suggestions?.shares_outstanding != null && (
                     <span className="ml-2 text-[10px] font-medium text-green-600 dark:text-green-400">✓ From SEC filings</span>
                   )}
-                  {suggestions && !suggestions.shares_outstanding && (
+                  {!identityBlocked && suggestions && !suggestions.shares_outstanding && (
                     <span className="ml-2 text-[10px] font-medium text-orange-600 dark:text-orange-400">⚠ Estimated</span>
                   )}
                 </label>
@@ -1257,8 +1275,15 @@ const DCFValuation: React.FC = () => {
           </div>
         )}
 
+        {/* A calculate call that came back identity-blocked: show the reason
+            instead of the result. The payload's valuation/recommendation are
+            null, so this also keeps the reads below from throwing. */}
+        {dcfData && isEntityContradicted(dcfData.entity_trust) && (
+          <EntityTrustBlock trust={dcfData.entity_trust} className="mt-6" />
+        )}
+
         {/* Results Display */}
-        {dcfData && (
+        {dcfData && !isEntityContradicted(dcfData.entity_trust) && (
           <div className="space-y-6">
             {/* Summary Card */}
             <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">

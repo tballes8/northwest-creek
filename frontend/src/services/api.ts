@@ -70,6 +70,35 @@ export const watchlistAPI = {
     axiosInstance.put(`/watchlist/${id}`, data),
 };
 
+// Entity identity verdict — attached to /financials, /dcf/*, /relval/inputs.
+//
+// A ticker is a mutable label, so a vendor can serve one company's filings
+// under another company's symbol. The backend resolves identity through SEC
+// EDGAR upstream of the data fetch and returns one verdict, which is the ONLY
+// thing any page should gate on. Do not re-derive it per component: doing so is
+// what previously let a "wrong entity" warning render beside green
+// "actual data" badges vouching for the same numbers.
+//
+//   match          -> proceed normally, trust badges allowed
+//   contradiction  -> hard block: no figures, no pre-filled params, no badges
+//   cannot_resolve -> NOT a block. Funds/ETFs are absent from EDGAR's company
+//                     file and new registrants lag it. Proceed as before.
+export type EntityTrustVerdict = 'match' | 'contradiction' | 'cannot_resolve';
+
+export interface EntityTrust {
+  verdict: EntityTrustVerdict;
+  edgar_cik: number | null;
+  edgar_company_name: string | null;
+  fmp_filing_cik: number | null;
+  fmp_profile_cik: number | null;
+  basis: 'edgar_vs_filing' | 'fmp_internal' | 'unresolved';
+  message: string | null;
+}
+
+// The single test every surface uses. Only a positive contradiction blocks.
+export const isEntityContradicted = (t?: EntityTrust | null): boolean =>
+  t?.verdict === 'contradiction';
+
 // Portfolio API
 export type TransactionType = 'BUY' | 'SELL' | 'ADJUST' | 'REVERSAL';
 

@@ -12,12 +12,28 @@ FMP Stable endpoints used:
   /stable/key-metrics-ttm?symbol=X     (pre-computed trailing-twelve-month metrics)
   /stable/historical-price-eod/full?symbol=X  (quarter-end closes for trailing P/E)
   /stable/analyst-estimates?symbol=X&period=annual  (via services/analyst_estimates)
+
+Entity identity gate
+--------------------
+A ticker is a mutable label and FMP keys on the label, so it can serve one
+entity's filings under another entity's symbol. Identity is therefore resolved
+through SEC EDGAR once, here, concurrently with the FMP calls, and the single
+verdict is attached to the payload as `entity_trust`. On a positive
+contradiction the vendor's figures are dropped at source rather than passed
+downstream with a caveat: every consumer of this function reads the same
+payload, and a per-consumer caveat is how a "wrong entity" warning ends up
+rendered next to green "actual data" badges. See `edgar_identity`.
 """
 import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional, List
 from app.services.fmp_client import get_fmp_client, API_KEY
 from app.services.analyst_estimates import fetch_estimates, derive_consensus_growth
+from app.services.edgar_identity import (
+    build_entity_trust,
+    is_contradicted,
+    resolve_ticker_cik,
+)
 
 
 def _fmt(value: Optional[float], decimals: int = 2) -> Optional[float]:
@@ -143,6 +159,21 @@ async def _fetch(path: str, params: dict) -> Any:
         return []
 
 
+# Payload keys carrying figures that belong to a specific legal entity. On a
+# positive identity contradiction every one of these describes a *different
+# company* than the ticker now identifies, so all of them are suppressed
+# together. Add new entity-scoped keys here.
+_ENTITY_SCOPED_KEYS = (
+    "income_statement",
+    "balance_sheet",
+    "cash_flow",
+    "ratios",
+    "quarterly_trend",
+    "dcf_suggestions",
+    "growth_profile",
+)
+
+
 async def get_company_financials(
     ticker: str, include_raw: bool = False
 ) -> Dict[str, Any]:
@@ -188,6 +219,10 @@ async def get_company_financials(
     # forward estimate instead of haircut trailing growth. Parallel with the rest,
     # so it costs no extra latency; degrades to [] on failure.
     estimates_task = fetch_estimates(ticker)
+    # EDGAR identity: which entity does this ticker point to *now*? In the same
+    # gather as the FMP calls, so it adds no latency, and after the startup warm
+    # it is an in-memory dict lookup rather than a request.
+    identity_task = resolve_ticker_cik(ticker)
     # Daily closes covering the 12-quarter window (+ fiscal-calendar margin),
     # used to compute trailing P/E at each quarter end
     now_utc = datetime.now(timezone.utc)
@@ -206,6 +241,7 @@ async def get_company_financials(
         profile_list,
         price_rows,
         estimates,
+        edgar_entity,
     ) = await asyncio.gather(
         income_quarterly_task,
         balance_task,
@@ -215,6 +251,7 @@ async def get_company_financials(
         profile_task,
         prices_task,
         estimates_task,
+        identity_task,
     )
 
     # ── Normalise to lists (FMP returns arrays directly) ──────────────
@@ -238,9 +275,25 @@ async def get_company_financials(
         estimates = {"rows": []}
     estimate_rows = estimates.get("rows") or []
 
-    # Extract current CIK from profile for staleness detection
     profile = profile_list[0] if profile_list else {}
-    current_cik = profile.get("cik")
+
+    # ── Entity identity gate ──────────────────────────────────────────
+    # The filing-side CIK is preferred over the profile CIK because it is
+    # stamped on the very rows rendered as this company's financials, whereas
+    # the profile CIK is metadata about the symbol.
+    # Defensive: this gate now runs on every financials request, so a malformed
+    # row must not raise here and take the whole endpoint down with it. A
+    # missing CIK degrades to `cannot_resolve`, which never blocks.
+    filing_cik = (
+        income_quarters[0].get("cik")
+        if income_quarters and isinstance(income_quarters[0], dict)
+        else None
+    )
+    entity_trust = build_entity_trust(
+        ticker, edgar_entity, filing_cik, profile.get("cik")
+    )
+    if is_contradicted(entity_trust):
+        print(f"BLOCKED {ticker}: {entity_trust['message']}")
 
     # Debug: log what came back from FMP
     print(f"📊 Financials for {ticker}: income={len(income_quarters)}Q, balance={len(balance_list)}, cashflow={len(cashflow_quarters)}Q, ratios={len(ratios_list)}, metrics={len(key_metrics_list)}, profile={len(profile_list)}")
@@ -401,11 +454,17 @@ async def get_company_financials(
 
     # ── Growth Profile (3-year trend data for charts) ─────────────────
     growth_profile = _build_growth_profile(
-        income_quarters, cashflow_quarters, revenue_ttm, fcf_ttm, current_cik
+        income_quarters, cashflow_quarters, revenue_ttm, fcf_ttm
     )
 
-    # ── Company name from FMP profile ─────────────────────────────────
+    # ── Company name ──────────────────────────────────────────────────
+    # On a contradiction FMP's company name describes the entity whose filings
+    # it wrongly served, so prefer EDGAR's name for the entity the ticker
+    # actually identifies. The page then names the right company while showing
+    # none of the wrong company's numbers.
     company_name = profile.get("companyName") or ticker
+    if is_contradicted(entity_trust) and entity_trust.get("edgar_company_name"):
+        company_name = entity_trust["edgar_company_name"]
 
     result = {
         "ticker": ticker,
@@ -417,7 +476,18 @@ async def get_company_financials(
         "quarterly_trend": quarterly_trend,
         "dcf_suggestions": dcf_suggestions,
         "growth_profile": growth_profile,
+        "entity_trust": entity_trust,
     }
+
+    if is_contradicted(entity_trust):
+        # Drop the wrong entity's figures at source. Doing it here rather than
+        # in each consumer is the whole point: this function has eight callers,
+        # and a caveat applied per-consumer is how a "wrong entity" warning
+        # ended up rendered beside green "actual data" badges. `_raw` is
+        # withheld too — it is the same filings, unsummarised.
+        for key in _ENTITY_SCOPED_KEYS:
+            result[key] = None
+        return result
 
     if include_raw:
         result["_raw"] = {
@@ -557,15 +627,14 @@ def _build_growth_profile(
     cashflow_quarters: List[dict],
     revenue_ttm: Optional[float],
     fcf_ttm: Optional[float],
-    current_cik: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Build growth profile from extended quarterly data (12Q income, 8Q cash flow).
     Returns trend arrays ordered oldest-first for charting, plus Rule of 40.
 
-    Staleness detection (two layers):
-      1. CIK mismatch — financials belong to a different entity than the current ticker
-      2. Date check — most recent quarter is older than 9 months (fallback)
+    Flags staleness on one axis only: whether the most recent quarter is older
+    than ~9 months. Entity identity is not this function's concern — see
+    `edgar_identity` and the gate in `get_company_financials`.
     """
     # Reverse to oldest-first for charting
     inc_oldest_first = list(reversed(income_quarters))
@@ -723,27 +792,23 @@ def _build_growth_profile(
         return None
 
     # ── Staleness detection ───────────────────────────────────────────
-    # Layer 1: CIK mismatch — financials are from a different entity
-    # Layer 2: Date check — most recent quarter older than 9 months (fallback)
+    # Date only: is the most recent quarter older than ~9 months?
+    #
+    # This used to also carry a CIK-mismatch layer. Entity identity now lives in
+    # exactly one place, `edgar_identity`, resolved upstream in
+    # `get_company_financials` — and on a contradiction this whole profile is
+    # suppressed before any consumer sees it. Keeping a second identity check
+    # here would be a second thing to keep in sync, which is how enforcement
+    # drifted apart in the first place. Staleness and identity are genuinely
+    # different conditions: stale data is the right company's old numbers, a
+    # contradiction is the wrong company's numbers.
     is_stale = False
     stale_reason = None
     newest_period_end = None
-    financials_cik = None
 
     if income_quarters:
         newest_period_end = income_quarters[0].get("date")  # desc order, [0] = most recent
-
-        # Extract CIK from financial results (FMP includes it in each result)
-        financials_cik = income_quarters[0].get("cik")
-
-        # Layer 1: CIK mismatch
-        if current_cik and financials_cik and current_cik != financials_cik:
-            is_stale = True
-            stale_reason = "cik_mismatch"
-            print(f"⚠️ Growth Profile CIK mismatch for ticker: current={current_cik}, financials={financials_cik}")
-
-        # Layer 2: Date check (fallback when CIK comparison isn't possible)
-        if not is_stale and newest_period_end:
+        if newest_period_end:
             try:
                 newest_date = datetime.strptime(newest_period_end, "%Y-%m-%d").replace(tzinfo=timezone.utc)
                 staleness_threshold = datetime.now(timezone.utc) - timedelta(days=270)  # ~9 months
@@ -779,6 +844,4 @@ def _build_growth_profile(
         "is_stale": is_stale,
         "stale_reason": stale_reason,
         "newest_period_end": newest_period_end,
-        "financials_cik": financials_cik,
-        "current_cik": current_cik,
     }

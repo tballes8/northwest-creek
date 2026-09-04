@@ -64,6 +64,16 @@ class Settings(BaseSettings):
     # client falls back to the unauthenticated fredgraph CSV endpoint.
     FRED_API_KEY: str = Field(default="", env="FRED_API_KEY")
 
+    # SEC EDGAR — no API key, but the SEC's fair-access policy REQUIRES a
+    # User-Agent naming the app and a real, monitored contact email, or every
+    # request returns 403. One value for the whole app: identity resolution,
+    # dividend facts and the bankruptcy 8-K check all share a single client and
+    # a single 8 req/sec throttle (SEC's limit is 10/sec per IP, so independent
+    # throttles in separate modules would not compose).
+    SEC_USER_AGENT: str = Field(
+        default="NWC-Analytics/1.0 (support@nwc-analytics.com)", env="SEC_USER_AGENT"
+    )
+
     # Stripe Settings
     STRIPE_SECRET_KEY: str = Field(default="", env="STRIPE_SECRET_KEY")
     STRIPE_PUBLISHABLE_KEY: str = Field(default="", env="STRIPE_PUBLISHABLE_KEY")

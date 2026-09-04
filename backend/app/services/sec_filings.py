@@ -2,14 +2,16 @@
 SEC EDGAR helpers.
 
 FMP exposes SEC form *types* but not 8-K *item codes*, so anything that needs
-item-level detail reads from SEC's free submissions API instead. This module is
-the single place in the app that talks to data.sec.gov.
+item-level detail reads from SEC's free submissions API instead.
+
+HTTP goes through `edgar_client.edgar_get`, which is now the single place in the
+app that talks to sec.gov — it owns the one User-Agent (SEC rejects requests
+without one) and the one 8 req/sec throttle. The SEC limit is per-IP, so each
+EDGAR reader keeping its own limiter would let them jointly exceed it.
 """
-import httpx
 from datetime import date, timedelta
 
-# SEC EDGAR requires a descriptive User-Agent with contact info on every request.
-SEC_USER_AGENT = "NWC-Analytics/1.0 (support@nwc-analytics.com)"
+from app.services.edgar_client import edgar_get
 
 # How far back an Item 1.03 filing still counts as "on record". Long enough to
 # cover a full restructuring, short enough that a company which emerged years
@@ -34,13 +36,12 @@ async def detect_bankruptcy(cik: str | None) -> dict | None:
     except (TypeError, ValueError):
         return None
     try:
-        async with httpx.AsyncClient(timeout=10.0) as sec:
-            r = await sec.get(
-                f"https://data.sec.gov/submissions/CIK{cik_padded}.json",
-                headers={"User-Agent": SEC_USER_AGENT, "Accept": "application/json"},
-            )
-            r.raise_for_status()
-            recent = (r.json().get("filings") or {}).get("recent") or {}
+        r = await edgar_get(
+            f"https://data.sec.gov/submissions/CIK{cik_padded}.json"
+        )
+        if r.status_code == 404:  # no such CIK on record
+            return None
+        recent = (r.json().get("filings") or {}).get("recent") or {}
     except Exception:
         return None
 

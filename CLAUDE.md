@@ -76,6 +76,9 @@ API docs: `http://localhost:8000/api/v1/docs`
 - `websocket_service.py` — manages per-ticker subscriber lists; broadcasts price ticks to connected frontend clients.
 - `technical_indicators.py` — TA-Lib based calculations (RSI, MACD, Bollinger Bands, etc.). CPU-bound; called via `/technical-analysis/analyze/{ticker}`.
 - `stock_analyzer.py` — Anthropic API calls for AI price targets and company analysis.
+- `edgar_client.py` — **the single place that talks to sec.gov / data.sec.gov.** Owns one lifespan-managed httpx client, one 8 req/sec throttle and one `SEC_USER_AGENT` (SEC returns 403 without a UA naming the app and a contact email). Its limit is per-IP, so every EDGAR reader must share this throttle rather than keep its own. Use `edgar_get()`; it returns 404s as a data condition and raises `PermissionError` on 403.
+- `edgar_identity.py` — **entity identity, resolved once and gated everywhere.** A ticker is a mutable label; FMP keys on the label, so it can serve one entity's filings under another's symbol (confirmed for `TE`). CIK is the identity and EDGAR is the authority. `get_company_financials` resolves the ticker through `resolve_ticker_cik()` in the same `asyncio.gather` as the FMP calls and attaches one verdict as `entity_trust`. Tri-state: `match` proceeds, `contradiction` is a hard block, `cannot_resolve` **never blocks** (funds/ETFs are absent from `company_tickers.json` and new registrants lag it). On a contradiction the service nulls every entity-scoped key (`_ENTITY_SCOPED_KEYS`) at source, so all consumers suppress together. Never re-derive identity in a consumer — inconsistent enforcement is how a wrong-entity warning once rendered beside green "actual data" badges. Pure logic (`normalize_cik`, `build_entity_trust`) is importable with no config: `python -m app.services.edgar_identity --selftest`.
+- `edgar_dividends.py` — EDGAR XBRL dividends-per-share reader, the source-of-record half of dividend verification. Not yet wired into any endpoint. Resolves identity via `edgar_identity`, not its own lookup.
 
 **Cron** (`tasks/fetch_daily_snapshots.py`): Scheduled externally (Railway cron). Fetches full batch quote from FMP, filters out delisted/foreign/long-ticker names, classifies ETF vs CS, upserts into `DailyStockSnapshot`.
 
@@ -117,6 +120,8 @@ SUPPORT_EMAIL=             # verification, password reset, payment-failed
 SALES_EMAIL=               # payment success, trial ending
 FROM_NAME=NWC-Analytics
 AUDIT_ALERT_EMAIL=         # weekly FMP field-audit recipient; falls back to SUPPORT_EMAIL
+SEC_USER_AGENT=            # SEC requires app name + real contact email, else 403.
+                           # Defaults to "NWC-Analytics/1.0 (support@nwc-analytics.com)"
 TWILIO_ACCOUNT_SID= / AUTH_TOKEN / FROM_NUMBER
 FRONTEND_URL=https://nwc-analytics.com   # no trailing slash; override locally if running a dev frontend
 ACCESS_TOKEN_EXPIRE_MINUTES=90
@@ -138,5 +143,6 @@ REACT_APP_API_URL=http://localhost:8000
 - **New backend endpoint**: add router file in `api/v1/endpoints/`, register in `main.py`, add Pydantic schemas in `schemas/`.
 - **New DB table**: add SQLAlchemy model in `db/models.py`, create Alembic migration (`alembic revision --autogenerate -m "description"` from `backend/`), migration auto-runs at next startup.
 - **Tier-gating a feature**: call `can_use_feature(db, user, "feature_name")` before the operation; increment with `increment_feature_usage()` after success.
+- **Displaying any per-company financial figure**: gate it on the `entity_trust` verdict already on the payload — backend `is_contradicted(...)` from `edgar_identity`, frontend `isEntityContradicted(...)` from `services/api.ts` with the shared `<EntityTrustBlock>`. Suppress, do not caveat: a soft warning next to an affirmative green badge loses to the badge. Do not resolve identity yourself.
 - **New frontend API call**: add method to the appropriate named group in `services/api.ts`; consume in the component via `useEffect` + state.
 - **Protected route**: wrap component in `SubscriptionGuard` in `App.tsx` and add `Depends(get_current_user)` on the backend endpoint.

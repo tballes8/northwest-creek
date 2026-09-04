@@ -27,6 +27,7 @@ from app.db.session import get_db
 from app.db.models import User, FeatureUsage
 from app.services.market_data import market_data_service
 from app.services.financials_service import get_company_financials, compute_peer_fundamentals
+from app.services.edgar_identity import is_contradicted
 from app.services.analyst_estimates import fetch_estimates
 from app.services.fmp_client import get_fmp_client, API_KEY
 from app.core.tier_limits import get_tier_limit, get_review_period, get_upgrade_tier
@@ -177,10 +178,34 @@ async def get_relval_inputs(
         except (TypeError, ValueError):
             current_price = None
 
+        entity_trust = (fin or {}).get("entity_trust")
         income = (fin or {}).get("income_statement") or {}
         balance = (fin or {}).get("balance_sheet") or {}
         ratios = (fin or {}).get("ratios") or {}
         company_name = (fin or {}).get("company_name") or sym
+
+        # ── Entity identity gate ──────────────────────────────────────────
+        # Net debt and diluted shares are tagged "actual" here, which renders
+        # as a ✓ Actual badge on every relval input. On a contradiction those
+        # figures are a different company's, so the inputs, the source tags and
+        # the "Source financials" reference popup all go.
+        if is_contradicted(entity_trust):
+            return {
+                "ticker": sym,
+                "company_name": (
+                    entity_trust.get("edgar_company_name") or company_name
+                ),
+                "description": None,
+                "sector": (company or {}).get("sector"),
+                "industry": (company or {}).get("industry"),
+                "market_cap": (company or {}).get("market_cap"),
+                "estimate_year": None,
+                "inputs": None,
+                "sources": None,
+                "trailing_pe": None,
+                "reference": None,
+                "entity_trust": entity_trust,
+            }
 
         fwd_eps = estimates.get("forward_eps")
         fwd_rev = estimates.get("forward_revenue")
@@ -241,6 +266,7 @@ async def get_relval_inputs(
                 "current_price": "live" if current_price else None,
             },
             "trailing_pe": ratios.get("pe_ratio"),
+            "entity_trust": entity_trust,
             # Source figures for the "Source financials" popup (raw $ → $B/$M).
             "reference": {
                 "revenue_ttm_b": _to_b(ttm_revenue),

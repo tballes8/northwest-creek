@@ -49,13 +49,23 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
      # (use isEtf/isFund/isAdr booleans). See scripts/audit_fmp_fields.py.
      # averageVolume is read here and ONLY here — it is the source for
      # stock_snapshots.avg_volume and therefore the screener's RVOL filter.
+     # `cik` feeds the entity-identity gate (services/edgar_identity.py): it is
+     # compared against the CIK SEC EDGAR resolves the ticker to, and a
+     # mismatch suppresses the whole financials payload. If FMP ever drops or
+     # renames this field the gate silently degrades to "cannot_resolve" — it
+     # fails open, so nothing breaks loudly. Treat any change to it as material.
      "key_fields": ["symbol", "companyName", "sector", "industry", "website", "fullTimeEmployees",
                     "country", "description", "exchange", "marketCap", "isEtf", "ipoDate",
-                    "averageVolume"]},
+                    "averageVolume", "cik"]},
     {"path": "income-statement", "description": "Quarterly/annual income statement",
      "used_by": ["services/financials_service.py:72",
                  "api/v1/endpoints/relative_valuation.py (peer-ratios: growth/margin context)"],
-     "key_fields": ["date", "revenue", "netIncome", "eps", "epsDiluted", "operatingIncome", "grossProfit"]},
+     # `cik` is the entity the statements were actually filed under, and is the
+     # primary input to the entity-identity gate (services/edgar_identity.py) —
+     # preferred over profile.cik because it is stamped on these very rows. See
+     # the note on `profile` above; losing it makes the gate fail open.
+     "key_fields": ["date", "revenue", "netIncome", "eps", "epsDiluted", "operatingIncome",
+                    "grossProfit", "cik"]},
     {"path": "balance-sheet-statement", "description": "Quarterly/annual balance sheet",
      "used_by": ["services/financials_service.py:75"],
      "key_fields": ["date", "totalDebt", "netDebt", "cashAndCashEquivalents", "totalAssets", "totalEquity"]},

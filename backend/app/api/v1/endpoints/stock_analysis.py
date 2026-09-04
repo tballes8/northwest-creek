@@ -24,6 +24,7 @@ from app.services.financial_fact_block import (
 )
 from app.services.financial_analyzer import analyze_financials, NOTHING_NOTABLE
 from app.services.sec_filings import detect_bankruptcy
+from app.services.edgar_identity import is_contradicted
 from app.services.dcf_service import UNSUITABLE_SECURITY_TYPES
 from app.api.v1.endpoints.portfolio_analysis import check_ai_analysis_access
 from app.core.tier_limits import get_tier_limit, get_upgrade_tier
@@ -593,11 +594,24 @@ async def stock_ai_financials(
             detail=f"Could not load financials for {sym}: {_safe_error(e)}",
         )
 
+    entity_trust = financials.get("entity_trust") or {}
     growth = financials.get("growth_profile") or {}
     income = financials.get("income_statement") or {}
     balance = financials.get("balance_sheet") or {}
     raw = financials.get("_raw") or {}
     quarters_available = len(raw.get("income_quarters") or [])
+
+    # ── Suppression: wrong entity ────────────────────────────────────────
+    # Checked before the no_data test below. The financials service already
+    # blanks the payload on a contradiction, so without this the read would
+    # suppress as "no_data" and tell the user their ticker has no financials —
+    # when the truth is that the vendor has someone else's.
+    if is_contradicted(entity_trust):
+        logger.info(
+            "Financials read for %s suppressed: entity contradiction (%s)",
+            sym, entity_trust.get("basis"),
+        )
+        return suppress("wrong_entity")
 
     # growth_profile is None when there is no revenue history at all.
     if not financials.get("growth_profile") or (
@@ -621,7 +635,10 @@ async def stock_ai_financials(
     # The Stock Details page already explains the situation authoritatively with
     # the filing date and an EDGAR link; a second AI paraphrase adds nothing and
     # could contradict it.
-    bankruptcy = await detect_bankruptcy(growth.get("current_cik"))
+    # EDGAR's own CIK for the ticker, not the vendor's guess at it — this is a
+    # real EDGAR query, and feeding it a vendor CIK meant that whenever the
+    # vendor's identity was wrong we checked the wrong company's filings.
+    bankruptcy = await detect_bankruptcy(entity_trust.get("edgar_cik"))
     if bankruptcy and bankruptcy.get("detected"):
         return suppress("bankruptcy")
 

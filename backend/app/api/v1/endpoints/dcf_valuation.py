@@ -14,6 +14,7 @@ from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.services.market_data import market_data_service
 from app.services.financials_service import get_company_financials
+from app.services.edgar_identity import is_contradicted
 from app.services.fmp_client import get_fmp_client, API_KEY
 from app.services.dcf_service import compute_dcf, calculate_reverse_dcf
 from app.core.tier_limits import get_tier_limit, get_review_period, get_upgrade_tier
@@ -352,10 +353,12 @@ async def get_dcf_suggestions(
         actuals = None
         dcf_sug = None
         growth_profile = None
+        entity_trust = None
         try:
             if fin_result is None:
                 raise ValueError("Financials not available")
             fin_data = fin_result
+            entity_trust = fin_data.get("entity_trust")
             dcf_sug = fin_data.get("dcf_suggestions") or {}
             income = fin_data.get("income_statement") or {}
             cash_flow_data = fin_data.get("cash_flow") or {}
@@ -433,6 +436,34 @@ async def get_dcf_suggestions(
             growth_from_consensus = False
             discount_from_actuals = False
 
+        # On a positive identity contradiction, nothing derived from the
+        # vendor's filings may be presented — not the pre-filled parameters,
+        # not the "actuals", not the source tags that render as green
+        # confirmation badges, and not FMP's own DCF benchmark (computed from
+        # the same wrong entity). A caveat under an affirmative green check
+        # loses to the green check for a user who trusts the platform.
+        if is_contradicted(entity_trust):
+            if entity_trust.get("edgar_company_name"):
+                company_name = entity_trust["edgar_company_name"]
+            return {
+                "ticker": ticker.upper(),
+                "company_name": company_name,
+                "sector": sector,
+                "industry": industry,
+                "current_price": round(current_price, 2),
+                "market_cap": market_cap,
+                "size_category": size_category,
+                "security_type": security_type,
+                "shares_outstanding": None,
+                "suggestions": None,
+                "sources": None,
+                "reasoning": None,
+                "actuals": None,
+                "growth_profile": None,
+                "fmp_benchmark": None,
+                "entity_trust": entity_trust,
+            }
+
         return {
             "ticker": ticker.upper(),
             "company_name": company_name,
@@ -468,6 +499,7 @@ async def get_dcf_suggestions(
             },
             "actuals": actuals,
             "growth_profile": growth_profile,
+            "entity_trust": entity_trust,
             "fmp_benchmark": {
                 "dcf_value": fmp_dcf.get("dcf"),
                 "levered_dcf_value": fmp_dcf.get("levered_dcf"),
@@ -562,6 +594,34 @@ async def calculate_dcf(
             shares_r = None
         if isinstance(fmp_dcf, BaseException):
             fmp_dcf = {}
+
+        # ── Entity identity gate ──────────────────────────────────────────
+        # Refuse before any figure is read. Un-gated, this endpoint produced
+        # the worst output in the codebase: an intrinsic value per share and a
+        # Buy/Sell rating computed from another company's cash flows and
+        # labelled `fcf_source = "actual_ttm"`. FMP's own DCF benchmark is
+        # withheld for the same reason — it is built on the same filings.
+        #
+        # Usage is deliberately NOT recorded: a user must not spend DCF quota
+        # to be told the vendor attached the wrong company's data to a ticker.
+        entity_trust = fin_r.get("entity_trust") if fin_r is not None else None
+        if is_contradicted(entity_trust):
+            if entity_trust.get("edgar_company_name"):
+                company_name = entity_trust["edgar_company_name"]
+            return {
+                "ticker": ticker,
+                "company_name": company_name,
+                "security_type": security_type,
+                "current_price": round(current_price, 2),
+                "assumptions": None,
+                "projections": None,
+                "terminal_value": None,
+                "valuation": None,
+                "recommendation": None,
+                "reverse_dcf": None,
+                "fmp_benchmark": None,
+                "entity_trust": entity_trust,
+            }
 
         # ── Extract financials from pre-fetched data ──────────────────────
         current_fcf = None
@@ -740,6 +800,7 @@ async def calculate_dcf(
                 "message": recommendation_message
             },
             "reverse_dcf": reverse_dcf,
+            "entity_trust": entity_trust,
             "fmp_benchmark": {
                 "dcf_value": fmp_dcf.get("dcf"),
                 "levered_dcf_value": fmp_dcf.get("levered_dcf"),

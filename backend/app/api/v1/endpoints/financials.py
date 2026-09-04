@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.db.models import User
 from app.api.dependencies import get_current_user
 from app.services.financials_service import get_company_financials
+from app.services.edgar_identity import is_contradicted
 
 router = APIRouter()
 
@@ -47,10 +48,18 @@ async def get_financials(
     try:
         result = await get_company_financials(ticker)
 
+        # A wrong-entity payload is deliberately blank, so it must be returned
+        # before the emptiness check below — otherwise it 404s as "no financial
+        # data", which is both wrong and the opposite of informative: the data
+        # exists, the vendor has simply attached the wrong company's to this
+        # symbol. The verdict carries the explanation; the frontend blocks on it.
+        if is_contradicted(result.get("entity_trust")):
+            return result
+
         # Verify we got meaningful data back
-        has_income = result.get("income_statement", {}).get("revenue") is not None
-        has_balance = result.get("balance_sheet", {}).get("total_assets") is not None
-        has_ratios = result.get("ratios", {}).get("pe_ratio") is not None
+        has_income = (result.get("income_statement") or {}).get("revenue") is not None
+        has_balance = (result.get("balance_sheet") or {}).get("total_assets") is not None
+        has_ratios = (result.get("ratios") or {}).get("pe_ratio") is not None
 
         if not has_income and not has_balance and not has_ratios:
             raise HTTPException(

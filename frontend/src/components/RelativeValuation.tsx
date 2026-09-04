@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { relvalAPI, screenerAPI } from '../services/api';
+import { relvalAPI, screenerAPI, EntityTrust, isEntityContradicted } from '../services/api';
 import { User } from '../types';
 import UpgradeRequired from './UpgradeRequired';
+import EntityTrustBlock from './EntityTrustBlock';
 
 // ─── Types ───────────────────────────────────────────────────────────────
 interface Peer {
@@ -54,6 +55,7 @@ interface RelvalInputs {
   sources: Record<string, SourceTag>;
   trailing_pe: number | null;
   reference?: RelvalReference | null;
+  entity_trust?: EntityTrust | null;
 }
 
 interface RelvalResult {
@@ -171,6 +173,7 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
     current_price: '',
   });
   const [sources, setSources] = useState<Record<string, SourceTag>>({});
+  const [entityTrust, setEntityTrust] = useState<EntityTrust | null>(null);
   const [reference, setReference] = useState<RelvalReference | null>(null);
   const [showFinancials, setShowFinancials] = useState(false);
   const [trailingPe, setTrailingPe] = useState<number | null>(null);
@@ -214,6 +217,31 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
     try {
       const res = await relvalAPI.getInputs(ticker);
       const data: RelvalInputs = res.data;
+
+      // Wrong entity: the vendor's net debt and share count belong to another
+      // company, so there is nothing legitimate to pre-fill. `inputs` is null
+      // in this case, which would throw on the reads below. Emptying `sources`
+      // is also what silences every SourceBadge — no per-badge gating needed.
+      setEntityTrust(data.entity_trust ?? null);
+      if (isEntityContradicted(data.entity_trust)) {
+        setForm({
+          forward_eps: '', forward_revenue_b: '', forward_ebitda_b: '',
+          net_debt_b: '', diluted_shares_m: '', current_price: '',
+        });
+        setSources({});
+        setReference(null);
+        setTrailingPe(null);
+        setCompanyName(data.company_name || ticker);
+        setCompanyDescription(null);
+        setSubjectSector(data.sector);
+        setSubjectIndustry(data.industry);
+        setSubjectMarketCap(data.market_cap ?? null);
+        setEstimateYear(null);
+        setCapMin('');
+        setCapMax('');
+        return;
+      }
+
       const i = data.inputs;
       setForm({
         forward_eps: i.forward_eps != null ? String(i.forward_eps) : '',
@@ -435,6 +463,12 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
     );
   }
 
+  // A relative valuation built on another company's net debt and share count is
+  // not a "rough" answer, it is an answer about a different business. The
+  // estimates grid, the peer set and the results all go; the ticker loader
+  // stays so the user can move off the blocked symbol.
+  const identityBlocked = isEntityContradicted(entityTrust);
+
   return (
     <div className="space-y-6">
       {/* Inputs — ticker loader + forward estimates in one card */}
@@ -494,7 +528,9 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
           )}
         </div>
 
-        {ticker && (
+        {identityBlocked && <EntityTrustBlock trust={entityTrust} className="mt-6" />}
+
+        {ticker && !identityBlocked && (
           <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-600">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
               Forward Estimates &amp; Balance Sheet
@@ -591,7 +627,7 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
         </div>
       )}
 
-      {ticker && (
+      {ticker && !identityBlocked && (
       <>
       {/* ── Peer set ──────────────────────────────────────────────────── */}
       <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
