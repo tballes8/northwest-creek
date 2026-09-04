@@ -19,11 +19,16 @@ import { EntityTrust, isEntityContradicted } from '../services/api';
  *
  * Red, not amber: amber reads as "degraded but usable", which is the wrong
  * instruction here.
+ *
+ * `note` replaces the default closing line. Use it where the surface offers a
+ * way forward — the DCF page lets the user supply the figures themselves — so
+ * the block does not tell them to wait on the vendor when they needn't.
  */
-const EntityTrustBlock: React.FC<{ trust?: EntityTrust | null; className?: string }> = ({
-  trust,
-  className = '',
-}) => {
+const EntityTrustBlock: React.FC<{
+  trust?: EntityTrust | null;
+  className?: string;
+  note?: React.ReactNode;
+}> = ({ trust, className = '', note }) => {
   if (!isEntityContradicted(trust) || !trust) return null;
 
   return (
@@ -71,8 +76,12 @@ const EntityTrustBlock: React.FC<{ trust?: EntityTrust | null; className?: strin
             error; "no filings" is a dead end. Conflating them misinforms.
           */}
           <p className="text-xs text-red-600 dark:text-red-400 mt-2">
-            Figures, valuation inputs and data-source badges are suppressed for this
-            ticker until the vendor corrects the mapping.
+            {note ?? (
+              <>
+                Figures, valuation inputs and data-source badges are suppressed for this
+                ticker until the vendor corrects the mapping.
+              </>
+            )}
           </p>
         </div>
       </div>

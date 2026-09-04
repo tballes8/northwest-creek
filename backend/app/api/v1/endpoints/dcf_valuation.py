@@ -445,6 +445,19 @@ async def get_dcf_suggestions(
         if is_contradicted(entity_trust):
             if entity_trust.get("edgar_company_name"):
                 company_name = entity_trust["edgar_company_name"]
+
+            # Sector defaults survive a contradiction, but only when the
+            # vendor's *profile* independently agrees with EDGAR on identity.
+            # That distinction is real: for the motivating case (TE) only the
+            # statement rows were stale — the profile already pointed at the
+            # right CIK — so sector, industry and size describe the correct
+            # company and a sector default is genuinely about it. When the
+            # profile is also wrong, the sector feeding those defaults is the
+            # wrong company's and they are withheld too.
+            profile_trusted = (
+                entity_trust.get("fmp_profile_cik") is not None
+                and entity_trust.get("fmp_profile_cik") == entity_trust.get("edgar_cik")
+            )
             return {
                 "ticker": ticker.upper(),
                 "company_name": company_name,
@@ -454,14 +467,39 @@ async def get_dcf_suggestions(
                 "market_cap": market_cap,
                 "size_category": size_category,
                 "security_type": security_type,
-                "shares_outstanding": None,
-                "suggestions": None,
-                "sources": None,
-                "reasoning": None,
+                # Symbol-keyed and current (shares-float), not read off the
+                # stale filings — but still a vendor figure, so it is tagged an
+                # estimate below and the user can override it.
+                "shares_outstanding": shares_outstanding if profile_trusted else None,
+                "suggestions": {
+                    "growth_rate": round(suggested_growth, 4),
+                    "terminal_growth": round(suggested_terminal, 4),
+                    "discount_rate": round(suggested_discount, 4),
+                    "projection_years": suggested_years,
+                } if profile_trusted else None,
+                "sources": {
+                    "growth_rate": "sector_default",
+                    "discount_rate": "sector_default",
+                    "terminal_growth": "sector_default",
+                    "projection_years": "sector_default",
+                    "shares_outstanding": "estimated",
+                } if profile_trusted else None,
+                "reasoning": {
+                    "growth_rate": growth_reasoning,
+                    "terminal_growth": profile["terminal_reasoning"],
+                    "discount_rate": discount_reasoning,
+                    "projection_years": profile["years_reasoning"],
+                } if profile_trusted else None,
+                # No entity figures and no vendor DCF: `actuals` is the wrong
+                # company's TTM, and FMP's benchmark is built on it.
                 "actuals": None,
                 "growth_profile": None,
                 "fmp_benchmark": None,
                 "entity_trust": entity_trust,
+                # Free cash flow has no legitimate source in this state. It is
+                # also the input that determines a DCF's answer, so the user
+                # must supply it — see `fcf_override` on /calculate.
+                "requires_manual_fcf": True,
             }
 
         return {
@@ -528,6 +566,16 @@ async def calculate_dcf(
     terminal_growth: float = Query(0.025, ge=0, le=0.10, description="Terminal growth rate (decimal)"),
     discount_rate: float = Query(0.10, ge=0.01, le=0.30, description="Discount rate / WACC (decimal)"),
     projection_years: int = Query(5, ge=3, le=10, description="Years to project"),
+    fcf_override: Optional[float] = Query(
+        None, description="User-supplied trailing free cash flow (absolute dollars). "
+                          "Takes precedence over the vendor figure. REQUIRED when the "
+                          "entity-identity verdict is a contradiction, because free "
+                          "cash flow then has no trustworthy source."
+    ),
+    shares_override: Optional[float] = Query(
+        None, gt=0, description="User-supplied diluted shares outstanding (absolute count). "
+                                "Takes precedence over the vendor figure."
+    ),
     current_user: User = Depends(require_valid_tier),
     db: AsyncSession = Depends(get_db)
 ):
@@ -605,7 +653,16 @@ async def calculate_dcf(
         # Usage is deliberately NOT recorded: a user must not spend DCF quota
         # to be told the vendor attached the wrong company's data to a ticker.
         entity_trust = fin_r.get("entity_trust") if fin_r is not None else None
-        if is_contradicted(entity_trust):
+
+        # A contradiction is escapable, but only by supplying the one input that
+        # decides the answer. Left to fall back on the vendor path, FCF becomes
+        # `market_cap * 5%`, which makes intrinsic value ~0.76x market cap at
+        # sector defaults — i.e. ~0.76x price, a "Sell, ~24% overvalued" verdict
+        # for every blocked ticker regardless of the business. That number
+        # encodes the heuristic, not the company, and it is worse than no answer
+        # because it looks like one. Sector-default *assumptions* are fine here
+        # (see /suggestions); a guessed *cash flow* is not.
+        if is_contradicted(entity_trust) and fcf_override is None:
             if entity_trust.get("edgar_company_name"):
                 company_name = entity_trust["edgar_company_name"]
             return {
@@ -621,6 +678,7 @@ async def calculate_dcf(
                 "reverse_dcf": None,
                 "fmp_benchmark": None,
                 "entity_trust": entity_trust,
+                "requires_manual_fcf": True,
             }
 
         # ── Extract financials from pre-fetched data ──────────────────────
@@ -676,6 +734,20 @@ async def calculate_dcf(
             else:
                 shares_outstanding = 1000000
                 shares_source = "estimated_default"
+
+        # ── User-supplied overrides ───────────────────────────────────
+        # Applied after every vendor path and fallback so they always win. This
+        # is the escape hatch from an identity contradiction: sector-default
+        # assumptions plus figures the user read off the correct entity's own
+        # filings is a legitimate rough DCF, where a guessed cash flow is not.
+        # `user_supplied` also keeps the frontend's "Low Confidence — Estimated
+        # Data" banner from firing, since these are not estimates.
+        if fcf_override is not None:
+            current_fcf = fcf_override
+            fcf_source = "user_supplied"
+        if shares_override is not None:
+            shares_outstanding = shares_override
+            shares_source = "user_supplied"
 
         # ── Equity bridge: Enterprise Value + Cash - Debt ─────────────
         net_debt_adjustment = 0

@@ -156,6 +156,23 @@ function suggestStrategy(
   };
 }
 
+// Amber, matching the existing "⚠ Estimated" badge: a sector default is a
+// legitimate input but not company-specific evidence. Green stays reserved for
+// figures read off the entity's own filings.
+const formatShares = (shares: number): string => {
+  if (shares >= 1e9) return `${(shares / 1e9).toFixed(2)}B`;
+  if (shares >= 1e6) return `${(shares / 1e6).toFixed(1)}M`;
+  if (shares >= 1e3) return `${(shares / 1e3).toFixed(0)}K`;
+  return shares.toFixed(0);
+};
+
+const SectorDefaultBadge: React.FC<{ show?: boolean }> = ({ show }) =>
+  show ? (
+    <span className="ml-2 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+      Sector default
+    </span>
+  ) : null;
+
 interface DCFSuggestions {
   ticker: string;
   company_name: string;
@@ -171,19 +188,23 @@ interface DCFSuggestions {
     terminal_growth: number;
     discount_rate: number;
     projection_years: number;
-  };
+  } | null;
   reasoning: {
     growth_rate: string;
     terminal_growth: string;
     discount_rate: string;
     projection_years: string;
-  };
+  } | null;
   sources?: {
     growth_rate: string;
     discount_rate: string;
     terminal_growth: string;
     projection_years: string;
-  };
+    shares_outstanding?: string;
+  } | null;
+  // Set when free cash flow has no trustworthy source and the user must supply
+  // it before a valuation can be run.
+  requires_manual_fcf?: boolean;
   actuals?: {
     revenue_ttm: number | null;
     revenue_ttm_fmt: string | null;
@@ -237,6 +258,7 @@ interface DCFSuggestions {
 interface DCFData {
   ticker: string;
   entity_trust?: EntityTrust | null;
+  requires_manual_fcf?: boolean;
   company_name: string;
   security_type?: string;  // CS, WARRANT, ETF, etc. from Polygon
   current_price: number;
@@ -249,7 +271,7 @@ interface DCFData {
     shares_outstanding: number;
     fcf_source?: string;
     shares_source?: string;
-  };
+  } | null;
   projections: Array<{
     year: number;
     cash_flow: number;
@@ -275,12 +297,12 @@ interface DCFData {
     intrinsic_value_per_share: number;
     current_price: number;
     margin_of_safety: number;
-  };
+  } | null;
   recommendation: {
     rating: string;
     color: string;
     message: string;
-  };
+  } | null;
   reverse_dcf?: {
     converged: boolean;
     implied_growth_low: number | null;   // solved at discount_rate - 1%
@@ -386,18 +408,34 @@ const DCFValuation: React.FC = () => {
     }
   }, [navigate]);
   
+  // User-supplied figures, kept as strings for controlled <input>s. These are
+  // the escape hatch from an identity contradiction: the assumptions can come
+  // from sector defaults, but free cash flow has to come from the user.
+  const [fcfOverride, setFcfOverride] = useState('');
+  const [sharesOverride, setSharesOverride] = useState('');
+
   // One derived flag for the whole page. Every trust badge and every result
   // block reads this rather than testing the verdict itself — inconsistent
   // per-badge enforcement is exactly how green "✓ From SEC filings" checks
   // ended up rendering beside a wrong-entity warning.
   const identityBlocked = isEntityContradicted(suggestions?.entity_trust);
+  // FCF has no trustworthy source here, so a valuation needs the user to supply
+  // one. Everything else can legitimately come from sector defaults.
+  const needsManualFcf = identityBlocked || suggestions?.requires_manual_fcf === true;
+  const parsedFcfOverride = fcfOverride.trim() === '' ? null : Number(fcfOverride);
+  const fcfOverrideValid = parsedFcfOverride != null && isFinite(parsedFcfOverride);
+  const parsedSharesOverride = sharesOverride.trim() === '' ? null : Number(sharesOverride);
+  const sharesOverrideValid =
+    parsedSharesOverride != null && isFinite(parsedSharesOverride) && parsedSharesOverride > 0;
 
   const loadSuggestions = useCallback(async (symbol: string, skipParamOverride: boolean = false) => {
     if (!symbol.trim()) return;
 
     setLoadingSuggestions(true);
     setError('');
-    
+    setFcfOverride('');
+    setSharesOverride('');
+
     try {
       const response = await dcfAPI.getSuggestions(symbol.toUpperCase());
       setSuggestions(response.data);
@@ -420,14 +458,12 @@ const DCFValuation: React.FC = () => {
       }
       // If apiType is empty/unknown, keep the hint-based detection as-is
       
-      // Only set parameters if NOT pre-filled from Technical Analysis, and
-      // never when the vendor is serving a different entity's filings — the
-      // payload's `suggestions` is null in that case, so this guard is also
-      // what keeps the reads below from throwing.
-      // Read off the fresh response, not the `identityBlocked` state flag above —
-      // setSuggestions hasn't committed yet at this point.
-      const blockedForPrefill = isEntityContradicted(response.data.entity_trust);
-      if (!skipParamOverride && !blockedForPrefill && response.data.suggestions) {
+      // Only set parameters if NOT pre-filled from Technical Analysis. The
+      // backend sends `suggestions` only when it stands behind them: sector
+      // defaults survive an identity contradiction (they are derived from
+      // sector and market cap, not from the wrong entity's filings), while
+      // anything entity-derived is withheld and this is null.
+      if (!skipParamOverride && response.data.suggestions) {
         setGrowthRate(response.data.suggestions.growth_rate * 100);
         setTerminalGrowth(response.data.suggestions.terminal_growth * 100);
         setDiscountRate(response.data.suggestions.discount_rate * 100);
@@ -540,7 +576,12 @@ const DCFValuation: React.FC = () => {
         growth_rate: growthRate / 100,
         terminal_growth: terminalGrowth / 100,
         discount_rate: discountRate / 100,
-        projection_years: projectionYears
+        projection_years: projectionYears,
+        // Sent only when the user actually typed something. On an identity
+        // contradiction the backend requires fcf_override and otherwise
+        // returns the block instead of a valuation.
+        ...(fcfOverrideValid ? { fcf_override: parsedFcfOverride as number } : {}),
+        ...(sharesOverrideValid ? { shares_override: parsedSharesOverride as number } : {}),
       });
 
       setDcfData(response.data);
@@ -775,6 +816,8 @@ const DCFValuation: React.FC = () => {
                         setIsWarrant(false);
                         setRelatedCommonStock(null);
                         setPrefilledFromTA(null);
+                        setFcfOverride('');
+                        setSharesOverride('');
                       }}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
                       title="Clear search"
@@ -805,6 +848,8 @@ const DCFValuation: React.FC = () => {
                       setIsWarrant(false);
                       setRelatedCommonStock(null);
                       setPrefilledFromTA(null);
+                      setFcfOverride('');
+                      setSharesOverride('');
                     }}
                     className="px-4 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-700 dark:text-gray-200 rounded-lg font-medium transition-colors text-sm whitespace-nowrap"
                   >
@@ -819,7 +864,19 @@ const DCFValuation: React.FC = () => {
                 growth_profile, so that panel drops out on its own) and every
                 data-source badge below. Not a caveat alongside them. */}
             {showSuggestions && isEntityContradicted(suggestions?.entity_trust) && (
-              <EntityTrustBlock trust={suggestions?.entity_trust} />
+              <EntityTrustBlock
+                trust={suggestions?.entity_trust}
+                note={
+                  <>
+                    Vendor figures and data-source badges are suppressed.
+                    {suggestions?.sources?.growth_rate === 'sector_default'
+                      ? ' Assumptions below fall back to sector defaults.'
+                      : ''}{' '}
+                    You can still run a valuation by entering a Current FCF taken from the
+                    correct entity's own filings.
+                  </>
+                }
+              />
             )}
 
             {/* Show Suggestions */}
@@ -1136,7 +1193,9 @@ const DCFValuation: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Growth Rate (%)
-                  {identityBlocked ? null : suggestions?.sources?.growth_rate === 'analyst_consensus' ? (
+                  {suggestions?.sources?.growth_rate === 'sector_default' ? (
+                    <SectorDefaultBadge show />
+                  ) : identityBlocked ? null : suggestions?.sources?.growth_rate === 'analyst_consensus' ? (
                     <span className="ml-2 text-[10px] font-medium text-teal-600 dark:text-teal-400">✓ Analyst consensus</span>
                   ) : (prefilledFromTA?.growth != null || suggestions?.sources?.growth_rate === 'sec_filings') && (
                     <span className="ml-2 text-[10px] font-medium text-green-600 dark:text-green-400">✓ From SEC filings</span>
@@ -1159,7 +1218,7 @@ const DCFValuation: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Terminal Growth (%)
-                  <span className="ml-2 text-[10px] font-medium text-gray-500 dark:text-gray-400">Sector default</span>
+                  <SectorDefaultBadge show={suggestions?.sources?.terminal_growth === 'sector_default'} />
                 </label>
                 <input
                   type="number"
@@ -1178,25 +1237,60 @@ const DCFValuation: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Current FCF
-                  {!identityBlocked && suggestions?.actuals?.fcf_ttm != null && (
+                  {needsManualFcf ? (
+                    <span className="ml-2 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                      Required — enter manually
+                    </span>
+                  ) : suggestions?.actuals?.fcf_ttm != null ? (
                     <span className="ml-2 text-[10px] font-medium text-green-600 dark:text-green-400">✓ Actual TTM</span>
-                  )}
-                  {!identityBlocked && suggestions && !suggestions.actuals?.fcf_ttm && (
+                  ) : suggestions ? (
                     <span className="ml-2 text-[10px] font-medium text-orange-600 dark:text-orange-400">⚠ Estimated</span>
-                  )}
+                  ) : null}
                 </label>
-                <div className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed">
-                  {suggestions?.actuals?.fcf_ttm_fmt || (suggestions ? `~${formatCurrency(suggestions.market_cap * 0.05)}` : '—')}
-                </div>
-                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                  💡 Operating Cash Flow minus CapEx (read-only)
-                </p>
+                {needsManualFcf ? (
+                  <>
+                    {/* Editable, and deliberately NOT pre-filled. The vendor
+                        fallback here is market cap x 5%, which at sector
+                        defaults makes intrinsic value ~0.76x the price it is
+                        compared against — the same "overvalued ~24%" verdict
+                        for every blocked ticker. Seeding the box with that
+                        number would just get it accepted. */}
+                    <input
+                      type="number"
+                      value={fcfOverride}
+                      onChange={(e) => setFcfOverride(e.target.value)}
+                      step="any"
+                      placeholder="e.g. 64500000"
+                      className="w-full px-4 py-2 border border-amber-400 dark:border-amber-600 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-white"
+                    />
+                    <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                      💡 Trailing free cash flow in dollars, from the correct entity's own
+                      filings — use the SEC EDGAR link above.
+                      {fcfOverrideValid && (
+                        <span className="text-gray-600 dark:text-gray-400">
+                          {' '}({formatCurrency(parsedFcfOverride as number)})
+                        </span>
+                      )}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed">
+                      {suggestions?.actuals?.fcf_ttm_fmt || (suggestions ? `~${formatCurrency(suggestions.market_cap * 0.05)}` : '—')}
+                    </div>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      💡 Operating Cash Flow minus CapEx (read-only)
+                    </p>
+                  </>
+                )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Discount Rate (%)
-                  {!identityBlocked && (prefilledFromTA?.wacc != null || suggestions?.sources?.discount_rate === 'sec_filings') && (
+                  {suggestions?.sources?.discount_rate === 'sector_default' ? (
+                    <SectorDefaultBadge show />
+                  ) : !identityBlocked && (prefilledFromTA?.wacc != null || suggestions?.sources?.discount_rate === 'sec_filings') && (
                     <span className="ml-2 text-[10px] font-medium text-green-600 dark:text-green-400">✓ Est. WACC</span>
                   )}
                 </label>
@@ -1217,6 +1311,7 @@ const DCFValuation: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Projection Years
+                  <SectorDefaultBadge show={suggestions?.sources?.projection_years === 'sector_default'} />
                 </label>
                 <input
                   type="number"
@@ -1236,32 +1331,63 @@ const DCFValuation: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Shares Outstanding
-                  {!identityBlocked && suggestions?.shares_outstanding != null && (
+                  {needsManualFcf ? (
+                    <span className="ml-2 text-[10px] font-medium text-orange-600 dark:text-orange-400">⚠ Estimated — editable</span>
+                  ) : suggestions?.shares_outstanding != null ? (
                     <span className="ml-2 text-[10px] font-medium text-green-600 dark:text-green-400">✓ From SEC filings</span>
-                  )}
-                  {!identityBlocked && suggestions && !suggestions.shares_outstanding && (
+                  ) : suggestions ? (
                     <span className="ml-2 text-[10px] font-medium text-orange-600 dark:text-orange-400">⚠ Estimated</span>
-                  )}
+                  ) : null}
                 </label>
-                <div className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed">
-                  {suggestions ? (() => {
-                    const shares = suggestions.shares_outstanding || (suggestions.current_price > 0 ? suggestions.market_cap / suggestions.current_price : 0);
-                    if (shares >= 1e9) return `${(shares / 1e9).toFixed(2)}B`;
-                    if (shares >= 1e6) return `${(shares / 1e6).toFixed(1)}M`;
-                    if (shares >= 1e3) return `${(shares / 1e3).toFixed(0)}K`;
-                    return shares.toFixed(0);
-                  })() : '—'}
-                </div>                
-                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                  💡 From SEC filings or market cap estimate (read-only)
-                </p>
+                {needsManualFcf ? (
+                  <>
+                    {/* Pre-filled, unlike FCF: the fallback is market cap / price,
+                        which is a market fact about the current ticker rather
+                        than a figure lifted from the wrong entity's filings.
+                        Still an estimate, so it stays overridable. */}
+                    <input
+                      type="number"
+                      value={sharesOverride}
+                      onChange={(e) => setSharesOverride(e.target.value)}
+                      step="any"
+                      min="1"
+                      placeholder={
+                        suggestions && suggestions.current_price > 0
+                          ? String(Math.round(suggestions.shares_outstanding || suggestions.market_cap / suggestions.current_price))
+                          : 'e.g. 278700000'
+                      }
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-white"
+                    />
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      💡 Diluted share count. Leave blank to use the market-cap estimate
+                      {suggestions && suggestions.current_price > 0 && (
+                        <> (~{formatShares(suggestions.shares_outstanding || suggestions.market_cap / suggestions.current_price)})</>
+                      )}
+                      .
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed">
+                      {suggestions ? formatShares(suggestions.shares_outstanding || (suggestions.current_price > 0 ? suggestions.market_cap / suggestions.current_price : 0)) : '—'}
+                    </div>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      💡 From SEC filings or market cap estimate (read-only)
+                    </p>
+                  </>
+                )}
               </div>
             </div>
 
             <button
               type="submit"
-              disabled={loading}
-              className="w-full px-6 py-3 bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 text-white rounded-lg font-semibold transition-colors disabled:opacity-50"
+              disabled={loading || (needsManualFcf && !fcfOverrideValid)}
+              title={
+                needsManualFcf && !fcfOverrideValid
+                  ? 'Enter a Current FCF figure to run the valuation — it has no trustworthy source for this ticker.'
+                  : undefined
+              }
+              className="w-full px-6 py-3 bg-purple-600 hover:bg-purple-700 dark:bg-purple-500 dark:hover:bg-purple-600 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Calculating...' : '📊 Calculate DCF Valuation'}
             </button>
@@ -1275,16 +1401,41 @@ const DCFValuation: React.FC = () => {
           </div>
         )}
 
-        {/* A calculate call that came back identity-blocked: show the reason
-            instead of the result. The payload's valuation/recommendation are
-            null, so this also keeps the reads below from throwing. */}
-        {dcfData && isEntityContradicted(dcfData.entity_trust) && (
-          <EntityTrustBlock trust={dcfData.entity_trust} className="mt-6" />
-        )}
-
-        {/* Results Display */}
-        {dcfData && !isEntityContradicted(dcfData.entity_trust) && (
+        {/* Results Display. Keyed on the payload, NOT on the verdict: a
+            user-supplied FCF escapes the refusal without changing the verdict,
+            which stays `contradiction`. A refusal comes back with valuation
+            null, so this guard also keeps the reads below from throwing, and
+            the reason is not repeated here — the block above the parameter form
+            already states it. */}
+        {dcfData && dcfData.valuation && dcfData.recommendation && dcfData.assumptions && (
           <div className="space-y-6">
+            {/* A valuation produced despite a contradicted verdict: the figures
+                came from the user, the assumptions from sector defaults, and
+                none of it from the vendor's filings. Say so on the result —
+                the user will screenshot this number, and by the time they look
+                at it again the banner further up the page is gone. */}
+            {isEntityContradicted(dcfData.entity_trust) && (
+              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-amber-500 text-lg leading-none" aria-hidden="true">⚠️</span>
+                  <div>
+                    <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+                      Built on your figures, not the vendor's
+                    </p>
+                    <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                      The vendor is serving a different company's filings for {dcfData.ticker}, so
+                      this valuation uses the free cash flow you entered
+                      {dcfData.assumptions?.shares_source === 'user_supplied'
+                        ? ' and your share count'
+                        : ''}
+                      , with sector-default assumptions. It is only as good as those inputs, and
+                      there is no net-debt adjustment — the balance sheet was withheld.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Summary Card */}
             <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
@@ -1758,7 +1909,10 @@ const DCFValuation: React.FC = () => {
       <BackToTop />
 
       {/* Trade This Modal */}
-      {showTradeModal && dcfData && (() => {
+      {/* The Trade This modal is opened from the results card, so a valuation is
+          always present in practice — but the payload allows null on a refusal,
+          so it is required explicitly rather than asserted. */}
+      {showTradeModal && dcfData && dcfData.valuation && dcfData.recommendation && (() => {
         const sigmaToUse = tradeIv?.value && tradeIv.value > 0 ? tradeIv.value : 0.30;
         // Tenor-matched live Treasury yield (%), falling back to 5% until loaded.
         const rfRatePct = _nearestTreasuryRate(tradeTreasuryRates, parseInt(tradeTimeframe)) ?? 5.0;

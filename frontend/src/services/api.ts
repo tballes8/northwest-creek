@@ -304,6 +304,12 @@ export const dcfAPI = {
     terminal_growth: number;
     discount_rate: number;
     projection_years: number;
+    // Optional user-supplied figures; they override the vendor's. `fcf_override`
+    // is REQUIRED when the entity-trust verdict is a contradiction, because free
+    // cash flow then has no trustworthy source and it is the input that decides
+    // the answer. Omit both for normal tickers.
+    fcf_override?: number;
+    shares_override?: number;
   }) =>
     axiosInstance.get(`/dcf/calculate/${ticker}`, { params }),
 };
