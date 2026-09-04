@@ -1572,7 +1572,7 @@ const TechnicalAnalysis: React.FC = () => {
                   </p>
                 )}
 
-                {isEntityContradicted(financialsData?.entity_trust) && (
+                {financialsData?.entity_trust && (
                   <EntityTrustBlock trust={financialsData.entity_trust} className="mb-2" />
                 )}
 

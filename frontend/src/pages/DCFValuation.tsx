@@ -863,10 +863,11 @@ const DCFValuation: React.FC = () => {
                 parameters, the growth-profile charts (the backend nulls
                 growth_profile, so that panel drops out on its own) and every
                 data-source badge below. Not a caveat alongside them. */}
-            {showSuggestions && isEntityContradicted(suggestions?.entity_trust) && (
+            {showSuggestions && (
               <EntityTrustBlock
                 trust={suggestions?.entity_trust}
                 note={
+                  !identityBlocked ? undefined :
                   <>
                     Vendor figures and data-source badges are suppressed.
                     {suggestions?.sources?.growth_rate === 'sector_default'

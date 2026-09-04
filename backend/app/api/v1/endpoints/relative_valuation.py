@@ -185,27 +185,28 @@ async def get_relval_inputs(
         company_name = (fin or {}).get("company_name") or sym
 
         # ── Entity identity gate ──────────────────────────────────────────
-        # Net debt and diluted shares are tagged "actual" here, which renders
-        # as a ✓ Actual badge on every relval input. On a contradiction those
-        # figures are a different company's, so the inputs, the source tags and
-        # the "Source financials" reference popup all go.
-        if is_contradicted(entity_trust):
-            return {
-                "ticker": sym,
-                "company_name": (
-                    entity_trust.get("edgar_company_name") or company_name
-                ),
-                "description": None,
-                "sector": (company or {}).get("sector"),
-                "industry": (company or {}).get("industry"),
-                "market_cap": (company or {}).get("market_cap"),
-                "estimate_year": None,
-                "inputs": None,
-                "sources": None,
-                "trailing_pe": None,
-                "reference": None,
-                "entity_trust": entity_trust,
-            }
+        # Narrower than a blanket refusal, because only *some* of this payload
+        # comes from the vendor's filings:
+        #
+        #   withheld  net debt, diluted shares, trailing P/E, and the "Source
+        #             financials" reference block — all read off the statements,
+        #             so on a contradiction they are a different company's.
+        #   kept      forward EPS / revenue / EBITDA. These come from analyst
+        #             estimates (a separate endpoint keyed on the live symbol),
+        #             so they describe the entity the ticker identifies *now*.
+        #             The one exception is handled below: when analyst EBITDA is
+        #             absent the code derives it from the TTM margin, which does
+        #             come from the filings — emptying `income` here disables
+        #             that path rather than letting it through as "derived".
+        #   kept      the peer set, which the client pulls by sector and
+        #             market-cap band and never touches these statements.
+        #
+        # Suppressing more than the evidence justifies is its own failure: it
+        # tells the user nothing is knowable when most of it is.
+        identity_blocked = is_contradicted(entity_trust)
+        if identity_blocked:
+            income, balance, ratios = {}, {}, {}
+            company_name = entity_trust.get("edgar_company_name") or company_name
 
         fwd_eps = estimates.get("forward_eps")
         fwd_rev = estimates.get("forward_revenue")
@@ -234,6 +235,16 @@ async def get_relval_inputs(
                 net_debt = total_debt - cash
 
         diluted_shares = income.get("diluted_shares_outstanding")
+        # With the filings withheld there is no reported share count, but market
+        # cap / price is a market fact about the live ticker rather than anything
+        # lifted from the wrong entity. Tagged an estimate, and the field is
+        # editable like every other relval input.
+        shares_estimated = False
+        if diluted_shares is None and identity_blocked:
+            mcap = (company or {}).get("market_cap")
+            if mcap and current_price:
+                diluted_shares = mcap / current_price
+                shares_estimated = True
 
         def _to_b(val):
             return round(val / 1e9, 4) if val is not None else None
@@ -262,13 +273,20 @@ async def get_relval_inputs(
                 "forward_revenue_b": "estimate" if fwd_rev is not None else None,
                 "forward_ebitda_b": fwd_ebitda_source,
                 "net_debt_b": "actual" if net_debt is not None else None,
-                "diluted_shares_m": "actual" if diluted_shares is not None else None,
+                "diluted_shares_m": (
+                    "estimate" if shares_estimated
+                    else "actual" if diluted_shares is not None
+                    else None
+                ),
                 "current_price": "live" if current_price else None,
             },
             "trailing_pe": ratios.get("pe_ratio"),
             "entity_trust": entity_trust,
             # Source figures for the "Source financials" popup (raw $ → $B/$M).
-            "reference": {
+            # Withheld entirely on a contradiction: it is a statement-by-statement
+            # view of the filings, so with `income`/`balance` emptied it would be
+            # a table of dashes presented as "source financials".
+            "reference": None if identity_blocked else {
                 "revenue_ttm_b": _to_b(ttm_revenue),
                 "ebitda_ttm_b": _to_b(ttm_ebitda),
                 "ebitda_margin_pct": round(ttm_ebitda_margin * 100, 1) if ttm_ebitda_margin is not None else None,

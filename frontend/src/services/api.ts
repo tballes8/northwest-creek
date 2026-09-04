@@ -79,11 +79,21 @@ export const watchlistAPI = {
 // what previously let a "wrong entity" warning render beside green
 // "actual data" badges vouching for the same numbers.
 //
-//   match          -> proceed normally, trust badges allowed
-//   contradiction  -> hard block: no figures, no pre-filled params, no badges
-//   cannot_resolve -> NOT a block. Funds/ETFs are absent from EDGAR's company
-//                     file and new registrants lag it. Proceed as before.
-export type EntityTrustVerdict = 'match' | 'contradiction' | 'cannot_resolve';
+//   match                -> proceed normally, trust badges allowed
+//   contradiction        -> hard block: no figures, no pre-filled params, no badges
+//   successor_registrant -> NOT a block. The vendor is serving the *predecessor*
+//                           registrant of the same business: a reorganization or
+//                           change of domicile mints a new CIK without the
+//                           company changing, and successors present predecessor
+//                           financials. Warn, and note that post-reorganization
+//                           filings are missing. (TE: FREYR Battery -> T1 Energy.)
+//   cannot_resolve       -> NOT a block. Funds/ETFs are absent from EDGAR's
+//                           company file and new registrants lag it.
+export type EntityTrustVerdict =
+  | 'match'
+  | 'contradiction'
+  | 'successor_registrant'
+  | 'cannot_resolve';
 
 export interface EntityTrust {
   verdict: EntityTrustVerdict;
@@ -91,13 +101,43 @@ export interface EntityTrust {
   edgar_company_name: string | null;
   fmp_filing_cik: number | null;
   fmp_profile_cik: number | null;
-  basis: 'edgar_vs_filing' | 'fmp_internal' | 'unresolved';
+  basis:
+    | 'edgar_vs_filing'
+    | 'fmp_internal'
+    | 'unresolved'
+    | 'edgar_name_lineage'
+    | 'fund_registrant';
   message: string | null;
+  // Registered fund (ETF / ETN / mutual fund) per SEC's fund file. Coverage
+  // across SEC's two ticker files is uneven — SPY, GLD, USO and QQQ file as
+  // trusts or LPs and appear in the operating file, so they keep the real CIK
+  // comparison; ULTY, VOO, JEPI and IWM appear only in the fund file. When this
+  // is true and no operating CIK resolved, the vendor-vs-vendor fallback is
+  // skipped so an ETF page can't hard-block on a vendor inconsistency.
+  is_fund?: boolean;
+  fund_series_id?: string | null;
+  fund_class_id?: string | null;
+  // Present once a contradiction has been classified against EDGAR's own
+  // submissions records for both registrants.
+  predecessor_name?: string | null;
+  predecessor_dormant?: boolean;
+  // Positively verified against EDGAR, not inferred from a vendor disagreement.
+  edgar_has_filings?: boolean;
+  edgar_latest_form?: string | null;
+  edgar_latest_filing_date?: string | null;
+  edgar_exchanges?: string[];
+  edgar_tickers?: string[];
 }
 
-// The single test every surface uses. Only a positive contradiction blocks.
+// The single test every surface uses. Only a positive contradiction blocks —
+// succession explicitly does not, so gates keyed on this proceed normally.
 export const isEntityContradicted = (t?: EntityTrust | null): boolean =>
   t?.verdict === 'contradiction';
+
+// The vendor is serving the predecessor registrant's filings: same business,
+// figures shown, but anything after the reorganization is absent.
+export const isEntitySuccessor = (t?: EntityTrust | null): boolean =>
+  t?.verdict === 'successor_registrant';
 
 // Portfolio API
 export type TransactionType = 'BUY' | 'SELL' | 'ADJUST' | 'REVERSAL';

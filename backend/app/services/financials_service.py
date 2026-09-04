@@ -32,6 +32,8 @@ from app.services.analyst_estimates import fetch_estimates, derive_consensus_gro
 from app.services.edgar_identity import (
     build_entity_trust,
     is_contradicted,
+    resolve_contradiction,
+    resolve_fund_ticker,
     resolve_ticker_cik,
 )
 
@@ -223,6 +225,11 @@ async def get_company_financials(
     # gather as the FMP calls, so it adds no latency, and after the startup warm
     # it is an in-memory dict lookup rather than a request.
     identity_task = resolve_ticker_cik(ticker)
+    # Fund detection is a second SEC file. Needed because coverage across the
+    # two is unpredictable — ULTY, VOO, JEPI and IWM appear only in the fund
+    # file — and knowing a symbol is a fund is what keeps the vendor-vs-vendor
+    # fallback from hard-blocking an ETF page.
+    fund_task = resolve_fund_ticker(ticker)
     # Daily closes covering the 12-quarter window (+ fiscal-calendar margin),
     # used to compute trailing P/E at each quarter end
     now_utc = datetime.now(timezone.utc)
@@ -242,6 +249,7 @@ async def get_company_financials(
         price_rows,
         estimates,
         edgar_entity,
+        edgar_fund,
     ) = await asyncio.gather(
         income_quarterly_task,
         balance_task,
@@ -252,6 +260,7 @@ async def get_company_financials(
         prices_task,
         estimates_task,
         identity_task,
+        fund_task,
     )
 
     # ── Normalise to lists (FMP returns arrays directly) ──────────────
@@ -290,8 +299,14 @@ async def get_company_financials(
         else None
     )
     entity_trust = build_entity_trust(
-        ticker, edgar_entity, filing_cik, profile.get("cik")
+        ticker, edgar_entity, filing_cik, profile.get("cik"), fund=edgar_fund
     )
+    # A raw CIK mismatch does not yet distinguish ticker *reuse* from corporate
+    # *succession* — a reorganization or change of domicile mints a new CIK for
+    # a business that never changed, and its predecessor's filings are that
+    # business's own history. Only reuse should block, so ask EDGAR which this
+    # is. No-op unless the verdict is a contradiction.
+    entity_trust = await resolve_contradiction(entity_trust)
     if is_contradicted(entity_trust):
         print(f"BLOCKED {ticker}: {entity_trust['message']}")
 

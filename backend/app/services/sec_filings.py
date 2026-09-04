@@ -19,6 +19,30 @@ from app.services.edgar_client import edgar_get
 BANKRUPTCY_LOOKBACK_DAYS = 550
 
 
+async def fetch_submissions(cik) -> dict | None:
+    """Fetch EDGAR's submissions record for a CIK, or None if unavailable.
+
+    This is the richest single call about a registrant: filing history plus its
+    current name, `formerNames`, and the `tickers`/`exchanges` EDGAR itself says
+    the entity trades under. Returns None for "no such CIK OR could not check" —
+    callers must not read a missing record as a statement of fact.
+
+    Prolific filers shard older history into `-submissions-NNN.json`; only the
+    `recent` block comes back here, which is what every current caller needs.
+    """
+    try:
+        cik_padded = str(int(cik)).zfill(10)
+    except (TypeError, ValueError):
+        return None
+    try:
+        r = await edgar_get(f"https://data.sec.gov/submissions/CIK{cik_padded}.json")
+        if r.status_code == 404:
+            return None
+        return r.json()
+    except Exception:
+        return None
+
+
 async def detect_bankruptcy(cik: str | None) -> dict | None:
     """Flag a recent 8-K Item 1.03 (Bankruptcy or Receivership) via SEC EDGAR.
 
@@ -31,19 +55,10 @@ async def detect_bankruptcy(cik: str | None) -> dict | None:
     """
     if not cik:
         return None
-    try:
-        cik_padded = str(int(cik)).zfill(10)
-    except (TypeError, ValueError):
+    payload = await fetch_submissions(cik)
+    if payload is None:
         return None
-    try:
-        r = await edgar_get(
-            f"https://data.sec.gov/submissions/CIK{cik_padded}.json"
-        )
-        if r.status_code == 404:  # no such CIK on record
-            return None
-        recent = (r.json().get("filings") or {}).get("recent") or {}
-    except Exception:
-        return None
+    recent = (payload.get("filings") or {}).get("recent") or {}
 
     forms = recent.get("form") or []
     items = recent.get("items") or []

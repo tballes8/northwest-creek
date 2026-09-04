@@ -218,29 +218,11 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
       const res = await relvalAPI.getInputs(ticker);
       const data: RelvalInputs = res.data;
 
-      // Wrong entity: the vendor's net debt and share count belong to another
-      // company, so there is nothing legitimate to pre-fill. `inputs` is null
-      // in this case, which would throw on the reads below. Emptying `sources`
-      // is also what silences every SourceBadge — no per-badge gating needed.
+      // On an identity contradiction the backend returns a *partial* payload
+      // rather than an empty one — forward estimates and the market-cap share
+      // estimate survive, net debt / trailing P/E / the reference block do not.
+      // So prefill normally and let the withheld fields arrive as nulls.
       setEntityTrust(data.entity_trust ?? null);
-      if (isEntityContradicted(data.entity_trust)) {
-        setForm({
-          forward_eps: '', forward_revenue_b: '', forward_ebitda_b: '',
-          net_debt_b: '', diluted_shares_m: '', current_price: '',
-        });
-        setSources({});
-        setReference(null);
-        setTrailingPe(null);
-        setCompanyName(data.company_name || ticker);
-        setCompanyDescription(null);
-        setSubjectSector(data.sector);
-        setSubjectIndustry(data.industry);
-        setSubjectMarketCap(data.market_cap ?? null);
-        setEstimateYear(null);
-        setCapMin('');
-        setCapMax('');
-        return;
-      }
 
       const i = data.inputs;
       setForm({
@@ -468,6 +450,14 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
   // estimates grid, the peer set and the results all go; the ticker loader
   // stays so the user can move off the blocked symbol.
   const identityBlocked = isEntityContradicted(entityTrust);
+  // The peer pull is driven by the subject's sector and market-cap band, which
+  // come from the vendor's *profile*. That is usually the trustworthy half of a
+  // contradiction — for TE only the statement rows were stale — but when the
+  // profile CIK disagrees with EDGAR too, the sector is the wrong company's and
+  // so are any comps pulled with it.
+  const profileTrusted =
+    entityTrust?.fmp_profile_cik != null &&
+    entityTrust.fmp_profile_cik === entityTrust.edgar_cik;
 
   return (
     <div className="space-y-6">
@@ -528,9 +518,35 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
           )}
         </div>
 
-        {identityBlocked && <EntityTrustBlock trust={entityTrust} className="mt-6" />}
+        {entityTrust && (
+          <EntityTrustBlock
+            trust={entityTrust}
+            className="mt-6"
+            note={
+              !identityBlocked ? undefined :
+              <>
+                Net debt, trailing P/E and the source-financials view are suppressed —
+                they come from the filings. Forward estimates are analyst consensus on
+                the live ticker and are unaffected
+                {profileTrusted
+                  ? ', and the peer set is pulled by sector, so a comparables valuation is still workable'
+                  : ''}
+                . Enter net debt yourself for an EV-based multiple.
+                {!profileTrusted && (
+                  <>
+                    {' '}
+                    <strong>
+                      The sector and market cap shown are also the wrong entity's, so
+                      check any peers you pull before trusting the medians.
+                    </strong>
+                  </>
+                )}
+              </>
+            }
+          />
+        )}
 
-        {ticker && !identityBlocked && (
+        {ticker && (
           <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-600">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
               Forward Estimates &amp; Balance Sheet
@@ -627,7 +643,7 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
         </div>
       )}
 
-      {ticker && !identityBlocked && (
+      {ticker && (
       <>
       {/* ── Peer set ──────────────────────────────────────────────────── */}
       <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
