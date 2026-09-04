@@ -446,21 +446,13 @@ def refine_contradiction(
     return refined
 
 
-# Submissions records, cached per CIK. Only fetched on the contradiction path,
-# but a contaminated ticker gets reloaded every time a user opens the page.
-_SUBMISSIONS_TTL_SECONDS = 6 * 3600
-_submissions_cache: dict[int, tuple[float, Optional[dict]]] = {}
-
-
 async def _submissions_cached(cik: int) -> Optional[dict]:
-    hit = _submissions_cache.get(cik)
-    if hit and (time.time() - hit[0]) < _SUBMISSIONS_TTL_SECONDS:
-        return hit[1]
-    from app.services.sec_filings import fetch_submissions
+    """One submissions cache for the app, owned by `sec_filings` next to the
+    fetcher. Identity, the IPO filter and the bankruptcy check all read the same
+    records, so they should not each hold their own copy."""
+    from app.services.sec_filings import fetch_submissions_cached
 
-    payload = await fetch_submissions(cik)
-    _submissions_cache[cik] = (time.time(), payload)
-    return payload
+    return await fetch_submissions_cached(cik)
 
 
 async def resolve_contradiction(entity_trust: dict) -> dict:

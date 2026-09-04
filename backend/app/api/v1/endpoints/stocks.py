@@ -12,7 +12,7 @@ from app.api.dependencies import get_current_user
 from app.services.market_data import market_data_service, evaluate_dividend
 from app.services.fmp_client import get_fmp_client, API_KEY
 from app.services.analyst_estimates import fetch_estimates
-from app.services.sec_filings import detect_bankruptcy
+from app.services.sec_filings import detect_bankruptcy, is_new_issuer
 from app.db.session import get_db
 from app.schemas.daily_snapshot import DailySnapshotItem, DailySnapshotResponse
 from app.db.models import DailyStockSnapshot, StockSnapshot
@@ -717,7 +717,10 @@ async def get_ipos():
     trading, so it belongs in recently_active. Entries age out of both after
     7 days because the calendar window itself is 7 days wide.
 
-    Filters out warrants, rights, units, foreign listings, and SPAC shells.
+    Filters out warrants, rights, units, foreign listings, SPAC shells, and
+    companies that were already public — the vendor calendar also carries
+    exchange transfers, uplistings and relistings, which are listing events
+    rather than new issuers. See `_drop_established_registrants`.
     """
     today = datetime.now().strftime("%Y-%m-%d")
     seven_days_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
@@ -840,15 +843,56 @@ async def get_ipos():
                     break
             return items
 
-        results["upcoming"] = _parse_ipo_response(
-            upcoming_resp, "upcoming", MAX_PER_TAB, "upcoming"
+        async def _drop_established_registrants(items: list, label: str) -> list:
+            """Remove calendar entries whose registrant EDGAR shows filing years
+            before the listing date.
+
+            OPAD is the case this exists for: Offerpad transferred its listing
+            from NYSE to Nasdaq on 2026-08-31 and the vendor calendar reported
+            it as an IPO, so the tracker showed a company public since its 2021
+            SPAC merger — with five years of price history and $400M of revenue
+            — next to genuine new issuers.
+
+            Both lookups are cached (the ticker map in memory, submissions on a
+            6h TTL), so this is a handful of requests for the whole calendar at
+            most. Each check fails open, and an outright error keeps the entry:
+            showing a stale listing beats hiding a real IPO.
+            """
+            if not items:
+                return items
+            verdicts = await asyncio.gather(
+                *[is_new_issuer(i["ticker"], i.get("listing_date")) for i in items],
+                return_exceptions=True,
+            )
+            kept = []
+            for item, verdict in zip(items, verdicts):
+                if isinstance(verdict, BaseException):
+                    print(f"IPO filter: {item['ticker']} check failed ({verdict}) — kept")
+                    kept.append(item)
+                elif verdict:
+                    kept.append(item)
+                else:
+                    print(
+                        f"IPO filter [{label}]: {item['ticker']} excluded — EDGAR shows "
+                        f"the registrant filing well before {item.get('listing_date')}"
+                    )
+            return kept
+
+        # Over-pull, then filter, so excluded relistings do not leave the tab
+        # short of genuine IPOs.
+        upcoming_items = _parse_ipo_response(
+            upcoming_resp, "upcoming", MAX_PER_TAB * 2, "upcoming"
         )
+        results["upcoming"] = (
+            await _drop_established_registrants(upcoming_items, "upcoming")
+        )[:MAX_PER_TAB]
 
         # Recent-window listings get split by whether they are actually trading.
         # Pull up to 2x so neither bucket is starved by the other.
         recent_items = _parse_ipo_response(
             recent_resp, "recent", MAX_PER_TAB * 2, "recent"
         )
+        recent_items = await _drop_established_registrants(recent_items, "recent")
 
         quotes = {}
         if recent_items:

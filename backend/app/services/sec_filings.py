@@ -9,9 +9,22 @@ app that talks to sec.gov — it owns the one User-Agent (SEC rejects requests
 without one) and the one 8 req/sec throttle. The SEC limit is per-IP, so each
 EDGAR reader keeping its own limiter would let them jointly exceed it.
 """
-from datetime import date, timedelta
+import time
+from datetime import date, datetime, timedelta
+from typing import Optional
 
 from app.services.edgar_client import edgar_get
+
+# Submissions records, cached per CIK. The record is ~a megabyte for a prolific
+# filer and several features now read it, so fetch it once per CIK per window.
+_SUBMISSIONS_TTL_SECONDS = 6 * 3600
+_submissions_cache: dict[int, tuple[float, Optional[dict]]] = {}
+
+# How long before a listing date a registrant may already have been filing and
+# still count as a new issuer. A genuine IPO files its S-1 months ahead, so the
+# window has to be generous; anything filing more than a year out is an
+# established company doing something other than going public.
+IPO_PRIOR_FILING_GRACE_DAYS = 365
 
 # How far back an Item 1.03 filing still counts as "on record". Long enough to
 # cover a full restructuring, short enough that a company which emerged years
@@ -41,6 +54,80 @@ async def fetch_submissions(cik) -> dict | None:
         return r.json()
     except Exception:
         return None
+
+
+async def fetch_submissions_cached(cik) -> dict | None:
+    """`fetch_submissions` with a per-CIK TTL cache. Negative results cached too:
+    a CIK EDGAR has no record of will not acquire one within the window."""
+    try:
+        key = int(cik)
+    except (TypeError, ValueError):
+        return None
+    hit = _submissions_cache.get(key)
+    if hit and (time.time() - hit[0]) < _SUBMISSIONS_TTL_SECONDS:
+        return hit[1]
+    payload = await fetch_submissions(key)
+    _submissions_cache[key] = (time.time(), payload)
+    return payload
+
+
+def earliest_filing_date(submissions: Optional[dict]) -> Optional[str]:
+    """Oldest filing date in the submissions `recent` block, ISO, or None.
+
+    Prolific filers shard older history out of `recent`, so this is a *lower
+    bound* on how long the registrant has existed — which is the safe direction
+    for the only caller: if even the recent block starts years back, the
+    registrant is unambiguously established.
+    """
+    recent = ((submissions or {}).get("filings") or {}).get("recent") or {}
+    dates = recent.get("filingDate") or []
+    # ISO dates sort lexicographically; the block is normally newest-first but
+    # min() does not depend on that holding.
+    return min(dates) if dates else None
+
+
+async def is_new_issuer(
+    ticker: str,
+    listing_date: str | None,
+    grace_days: int = IPO_PRIOR_FILING_GRACE_DAYS,
+) -> bool:
+    """
+    Is `ticker` genuinely going public on `listing_date`, per EDGAR?
+
+    Vendor IPO calendars mix in exchange transfers, uplistings and relistings —
+    OPAD's NYSE→Nasdaq move showed up as an "IPO" on 2026-08-31 for a company
+    public since its 2021 SPAC merger, with five years of price history behind
+    it. The discriminator is the registrant's filing history, not the listing
+    paperwork: a transfer files `8-A12B` exactly like a new listing does, so the
+    form type alone would not tell them apart.
+
+    **Fails open.** Unresolvable ticker, missing record or unparseable date all
+    return True, because a genuine IPO can easily precede its appearance in
+    SEC's ticker file and dropping real IPOs is the worse error.
+    """
+    if not listing_date:
+        return True
+    try:
+        listed = datetime.strptime(listing_date[:10], "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return True
+
+    from app.services.edgar_identity import resolve_ticker_cik
+
+    resolved = await resolve_ticker_cik(ticker)
+    if not resolved:
+        return True
+
+    submissions = await fetch_submissions_cached(resolved[0])
+    earliest = earliest_filing_date(submissions)
+    if not earliest:
+        return True
+    try:
+        first = datetime.strptime(earliest[:10], "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return True
+
+    return (listed - first).days <= grace_days
 
 
 async def detect_bankruptcy(cik: str | None) -> dict | None:
