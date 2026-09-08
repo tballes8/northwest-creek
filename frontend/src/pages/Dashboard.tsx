@@ -1271,7 +1271,7 @@ return (
                   }
                   className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
                     ipoAssetFilter === filter
-                      ? 'bg-gray-700 dark:bg-gray-900 text-white'
+                      ? 'bg-primary-600 text-white'
                       : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                   }`}
                 >
