@@ -709,13 +709,18 @@ async def get_ipos():
     Get upcoming IPOs from FMP IPO calendar.
 
     Three buckets:
-      - upcoming        — listing date in the next 21 days
+      - upcoming        — listing date in the next 21 days, today excluded
       - recently_active — listed in the last 7 days and already trading
       - pending         — listed in the last 7 days but no trading data yet
 
     The last two are split by a batch quote: a ticker with a real price is
     trading, so it belongs in recently_active. Entries age out of both after
     7 days because the calendar window itself is 7 days wide.
+
+    The upcoming window starts *tomorrow*. FMP's from/to are both inclusive, so
+    running it from `today` put every listing dated today in two tabs at once —
+    the same four rows rendered under Upcoming and again under Pending. A
+    listing dated today is not upcoming; it is pending until it prints.
 
     Filters out warrants, rights, units, foreign listings, SPAC shells, and
     companies that were already public — the vendor calendar also carries
@@ -724,6 +729,7 @@ async def get_ipos():
     """
     today = datetime.now().strftime("%Y-%m-%d")
     seven_days_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     twenty_one_days_ahead = (datetime.now() + timedelta(days=21)).strftime("%Y-%m-%d")
 
     # US exchanges we care about
@@ -811,7 +817,7 @@ async def get_ipos():
         upcoming_resp, recent_resp = await asyncio.gather(
             client.get(
                 "ipos-calendar",
-                params={"from": today, "to": twenty_one_days_ahead, "apikey": API_KEY},
+                params={"from": tomorrow, "to": twenty_one_days_ahead, "apikey": API_KEY},
             ),
             client.get(
                 "ipos-calendar",

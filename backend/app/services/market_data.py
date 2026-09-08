@@ -22,6 +22,22 @@ def _safe_error(e: Exception) -> str:
     return msg
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+    """Coerce an FMP numeric field to int, tolerating null and junk.
+
+    A listing that has not printed yet comes back with `volume: null`, and
+    `int(None)` raises. That mattered because the exception escaped the row and
+    took the whole response with it — one untraded IPO blanked every quote in
+    the same batch. Coerce here so a missing field costs that field only.
+    """
+    if value is None:
+        return default
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return default
+
+
 # --- Dividend annualization -------------------------------------------------
 # The one tunable knob; everything else in evaluate_dividend() is deterministic.
 DIVIDEND_STALE_INTERVAL_MULTIPLIER = 1.5   # missed more than this many expected intervals => suspended
@@ -261,7 +277,7 @@ class MarketDataService:
                 "price": result.get("price", 0),
                 "change": result.get("change", 0),
                 "change_percent": result.get("changePercentage", 0),
-                "volume": int(result.get("volume", 0)),
+                "volume": _safe_int(result.get("volume")),
                 "high": result.get("dayHigh", 0),
                 "low": result.get("dayLow", 0),
                 "open": result.get("open", 0),
@@ -296,13 +312,15 @@ class MarketDataService:
 
             quotes = {}
             for result in data:
-                symbol = result.get("symbol", "")
-                quotes[symbol.upper()] = {
+                symbol = (result.get("symbol") or "").upper().strip()
+                if not symbol:
+                    continue
+                quotes[symbol] = {
                     "ticker": symbol,
                     "price": result.get("price", 0),
                     "change": result.get("change", 0),
                     "change_percent": result.get("changePercentage", 0),
-                    "volume": int(result.get("volume", 0)),
+                    "volume": _safe_int(result.get("volume")),
                     "high": result.get("dayHigh", 0),
                     "low": result.get("dayLow", 0),
                     "open": result.get("open", 0),
@@ -416,7 +434,7 @@ class MarketDataService:
                     "high": item.get("high", 0),
                     "low": item.get("low", 0),
                     "close": item.get("close", 0),
-                    "volume": int(item.get("volume", 0)),
+                    "volume": _safe_int(item.get("volume")),
                 })
 
             # FMP returns newest-first; sort ascending for consistency
