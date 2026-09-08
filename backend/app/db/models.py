@@ -309,12 +309,39 @@ class StockSnapshot(Base):
     squeeze_ratio = Column(Numeric(precision=10, scale=4), nullable=True)  # BB width ÷ KC width (smaller = tighter)
     squeeze_computed_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Fund metadata — populated only on is_etf rows, by
+    # refresh_stock_snapshots._update_etf_metadata from /stable/etf/info.
+    #
+    # expense_ratio is a PERCENT (0.0300 = 3bp), not a fraction: FMP's expenseRatio
+    # unit differs between funds and market_data._normalize_expense_ratio reconciles
+    # it on ingest so every consumer reads one unit.
+    expense_ratio = Column(Numeric(precision=6, scale=4), nullable=True)
+    # Deliberately not market_cap: that comes from batch-quote and is sparse for
+    # funds, this comes from the fund itself. ETF mode filters and sorts on aum.
+    aum = Column(Numeric(precision=24, scale=2), nullable=True)
+    nav = Column(Numeric(precision=18, scale=4), nullable=True)
+    holdings_count = Column(Integer, nullable=True)
+    asset_class = Column(String(50), nullable=True)   # Equity | Fixed Income | Commodity | ...
+    etf_company = Column(String(120), nullable=True)  # issuer
+    inception_date = Column(Date, nullable=True)
+    # Every field above is written with COALESCE, so without this a value stale
+    # because etf/info has been erroring for days is indistinguishable from a fresh one.
+    etf_info_refreshed_at = Column(DateTime(timezone=True), nullable=True)
+
     __table_args__ = (
         Index('idx_ss_market_cap', 'market_cap'),
         Index('idx_ss_price_avg_50', 'price_avg_50'),
         Index('idx_ss_price_avg_200', 'price_avg_200'),
         Index('idx_ss_change_pct', 'change_percentage'),
         Index('idx_ss_squeeze_state', 'squeeze_state'),
+        Index('idx_ss_sector', 'sector'),
+        Index('idx_ss_industry', 'industry'),
+        # Two GIN full-text indexes also exist on this table and are NOT modelled
+        # here, because they are expression indexes over to_tsvector(...) which
+        # SQLAlchemy cannot express as a plain Index: idx_ss_description_fts and
+        # idx_ss_combined_fts (migration 023). /stocks/search-by-keywords depends on
+        # both. `alembic revision --autogenerate` cannot see them and WILL emit
+        # op.drop_index for each — delete those lines from any generated migration.
     )
 
 

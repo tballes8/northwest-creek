@@ -209,9 +209,10 @@ async def get_sectors(
     source `/company/{ticker}` renders. One source, so a ticker still cannot show one
     sector here and another in the Company Details panel.
 
-    The live path remains for symbols the table has no sector for — typically ETFs and
-    other non-universe tickers a user holds, which `_prune_universe` keeps out of
-    `stock_snapshots`. Those are written back when they resolve.
+    The live path remains for symbols the table has no sector for — non-universe tickers
+    a user holds, which `_prune_universe` keeps out of `stock_snapshots`, and ETFs, which
+    are in the table but never get a sector (see below). Those are written back when they
+    resolve, except onto fund rows.
 
     **Returns:** `{"sectors": {"NFE": "Energy", ...}}` — every requested ticker is
     present; anything unresolvable maps to "Other".
@@ -266,13 +267,23 @@ async def get_sectors(
 
         # 3. Keep stock_snapshots in step, so the screener's sector filter and keyword
         #    search agree with the labels users see. UPDATE-only: never INSERT, so a
-        #    non-universe ticker (an ETF) can't leak into the screener universe.
+        #    non-universe ticker can't leak into the screener universe.
+        #
+        #    Guarded on is_etf because funds ARE in stock_snapshots now (the universe
+        #    build has an isEtf=true leg) but deliberately carry no sector: they are
+        #    excluded from the profile pass, and /screener/filter-options builds the
+        #    sector dropdown from DISTINCT over this column. Without the guard, one user
+        #    holding SPY writes a sector onto a fund row and it turns up as a sector
+        #    option — and makes that fund answer a stock-mode sector screen.
         changed = [(sym, sector) for sym, sector in fetched.items() if sector]
         if changed:
             for sym, sector in changed:
                 await db.execute(
                     update(StockSnapshot)
-                    .where(StockSnapshot.symbol == sym)
+                    .where(
+                        StockSnapshot.symbol == sym,
+                        StockSnapshot.is_etf.isnot(True),
+                    )
                     .values(sector=sector)
                 )
             await db.commit()
@@ -1096,6 +1107,13 @@ async def search_by_keywords(
 
     **Returns:**
     - Array of matching companies with relevance ranking
+
+    Results include ETFs. Funds are in `stock_snapshots` and their descriptions come
+    from `etf/info`, so a thematic search ("uranium", "semiconductors") legitimately
+    surfaces the sector fund alongside the operating companies. They carry `is_etf`
+    so the caller can label them, and their `sector`/`industry` are always null —
+    funds are excluded from the profile pass — so `match_reason` on a fund always
+    falls through to the description branch.
     """
     from sqlalchemy import func, text
 
@@ -1114,6 +1132,7 @@ async def search_by_keywords(
                 description,
                 market_cap,
                 price,
+                is_etf,
                 ts_rank(
                     to_tsvector('english',
                         COALESCE(name, '') || ' ' ||
@@ -1165,6 +1184,7 @@ async def search_by_keywords(
                 "market_cap": float(row.market_cap) if row.market_cap else None,
                 "price": float(row.price) if row.price else None,
                 "relevance_score": float(row.rank) if row.rank else 0,
+                "is_etf": bool(row.is_etf),
             })
 
         # Also search for exact matches in sector/industry (case-insensitive)
@@ -1200,6 +1220,7 @@ async def search_by_keywords(
                     "market_cap": float(row.market_cap) if row.market_cap else None,
                     "price": float(row.price) if row.price else None,
                     "relevance_score": 0,
+                    "is_etf": bool(row.is_etf),
                 })
 
         return {
@@ -1287,40 +1308,17 @@ async def get_etf_info(symbol: str):
 
     **Returns:**
     - ETF metadata, sector breakdown, and fund details
+
+    Field mapping lives in market_data.get_etf_info, which the daily snapshot
+    enrichment also calls — so this panel and the ETF screener read one shape and
+    one expense-ratio unit. `expense_ratio` is a percent (0.09 = 0.09%); FMP's raw
+    value is a percent for some funds and a fraction for others.
     """
     try:
-        client = get_fmp_client()
-        resp = await client.get(
-            "etf/info",
-            params={"symbol": symbol.upper(), "apikey": API_KEY},
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-        if not data or not isinstance(data, list) or len(data) == 0:
+        info = await market_data_service.get_etf_info(symbol)
+        if info is None:
             raise HTTPException(status_code=404, detail=f"No ETF info found for {symbol}")
-
-        info = data[0]
-        sectors = info.get("sectorsList", [])
-
-        return {
-            "symbol": info.get("symbol"),
-            "name": info.get("name"),
-            "description": info.get("description"),
-            "etf_company": info.get("etfCompany"),
-            "expense_ratio": info.get("expenseRatio"),
-            "aum": info.get("assetsUnderManagement"),
-            "nav": info.get("nav"),
-            "holdings_count": info.get("holdingsCount"),
-            "inception_date": info.get("inceptionDate"),
-            "avg_volume": info.get("avgVolume"),
-            "asset_class": info.get("assetClass"),
-            "is_actively_trading": info.get("isActivelyTrading"),
-            "sectors": [
-                {"sector": s.get("industry"), "weight": s.get("exposure")}
-                for s in sectors
-            ],
-        }
+        return info
 
     except HTTPException:
         raise

@@ -11,6 +11,18 @@ Strategy (cheap, ~0 recurring FMP calls):
   4. Compute — run compute_squeeze_from_ohlc over each ticker's recent bars and
      write squeeze_state / squeeze_bars back onto StockSnapshot.
 
+Universe: every row in stock_snapshots, which since the ETF-mode change includes
+~4.7k funds as well as common stock. That is deliberate — a coiling SPY or XLE is as
+tradeable as a coiling stock, and scoping this job to stocks would leave the squeeze
+columns permanently blank for funds while the screener still renders the badges. The
+cost is one-off: ~4.7k extra historical seeds on the first run after funds land
+(~5 min at SEED_CONCURRENCY), then ~0/day recurring, plus ~240k more ticker_daily_bars
+rows against the existing ~360k.
+
+Caveat worth knowing: leveraged and inverse funds (TQQQ, SQQQ, UVXY) produce
+mathematically valid but strategically meaningless squeeze states — their volatility
+is a function of the leverage, not of accumulation.
+
 Run manually:  python -m app.tasks.compute_squeeze
 """
 import asyncio

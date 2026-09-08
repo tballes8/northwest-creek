@@ -51,6 +51,48 @@ DIVIDEND_STALE_INTERVAL_MULTIPLIER = 1.5   # missed more than this many expected
 # Used for the staleness window when FMP reports no usable frequency.
 _DIVIDEND_FALLBACK_INTERVAL_DAYS = 365.0
 
+
+# --- Fund expense ratio -----------------------------------------------------
+# FMP's etf/info `expenseRatio` unit is inconsistent across funds: some rows are a
+# percent (0.75 meaning 0.75%), others a fraction (0.0075 meaning the same). It is
+# normalized to a percent here, once, so every consumer reads the same unit.
+#
+# This rule used to live only in Stocks.tsx (loadEtfInfo). That was fine while the
+# only consumer was a display field, but the screener now FILTERS on the stored
+# value — a frontend-only rule would mean the results table and the Fund Details
+# panel disagreeing about the same fund.
+#
+# Threshold: a fraction-encoded ratio is at most ~0.10 (a 10% fee) and a
+# percent-encoded one is at least ~0.02 (2bp; the cheapest US funds are 0-3bp), so
+# 0.02 separates them for every fund except a genuine 1bp fee, which would be read
+# as 1.00%. That ambiguity is unavoidable without a second source, and it is not a
+# regression — it is the identical rule the frontend already shipped.
+# scripts/probe_etf_universe.py prints which sampled funds land in (0, 0.02); if any
+# is a real 1bp fee, move this floor and record why rather than leaving it implicit.
+#
+# Deliberately idempotent: an already-normalized value >= 0.02 passes through
+# unchanged, so running it twice cannot inflate a figure 100x.
+_EXPENSE_RATIO_PCT_FLOOR = 0.02
+_EXPENSE_RATIO_PCT_CEIL = 10.0
+
+
+def normalize_expense_ratio(raw: Any) -> Optional[float]:
+    """FMP expenseRatio -> a percent, or None when absent or implausible."""
+    try:
+        val = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if val < 0:
+        return None
+    if val == 0:
+        return 0.0  # zero-fee funds are real (BKLC, and several 0bp core funds)
+    pct = val if val >= _EXPENSE_RATIO_PCT_FLOOR else val * 100
+    if pct > _EXPENSE_RATIO_PCT_CEIL:
+        # No fund charges more than 10%. Storing the value would put garbage at the
+        # top of every "cheapest ETF" sort, so show nothing instead.
+        return None
+    return round(pct, 4)
+
 FREQ_INT_TO_LABEL = {
     0: "One-time",
     1: "Annual",
@@ -218,6 +260,7 @@ class MarketDataService:
         self._quote_cache = SimpleCache(ttl_seconds=15)
         self._profile_cache = SimpleCache(ttl_seconds=3600)
         self._dividend_cache = SimpleCache(ttl_seconds=43200)  # 12 hours — dividends change quarterly
+        self._etf_info_cache = SimpleCache(ttl_seconds=86400)  # 24 hours — fund metadata changes rarely
 
     @staticmethod
     def _is_warrant_ticker(ticker: str) -> bool:
@@ -394,6 +437,64 @@ class MarketDataService:
             raise ValueError(f"HTTP error fetching company info for {ticker}: {_safe_error(e)}")
         except Exception as e:
             raise ValueError(f"Error fetching company info for {ticker}: {_safe_error(e)}")
+
+    async def get_etf_info(
+        self, ticker: str, *, use_cache: bool = True
+    ) -> Optional[Dict[str, Any]]:
+        """Fund metadata from /stable/etf/info. None when FMP has no record.
+
+        The single source for fund metadata: GET /stocks/etf/{symbol}/info renders it
+        and refresh_stock_snapshots._update_etf_metadata stores it, so the Fund
+        Details panel and the ETF screener cannot disagree about the same fund.
+        Before this existed the endpoint owned its own field mapping and the
+        expense-ratio unit rule lived in React — three places that had to agree.
+
+        expense_ratio comes back as a percent — see normalize_expense_ratio.
+
+        Returns None (rather than raising) when the symbol has no ETF record, because
+        that is a data condition, not an error: the daily pass runs over every row
+        flagged is_etf and some of them are ETNs or trusts FMP has no fund record for.
+
+        use_cache=False for the daily bulk pass: it touches ~4k symbols once per day
+        and would otherwise pin every one of them in a process-lifetime dict
+        (SimpleCache only evicts on a subsequent read of an expired key).
+        """
+        cache_key = f"etfinfo:{ticker.upper()}"
+        if use_cache:
+            cached = self._etf_info_cache.get(cache_key)
+            if cached is not None:
+                return cached
+
+        data = await self._fmp_get("etf/info", {"symbol": ticker.upper()})
+        if not data or not isinstance(data, list):
+            return None
+        info = data[0]
+        if not isinstance(info, dict):
+            return None
+
+        result = {
+            "symbol": info.get("symbol"),
+            "name": info.get("name"),
+            "description": info.get("description"),
+            "etf_company": info.get("etfCompany"),
+            "expense_ratio": normalize_expense_ratio(info.get("expenseRatio")),
+            "aum": info.get("assetsUnderManagement"),
+            "nav": info.get("nav"),
+            "holdings_count": info.get("holdingsCount"),
+            "inception_date": info.get("inceptionDate"),
+            "avg_volume": info.get("avgVolume"),
+            "asset_class": info.get("assetClass"),
+            "is_actively_trading": info.get("isActivelyTrading"),
+            "sectors": [
+                {"sector": s.get("industry"), "weight": s.get("exposure")}
+                for s in (info.get("sectorsList") or [])
+                if isinstance(s, dict)
+            ],
+        }
+
+        if use_cache:
+            self._etf_info_cache.set(cache_key, result)
+        return result
 
     async def get_historical_prices(
         self,

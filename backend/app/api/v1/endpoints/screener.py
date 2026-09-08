@@ -1,11 +1,12 @@
 import math
 from typing import Literal, Optional
-from datetime import timezone
+from datetime import date, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from app.api.dependencies import get_current_user
 from app.core.tier_limits import get_tier_limit
@@ -67,7 +68,22 @@ SORT_COL = {
     "beta": StockSnapshot.beta,
     "avg_volume": StockSnapshot.avg_volume,
     "rvol": RVOL_EXPR,
+    # ETF-mode columns. A sort key missing from this map falls back silently to
+    # market_cap below, so the arrow flips while the order does not change — which
+    # reads as a broken sort rather than an error. Anything the UI offers as a
+    # sortable header must be here.
+    "expense_ratio": StockSnapshot.expense_ratio,
+    "aum": StockSnapshot.aum,
+    "holdings_count": StockSnapshot.holdings_count,
+    "nav": StockSnapshot.nav,
+    "inception_date": StockSnapshot.inception_date,
 }
+
+# Default sort per universe. ETF mode cannot default to market_cap: batch-quote is
+# sparse on marketCap for funds, so with .nulls_last() the result order would be
+# effectively arbitrary. Applied only when the caller did not choose a sort, so a
+# saved screen written before ETF mode still gets a sensible default for its universe.
+_DEFAULT_SORT = {"stocks": "market_cap", "etfs": "aum", "all": "market_cap"}
 
 
 class NumericRange(BaseModel):
@@ -101,7 +117,28 @@ class ScreenerCriteria(BaseModel):
     squeeze_fired_within_days: Optional[int] = None
     squeeze_min_bars: Optional[int] = None
     squeeze_max_ratio: Optional[float] = None
-    exclude_etfs: bool = True
+
+    # Which slice of stock_snapshots to screen — the Stocks|ETFs mode toggle.
+    universe: Literal["stocks", "etfs", "all"] = "stocks"
+    # DEPRECATED, superseded by `universe`. Kept because saved screens written before
+    # ETF mode carry it in their JSONB criteria, and RelativeValuation.tsx still sends
+    # exclude_etfs: true when pulling peers. Optional[bool] rather than the old
+    # `bool = True` so "not sent" stays distinguishable from "sent as false" —
+    # _resolve_universe depends on that distinction.
+    exclude_etfs: Optional[bool] = None
+
+    # ETF-only filters. Null on common stock, so applying one in stock mode would
+    # return nothing — the frontend omits them outside ETF mode and so does
+    # _resolve_universe's caller. expense_ratio is a percent (max 0.10 = a fee of
+    # 0.10% or less); see market_data.normalize_expense_ratio for the unit.
+    expense_ratio: Optional[NumericRange] = None
+    aum: Optional[NumericRange] = None          # raw $, from etf/info
+    holdings_count: Optional[NumericRange] = None
+    asset_class: Optional[list[str]] = None     # Equity | Fixed Income | Commodity | ...
+    etf_company: Optional[list[str]] = None     # issuer
+    # "at least N years since inception". Sent as a count of years rather than a cutoff
+    # date so the date arithmetic stays server-side — one fewer timezone off-by-one.
+    min_age_years: Optional[float] = None
 
     # Industry and sector filters
     sector: Optional[list[str]] = None
@@ -114,8 +151,67 @@ class ScreenerCriteria(BaseModel):
     sort_desc: bool = True
 
 
+def _resolve_universe(c: "ScreenerCriteria") -> str:
+    """Which slice of stock_snapshots this screen runs against.
+
+    `universe` is the current field; `exclude_etfs` is what pre-ETF-mode clients send.
+    An explicit `universe` always wins.
+
+    When only `exclude_etfs` arrives, exclude_etfs=False maps to "all", not "etfs" — it
+    only ever meant "don't filter funds out", never "funds only". Both absent gives
+    "stocks", which is exactly the old `exclude_etfs: bool = True` default, so every
+    saved screen written before ETF mode returns the result set it always returned.
+    """
+    if "universe" in c.model_fields_set:
+        return c.universe
+    if c.exclude_etfs is False:
+        return "all"
+    return "stocks"
+
+
 def _f(val) -> Optional[float]:
     return float(val) if val is not None else None
+
+
+# Exactly the columns _build_row reads, for the load_only() in run_screener.
+#
+# Keep in lockstep with _build_row. A column read there but missing here is NOT an
+# error — SQLAlchemy silently lazy-loads it, one SELECT per row per attribute, which
+# turns one query into thousands on the derived-filter path. The test below the
+# module guards this; if you add a field to _build_row, add it here too.
+_ROW_COLS = (
+    StockSnapshot.symbol,
+    StockSnapshot.name,
+    StockSnapshot.price,
+    StockSnapshot.change_percentage,
+    StockSnapshot.volume,
+    StockSnapshot.avg_volume,
+    StockSnapshot.market_cap,
+    StockSnapshot.day_high,
+    StockSnapshot.day_low,
+    StockSnapshot.year_high,
+    StockSnapshot.year_low,
+    StockSnapshot.price_avg_50,
+    StockSnapshot.price_avg_200,
+    StockSnapshot.exchange,
+    StockSnapshot.open_price,
+    StockSnapshot.previous_close,
+    StockSnapshot.dividend_annual,
+    StockSnapshot.dividend_status,
+    StockSnapshot.beta,
+    StockSnapshot.last_refreshed,
+    StockSnapshot.is_etf,
+    StockSnapshot.squeeze_state,
+    StockSnapshot.squeeze_bars,
+    StockSnapshot.squeeze_ratio,
+    StockSnapshot.expense_ratio,
+    StockSnapshot.aum,
+    StockSnapshot.nav,
+    StockSnapshot.holdings_count,
+    StockSnapshot.asset_class,
+    StockSnapshot.etf_company,
+    StockSnapshot.inception_date,
+)
 
 
 def _build_row(row: StockSnapshot) -> dict:
@@ -178,6 +274,14 @@ def _build_row(row: StockSnapshot) -> dict:
         "squeeze_state": row.squeeze_state,
         "squeeze_bars": row.squeeze_bars,
         "squeeze_ratio": _f(row.squeeze_ratio),
+        # Fund metadata — null on common stock. expense_ratio is a percent.
+        "expense_ratio": _f(row.expense_ratio),
+        "aum": _f(row.aum),
+        "nav": _f(row.nav),
+        "holdings_count": row.holdings_count,
+        "asset_class": row.asset_class,
+        "etf_company": row.etf_company,
+        "inception_date": row.inception_date.isoformat() if row.inception_date else None,
     }
 
 
@@ -226,6 +330,24 @@ async def run_screener(
     add_range(DIV_YIELD_EXPR, criteria.dividend_yield)
     add_range(StockSnapshot.beta, criteria.beta)
     add_range(RVOL_EXPR, criteria.rvol)
+
+    # ETF-only. All push down to SQL, so _passes_derived needs no change.
+    add_range(StockSnapshot.expense_ratio, criteria.expense_ratio)
+    add_range(StockSnapshot.aum, criteria.aum)
+    add_range(StockSnapshot.holdings_count, criteria.holdings_count)
+
+    if criteria.asset_class:
+        conditions.append(StockSnapshot.asset_class.in_(criteria.asset_class))
+
+    if criteria.etf_company:
+        conditions.append(StockSnapshot.etf_company.in_(criteria.etf_company))
+
+    if criteria.min_age_years is not None:
+        # "has a track record of at least N years". Computed here rather than in the
+        # browser so the cutoff is derived once, from the server's clock.
+        cutoff = date.today() - timedelta(days=criteria.min_age_years * 365.25)
+        conditions.append(StockSnapshot.inception_date.isnot(None))
+        conditions.append(StockSnapshot.inception_date <= cutoff)
 
     if criteria.exchange:
         conditions.append(StockSnapshot.exchange.in_(criteria.exchange))
@@ -312,12 +434,23 @@ async def run_screener(
         conditions.append(StockSnapshot.squeeze_ratio.isnot(None))
         conditions.append(StockSnapshot.squeeze_ratio <= criteria.squeeze_max_ratio)
 
-    if criteria.exclude_etfs:
+    universe = _resolve_universe(criteria)
+    if universe == "stocks":
+        # NULL still reads as "not an ETF". is_etf is stamped at universe-build time
+        # now, so NULL should not occur, but the tolerance costs nothing and keeps the
+        # pre-ETF-mode behaviour exactly.
         conditions.append(
             or_(StockSnapshot.is_etf.is_(None), StockSnapshot.is_etf == False)
         )
+    elif universe == "etfs":
+        conditions.append(StockSnapshot.is_etf.is_(True))
+    # "all": no predicate
 
-    sort_col = SORT_COL.get(criteria.sort_by, StockSnapshot.market_cap)
+    # Fall back to the universe's default rather than market_cap, so an unrecognised
+    # sort key in ETF mode doesn't silently order funds by a mostly-NULL column.
+    default_sort = _DEFAULT_SORT[universe]
+    sort_by = criteria.sort_by if "sort_by" in criteria.model_fields_set else default_sort
+    sort_col = SORT_COL.get(sort_by, SORT_COL[default_sort])
     order = sort_col.desc().nulls_last() if criteria.sort_desc else sort_col.asc().nulls_last()
 
     has_derived = any([
@@ -327,7 +460,11 @@ async def run_screener(
         criteria.gap_percent,
     ])
 
-    base_q = select(StockSnapshot)
+    # load_only because the derived-filter branch below materializes the WHOLE filtered
+    # set into Python, and a full entity load drags the `description` Text column
+    # (~1-3KB/row) that _build_row never reads. Naming the columns _build_row actually
+    # touches cuts the transfer by roughly an order of magnitude on that path.
+    base_q = select(StockSnapshot).options(load_only(*_ROW_COLS))
     if conditions:
         base_q = base_q.where(and_(*conditions))
 
@@ -370,8 +507,10 @@ _PRESETS = [
     {
         "id": "near_52wk_high",
         "name": "Near 52-Week High",
+        "universe": "stocks",
         "description": "Stocks trading within 10% of their 52-week high with market cap above $1B",
         "criteria": {
+            "universe": "stocks",
             "pct_from_52wk_high": {"min": -10},
             "market_cap": {"min": 1_000_000_000},
             "sort_by": "market_cap",
@@ -381,8 +520,10 @@ _PRESETS = [
     {
         "id": "oversold_quality",
         "name": "Oversold Quality",
+        "universe": "stocks",
         "description": "Large-cap stocks near 52-week lows but still trading above their 200-day MA",
         "criteria": {
+            "universe": "stocks",
             "pct_from_52wk_low": {"max": 15},
             "price_above_200ma": True,
             "market_cap": {"min": 500_000_000},
@@ -393,8 +534,10 @@ _PRESETS = [
     {
         "id": "golden_cross",
         "name": "Golden Cross",
+        "universe": "stocks",
         "description": "Stocks where the 50-day MA has crossed above the 200-day MA and price is above both",
         "criteria": {
+            "universe": "stocks",
             "golden_cross": True,
             "price_above_50ma": True,
             "market_cap": {"min": 500_000_000},
@@ -405,11 +548,13 @@ _PRESETS = [
     {
         "id": "high_volume_breakout",
         "name": "High Volume Breakout",
+        "universe": "stocks",
         "description": (
             "Stocks up 3%+ today that have already traded a full average day's volume, "
             "with at least $50M in dollar volume"
         ),
         "criteria": {
+            "universe": "stocks",
             "change_percentage": {"min": 3},
             # Dollar volume stays as the tradability floor; RVOL is what makes the
             # participation actually unusual rather than just large.
@@ -423,11 +568,13 @@ _PRESETS = [
     {
         "id": "unusual_volume",
         "name": "Unusual Volume",
+        "universe": "stocks",
         "description": (
             "Stocks that have already traded 2x an average day's volume — direction-agnostic, "
             "so it catches accumulation and capitulation alike"
         ),
         "criteria": {
+            "universe": "stocks",
             "rvol": {"min": 2},
             "market_cap": {"min": 200_000_000},
             "sort_by": "rvol",
@@ -437,8 +584,10 @@ _PRESETS = [
     {
         "id": "momentum_leaders",
         "name": "Momentum Leaders",
+        "universe": "stocks",
         "description": "Large-cap stocks trading above both moving averages with positive momentum today",
         "criteria": {
+            "universe": "stocks",
             "price_above_50ma": True,
             "price_above_200ma": True,
             "change_percentage": {"min": 0.5},
@@ -450,8 +599,10 @@ _PRESETS = [
     {
         "id": "near_52wk_low",
         "name": "Near 52-Week Low",
+        "universe": "stocks",
         "description": "Stocks trading within 10% of their 52-week low — contrarian and value hunter territory",
         "criteria": {
+            "universe": "stocks",
             "pct_from_52wk_low": {"max": 10},
             "market_cap": {"min": 1_000_000_000},
             "sort_by": "market_cap",
@@ -461,8 +612,10 @@ _PRESETS = [
     {
         "id": "death_cross",
         "name": "Death Cross",
+        "universe": "stocks",
         "description": "Stocks where the 50-day MA has crossed below the 200-day MA — bearish technical signal",
         "criteria": {
+            "universe": "stocks",
             "death_cross": True,
             "market_cap": {"min": 500_000_000},
             "sort_by": "market_cap",
@@ -472,8 +625,10 @@ _PRESETS = [
     {
         "id": "gap_up",
         "name": "Gap Up (2%+)",
+        "universe": "stocks",
         "description": "Stocks that opened at least 2% above the prior close — momentum and catalyst plays",
         "criteria": {
+            "universe": "stocks",
             "gap_percent": {"min": 2},
             "market_cap": {"min": 200_000_000},
             "sort_by": "change_percentage",
@@ -483,8 +638,10 @@ _PRESETS = [
     {
         "id": "gap_down",
         "name": "Gap Down (2%+)",
+        "universe": "stocks",
         "description": "Stocks that opened at least 2% below the prior close — potential reversals or continued selling",
         "criteria": {
+            "universe": "stocks",
             "gap_percent": {"max": -2},
             "market_cap": {"min": 200_000_000},
             "sort_by": "change_percentage",
@@ -494,8 +651,10 @@ _PRESETS = [
     {
         "id": "dividend_income",
         "name": "Dividend Income",
+        "universe": "stocks",
         "description": "Established companies yielding 3%+ with a market cap above $2B — a starting universe for income investors.",
         "criteria": {
+            "universe": "stocks",
             "dividend_yield": {"min": 3},
             "market_cap": {"min": 2_000_000_000},
             "sort_by": "dividend_yield",
@@ -505,8 +664,10 @@ _PRESETS = [
     {
         "id": "in_squeeze",
         "name": "In Squeeze",
+        "universe": "stocks",
         "description": "Volatility is coiling — Bollinger Bands are inside the Keltner Channels. A breakout often follows.",
         "criteria": {
+            "universe": "stocks",
             "squeeze_on": True,
             "market_cap": {"min": 250_000_000},
             "sort_by": "market_cap",
@@ -516,11 +677,58 @@ _PRESETS = [
     {
         "id": "squeeze_fired",
         "name": "Squeeze Fired (3d)",
+        "universe": "stocks",
         "description": "A volatility squeeze released in the last 3 trading days — potential breakout underway.",
         "criteria": {
+            "universe": "stocks",
             "squeeze_fired_within_days": 3,
             "market_cap": {"min": 250_000_000},
             "sort_by": "market_cap",
+            "sort_desc": True,
+        },
+    },
+    # --- ETF mode ---------------------------------------------------------
+    # Deliberately only three. The asset_class and issuer dropdowns already cover
+    # "bond ETFs" / "Vanguard funds" in one click, so a preset that is just a single
+    # dropdown value is chip-row clutter.
+    {
+        "id": "etf_low_cost_core",
+        "name": "Low-Cost Core",
+        "universe": "etfs",
+        "description": "Funds with at least $1B under management charging 0.10% or less — the cheap end of the core building blocks",
+        "criteria": {
+            "universe": "etfs",
+            "expense_ratio": {"max": 0.10},
+            "aum": {"min": 1_000_000_000},
+            "sort_by": "aum",
+            "sort_desc": True,
+        },
+    },
+    {
+        "id": "etf_income",
+        "name": "ETF Income",
+        "universe": "etfs",
+        "description": "Funds yielding 4%+ with at least $250M under management. Yield is derived live against price and gated on distribution recency, so a fund that stopped paying drops out",
+        "criteria": {
+            "universe": "etfs",
+            "dividend_yield": {"min": 4},
+            "aum": {"min": 250_000_000},
+            "sort_by": "dividend_yield",
+            "sort_desc": True,
+        },
+    },
+    {
+        "id": "etf_momentum",
+        "name": "ETF Momentum",
+        "universe": "etfs",
+        "description": "Liquid funds trading above both moving averages and up on the day",
+        "criteria": {
+            "universe": "etfs",
+            "price_above_50ma": True,
+            "price_above_200ma": True,
+            "change_percentage": {"min": 0.5},
+            "aum": {"min": 250_000_000},
+            "sort_by": "change_percentage",
             "sort_desc": True,
         },
     },
@@ -532,14 +740,23 @@ async def get_filter_options(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Distinct sectors and their industries present in the snapshot universe.
+    """Distinct dropdown values present in the snapshot universe.
 
-    Drives the screener's Sector / Industry dropdowns so the UI only ever offers
-    values that actually exist in the data — picking one always returns matches.
+    Drives the screener's dropdowns so the UI only ever offers values that actually
+    exist in the data — picking one always returns matches. Stock mode gets
+    sectors/industries, ETF mode gets asset classes and issuers, and both get the
+    exchange list rather than a hardcoded one (funds list on venues common stock
+    does not).
+
+    One endpoint rather than two: the UI fetches this once on mount, and a second
+    round trip for two more dropdowns is not worth it.
     """
     result = await db.execute(
         select(StockSnapshot.sector, StockSnapshot.industry)
-        .where(StockSnapshot.sector.isnot(None))
+        # is_etf guard is belt-and-braces: funds are excluded from the profile pass so
+        # they carry no sector anyway. It pins the invariant against a stray write —
+        # a fund appearing as a sector option would also answer a stock-mode screen.
+        .where(StockSnapshot.sector.isnot(None), StockSnapshot.is_etf.isnot(True))
         .distinct()
     )
     by_sector: dict[str, set] = {}
@@ -549,9 +766,37 @@ async def get_filter_options(
         bucket = by_sector.setdefault(sector, set())
         if industry:
             bucket.add(industry)
+
+    asset_classes = (await db.execute(
+        select(StockSnapshot.asset_class)
+        .where(StockSnapshot.is_etf.is_(True), StockSnapshot.asset_class.isnot(None))
+        .distinct()
+    )).scalars().all()
+
+    # Ordered by fund count so the issuers users actually want (iShares, Vanguard,
+    # SPDR) sit at the top of a long select rather than wherever the alphabet puts
+    # them. Returned in full — truncating hides the smaller issuers entirely, and the
+    # whole list is only a few KB.
+    issuers = (await db.execute(
+        select(StockSnapshot.etf_company, func.count())
+        .where(StockSnapshot.is_etf.is_(True), StockSnapshot.etf_company.isnot(None))
+        .group_by(StockSnapshot.etf_company)
+        .order_by(func.count().desc(), StockSnapshot.etf_company)
+    )).all()
+
+    exchanges = (await db.execute(
+        select(StockSnapshot.exchange)
+        .where(StockSnapshot.exchange.isnot(None))
+        .distinct()
+        .order_by(StockSnapshot.exchange)
+    )).scalars().all()
+
     return {
         "sectors": sorted(by_sector.keys()),
         "industries_by_sector": {s: sorted(v) for s, v in by_sector.items()},
+        "asset_classes": sorted(a for a in asset_classes if a),
+        "etf_companies": [c for c, _ in issuers if c],
+        "exchanges": [e for e in exchanges if e],
     }
 
 

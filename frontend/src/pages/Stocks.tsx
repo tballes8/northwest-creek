@@ -188,7 +188,44 @@ interface ScreenerResult {
   squeeze_state: 'on' | 'fired' | 'none' | null;
   squeeze_bars: number | null;
   squeeze_ratio: number | null;
+  // The backend has always returned this; the interface was simply out of date.
+  // Used as a canary in stock mode, not to branch the table — see STOCK_COLS/ETF_COLS.
+  is_etf: boolean | null;
+  // Fund metadata — null on common stock. expense_ratio is a percent (0.09 = 0.09%);
+  // the backend owns the unit reconciliation on ingest.
+  expense_ratio: number | null;
+  aum: number | null;
+  nav: number | null;
+  holdings_count: number | null;
+  asset_class: string | null;
+  etf_company: string | null;
+  inception_date: string | null;   // 'YYYY-MM-DD'
 }
+
+// Which slice of the universe the screener is looking at. Swaps the filter panel and
+// the result columns; the backend calls the same field `universe`.
+type ScreenerMode = 'stocks' | 'etfs';
+
+// Filters that only exist in one universe. Cleared on mode switch AND omitted from the
+// payload, so neither a stale value nor a preset/saved screen can apply a filter the
+// user cannot see. Both layers are needed: clearing alone still lets a saved screen
+// smuggle `beta` into an ETF run, and omitting alone leaves a hidden value that
+// reappears on toggling back.
+const STOCK_ONLY_KEYS = [
+  'marketCapMinB', 'marketCapMaxB',
+  'sector', 'industry',
+  // Squeeze is stocks-only for now purely as a timing matter: compute_squeeze seeds
+  // fund history on its first post-close run after ETFs land, so until then a squeeze
+  // filter in ETF mode would return zero rows with no explanation. Promoting it later
+  // is deleting these four lines.
+  'squeezeOn', 'squeezeFiredWithinDays', 'squeezeMinBars', 'squeezeMaxRatio',
+] as const;
+
+const ETF_ONLY_KEYS = [
+  'expenseRatioMax', 'aumMinM', 'aumMaxM',
+  'assetClass', 'etfCompany',
+  'holdingsCountMin', 'holdingsCountMax', 'minAgeYears',
+] as const;
 
 
 interface ScreenerFormState {
@@ -211,16 +248,25 @@ interface ScreenerFormState {
   squeezeMinBars: string;
   squeezeMaxRatio: string;
   exchange: string[];
-  excludeEtfs: boolean;
   gapPctMin: string;
   gapPctMax: string;
   sector: string;
   industry: string;
+  // — ETF mode only —
+  expenseRatioMax: string;   // percent, e.g. '0.20' = 0.20%
+  aumMinM: string; aumMaxM: string;   // $M in the UI, raw $ on the wire
+  assetClass: string;
+  etfCompany: string;
+  holdingsCountMin: string; holdingsCountMax: string;
+  minAgeYears: string;       // 'at least N years since inception'
 }
 
 interface ScreenerPreset {
   id: string;
   name: string;
+  // Which mode's chip row this preset belongs in. Also present inside `criteria`,
+  // which is what actually pins the universe server-side.
+  universe: ScreenerMode;
   description: string;
   criteria: Record<string, any>;
 }
@@ -261,9 +307,13 @@ const defaultScreenerForm: ScreenerFormState = {
   squeezeMinBars: '',
   squeezeMaxRatio: '',
   exchange: [],
-  excludeEtfs: true,
   gapPctMin: '', gapPctMax: '',
   sector: '', industry: '',
+  expenseRatioMax: '',
+  aumMinM: '', aumMaxM: '',
+  assetClass: '', etfCompany: '',
+  holdingsCountMin: '', holdingsCountMax: '',
+  minAgeYears: '',
 };
 
 function fmtMarketCap(v: number | null): string {
@@ -274,6 +324,55 @@ function fmtMarketCap(v: number | null): string {
   return `$${v.toLocaleString()}`;
 }
 
+// Result columns per universe. Every key here must exist in the backend's SORT_COL map
+// or clicking the header flips the arrow and silently re-sorts by the default instead.
+const STOCK_COLS = [
+  { key: 'symbol', label: 'Symbol' },
+  { key: 'name', label: 'Name' },
+  { key: 'price', label: 'Price' },
+  { key: 'change_percentage', label: 'Chg%' },
+  { key: 'market_cap', label: 'Mkt Cap' },
+  { key: 'volume', label: 'Volume' },
+  { key: 'rvol', label: 'RVOL' },
+  { key: 'dividend_yield', label: 'Div Yld' },
+  { key: 'beta', label: 'Beta' },
+] as const;
+
+// No NAV column: for any liquid fund NAV sits within pennies of price, so it would be a
+// near-duplicate of a column already present. It is still fetched and stored, because
+// the number that earns its keep is premium/discount ((price - nav) / nav) - a later
+// addition, not a v1 one.
+const ETF_COLS = [
+  { key: 'symbol', label: 'Symbol' },
+  { key: 'name', label: 'Name' },
+  { key: 'price', label: 'Price' },
+  { key: 'change_percentage', label: 'Chg%' },
+  { key: 'aum', label: 'AUM' },
+  { key: 'expense_ratio', label: 'Exp' },
+  { key: 'dividend_yield', label: 'Div Yld' },
+  { key: 'volume', label: 'Volume' },
+  { key: 'beta', label: 'Beta' },
+] as const;
+
+// Appears in both column sets. Extracted so the suspended-payer branch - which is the
+// difference between "pays nothing" and "stopped paying" - lives in one place.
+const DivYieldCell: React.FC<{ r: ScreenerResult }> = ({ r }) => (
+  <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums">
+    {r.dividend_yield != null ? (
+      `${r.dividend_yield.toFixed(2)}%`
+    ) : r.dividend_status === 'suspended' ? (
+      <span
+        className="text-amber-600 dark:text-amber-500"
+        title="Dividend suspended — no payment has gone ex since the expected schedule lapsed. Yield withheld."
+      >
+        Susp.
+      </span>
+    ) : (
+      '—'
+    )}
+  </td>
+);
+
 function fmtVolume(v: number | null): string {
   if (v == null) return '—';
   if (v >= 1e9) return `${(v / 1e9).toFixed(1)}B`;
@@ -282,8 +381,11 @@ function fmtVolume(v: number | null): string {
   return v.toLocaleString();
 }
 
+// `mode` is second so TypeScript flags every existing call site rather than silently
+// shifting the positional arguments.
 function buildScreenerCriteria(
   form: ScreenerFormState,
+  mode: ScreenerMode,
   sortBy: string,
   sortDesc: boolean,
   page: number,
@@ -297,12 +399,14 @@ function buildScreenerCriteria(
   };
   const p = nr(form.priceMin, form.priceMax);
   if (p) c.price = p;
-  const mcMin = form.marketCapMinB !== '' ? parseFloat(form.marketCapMinB) * 1e9 : undefined;
-  const mcMax = form.marketCapMaxB !== '' ? parseFloat(form.marketCapMaxB) * 1e9 : undefined;
-  if (mcMin != null || mcMax != null) {
-    c.market_cap = {};
-    if (mcMin != null) c.market_cap.min = mcMin;
-    if (mcMax != null) c.market_cap.max = mcMax;
+  if (mode === 'stocks') {
+    const mcMin = form.marketCapMinB !== '' ? parseFloat(form.marketCapMinB) * 1e9 : undefined;
+    const mcMax = form.marketCapMaxB !== '' ? parseFloat(form.marketCapMaxB) * 1e9 : undefined;
+    if (mcMin != null || mcMax != null) {
+      c.market_cap = {};
+      if (mcMin != null) c.market_cap.min = mcMin;
+      if (mcMax != null) c.market_cap.max = mcMax;
+    }
   }
   const ch = nr(form.changePctMin, form.changePctMax);
   if (ch) c.change_percentage = ch;
@@ -326,17 +430,115 @@ function buildScreenerCriteria(
   if (form.deathCross !== null) c.death_cross = form.deathCross;
   if (form.priceAbove50ma !== null) c.price_above_50ma = form.priceAbove50ma;
   if (form.priceAbove200ma !== null) c.price_above_200ma = form.priceAbove200ma;
-  if (form.squeezeOn !== null) c.squeeze_on = form.squeezeOn;
-  if (form.squeezeFiredWithinDays !== '') c.squeeze_fired_within_days = parseInt(form.squeezeFiredWithinDays, 10);
-  if (form.squeezeMinBars !== '') c.squeeze_min_bars = parseInt(form.squeezeMinBars, 10);
-  if (form.squeezeMaxRatio !== '') c.squeeze_max_ratio = parseFloat(form.squeezeMaxRatio);
+  if (mode === 'stocks') {
+    if (form.squeezeOn !== null) c.squeeze_on = form.squeezeOn;
+    if (form.squeezeFiredWithinDays !== '') c.squeeze_fired_within_days = parseInt(form.squeezeFiredWithinDays, 10);
+    if (form.squeezeMinBars !== '') c.squeeze_min_bars = parseInt(form.squeezeMinBars, 10);
+    if (form.squeezeMaxRatio !== '') c.squeeze_max_ratio = parseFloat(form.squeezeMaxRatio);
+    if (form.sector) c.sector = [form.sector];
+    if (form.industry) c.industry = [form.industry];
+  }
+
+  if (mode === 'etfs') {
+    // Percent, as stored - no conversion. Max only: nobody screens for a minimum fee.
+    if (form.expenseRatioMax !== '') c.expense_ratio = { max: parseFloat(form.expenseRatioMax) };
+
+    // $M in the UI because fund sizes cluster below $1B - typing 0.05 for a $50M floor
+    // is worse than typing 50. Raw dollars on the wire.
+    const aumMin = form.aumMinM !== '' ? parseFloat(form.aumMinM) * 1e6 : undefined;
+    const aumMax = form.aumMaxM !== '' ? parseFloat(form.aumMaxM) * 1e6 : undefined;
+    if (aumMin != null || aumMax != null) {
+      c.aum = {};
+      if (aumMin != null) c.aum.min = aumMin;
+      if (aumMax != null) c.aum.max = aumMax;
+    }
+
+    // Single-element arrays, matching the sector/industry convention above.
+    if (form.assetClass) c.asset_class = [form.assetClass];
+    if (form.etfCompany) c.etf_company = [form.etfCompany];
+
+    const hc = nr(form.holdingsCountMin, form.holdingsCountMax);
+    if (hc) c.holdings_count = hc;
+
+    // Backend converts this to an inception_date cutoff, keeping the date math
+    // server-side - one fewer place for a timezone off-by-one.
+    if (form.minAgeYears !== '') c.min_age_years = parseFloat(form.minAgeYears);
+  }
+
   if (form.exchange.length) c.exchange = form.exchange;
-  if (form.sector) c.sector = [form.sector];
-  if (form.industry) c.industry = [form.industry];
-  c.exclude_etfs = form.excludeEtfs;
+  // Replaces the old exclude_etfs flag. The backend still accepts that field so saved
+  // screens and RelativeValuation keep working, but nothing sends it any more.
+  c.universe = mode === 'etfs' ? 'etfs' : 'stocks';
   const gp = nr(form.gapPctMin, form.gapPctMax);
   if (gp) c.gap_percent = gp;
   return c;
+}
+
+// Rebuild the form from a criteria dict - the shape presets and saved screens both
+// carry. Extracted because applyPreset and applySavedScreen were byte-identical 35-line
+// copies; with ETF mode adding eight fields plus a mode inference, two copies means two
+// places to forget the next filter.
+function hydrateFormFromCriteria(c: Record<string, any>): {
+  form: ScreenerFormState;
+  mode: ScreenerMode;
+  sortBy: string;
+  sortDesc: boolean;
+} {
+  // Criteria predating ETF mode carry no `universe` (and possibly an `exclude_etfs`
+  // that was a no-op - the universe held no ETFs when they were written). Absence
+  // therefore means stocks, so no back-compat branch is needed.
+  const mode: ScreenerMode = c.universe === 'etfs' || c.universe === 'etf' ? 'etfs' : 'stocks';
+  const form: ScreenerFormState = {
+    ...defaultScreenerForm,
+    priceMin: c.price?.min?.toString() ?? '',
+    priceMax: c.price?.max?.toString() ?? '',
+    marketCapMinB: c.market_cap?.min != null ? (c.market_cap.min / 1e9).toString() : '',
+    marketCapMaxB: c.market_cap?.max != null ? (c.market_cap.max / 1e9).toString() : '',
+    changePctMin: c.change_percentage?.min?.toString() ?? '',
+    changePctMax: c.change_percentage?.max?.toString() ?? '',
+    dividendYieldMin: c.dividend_yield?.min?.toString() ?? '',
+    dividendYieldMax: c.dividend_yield?.max?.toString() ?? '',
+    betaMin: c.beta?.min?.toString() ?? '',
+    betaMax: c.beta?.max?.toString() ?? '',
+    dollarVolMinM: c.dollar_volume?.min != null ? (c.dollar_volume.min / 1e6).toString() : '',
+    volumeMinM: c.volume?.min != null ? (c.volume.min / 1e6).toString() : '',
+    volumeMaxM: c.volume?.max != null ? (c.volume.max / 1e6).toString() : '',
+    rvolMin: c.rvol?.min?.toString() ?? '',
+    rvolMax: c.rvol?.max?.toString() ?? '',
+    pctFromHighMin: c.pct_from_52wk_high?.min?.toString() ?? '',
+    pctFromHighMax: c.pct_from_52wk_high?.max?.toString() ?? '',
+    pctFromLowMin: c.pct_from_52wk_low?.min?.toString() ?? '',
+    pctFromLowMax: c.pct_from_52wk_low?.max?.toString() ?? '',
+    goldenCross: c.golden_cross ?? null,
+    deathCross: c.death_cross ?? null,
+    priceAbove50ma: c.price_above_50ma ?? null,
+    priceAbove200ma: c.price_above_200ma ?? null,
+    squeezeOn: c.squeeze_on ?? null,
+    squeezeFiredWithinDays: c.squeeze_fired_within_days?.toString() ?? '',
+    squeezeMinBars: c.squeeze_min_bars?.toString() ?? '',
+    squeezeMaxRatio: c.squeeze_max_ratio?.toString() ?? '',
+    exchange: c.exchange ?? [],
+    gapPctMin: c.gap_percent?.min?.toString() ?? '',
+    gapPctMax: c.gap_percent?.max?.toString() ?? '',
+    sector: c.sector?.[0] ?? '',
+    industry: c.industry?.[0] ?? '',
+    expenseRatioMax: c.expense_ratio?.max?.toString() ?? '',
+    aumMinM: c.aum?.min != null ? (c.aum.min / 1e6).toString() : '',
+    aumMaxM: c.aum?.max != null ? (c.aum.max / 1e6).toString() : '',
+    assetClass: c.asset_class?.[0] ?? '',
+    etfCompany: c.etf_company?.[0] ?? '',
+    holdingsCountMin: c.holdings_count?.min?.toString() ?? '',
+    holdingsCountMax: c.holdings_count?.max?.toString() ?? '',
+    minAgeYears: c.min_age_years?.toString() ?? '',
+  };
+  return {
+    form,
+    mode,
+    // Mode-aware default: a preset that omits sort_by in ETF mode must not fall through
+    // to market_cap, which is the wrong number for a fund.
+    sortBy: c.sort_by ?? (mode === 'etfs' ? 'aum' : 'market_cap'),
+    sortDesc: c.sort_desc ?? true,
+  };
 }
 
 const Stocks: React.FC = () => {
@@ -929,15 +1131,17 @@ const Stocks: React.FC = () => {
       );
       const info = response.data || {};
 
-      // FMP's expenseRatio unit is inconsistent across funds — some rows are a
-      // percent (0.75 → 0.75%), others a fraction (0.0075 → 0.75%). Treat any
-      // value >= 0.02 as an already-percent figure and scale up the smaller
-      // ones; no real ETF charges below ~0.02%. Stored as a percent.
-      let expensePct: number | null = null;
+      // Already normalized to a percent by the backend — market_data.get_etf_info runs
+      // normalize_expense_ratio on ingest, so this endpoint and the screener's stored
+      // column carry the same unit.
+      //
+      // The scaling heuristic that used to live here has been REMOVED, not moved: with
+      // the value already a percent, re-applying it would read a genuine 0.015% fee as
+      // 1.5% — a 100x error on exactly the ultra-low-cost funds a "Low-Cost Core"
+      // screen exists to surface.
       const rawExpense = Number(info.expense_ratio);
-      if (info.expense_ratio != null && !Number.isNaN(rawExpense)) {
-        expensePct = rawExpense >= 0.02 ? rawExpense : rawExpense * 100;
-      }
+      const expensePct: number | null =
+        info.expense_ratio != null && !Number.isNaN(rawExpense) ? rawExpense : null;
 
       setCompany((prev) => {
         // Guard against a late response from a previously-searched ticker
@@ -1478,6 +1682,7 @@ const Stocks: React.FC = () => {
 
   // ── Screener state ──────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<'search' | 'screener'>('search');
+  const [screenerMode, setScreenerMode] = useState<ScreenerMode>('stocks');
   const [screenerForm, setScreenerForm] = useState<ScreenerFormState>(defaultScreenerForm);
   const [screenerResults, setScreenerResults] = useState<ScreenerResult[]>([]);
   const [screenerLoading, setScreenerLoading] = useState(false);
@@ -1492,7 +1697,13 @@ const Stocks: React.FC = () => {
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
   const [activeSavedScreenId, setActiveSavedScreenId] = useState<string | null>(null);
   const [savedScreens, setSavedScreens] = useState<SavedScreenItem[]>([]);
-  const [filterOptions, setFilterOptions] = useState<{ sectors: string[]; industries_by_sector: Record<string, string[]> }>({ sectors: [], industries_by_sector: {} });
+  const [filterOptions, setFilterOptions] = useState<{
+    sectors: string[];
+    industries_by_sector: Record<string, string[]>;
+    asset_classes: string[];
+    etf_companies: string[];
+    exchanges: string[];
+  }>({ sectors: [], industries_by_sector: {}, asset_classes: [], etf_companies: [], exchanges: [] });
   const [showSaveForm, setShowSaveForm] = useState(false);
   const [saveScreenName, setSaveScreenName] = useState('');
   const [savingScreen, setSavingScreen] = useState(false);
@@ -1518,16 +1729,20 @@ const Stocks: React.FC = () => {
     }
   }, [activeTab, searchMode]);
 
+  // `mode` is passed explicitly for the same reason `form` is: setScreenerMode is async,
+  // so reading it from state here would run an ETF preset against the stock universe on
+  // the first click.
   const runScreener = async (
     page: number,
     form: ScreenerFormState,
+    mode: ScreenerMode,
     sortBy: string,
     sortDesc: boolean,
   ) => {
     setScreenerLoading(true);
     setScreenerError('');
     try {
-      const criteria = buildScreenerCriteria(form, sortBy, sortDesc, page);
+      const criteria = buildScreenerCriteria(form, mode, sortBy, sortDesc, page);
       const resp = await screenerAPI.runScreen(criteria);
       setScreenerResults(resp.data.results);
       setScreenerTotal(resp.data.total);
@@ -1545,101 +1760,59 @@ const Stocks: React.FC = () => {
     const newDesc = col === screenerSortBy ? !screenerSortDesc : true;
     setScreenerSortBy(col);
     setScreenerSortDesc(newDesc);
-    runScreener(1, screenerForm, col, newDesc);
+    runScreener(1, screenerForm, screenerMode, col, newDesc);
+  };
+
+  // Switching universe keeps the filters that mean the same thing in both (price,
+  // volume, yield, change%) and clears the ones that only exist in the other. A full
+  // reset would be safe but hostile; keeping the other mode's values would leave a
+  // filter applied that the panel no longer shows.
+  const switchScreenerMode = (mode: ScreenerMode) => {
+    if (mode === screenerMode) return;
+    const clear = mode === 'etfs' ? STOCK_ONLY_KEYS : ETF_ONLY_KEYS;
+    setScreenerMode(mode);
+    setScreenerForm(f => {
+      const next = { ...f };
+      for (const k of clear) (next as any)[k] = (defaultScreenerForm as any)[k];
+      return next;
+    });
+    // Default sort has to move with the mode: market_cap is the wrong number for a
+    // fund, and the backend falls back silently rather than erroring on a bad key.
+    setScreenerSortBy(mode === 'etfs' ? 'aum' : 'market_cap');
+    setScreenerSortDesc(true);
+    // Leaving the previous universe's rows under a different filter panel is the same
+    // lie as leaving a hidden filter applied.
+    setScreenerResults([]);
+    setScreenerTotal(0);
+    setScreenerTotalPages(0);
+    setScreenerPage(1);
+    setActivePresetId(null);
+    setActiveSavedScreenId(null);
+    // Deliberately no auto-run: the empty state already prompts, and auto-running
+    // would burn a request on every toggle.
   };
 
   const applyPreset = (preset: ScreenerPreset) => {
-    const c = preset.criteria;
-    const form: ScreenerFormState = {
-      priceMin: c.price?.min?.toString() ?? '',
-      priceMax: c.price?.max?.toString() ?? '',
-      marketCapMinB: c.market_cap?.min != null ? (c.market_cap.min / 1e9).toString() : '',
-      marketCapMaxB: c.market_cap?.max != null ? (c.market_cap.max / 1e9).toString() : '',
-      changePctMin: c.change_percentage?.min?.toString() ?? '',
-      changePctMax: c.change_percentage?.max?.toString() ?? '',
-      dividendYieldMin: c.dividend_yield?.min?.toString() ?? '',
-      dividendYieldMax: c.dividend_yield?.max?.toString() ?? '',
-      betaMin: c.beta?.min?.toString() ?? '',
-      betaMax: c.beta?.max?.toString() ?? '',
-      dollarVolMinM: c.dollar_volume?.min != null ? (c.dollar_volume.min / 1e6).toString() : '',
-      volumeMinM: c.volume?.min != null ? (c.volume.min / 1e6).toString() : '',
-      volumeMaxM: c.volume?.max != null ? (c.volume.max / 1e6).toString() : '',
-      rvolMin: c.rvol?.min?.toString() ?? '',
-      rvolMax: c.rvol?.max?.toString() ?? '',
-      pctFromHighMin: c.pct_from_52wk_high?.min?.toString() ?? '',
-      pctFromHighMax: c.pct_from_52wk_high?.max?.toString() ?? '',
-      pctFromLowMin: c.pct_from_52wk_low?.min?.toString() ?? '',
-      pctFromLowMax: c.pct_from_52wk_low?.max?.toString() ?? '',
-      goldenCross: c.golden_cross ?? null,
-      deathCross: c.death_cross ?? null,
-      priceAbove50ma: c.price_above_50ma ?? null,
-      priceAbove200ma: c.price_above_200ma ?? null,
-      squeezeOn: c.squeeze_on ?? null,
-      squeezeFiredWithinDays: c.squeeze_fired_within_days?.toString() ?? '',
-      squeezeMinBars: c.squeeze_min_bars?.toString() ?? '',
-      squeezeMaxRatio: c.squeeze_max_ratio?.toString() ?? '',
-      exchange: c.exchange ?? [],
-      excludeEtfs: c.exclude_etfs ?? true,
-      gapPctMin: c.gap_percent?.min?.toString() ?? '',
-      gapPctMax: c.gap_percent?.max?.toString() ?? '',
-      sector: c.sector?.[0] ?? '',
-      industry: c.industry?.[0] ?? '',
-    };
-    const sb = c.sort_by ?? 'market_cap';
-    const sd = c.sort_desc ?? true;
+    const { form, mode, sortBy, sortDesc } = hydrateFormFromCriteria(preset.criteria);
+    setScreenerMode(mode);
     setScreenerForm(form);
-    setScreenerSortBy(sb);
-    setScreenerSortDesc(sd);
+    setScreenerSortBy(sortBy);
+    setScreenerSortDesc(sortDesc);
     setActivePresetId(preset.id);
     setActiveSavedScreenId(null);
-    runScreener(1, form, sb, sd);
+    // Every value threaded explicitly rather than read back from state - see runScreener.
+    runScreener(1, form, mode, sortBy, sortDesc);
   };
 
   const applySavedScreen = (screen: SavedScreenItem) => {
-    const c = screen.criteria;
-    const form: ScreenerFormState = {
-      priceMin: c.price?.min?.toString() ?? '',
-      priceMax: c.price?.max?.toString() ?? '',
-      marketCapMinB: c.market_cap?.min != null ? (c.market_cap.min / 1e9).toString() : '',
-      marketCapMaxB: c.market_cap?.max != null ? (c.market_cap.max / 1e9).toString() : '',
-      changePctMin: c.change_percentage?.min?.toString() ?? '',
-      changePctMax: c.change_percentage?.max?.toString() ?? '',
-      dividendYieldMin: c.dividend_yield?.min?.toString() ?? '',
-      dividendYieldMax: c.dividend_yield?.max?.toString() ?? '',
-      betaMin: c.beta?.min?.toString() ?? '',
-      betaMax: c.beta?.max?.toString() ?? '',
-      dollarVolMinM: c.dollar_volume?.min != null ? (c.dollar_volume.min / 1e6).toString() : '',
-      volumeMinM: c.volume?.min != null ? (c.volume.min / 1e6).toString() : '',
-      volumeMaxM: c.volume?.max != null ? (c.volume.max / 1e6).toString() : '',
-      rvolMin: c.rvol?.min?.toString() ?? '',
-      rvolMax: c.rvol?.max?.toString() ?? '',
-      pctFromHighMin: c.pct_from_52wk_high?.min?.toString() ?? '',
-      pctFromHighMax: c.pct_from_52wk_high?.max?.toString() ?? '',
-      pctFromLowMin: c.pct_from_52wk_low?.min?.toString() ?? '',
-      pctFromLowMax: c.pct_from_52wk_low?.max?.toString() ?? '',
-      goldenCross: c.golden_cross ?? null,
-      deathCross: c.death_cross ?? null,
-      priceAbove50ma: c.price_above_50ma ?? null,
-      priceAbove200ma: c.price_above_200ma ?? null,
-      squeezeOn: c.squeeze_on ?? null,
-      squeezeFiredWithinDays: c.squeeze_fired_within_days?.toString() ?? '',
-      squeezeMinBars: c.squeeze_min_bars?.toString() ?? '',
-      squeezeMaxRatio: c.squeeze_max_ratio?.toString() ?? '',
-      exchange: c.exchange ?? [],
-      excludeEtfs: c.exclude_etfs ?? true,
-      gapPctMin: c.gap_percent?.min?.toString() ?? '',
-      gapPctMax: c.gap_percent?.max?.toString() ?? '',
-      sector: c.sector?.[0] ?? '',
-      industry: c.industry?.[0] ?? '',
-    };
-    const sb = c.sort_by ?? 'market_cap';
-    const sd = c.sort_desc ?? true;
+    const { form, mode, sortBy, sortDesc } = hydrateFormFromCriteria(screen.criteria);
+    setScreenerMode(mode);
     setScreenerForm(form);
-    setScreenerSortBy(sb);
-    setScreenerSortDesc(sd);
+    setScreenerSortBy(sortBy);
+    setScreenerSortDesc(sortDesc);
     setActivePresetId(null);
     setActiveSavedScreenId(screen.id);
-    runScreener(1, form, sb, sd);
+    runScreener(1, form, mode, sortBy, sortDesc);
   };
 
   const saveCurrentScreen = async () => {
@@ -1647,7 +1820,7 @@ const Stocks: React.FC = () => {
     setSavingScreen(true);
     setSaveError('');
     try {
-      const criteria = buildScreenerCriteria(screenerForm, screenerSortBy, screenerSortDesc, screenerPage);
+      const criteria = buildScreenerCriteria(screenerForm, screenerMode, screenerSortBy, screenerSortDesc, screenerPage);
       const r = await screenerAPI.saveScreen({ name: saveScreenName.trim(), criteria });
       setSavedScreens(prev => [r.data, ...prev]);
       setSaveScreenName('');
@@ -1668,6 +1841,12 @@ const Stocks: React.FC = () => {
   };
 
   const screenerInputCls = "w-full px-2 py-1.5 text-xs border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-teal-500";
+
+  // Presets come back as one flat list; show only the ones for the current universe.
+  // Saved screens are deliberately NOT filtered this way - hiding a user's own screen
+  // because the toggle happens to sit in the other position is worse than showing it,
+  // and clicking one flips the toggle anyway.
+  const modePresets = presets.filter(p => (p.universe ?? 'stocks') === screenerMode);
 
   // Saving screens/searches is an Active+ feature (saved_screens limit is 0 below it).
   const canSaveScreens = user?.subscription_tier === 'active' || user?.subscription_tier === 'professional';
@@ -3120,12 +3299,32 @@ const Stocks: React.FC = () => {
 
         {activeTab === 'screener' && (
         <div>
+          {/* Universe toggle. Above the presets because the preset row changes with it,
+              so the page reads top-down. Matches the searchMode toggle's styling rather
+              than inventing a third idiom. */}
+          <div className="flex gap-2 mb-4">
+            {(['stocks', 'etfs'] as const).map(m => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => switchScreenerMode(m)}
+                className={`px-4 py-2 rounded-lg transition-colors ${
+                  screenerMode === m
+                    ? 'bg-teal-600 text-white'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                }`}
+              >
+                {m === 'stocks' ? 'Stocks' : 'ETFs'}
+              </button>
+            ))}
+          </div>
+
           {/* Quick screens + Saved screens + Save form */}
           <div className="mb-5 space-y-2">
-            {presets.length > 0 && (
+            {modePresets.length > 0 && (
               <div className="flex flex-wrap gap-2 items-center">
                 <span className="text-sm font-medium text-gray-500 dark:text-gray-400 shrink-0">Quick screens:</span>
-                {presets.map(p => (
+                {modePresets.map(p => (
                   <button
                     key={p.id}
                     onClick={() => applyPreset(p)}
@@ -3142,7 +3341,7 @@ const Stocks: React.FC = () => {
             )}
 
             {activePresetId && (() => {
-              const active = presets.find(p => p.id === activePresetId);
+              const active = modePresets.find(p => p.id === activePresetId);
               return active ? (
                 <p className="text-xs text-gray-500 dark:text-gray-400">{active.description}</p>
               ) : null;
@@ -3246,18 +3445,47 @@ const Stocks: React.FC = () => {
                 </div>
               </div>
 
-              {/* Market Cap */}
-              <div className="mb-3">
-                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Market Cap ($B)</div>
-                <div className="flex gap-1.5">
-                  <input type="number" placeholder="Min" value={screenerForm.marketCapMinB}
-                    onChange={e => setScreenerForm(f => ({ ...f, marketCapMinB: e.target.value }))}
-                    className={screenerInputCls} />
-                  <input type="number" placeholder="Max" value={screenerForm.marketCapMaxB}
-                    onChange={e => setScreenerForm(f => ({ ...f, marketCapMaxB: e.target.value }))}
-                    className={screenerInputCls} />
+              {screenerMode === 'stocks' ? (
+                /* Market Cap */
+                <div className="mb-3">
+                  <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Market Cap ($B)</div>
+                  <div className="flex gap-1.5">
+                    <input type="number" placeholder="Min" value={screenerForm.marketCapMinB}
+                      onChange={e => setScreenerForm(f => ({ ...f, marketCapMinB: e.target.value }))}
+                      className={screenerInputCls} />
+                    <input type="number" placeholder="Max" value={screenerForm.marketCapMaxB}
+                      onChange={e => setScreenerForm(f => ({ ...f, marketCapMaxB: e.target.value }))}
+                      className={screenerInputCls} />
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <>
+                  {/* AUM in $M, not $B: a large share of funds sit between $50M and
+                      $1B, so typing 0.05 for a $50M floor is worse than typing 50.
+                      Deliberately different from the stock side - each unit suits its
+                      own distribution and the label carries it. */}
+                  <div className="mb-3">
+                    <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">AUM ($M)</div>
+                    <div className="flex gap-1.5">
+                      <input type="number" placeholder="Min" value={screenerForm.aumMinM}
+                        onChange={e => setScreenerForm(f => ({ ...f, aumMinM: e.target.value }))}
+                        className={screenerInputCls} />
+                      <input type="number" placeholder="Max" value={screenerForm.aumMaxM}
+                        onChange={e => setScreenerForm(f => ({ ...f, aumMaxM: e.target.value }))}
+                        className={screenerInputCls} />
+                    </div>
+                  </div>
+
+                  {/* Max only - nobody screens for a minimum fee. Percent, matching
+                      how the Fund Details panel renders it. */}
+                  <div className="mb-3">
+                    <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Expense Ratio (% max)</div>
+                    <input type="number" step="0.01" placeholder="e.g. 0.20" value={screenerForm.expenseRatioMax}
+                      onChange={e => setScreenerForm(f => ({ ...f, expenseRatioMax: e.target.value }))}
+                      className={screenerInputCls} />
+                  </div>
+                </>
+              )}
 
               {/* Daily Change */}
               <div className="mb-3">
@@ -3285,7 +3513,8 @@ const Stocks: React.FC = () => {
                 </div>
               </div>
 
-              {/* Beta */}
+              {/* Beta - available in both modes: company-screener reports beta for ~96%
+                  of funds, so an ETF beta filter returns real results. */}
               <div className="mb-3">
                 <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Beta</div>
                 <div className="flex gap-1.5">
@@ -3370,6 +3599,8 @@ const Stocks: React.FC = () => {
                 ))}
               </div>
 
+              {screenerMode === 'stocks' ? (
+              <>
               {/* Squeeze */}
               <div className="mb-3">
                 <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1.5">Volatility Squeeze</div>
@@ -3427,11 +3658,76 @@ const Stocks: React.FC = () => {
                 </select>
               </div>
 
+              </>
+              ) : (
+              <>
+              {/* Asset Class - ETF mode. Note the vendor vocabulary overlaps
+                  ("Equity" vs "US Equity" vs "Large Cap Equity"), so this list is
+                  longer and messier than it looks like it should be. Values come from
+                  DISTINCT over the data, so picking one always returns matches. */}
+              <div className="mb-3">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Asset Class</div>
+                <select
+                  value={screenerForm.assetClass}
+                  onChange={e => setScreenerForm(f => ({ ...f, assetClass: e.target.value }))}
+                  className={screenerInputCls}
+                >
+                  <option value="">Any asset class</option>
+                  {filterOptions.asset_classes.map(a => (
+                    <option key={a} value={a}>{a}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Issuer - ordered by fund count server-side, so iShares/Vanguard/SPDR
+                  sit at the top of a long list rather than wherever the alphabet puts them. */}
+              <div className="mb-3">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Issuer</div>
+                <select
+                  value={screenerForm.etfCompany}
+                  onChange={e => setScreenerForm(f => ({ ...f, etfCompany: e.target.value }))}
+                  className={screenerInputCls}
+                >
+                  <option value="">Any issuer</option>
+                  {filterOptions.etf_companies.map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Holdings Count */}
+              <div className="mb-3">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Holdings Count</div>
+                <div className="flex gap-1.5">
+                  <input type="number" placeholder="Min" value={screenerForm.holdingsCountMin}
+                    onChange={e => setScreenerForm(f => ({ ...f, holdingsCountMin: e.target.value }))}
+                    className={screenerInputCls} />
+                  <input type="number" placeholder="Max" value={screenerForm.holdingsCountMax}
+                    onChange={e => setScreenerForm(f => ({ ...f, holdingsCountMax: e.target.value }))}
+                    className={screenerInputCls} />
+                </div>
+              </div>
+
+              {/* Minimum age - "does it have a track record", which is the question a
+                  date picker would ask badly. Backend converts years to a cutoff date. */}
+              <div className="mb-3">
+                <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Minimum Age (years)</div>
+                <input type="number" step="0.5" placeholder="e.g. 3" value={screenerForm.minAgeYears}
+                  onChange={e => setScreenerForm(f => ({ ...f, minAgeYears: e.target.value }))}
+                  className={screenerInputCls} />
+              </div>
+              </>
+              )}
+
               {/* Exchange */}
               <div className="mb-4">
                 <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1.5">Exchange</div>
+                {/* Driven by what is actually in the universe rather than a hardcoded
+                    list: funds list on venues common stock does not (Cboe BZX carries
+                    ~14% of US ETFs and reports as CBOE), so a fixed trio would silently
+                    offer the wrong chips in ETF mode. */}
                 <div className="flex gap-1.5 flex-wrap">
-                  {['NYSE', 'NASDAQ', 'AMEX'].map(ex => (
+                  {(filterOptions.exchanges.length ? filterOptions.exchanges : ['NYSE', 'NASDAQ', 'AMEX']).map(ex => (
                     <button
                       key={ex}
                       onClick={() => setScreenerForm(f => ({
@@ -3452,19 +3748,6 @@ const Stocks: React.FC = () => {
                 </div>
               </div>
 
-              {/* Exclude ETFs */}
-              <div className="mb-4">
-                <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={screenerForm.excludeEtfs}
-                    onChange={e => setScreenerForm(f => ({ ...f, excludeEtfs: e.target.checked }))}
-                    className="rounded border-gray-300 dark:border-gray-600 text-teal-600 focus:ring-teal-500"
-                  />
-                  Exclude ETFs &amp; Funds
-                </label>
-              </div>
-
               {/* Actions */}
               <div className="flex gap-2">
                 <button
@@ -3474,7 +3757,7 @@ const Stocks: React.FC = () => {
                   Clear
                 </button>
                 <button
-                  onClick={() => runScreener(1, screenerForm, screenerSortBy, screenerSortDesc)}
+                  onClick={() => runScreener(1, screenerForm, screenerMode, screenerSortBy, screenerSortDesc)}
                   className="flex-1 py-1.5 text-xs bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors font-medium"
                 >
                   Run Screen
@@ -3518,17 +3801,7 @@ const Stocks: React.FC = () => {
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 dark:bg-gray-800/60">
                         <tr>
-                          {([
-                            { key: 'symbol', label: 'Symbol' },
-                            { key: 'name', label: 'Name' },
-                            { key: 'price', label: 'Price' },
-                            { key: 'change_percentage', label: 'Chg%' },
-                            { key: 'market_cap', label: 'Mkt Cap' },
-                            { key: 'volume', label: 'Volume' },
-                            { key: 'rvol', label: 'RVOL' },
-                            { key: 'dividend_yield', label: 'Div Yld' },
-                            { key: 'beta', label: 'Beta' },
-                          ] as const).map(col => (
+                          {(screenerMode === 'etfs' ? ETF_COLS : STOCK_COLS).map(col => (
                             <th
                               key={col.key}
                               onClick={() => handleScreenerSort(col.key)}
@@ -3585,29 +3858,32 @@ const Stocks: React.FC = () => {
                               <td className={`px-3 py-2.5 font-medium whitespace-nowrap ${r.change_percentage == null ? '' : r.change_percentage >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                                 {r.change_percentage != null ? `${r.change_percentage >= 0 ? '+' : ''}${r.change_percentage.toFixed(2)}%` : '—'}
                               </td>
-                              <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap">{fmtMarketCap(r.market_cap)}</td>
-                              <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap">{fmtVolume(r.volume)}</td>
-                              <td
-                                className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums"
-                                title={r.avg_volume != null ? `Avg daily volume ${fmtVolume(r.avg_volume)}` : undefined}
-                              >
-                                {r.rvol != null ? `${r.rvol.toFixed(2)}x` : '—'}
-                              </td>
-                              <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums">
-                                {r.dividend_yield != null ? (
-                                  `${r.dividend_yield.toFixed(2)}%`
-                                ) : r.dividend_status === 'suspended' ? (
-                                  <span
-                                    className="text-amber-600 dark:text-amber-500"
-                                    title="Dividend suspended — no payment has gone ex since the expected schedule lapsed. Yield withheld."
+                              {screenerMode === 'stocks' ? (
+                                <>
+                                  <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap">{fmtMarketCap(r.market_cap)}</td>
+                                  <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap">{fmtVolume(r.volume)}</td>
+                                  <td
+                                    className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums"
+                                    title={r.avg_volume != null ? `Avg daily volume ${fmtVolume(r.avg_volume)}` : undefined}
                                   >
-                                    Susp.
-                                  </span>
-                                ) : (
-                                  '—'
-                                )}
-                              </td>
-                              <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums">{r.beta != null ? r.beta.toFixed(2) : '—'}</td>
+                                    {r.rvol != null ? `${r.rvol.toFixed(2)}x` : '—'}
+                                  </td>
+                                  <DivYieldCell r={r} />
+                                  <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums">{r.beta != null ? r.beta.toFixed(2) : '—'}</td>
+                                </>
+                              ) : (
+                                <>
+                                  {/* fmtMarketCap reused for AUM: it is already the exact
+                                      $T/$B/$M ladder fund sizes need. */}
+                                  <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap">{fmtMarketCap(r.aum)}</td>
+                                  <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums">
+                                    {r.expense_ratio != null ? `${r.expense_ratio.toFixed(2)}%` : '—'}
+                                  </td>
+                                  <DivYieldCell r={r} />
+                                  <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap">{fmtVolume(r.volume)}</td>
+                                  <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums">{r.beta != null ? r.beta.toFixed(2) : '—'}</td>
+                                </>
+                              )}
                               <td className="px-3 py-2.5">
                                 {pos != null ? (
                                   <div className="flex items-center gap-1.5 min-w-[120px]">
@@ -3637,7 +3913,7 @@ const Stocks: React.FC = () => {
                     <div className="flex items-center justify-between mt-4">
                       <button
                         disabled={screenerPage <= 1}
-                        onClick={() => runScreener(screenerPage - 1, screenerForm, screenerSortBy, screenerSortDesc)}
+                        onClick={() => runScreener(screenerPage - 1, screenerForm, screenerMode, screenerSortBy, screenerSortDesc)}
                         className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                       >
                         ← Previous
@@ -3647,7 +3923,7 @@ const Stocks: React.FC = () => {
                       </span>
                       <button
                         disabled={screenerPage >= screenerTotalPages}
-                        onClick={() => runScreener(screenerPage + 1, screenerForm, screenerSortBy, screenerSortDesc)}
+                        onClick={() => runScreener(screenerPage + 1, screenerForm, screenerMode, screenerSortBy, screenerSortDesc)}
                         className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 disabled:opacity-40 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                       >
                         Next →

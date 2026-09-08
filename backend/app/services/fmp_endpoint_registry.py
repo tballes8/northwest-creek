@@ -22,7 +22,8 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
      "key_fields": ["symbol", "price", "open", "previousClose", "change", "changePercentage", "volume"]},
     {"path": "batch-quote", "description": "Batch quotes for many symbols (screener, snapshots, ticker tape)",
      "used_by": ["services/market_data.py:119", "api/v1/endpoints/intraday.py:181",
-                 "tasks/fetch_daily_snapshots.py:137", "tasks/refresh_stock_snapshots.py:120"],
+                 "tasks/fetch_daily_snapshots.py:137",
+                 "tasks/refresh_stock_snapshots.py:_fetch_quotes"],
      # NOTE: batch-quote does NOT return avgVolume (only the single `quote` endpoint /
      # `profile.averageVolume` do). refresh_stock_snapshots reading it gets None.
      "key_fields": ["symbol", "name", "price", "open", "changePercentage", "change", "volume",
@@ -164,8 +165,13 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
      "used_by": ["api/v1/endpoints/stocks.py:822"], "key_fields": ["symbol", "name", "exchange"]},
     # Stable uses `exchange` (not `exchangeShortName`). isEtf/isFund/isActivelyTrading/country
     # are also accepted as request FILTERS. key_fields = response fields the code reads.
-    {"path": "company-screener", "description": "Filter stocks/build the screener universe",
-     "used_by": ["api/v1/endpoints/stocks.py:1217", "tasks/refresh_stock_snapshots.py:55"],
+    {"path": "company-screener",
+     "description": ("Filter stocks/build the screener universe. refresh_stock_snapshots calls it "
+                     "twice per daily rebuild - isEtf=false for the stock leg, isEtf=true for the "
+                     "ETF leg; which leg a symbol arrives on IS the definition of "
+                     "stock_snapshots.is_etf. Response shape is identical on both."),
+     "used_by": ["api/v1/endpoints/stocks.py (GET /stocks/screener)",
+                 "tasks/refresh_stock_snapshots.py:_build_universe (both legs)"],
      "key_fields": ["symbol", "companyName", "marketCap", "sector", "industry", "beta", "price",
                     "lastAnnualDividend", "volume", "exchange", "isEtf", "isActivelyTrading"]},
     {"path": "stock-list", "description": "Full list of tradable stocks",
@@ -176,12 +182,28 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
      "used_by": ["tasks/fetch_daily_snapshots.py:74"], "key_fields": ["symbol", "delistedDate"]},
 
     # ── ETF detail ───────────────────────────────────────────────────
-    {"path": "etf/info", "description": "ETF metadata (expense ratio, AUM, sectors)",
-     "used_by": ["api/v1/endpoints/stocks.py:1080"],
-     "key_fields": ["symbol", "name", "expenseRatio", "assetsUnderManagement", "nav",
-                    "holdingsCount", "isActivelyTrading", "sectorsList"]},
+    # expenseRatio's unit is inconsistent across funds (a percent for some, a fraction
+    # for others) — market_data.normalize_expense_ratio owns the reconciliation, and
+    # stock_snapshots.expense_ratio stores the normalized percent.
+    #
+    # description, etfCompany, inceptionDate, avgVolume and assetClass are listed
+    # because the code has always read them and the ETF screener now DEPENDS on them —
+    # a rename would silently empty the issuer and asset-class dropdowns and blank the
+    # stored fund columns. Verified non-null for 33/33 funds spanning issuers, asset
+    # classes and structures (scripts/probe_etf_universe.py), which is the bar for
+    # adding a key here: the weekly audit probes this path with {"symbol": "SPY"}, so a
+    # field SPY omits would email a MISSING every Monday forever.
+    {"path": "etf/info",
+     "description": "ETF metadata: expense ratio, AUM, NAV, issuer, asset class, sector exposures",
+     "used_by": ["services/market_data.py (get_etf_info - the single source)",
+                 "api/v1/endpoints/stocks.py (GET /stocks/etf/{symbol}/info)",
+                 "tasks/refresh_stock_snapshots.py (_update_etf_metadata)"],
+     "key_fields": ["symbol", "name", "description", "etfCompany", "expenseRatio",
+                    "assetsUnderManagement", "nav", "holdingsCount", "inceptionDate",
+                    "avgVolume", "assetClass", "isActivelyTrading", "sectorsList"]},
     {"path": "etf/holdings", "description": "Top holdings within an ETF",
-     "used_by": ["api/v1/endpoints/stocks.py:1135"], "key_fields": ["asset", "name", "weightPercentage"]},
+     "used_by": ["api/v1/endpoints/stocks.py (GET /stocks/etf/{symbol}/holdings)"],
+     "key_fields": ["asset", "name", "weightPercentage"]},
 
     # ── Batch quotes for other asset classes & macro ─────────────────
     {"path": "treasury-rates", "description": "Treasury yields across maturities",
