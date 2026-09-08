@@ -13,6 +13,7 @@ from app.services.market_data import market_data_service, evaluate_dividend
 from app.services.fmp_client import get_fmp_client, API_KEY
 from app.services.analyst_estimates import fetch_estimates
 from app.services.sec_filings import detect_bankruptcy, is_new_issuer
+from app.services.edgar_identity import resolve_fund_ticker
 from app.db.session import get_db
 from app.schemas.daily_snapshot import DailySnapshotItem, DailySnapshotResponse
 from app.db.models import DailyStockSnapshot, StockSnapshot
@@ -726,6 +727,11 @@ async def get_ipos():
     companies that were already public — the vendor calendar also carries
     exchange transfers, uplistings and relistings, which are listing events
     rather than new issuers. See `_drop_established_registrants`.
+
+    Every entry carries `asset_type` ("CS" or "ETF"). Fund launches are not
+    filtered out here because they are a legitimate thing to watch; they are
+    labelled so the client can separate them from share IPOs, which they
+    otherwise outnumber. See `_tag_asset_types`.
     """
     today = datetime.now().strftime("%Y-%m-%d")
     seven_days_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
@@ -793,6 +799,9 @@ async def get_ipos():
             "security_type": None,
             "security_description": ipo.get("actions"),
             "ipo_status": status,
+            # Overwritten by _tag_asset_types; "CS" is the fail-open default so
+            # an unclassifiable listing shows under stocks rather than vanishing.
+            "asset_type": "CS",
             "last_updated": None,
             "currency_code": "USD",
             "min_shares_offered": None,
@@ -884,14 +893,44 @@ async def get_ipos():
                     )
             return kept
 
+        async def _tag_asset_types(items: list) -> list:
+            """Stamp each entry as an ETF launch ("ETF") or a share IPO ("CS").
+
+            New ETF listings outnumber genuine IPOs by several times over, so
+            without this the tracker reads as a fund-launch feed. SEC's
+            registered-fund file is the discriminator: a '40 Act fund is in it,
+            keyed by series/class, and a new ETF listing is nearly always one.
+
+            It does not catch trust-structured ETPs — the commodity and
+            spot-crypto vehicles that file the way SPY and GLD do — which stay
+            "CS". That is the intended edge: a new ETP is closer to an IPO in
+            what it offers investors than a fund launch is.
+
+            Costs one cached file for the whole calendar, then a dict lookup per
+            ticker. Fails open to "CS": an unclassifiable listing belongs with
+            the IPOs, since that is the tab a user is not filtering away.
+            """
+            if not items:
+                return items
+            funds = await asyncio.gather(
+                *[resolve_fund_ticker(i["ticker"]) for i in items],
+                return_exceptions=True,
+            )
+            for item, fund in zip(items, funds):
+                if isinstance(fund, BaseException):
+                    print(f"IPO asset type: {item['ticker']} check failed ({fund}) — CS")
+                    continue
+                item["asset_type"] = "ETF" if fund else "CS"
+            return items
+
         # Over-pull, then filter, so excluded relistings do not leave the tab
         # short of genuine IPOs.
         upcoming_items = _parse_ipo_response(
             upcoming_resp, "upcoming", MAX_PER_TAB * 2, "upcoming"
         )
-        results["upcoming"] = (
-            await _drop_established_registrants(upcoming_items, "upcoming")
-        )[:MAX_PER_TAB]
+        results["upcoming"] = await _tag_asset_types(
+            (await _drop_established_registrants(upcoming_items, "upcoming"))[:MAX_PER_TAB]
+        )
 
         # Recent-window listings get split by whether they are actually trading.
         # Pull up to 2x so neither bucket is starved by the other.
@@ -899,6 +938,7 @@ async def get_ipos():
             recent_resp, "recent", MAX_PER_TAB * 2, "recent"
         )
         recent_items = await _drop_established_registrants(recent_items, "recent")
+        recent_items = await _tag_asset_types(recent_items)
 
         quotes = {}
         if recent_items:

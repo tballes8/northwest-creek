@@ -43,6 +43,8 @@ interface IPOItem {
   currency_code: string | null;
   min_shares_offered: number | null;
   max_shares_offered: number | null;
+  // "ETF" for a fund launch, "CS" for a share IPO. Absent on older payloads.
+  asset_type?: 'CS' | 'ETF' | null;
   // Populated only for the recently_active bucket
   current_price?: number | null;
   change_percent?: number | null;
@@ -53,10 +55,28 @@ type IPOTab = 'upcoming' | 'recently_active' | 'pending';
 
 type IPOSortColumn = 'ticker' | 'company' | 'date' | 'price' | 'change';
 
+// Asset type is a separate axis from the tabs. The tabs are a lifecycle
+// (upcoming -> pending -> trading) and a fund launch has one of those states
+// too, so this filters across all three rather than sitting beside them.
+type IPOAssetFilter = 'CS' | 'ETF' | 'all';
+
 const IPO_TAB_LABELS: Record<IPOTab, string> = {
   upcoming: 'Upcoming',
   recently_active: 'Recently Active',
   pending: 'Pending',
+};
+
+const IPO_ASSET_LABELS: Record<IPOAssetFilter, string> = {
+  CS: 'Stocks',
+  ETF: 'ETFs',
+  all: 'All',
+};
+
+// What the rows are called in the empty state, per filter.
+const IPO_ASSET_NOUNS: Record<IPOAssetFilter, string> = {
+  CS: 'IPOs',
+  ETF: 'ETF launches',
+  all: 'listings',
 };
 
 interface DashboardPosition {
@@ -102,6 +122,9 @@ const Dashboard: React.FC = () => {
   const [ipoData, setIpoData] = useState<Record<IPOTab, IPOItem[]>>({ upcoming: [], recently_active: [], pending: [] });
   const [ipoLoading, setIpoLoading] = useState(false);
   const [ipoTab, setIpoTab] = useState<IPOTab>('upcoming');
+  // Defaults to stocks: new ETF listings run several times the rate of share
+  // IPOs, so an unfiltered tracker reads as a fund-launch feed.
+  const [ipoAssetFilter, setIpoAssetFilter] = useState<IPOAssetFilter>('CS');
 
   // IPO column sorting. Null column = the default listing-date order below.
   const [ipoSortColumn, setIpoSortColumn] = useState<IPOSortColumn | null>(null);
@@ -117,8 +140,21 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  // Every tab, asset-filtered. Drives the tab counts as well as the table, so
+  // a badge never promises rows the filter is about to hide. An item with no
+  // asset_type counts as a stock, matching the backend's fail-open default.
+  const visibleIpos = useMemo<Record<IPOTab, IPOItem[]>>(() => {
+    const keep = (ipo: IPOItem) =>
+      ipoAssetFilter === 'all' || (ipo.asset_type ?? 'CS') === ipoAssetFilter;
+    return {
+      upcoming: ipoData.upcoming.filter(keep),
+      recently_active: ipoData.recently_active.filter(keep),
+      pending: ipoData.pending.filter(keep),
+    };
+  }, [ipoData, ipoAssetFilter]);
+
   const sortedIpos = useMemo(() => {
-    const rows = [...ipoData[ipoTab]];
+    const rows = [...visibleIpos[ipoTab]];
 
     if (!ipoSortColumn) {
       // Default: soonest-first while upcoming, newest-first once listed.
@@ -167,7 +203,7 @@ const Dashboard: React.FC = () => {
       }
       return ((aVal as number) - (bVal as number)) * dir;
     });
-  }, [ipoData, ipoTab, ipoSortColumn, ipoSortDirection]);
+  }, [visibleIpos, ipoTab, ipoSortColumn, ipoSortDirection]);
 
   // IPO detail modal
   const [ipoModalOpen, setIpoModalOpen] = useState(false);
@@ -1215,39 +1251,61 @@ return (
 
       {/* IPO Tracker */}
       <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500 mt-8">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
           <div className="flex items-center gap-2">
             <svg className="w-5 h-5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
             </svg>
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">IPO Tracker</h2>
           </div>
-          <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
-            {(['upcoming', 'recently_active', 'pending'] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => {
-                  setIpoTab(tab);
-                  // Price/Change carry different meanings per tab — start each tab
-                  // in its own default order rather than inheriting a sort.
-                  setIpoSortColumn(null);
-                }}
-                className={`px-4 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
-                  ipoTab === tab
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
-                }`}
-              >
-                {IPO_TAB_LABELS[tab]}
-                {ipoData[tab].length > 0 && (
-                  <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs ${
-                    ipoTab === tab ? 'bg-primary-500 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
-                  }`}>
-                    {ipoData[tab].length}
-                  </span>
-                )}
-              </button>
-            ))}
+          <div className="flex items-center gap-3 flex-wrap justify-end">
+            <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+              {(['CS', 'ETF', 'all'] as const).map((filter) => (
+                <button
+                  key={filter}
+                  onClick={() => setIpoAssetFilter(filter)}
+                  title={
+                    filter === 'CS' ? 'Share IPOs only'
+                      : filter === 'ETF' ? 'New ETF listings only'
+                        : 'Share IPOs and ETF listings'
+                  }
+                  className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
+                    ipoAssetFilter === filter
+                      ? 'bg-gray-700 dark:bg-gray-900 text-white'
+                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {IPO_ASSET_LABELS[filter]}
+                </button>
+              ))}
+            </div>
+            <div className="flex rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
+              {(['upcoming', 'recently_active', 'pending'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => {
+                    setIpoTab(tab);
+                    // Price/Change carry different meanings per tab — start each tab
+                    // in its own default order rather than inheriting a sort.
+                    setIpoSortColumn(null);
+                  }}
+                  className={`px-4 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
+                    ipoTab === tab
+                      ? 'bg-primary-600 text-white'
+                      : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                  }`}
+                >
+                  {IPO_TAB_LABELS[tab]}
+                  {visibleIpos[tab].length > 0 && (
+                    <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs ${
+                      ipoTab === tab ? 'bg-primary-500 text-white' : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
+                    }`}>
+                      {visibleIpos[tab].length}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -1256,12 +1314,22 @@ return (
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
             <span className="ml-3 text-gray-500 dark:text-gray-400">Loading IPOs...</span>
           </div>
-        ) : ipoData[ipoTab].length === 0 ? (
+        ) : visibleIpos[ipoTab].length === 0 ? (
           <div className="text-center py-10">
             <svg className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
             </svg>
-            <p className="text-gray-500 dark:text-gray-400">No {IPO_TAB_LABELS[ipoTab].toLowerCase()} IPOs found</p>
+            <p className="text-gray-500 dark:text-gray-400">
+              No {IPO_TAB_LABELS[ipoTab].toLowerCase()} {IPO_ASSET_NOUNS[ipoAssetFilter]} found
+            </p>
+            {ipoAssetFilter !== 'all' && ipoData[ipoTab].length > 0 && (
+              <button
+                onClick={() => setIpoAssetFilter('all')}
+                className="mt-2 text-sm text-primary-600 dark:text-primary-400 hover:underline"
+              >
+                Show all {ipoData[ipoTab].length} {IPO_TAB_LABELS[ipoTab].toLowerCase()} listings
+              </button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -1310,6 +1378,13 @@ return (
                     <td className="px-4 py-3">
                       <div className="text-sm text-gray-900 dark:text-white font-medium truncate max-w-xs">{ipo.issuer_name}</div>
                       <div className="flex items-center gap-2">
+                        {/* Only under "All" — beside a filtered list the badge
+                            would repeat what the filter already said. */}
+                        {ipoAssetFilter === 'all' && ipo.asset_type === 'ETF' && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300">
+                            ETF
+                          </span>
+                        )}
                         {ipo.security_type && (
                           <span className="text-xs text-gray-500 dark:text-gray-400">{ipo.security_type}</span>
                         )}
