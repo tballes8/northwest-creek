@@ -119,6 +119,7 @@ async def fetch_and_store_snapshots():
         # Step 2: Batch-fetch quotes
         print("📈 Fetching quotes in batches...")
         valid_snapshots = []
+        skipped_no_change = 0
         today = date.today()
 
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -150,10 +151,34 @@ async def fetch_and_store_snapshots():
                         open_price = float(open_price)
                         close_price = float(close_price)
 
-                        if open_price != 0:
-                            change_percent = ((close_price - open_price) / open_price) * 100
-                        else:
-                            change_percent = 0.0
+                        # Use FMP's own changePercentage — the identical field
+                        # refresh_stock_snapshots.py:376 stores as
+                        # stock_snapshots.change_percentage from this same
+                        # /stable/batch-quote call. It is what the screener, the
+                        # dashboard and the ticker tape all display.
+                        #
+                        # This used to be computed as (price - open) / open: an
+                        # open-to-close move that no other surface in the app
+                        # reports, so the discovery cards on Stocks.tsx showed a
+                        # different number for a ticker than the screener row for
+                        # that same ticker, on the same page.
+                        #
+                        # changePercentage is occasionally absent. previousClose
+                        # yields the same definition, so derive from it rather than
+                        # falling back to the open-based figure — a silent mix of
+                        # two metrics in one column is the problem being fixed.
+                        # If both are missing the row is dropped: change_percent is
+                        # NOT NULL, and a synthesised 0.0 renders as a confident
+                        # flat "+0.00%" on a stock that may well have moved.
+                        change_percent = item.get("changePercentage")
+                        if change_percent is None:
+                            prev_close = item.get("previousClose")
+                            if prev_close is None or float(prev_close) == 0:
+                                skipped_no_change += 1
+                                continue
+                            prev_close = float(prev_close)
+                            change_percent = ((close_price - prev_close) / prev_close) * 100
+                        change_percent = float(change_percent)
 
                         valid_snapshots.append({
                             'ticker': ticker,
@@ -173,6 +198,10 @@ async def fetch_and_store_snapshots():
                     print(f"   Processed {i + QUOTE_BATCH_SIZE}/{len(tickers)} tickers...")
 
         print(f"✅ Processed {len(valid_snapshots)} valid snapshots")
+        if skipped_no_change:
+            # Visible on purpose: this is the only way a ticker silently leaves the
+            # discovery widgets, so a sudden jump means a vendor field change.
+            print(f"⚠️  Skipped {skipped_no_change} quotes with no changePercentage and no previousClose")
 
         if not valid_snapshots:
             print("⚠️ No valid snapshots to store")

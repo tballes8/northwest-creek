@@ -1,9 +1,44 @@
+# DOCUMENTATION ONLY — Railway does not read this file.
+#
+# Each cron is a separate Railway *service* with its own "Custom Start Command"
+# and "Cron Schedule" field in the dashboard. Editing anything here changes
+# nothing at runtime; to change a schedule or stop a job you must open the
+# service in Railway. This file drifted badly before that was understood — it
+# claimed 0 6 * * * for the snapshot job when the dashboard said 0 11 * * *, and
+# omitted compute_squeeze entirely. Verified against the dashboard 2026-09-09.
+#
+# Service name          Command                                Schedule
+# --------------------  -------------------------------------  ---------------
+# northwest-creek       python -m app.tasks.fetch_daily_snapshots   30 21 * * 1-5
+# check-technical-alerts python -m app.tasks.check_technical_alerts  30 20 * * 1-5
+# compute_squeeze       python -m app.tasks.compute_squeeze        (see dashboard)
+#
+# Post-close cascade (UTC): 20:00 close -> ~20:00 refresh_stock_snapshots
+# (APScheduler) -> 20:30 technical alerts -> ~21:00 squeeze -> 21:30 snapshot.
+#
+# Not cron services — these run in-process on APScheduler, registered in
+# app/main.py: refresh_stock_snapshots (15 min), macro_indicators (24 h),
+# sector_rotation_append (06:00 UTC), FMP field audit (Mon 13:00 UTC).
+
 [[jobs]]
-name = "Daily Stock Snapshot"
-schedule = "0 6 * * *"
+name = "Daily Stock Snapshot"          # Railway service: northwest-creek
+# 17:30 ET in EDT / 16:30 ET in EST — after the 16:00 ET close, so batch-quote
+# returns the completed session. Moved here from 0 11 * * * on 2026-09-09: that
+# fired pre-market, where `price` can still equal `previousClose` for anything
+# without pre-market volume, which would store a flat 0.00% change.
+schedule = "30 21 * * 1-5"
 command = "python -m app.tasks.fetch_daily_snapshots"
 
 [[jobs]]
-name = "Technical Alert Check"
-schedule = "30 21 * * 1-5"
+name = "Technical Alert Check"         # Railway service: check-technical-alerts
+# 16:30 ET in EDT, 30 min after the close. Reads FMP directly via
+# technical_alert_checker and touches neither snapshot table, so it has no
+# ordering dependency on the jobs around it — it sits here only to keep the
+# post-close services from all firing at once.
+schedule = "30 20 * * 1-5"
 command = "python -m app.tasks.check_technical_alerts"
+
+[[jobs]]
+name = "Squeeze Precompute"            # Railway service: compute_squeeze
+schedule = "unknown"                   # weekdays post-close per main.py:92-95
+command = "python -m app.tasks.compute_squeeze"
