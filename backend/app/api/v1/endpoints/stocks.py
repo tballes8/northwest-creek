@@ -45,6 +45,7 @@ async def get_daily_snapshot(
     limit: int = Query(default=10, ge=1, le=50),
     tickers: Optional[str] = Query(default=None, description="Comma-separated tickers to filter by"),
     asset_type: Optional[str] = Query(default=None, description="Filter by asset type, e.g. 'ETF' or 'CS'"),
+    sector: Optional[str] = Query(default=None, description="Sector filter, e.g. 'Energy' — resolved from stock_snapshots.sector"),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -54,6 +55,7 @@ async def get_daily_snapshot(
     - **limit**: Number of random stocks to return (1-50, default 10)
     - **tickers**: Optional comma-separated list of tickers to filter by (e.g. "AAPL,MSFT,GOOGL")
     - **asset_type**: Optional asset type filter (e.g. "ETF", "CS")
+    - **sector**: Optional sector filter, joined against `stock_snapshots.sector`
 
     **Returns:**
     - Random selection of stocks from today's snapshot with change percentages
@@ -77,6 +79,25 @@ async def get_daily_snapshot(
         # If asset_type provided, filter by it
         if asset_type:
             base_filter = base_filter & (DailyStockSnapshot.asset_type == asset_type.upper())
+
+        # Sector membership comes from stock_snapshots.sector — the one stored sector,
+        # written only from /stable/profile. The sector explorer used to build its own
+        # ticker list from a static frontend map, so a Marine Shipping name like KNOP
+        # was listed under Energy and then showed "Industrials" on its own page. Read
+        # the same column Company Details and the screener read, and they agree.
+        #
+        # is_etf guard for the same reason /stocks/sectors carries one: funds are in
+        # stock_snapshots but deliberately carry no sector, and a stray write must not
+        # let one answer a stock-mode sector browse.
+        if sector:
+            sector_symbols = (
+                select(StockSnapshot.symbol)
+                .where(
+                    func.lower(StockSnapshot.sector) == sector.strip().lower(),
+                    StockSnapshot.is_etf.isnot(True),
+                )
+            )
+            base_filter = base_filter & DailyStockSnapshot.ticker.in_(sector_symbols)
 
         # Get total count
         count_query = select(func.count(DailyStockSnapshot.id)).where(base_filter)

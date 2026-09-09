@@ -303,13 +303,18 @@ export const stocksAPI = {
   getTopGainers: (limit: number = 10) =>
     axiosInstance.get(`/stocks/top-gainers`, {params: {limit}}),
 
-  getDailySnapshot: (limit: number = 10, tickers?: string[], asset_type?: string) => {
+  getDailySnapshot: (limit: number = 10, tickers?: string[], asset_type?: string, sector?: string) => {
     const params: any = { limit };
     if (tickers && tickers.length > 0) {
       params.tickers = tickers.join(',');
     }
     if (asset_type) {
       params.asset_type = asset_type;
+    }
+    // Sector is resolved server-side from stock_snapshots.sector, the same column
+    // Company Details reads. Never pass a client-derived sector ticker list here.
+    if (sector) {
+      params.sector = sector;
     }
     return axiosInstance.get(`/stocks/daily-snapshot`, { params });
   },

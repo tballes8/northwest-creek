@@ -7,7 +7,7 @@ import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement
 import { Line } from 'react-chartjs-2';
 import { authAPI, stocksAPI, watchlistAPI, screenerAPI } from '../services/api';
 import ScreenerChartPanel from '../components/ScreenerChartPanel';
-import { getTickersForSector, SECTOR_COLORS } from '../utils/sectorMap';
+import { SECTOR_COLORS } from '../utils/sectorMap';
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -839,17 +839,14 @@ const Stocks: React.FC = () => {
     handleTickerClick(suggestion.ticker);
   };
 
+  // Sector membership is resolved by the backend from stock_snapshots.sector, not from
+  // the static TICKER_SECTOR_MAP. The map is a first-paint fallback carrying another
+  // vendor's labels, so browsing it directly listed KNOP (Industrials / Marine Shipping
+  // per /stable/profile) under Energy, contradicting its own Company Details panel.
   const loadSectorSnapshots = async (sector: string) => {
     setSectorLoading(true);
     try {
-      const sectorTickers = getTickersForSector(sector);
-      if (sectorTickers.length === 0) {
-        setSectorSnapshots([]);
-        return;
-      }
-      const shuffled = [...sectorTickers].sort(() => Math.random() - 0.5);
-      const subset = shuffled.slice(0, 100);
-      const response = await stocksAPI.getDailySnapshot(10, subset);
+      const response = await stocksAPI.getDailySnapshot(10, undefined, undefined, sector);
       const snaps = response.data.snapshots || [];
       setSectorSnapshots(snaps);
       if (snaps.length > 0) {

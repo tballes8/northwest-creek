@@ -2,10 +2,13 @@
  * Stock Sector Mapping Utility
  * ~500 common US stocks mapped to yfinance sector names
  * 
- * Two-layer approach:
- *   1. Static map — instant lookup for known tickers
- *   2. Dynamic fetch — calls backend getCompany() for unknowns,
- *      caching results so each ticker is only fetched once per session.
+ * Two-layer approach, backend-authoritative:
+ *   1. Dynamic fetch — GET /stocks/sectors, reading stock_snapshots.sector, which is
+ *      written only from /stable/profile. This is the label the rest of the app shows.
+ *   2. Static map — a synchronous fallback for first paint only, and it carries another
+ *      vendor's classifications, so it disagrees with (1) for names the two vendors
+ *      split on (KNOP: Energy here, Industrials / Marine Shipping at FMP). Only ever
+ *      read it forward, ticker -> sector, and only until hydrateSectors() lands.
  *
  * To regenerate with the latest data, run:
  *   python generate_sector_map.py
@@ -953,15 +956,11 @@ export const useSectors = (tickers: string[]): ((ticker: string) => string) => {
   }, [version]);
 };
 
-/**
- * Get all tickers in the static map for a given sector.
- * Used by the sector explorer on the Stocks page.
- */
-export const getTickersForSector = (sector: string): string[] => {
-  return Object.entries(TICKER_SECTOR_MAP)
-    .filter(([_, s]) => s === sector)
-    .map(([ticker]) => ticker);
-};
+// There is deliberately no reverse lookup (sector -> tickers) over TICKER_SECTOR_MAP.
+// The map is a stale first-paint fallback from another vendor's labels; browsing it
+// listed KNOP under Energy while its own Company Details panel said Industrials /
+// Marine Shipping. Sector membership is a backend query — pass `sector` to
+// stocksAPI.getDailySnapshot(), which reads stock_snapshots.sector.
 
 export interface SectorBreakdown {
   sector: string;
