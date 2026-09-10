@@ -3,6 +3,7 @@ Daily stock snapshot fetcher - CRON JOB
 Fetches all stock snapshots from FMP API and stores in database
 """
 import asyncio
+import math
 import os
 from sqlalchemy import delete, insert, select, func
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -16,6 +17,44 @@ from app.db.models import WaitlistSignup
 FMP_BASE = "https://financialmodelingprep.com/stable"
 # Batch size for quote requests — /stable/batch-quote supports larger batches
 QUOTE_BATCH_SIZE = 1000
+
+# Sanity bound on change_percent. FMP derives changePercentage from previousClose,
+# and for dead OTC shells that previousClose can be 0 or ~1e-17, so the field comes
+# back as nonsense. Measured across the full 39,208-quote universe on 2026-09-09:
+# BMJJF 6.4e35, NTPL 1.1e30, SAYFF 1.1e29 (all previousClose = 0), RRVAS 1.2e26,
+# FJLLF 1.9e20, ZKPLF 3.8e18. change_percent is NUMERIC(18,2) — ceiling 1e16 — so
+# one such row aborts the entire 32k-row INSERT. That is exactly how the 21:30 run
+# failed on 2026-09-09.
+#
+# 1,000% is a data-quality bound, not a market one. Measured over the same universe:
+# 267 tickers exceed 100%, 108 exceed 1,000%, 39 exceed 10,000%. The tail is visibly
+# synthetic — four separate tickers came back at exactly 9900.00%, which is what a
+# 1:100 reverse split looks like when the vendor forgets to adjust previousClose.
+# Below ~1,000% the values stay plausible for a nano-cap on news (LSMG 890%,
+# NXATW 176%). This drops 108 of ~39,200 quotes, 0.28%, essentially all artifacts.
+#
+# Dropping the row beats clamping it: a card reading "+1000.00%" is just as false but
+# looks deliberate. A dropped ticker simply isn't offered for research that day.
+MAX_CHANGE_PCT = 1_000.0
+
+# Hard ceiling of NUMERIC(18,2). Not an opinion about prices — just a refusal to hand
+# the column a value it cannot store and take 32k good rows down with it.
+NUMERIC_18_2_MAX = 10.0 ** 16
+
+
+def _finite(value) -> float | None:
+    """float(value) if it parses to a real finite number, else None.
+
+    Returning None rather than raising matters: this runs inside the per-quote loop,
+    and an exception here escapes the per-batch try and kills the whole run.
+    """
+    if value is None:
+        return None
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return None
+    return f if math.isfinite(f) else None
 
 
 async def fetch_and_store_snapshots():
@@ -120,6 +159,8 @@ async def fetch_and_store_snapshots():
         print("📈 Fetching quotes in batches...")
         valid_snapshots = []
         skipped_no_change = 0
+        skipped_absurd = 0
+        skipped_unstorable = 0
         today = date.today()
 
         async with httpx.AsyncClient(timeout=15.0) as client:
@@ -139,17 +180,18 @@ async def fetch_and_store_snapshots():
                         continue
 
                     for item in quotes:
-                        open_price = item.get("open")
-                        close_price = item.get("price")
+                        open_price = _finite(item.get("open"))
+                        close_price = _finite(item.get("price"))
                         ticker = item.get("symbol")
 
                         if not ticker or open_price is None or close_price is None:
                             continue
                         if "." in ticker or len(ticker) > 10:
                             continue
-
-                        open_price = float(open_price)
-                        close_price = float(close_price)
+                        if (abs(open_price) >= NUMERIC_18_2_MAX
+                                or abs(close_price) >= NUMERIC_18_2_MAX):
+                            skipped_unstorable += 1
+                            continue
 
                         # Use FMP's own changePercentage — the identical field
                         # refresh_stock_snapshots.py:376 stores as
@@ -170,15 +212,16 @@ async def fetch_and_store_snapshots():
                         # If both are missing the row is dropped: change_percent is
                         # NOT NULL, and a synthesised 0.0 renders as a confident
                         # flat "+0.00%" on a stock that may well have moved.
-                        change_percent = item.get("changePercentage")
+                        change_percent = _finite(item.get("changePercentage"))
                         if change_percent is None:
-                            prev_close = item.get("previousClose")
-                            if prev_close is None or float(prev_close) == 0:
+                            prev_close = _finite(item.get("previousClose"))
+                            if not prev_close:  # None or 0.0 — nothing to divide by
                                 skipped_no_change += 1
                                 continue
-                            prev_close = float(prev_close)
                             change_percent = ((close_price - prev_close) / prev_close) * 100
-                        change_percent = float(change_percent)
+                        if abs(change_percent) > MAX_CHANGE_PCT:
+                            skipped_absurd += 1
+                            continue
 
                         valid_snapshots.append({
                             'ticker': ticker,
@@ -198,10 +241,14 @@ async def fetch_and_store_snapshots():
                     print(f"   Processed {i + QUOTE_BATCH_SIZE}/{len(tickers)} tickers...")
 
         print(f"✅ Processed {len(valid_snapshots)} valid snapshots")
+        # Visible on purpose: these are the only ways a ticker silently leaves the
+        # discovery widgets, so a sudden jump means a vendor field change.
         if skipped_no_change:
-            # Visible on purpose: this is the only way a ticker silently leaves the
-            # discovery widgets, so a sudden jump means a vendor field change.
             print(f"⚠️  Skipped {skipped_no_change} quotes with no changePercentage and no previousClose")
+        if skipped_absurd:
+            print(f"⚠️  Skipped {skipped_absurd} quotes with |change| > {MAX_CHANGE_PCT:,.0f}% (bad vendor previousClose)")
+        if skipped_unstorable:
+            print(f"⚠️  Skipped {skipped_unstorable} quotes with a price too large for NUMERIC(18,2)")
 
         if not valid_snapshots:
             print("⚠️ No valid snapshots to store")
