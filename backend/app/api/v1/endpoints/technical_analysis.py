@@ -6,10 +6,14 @@ import asyncio
 import re
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func as sa_func
 from typing import List, Optional
-from app.db.models import User, Watchlist
+from datetime import datetime, timedelta, timezone
+from app.db.models import User, Watchlist, FeatureUsage
 from app.api.dependencies import get_current_user
+from app.core.tier_limits import (
+    get_tier_limit, get_review_period, get_upgrade_tier, WATCHLIST_SCREEN_MIN_TIERS,
+)
 from app.db.session import get_db
 from app.services.market_data import market_data_service
 from app.services.technical_indicators import technical_indicators, generate_summary, build_signal_rows
@@ -26,7 +30,14 @@ def _safe_error(e: Exception) -> str:
 router = APIRouter()
 
 def require_valid_tier(current_user: User = Depends(get_current_user)):
-    """Validate user has a recognized subscription tier for Technical Analysis access"""
+    """Validate user has a recognized subscription tier for Technical Analysis access.
+
+    Membership only — this says the tier exists, not that the user has quota left,
+    and it admits every recognized tier. Routes that burn FMP calls must also draw
+    on a quota: check_analysis_limit() for single-stock analysis, and
+    check_watchlist_screen_limit() (behind require_watchlist_screening_tier) for
+    the far more expensive watchlist screens.
+    """
     allowed_tiers = ["beginner", "casual", "active", "professional"]
     if current_user.subscription_tier not in allowed_tiers:
         raise HTTPException(
@@ -34,6 +45,106 @@ def require_valid_tier(current_user: User = Depends(get_current_user)):
             detail=f"Technical Analysis requires a valid subscription. Current tier: {current_user.subscription_tier.title()}. Please contact support."
         )
     return current_user
+
+async def _check_feature_limit(user: User, db: AsyncSession, feature: str, label: str) -> int:
+    """Check a per-period quota and raise 403 if it is spent.
+
+    Returns the current usage count. The 403 detail matches the shape the other
+    metered endpoints use, so the frontend renders <UpgradeRequired/> straight
+    from the response instead of counting in the browser.
+    """
+    limit = get_tier_limit(user.subscription_tier, feature)
+    period = get_review_period(user.subscription_tier)
+
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(days=1) if period == "day" else now - timedelta(weeks=1)
+
+    result = await db.execute(
+        select(sa_func.count(FeatureUsage.id))
+        .where(
+            FeatureUsage.user_id == user.id,
+            FeatureUsage.feature == feature,
+            FeatureUsage.used_at >= window_start,
+        )
+    )
+    current_count = result.scalar() or 0
+
+    if current_count >= limit:
+        next_tier = get_upgrade_tier(user.subscription_tier)
+        if next_tier and get_tier_limit(next_tier, feature) > limit:
+            upgrade_msg = (
+                f" Upgrade to {next_tier.capitalize()} for "
+                f"{get_tier_limit(next_tier, feature)} per {get_review_period(next_tier)}."
+            )
+        else:
+            upgrade_msg = ""
+
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "message": f"{label} limit reached. {user.subscription_tier.capitalize()} tier allows {limit} per {period}.{upgrade_msg}",
+                "current_usage": current_count,
+                "max_usage": limit,
+                "period": period,
+            }
+        )
+
+    return current_count
+
+
+async def _record_feature_usage(user: User, db: AsyncSession, feature: str) -> None:
+    """Record one usage event. Called only after the work succeeds, so an upstream
+    failure or a bad ticker never costs the user a run."""
+    db.add(FeatureUsage(user_id=user.id, feature=feature))
+    await db.commit()
+
+
+async def check_analysis_limit(user: User, db: AsyncSession) -> int:
+    """Quota for a single-stock analysis — roughly one FMP fetch."""
+    return await _check_feature_limit(user, db, "technical_analysis", "Technical Analysis")
+
+
+async def record_analysis_usage(user: User, db: AsyncSession) -> None:
+    await _record_feature_usage(user, db, "technical_analysis")
+
+
+async def check_watchlist_screen_limit(user: User, db: AsyncSession) -> int:
+    """Quota for a watchlist screen.
+
+    Priced separately from a single-stock analysis on purpose: one screen fans
+    out a historical fetch for EVERY watchlist ticker, so a 75-stock watchlist
+    costs ~75x what /analyze does. Charging both against one counter would hide
+    that entirely.
+    """
+    return await _check_feature_limit(user, db, "watchlist_screens", "Watchlist screening")
+
+
+async def record_watchlist_screen_usage(user: User, db: AsyncSession) -> None:
+    await _record_feature_usage(user, db, "watchlist_screens")
+
+
+def require_watchlist_screening_tier(current_user: User = Depends(require_valid_tier)):
+    """Watchlist screening is an Active-and-above feature.
+
+    A real tier gate, unlike require_valid_tier: it names the tiers rather than
+    accepting any recognized one. Matches how saved_screens and indicator_alerts
+    are already gated.
+    """
+    if current_user.subscription_tier not in WATCHLIST_SCREEN_MIN_TIERS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "message": (
+                    "Watchlist screening is available on the Active and Professional plans. "
+                    f"Current tier: {current_user.subscription_tier.capitalize()}."
+                ),
+                "current_usage": 0,
+                "max_usage": 0,
+                "period": get_review_period(current_user.subscription_tier),
+            },
+        )
+    return current_user
+
 
 class ScreenerResult:
     """Screener result item"""
@@ -80,6 +191,10 @@ async def analyze_stock(
     """
     Get complete technical analysis for a stock
     """
+    # Quota first: this route burns a ~170-bar FMP fetch and ~20 indicator
+    # computations, so the check happens before any upstream call.
+    await check_analysis_limit(current_user, db)
+
     try:
         # Get company info
         security_type = ""
@@ -336,6 +451,8 @@ async def analyze_stock(
             
             enriched_chart_data.append(entry)
 
+        await record_analysis_usage(current_user, db)
+
         return {
             "ticker": ticker,
             "company_name": company_name,
@@ -416,11 +533,11 @@ async def screen_watchlist(
     above_sma_50: Optional[bool] = Query(None, description="Price above 50-day SMA"),
     bollinger_oversold: Optional[bool] = Query(None, description="Below lower Bollinger Band"),
     bollinger_overbought: Optional[bool] = Query(None, description="Above upper Bollinger Band"),
-    current_user: User = Depends(require_valid_tier),  # CHANGED THIS LINE!
+    current_user: User = Depends(require_watchlist_screening_tier),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    🔒 PAID TIERS ONLY - Screen your watchlist by technical indicators
+    🔒 ACTIVE & PROFESSIONAL - Screen your watchlist by technical indicators
     
     **Find trading opportunities in your watchlist:**
     
@@ -445,15 +562,19 @@ async def screen_watchlist(
     - `/screener/watchlist?macd_bullish=true&above_sma_50=true` → Strong uptrends
     - `/screener/watchlist?bollinger_oversold=true` → Potential bounce opportunities
     
-    ⭐ **Professional Feature:** 20 stock screenings daily and 75 watchlist stocks!
+    ⭐ **Active:** 5 screens/day · **Professional:** 15 screens/day
     """
-    # Get user's watchlist
+    # One screen fans out a historical fetch per watchlist ticker, so it draws
+    # on the watchlist_screens quota rather than the single-stock one.
+    await check_watchlist_screen_limit(current_user, db)
+
     result = await db.execute(
         select(Watchlist)
         .where(Watchlist.user_id == current_user.id)
     )
     watchlist_items = result.scalars().all()
-    
+
+    # An empty watchlist fetches nothing upstream, so it costs no quota.
     if not watchlist_items:
         return {
             "matches": [],
@@ -579,7 +700,9 @@ async def screen_watchlist(
         except Exception:
             # Skip stocks that error out
             continue
-    
+
+    await record_watchlist_screen_usage(current_user, db)
+
     return {
         "matches": matches,
         "total_screened": len(watchlist_items),
@@ -595,11 +718,11 @@ async def screen_watchlist(
 
 @router.get("/presets/oversold")
 async def screen_oversold(
-    current_user: User = Depends(require_valid_tier),
+    current_user: User = Depends(require_watchlist_screening_tier),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    🔒 PROFESSIONL ONLY - Find oversold stocks in your watchlist
+    🔒 ACTIVE & PROFESSIONAL - Find oversold stocks in your watchlist
     
     **Criteria:**
     - RSI < 30 (oversold)
@@ -617,11 +740,11 @@ async def screen_oversold(
 
 @router.get("/presets/overbought")
 async def screen_overbought(
-    current_user: User = Depends(require_valid_tier),
+    current_user: User = Depends(require_watchlist_screening_tier),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    🔒 PAID TIERS ONLY - Find overbought stocks in your watchlist
+    🔒 ACTIVE & PROFESSIONAL - Find overbought stocks in your watchlist
     
     **Criteria:**
     - RSI > 70 (overbought)
@@ -639,11 +762,11 @@ async def screen_overbought(
 
 @router.get("/presets/strong-uptrend")
 async def screen_strong_uptrend(
-    current_user: User = Depends(require_valid_tier),
+    current_user: User = Depends(require_watchlist_screening_tier),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    🔒 PAID TIERS ONLY - Find stocks in strong uptrends
+    🔒 ACTIVE & PROFESSIONAL - Find stocks in strong uptrends
     
     **Criteria:**
     - MACD bullish
@@ -663,11 +786,11 @@ async def screen_strong_uptrend(
 
 @router.get("/presets/reversal-candidates")
 async def screen_reversal_candidates(
-    current_user: User = Depends(require_valid_tier),
+    current_user: User = Depends(require_watchlist_screening_tier),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    🔒 PAID TIERS ONLY - Find potential reversal candidates
+    🔒 ACTIVE & PROFESSIONAL - Find potential reversal candidates
     
     **Criteria:**
     - RSI < 30 (oversold)

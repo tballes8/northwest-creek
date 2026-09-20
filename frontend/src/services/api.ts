@@ -382,10 +382,40 @@ export const relvalAPI = {
     axiosInstance.post('/relval/calculate', payload),
 };
 
+// Watchlist screening — Active & Professional only, and metered on its own
+// quota because one screen costs a price-history fetch per watchlist ticker.
+export type WatchlistScreenPreset =
+  | 'oversold'
+  | 'overbought'
+  | 'strong-uptrend'
+  | 'reversal-candidates';
+
+export interface WatchlistScreenMatch {
+  ticker: string;
+  company_name: string;
+  current_price: number;
+  rsi: number | null;
+  macd_trend: string | null;
+  above_sma_20: boolean | null;
+  above_sma_50: boolean | null;
+  bollinger_position: string | null;
+  match_reasons: string[];
+}
+
+export interface WatchlistScreenResponse {
+  matches: WatchlistScreenMatch[];
+  total_screened: number;
+  matches_found: number;
+  filters_applied: string;
+  message?: string;
+}
+
 // Technical Analysis API
 export const technicalAPI = {
   analyze: (ticker: string) =>
     axiosInstance.get(`/technical-analysis/analyze/${ticker}`),
+  screenWatchlist: (preset: WatchlistScreenPreset) =>
+    axiosInstance.get<WatchlistScreenResponse>(`/technical-analysis/presets/${preset}`),
   aiAnalysis: (ticker: string) =>
     axiosInstance.get(`/stocks/${ticker}/ai-analysis`),
   priceForecast: (ticker: string) =>

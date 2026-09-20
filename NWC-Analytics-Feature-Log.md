@@ -1,6 +1,6 @@
 # NWC-Analytics — Shipped Features Log
 
-**Last Updated:** September 1, 2026  
+**Last Updated:** September 20, 2026  
 **Purpose:** Cross-project reference document. Attach to NWC Marketing, NWC Blog/SM Post, NWC Enhancements, and NWC Sandbox projects so all workstreams have visibility into what has shipped, what tier it lives on, and what content angles it unlocks.
 
 ---
@@ -1265,6 +1265,87 @@ It also reinforces the positioning the rest of the platform is built on: the bad
 - Why one indicator is never enough (and why our signals say so out loud)
 - Overbought doesn't mean sell — the most expensive misreading in technical analysis
 - The difference between an indicator and a signal — and why the gap matters
+
+---
+
+### September 20, 2026
+
+---
+
+#### Watchlist Screening — Four One-Click Technical Screens
+
+**What It Does:** The Watchlist page now carries a row of screening buttons — **Oversold**, **Overbought**, **Strong Uptrend** and **Reversal Candidates** — that filter the list down to the stocks meeting each condition right now. Click Oversold and a twelve-stock watchlist collapses to the three names currently showing an RSI below 30 and a price below their lower Bollinger Band. Click it again to clear.
+
+Each button states its own criteria on hover, and the result line names them in full: *"3 of 12 match — RSI < 30, Below Bollinger Lower Band."* Nothing is hidden behind a label. The screens read live indicator values for every stock in the list at the moment the button is pressed, rather than a cached daily figure, and the current sort order is preserved so the filtered list stays in whatever order the user arranged it.
+
+This is deliberately a different tool from the screener on the Stocks page, and the distinction matters for how it gets described. **The Stocks screener searches the entire market** to answer "what should I be looking at?" **Watchlist screening searches only what the user already follows**, answering "what is happening in the names I've chosen?" The second question is the one a user asks every morning, and until now the only way to answer it was to open each holding one at a time.
+
+**Tier Availability:** Active and Professional. Active gets 5 screens per day, Professional 15. Beginner and Casual see the feature on the page with a note naming the plans that include it.
+
+**Marketing Angle:** The gap this fills is a daily-routine gap, not a capability gap. A user with twenty stocks on their watchlist has no way to ask a question about all twenty at once — they scroll, they click into each one, and in practice they check the four they already have an opinion about and ignore the rest. One click that says "these three are oversold today" replaces twenty minutes of clicking, and more importantly it surfaces the stock the user was not already thinking about.
+
+It is also a natural upgrade driver. The value of screening a watchlist scales with how many stocks are on it, which is itself a tiered limit — a Beginner watching ten names can hold them in their head, while an Active subscriber watching forty-five cannot. The feature gets more useful exactly as the user's list grows into the tier that includes it.
+
+The framing stays consistent with the rest of the platform: a screen returns a *condition*, not an instruction. "Three stocks are oversold" is a starting point for research, and the result line says so in as many words.
+
+**Blog/Content Hooks:**
+- Screening your own watchlist vs. screening the market — two different questions, two different tools
+- The morning routine: four questions to ask your watchlist before the open
+- Why "oversold" is where research starts, not where it ends
+- What RSI, MACD and Bollinger Bands look like when you check all of them at once
+
+---
+
+#### Technical Analysis — Usage Limits Now Enforced Correctly
+
+**What It Does:** Technical Analysis has carried a per-tier usage limit since launch, but it was only ever counted in the browser. Refreshing the page reset the count to zero, which meant the limit was, in practice, not a limit. Usage is now recorded against the account on the server, so the allowance is the allowance regardless of how many times a page is reloaded or which device it is opened on.
+
+The Active and Professional numbers were also corrected. The platform now enforces **5 per week** on Beginner, **15 per week** on Casual, **10 per day** on Active and **20 per day** on Professional — which works out to 70 and 140 a week respectively, so each tier up is meaningfully more generous than the one below it.
+
+Watchlist screening is counted separately, on its own smaller daily allowance, because one screen reads live indicators for every stock in the list and costs far more to run than a single stock's analysis. Bundling the two into one counter would have made a forty-five-stock screen look identical in cost to looking up one ticker.
+
+**Tier Availability:** All tiers
+
+**Marketing Angle:** Nothing here is worth announcing on its own, but two things matter for anyone writing pricing or upgrade copy. First, **the numbers on the pricing page are now the numbers the platform enforces** — limits stated in marketing are accurate rather than aspirational, and "10 technical analyses per day" now means exactly that. Second, and worth anticipating: existing users on lower tiers who had been effectively unlimited will begin to encounter their stated limit for the first time. That is the plan working as written, but it will read as new to them, and support should expect the question.
+
+When a limit is reached the platform names the tier, the allowance, the period, and what the next tier up includes — so the moment is an upgrade prompt rather than a dead end.
+
+**Blog/Content Hooks:** None — infrastructure and billing correctness
+
+---
+
+#### Technical Analysis — ATR Stop & Position-Size Calculator
+
+**What It Does:** The Technical Analysis dashboard has always shown the ATR (Average True Range) value and a plain-language read of it — "$2.47, moderate volatility." What it never did was the next step. Every piece of guidance the platform publishes about ATR describes the same workflow: take the ATR, multiply it, subtract it from your entry, and you have a stop that sits outside ordinary daily noise. That arithmetic was left entirely to the user and whatever calculator they had open in another tab.
+
+The ATR card in the Volatility Indicators section is now clickable and opens a calculator. The user enters an entry price, picks a direction (long or short) and an ATR multiple (1.5×, 2×, 2.5× or 3×), and gets back:
+
+- **Stop level and stop distance** — where the stop sits, and how far away that is in both dollars and percent
+- **A trailing stop** — the 22-day "chandelier exit," which trails a fixed ATR multiple below the highest high of the last 22 sessions. It widens automatically when volatility rises and never moves backwards
+- **ATR multiples from entry (1R, 2R, 3R)** — where price would sit having moved one, two or three times the user's own risk in their favour
+- **Position size** — enter an account size and a risk percentage, and it returns the share count that caps the loss at that amount if the stop is hit, along with the capital that position would tie up
+
+The entry price does not have to be typed from memory. If the user already owns the stock, the calculator reads their own portfolio records and offers their average cost, or any individual purchase they have logged, as the starting point. When a position is already held, a separate block shows the dollars genuinely at risk right now at the chosen stop, and whether that stop has risen above their cost — the point at which a trade can no longer lose money.
+
+A new chart sits alongside it plotting the trailing stop against price across the full history, so the ratcheting behaviour is something users can see rather than something they have to take on faith.
+
+**Tier Availability:** All tiers with Technical Analysis access
+
+**Marketing Angle:** This closes a gap between what the platform teaches and what it actually does. Risk management is the part of trading that beginners skip, and the reason is rarely laziness — it is that setting a volatility-scaled stop requires a number they would have to go find, then arithmetic they would have to get right, at exactly the moment they are most eager to just place the trade. Rounding it off to "I'll get out if it drops ten percent" is what happens instead, and a round number bears no relationship to how far the stock in question actually moves in a day.
+
+The positioning matters as much as the feature. This is a calculator, not a recommendation engine. Every input is visible on screen next to its output, the language never says buy or sell, and profit levels are expressed as multiples of the user's own risk rather than as price targets — because "2R" is a statement about their position and "$158.20" reads as a prediction. Nothing is saved to the account or transmitted anywhere. That distinction is defensible in a way that "our platform tells you where to exit" would not be, and it is the same line the rest of the platform already holds.
+
+It also completes the trend and volatility video series, which walks viewers through exactly this workflow. Every one of those videos can now end by pointing at a tool that does what the video just described.
+
+**Blog/Content Hooks:**
+- How to set a stop-loss that isn't a round number — and why round numbers are the problem
+- Position sizing: the one calculation that separates a trading plan from a gamble
+- What traders mean by "R" — and why professionals talk in multiples of risk instead of dollars
+- The chandelier exit explained — a trailing stop that widens when the market gets rough
+- Why a wider stop is not a safer stop
+- Volatility is not direction — what ATR can and cannot tell you
+
+> **Honest limits to carry into content:** The entry price is seeded from the most recent daily close, not a live tick, and the panel says so — users holding a position should enter their actual fill. Position sizing answers one question only: how many shares keep the loss at a set amount if the stop is hit. It does not check buying power, commissions or slippage, though it does warn when the resulting position would need more capital than the account size entered. Open risk is shown for long positions only; the portfolio does not model shorts. And as noted in the transaction-ledger entry above, positions built from multiple purchases *before* that ledger shipped were stored as a single blended average — for those, the calculator can offer average cost but not the individual purchase lots, because that detail was never recorded.
 
 ---
 

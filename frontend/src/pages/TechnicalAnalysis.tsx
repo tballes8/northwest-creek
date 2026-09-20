@@ -440,7 +440,9 @@ const TechnicalAnalysis: React.FC = () => {
 
   const [watchlistMsg, setWatchlistMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [addingToWatchlist, setAddingToWatchlist] = useState(false);
-  const [usageCount, setUsageCount] = useState(0);
+  // Quota is enforced and reported by the server; the browser never counts.
+  // Populated from the 403 detail, same as DCFValuation.tsx.
+  const [limitData, setLimitData] = useState<{ currentUsage: number; maxUsage: number; period: string } | null>(null);
 
   // Trend line drawing state (Moving Averages chart)
   const maChartRef = useRef<any>(null);
@@ -584,12 +586,12 @@ const TechnicalAnalysis: React.FC = () => {
     setAtrLotsTruncated(false);
     setAtrLotsBeforeAdjust(false);
     setShowAtrCalc(false);
+    setLimitData(null);
 
     try {
       const response = await technicalAPI.analyze(symbol.toUpperCase());
       setAnalysisData(response.data);
       loadEntryAnchors(symbol.toUpperCase());
-      setUsageCount(prev => prev + 1);
       
       // API-driven warrant detection — overrides any pre-fetch hint
       const apiType = response.data.security_type || '';
@@ -608,24 +610,23 @@ const TechnicalAnalysis: React.FC = () => {
       }
     } catch (err: any) {
       console.error('Analysis error:', err);
-      setError(err.response?.data?.detail || 'Failed to analyze stock. Please check the ticker symbol.');
+      if (err.response?.status === 403 && err.response?.data?.detail?.current_usage !== undefined) {
+        setLimitData({
+          currentUsage: err.response.data.detail.current_usage,
+          maxUsage: err.response.data.detail.max_usage,
+          period: err.response.data.detail.period,
+        });
+      } else {
+        setError(err.response?.data?.detail || 'Failed to analyze stock. Please check the ticker symbol.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const TIER_LIMITS: Record<string, number> = {
-      beginner: 5, casual: 15, active: 10, professional: 20
-    };
-
-  const tierLimit = TIER_LIMITS[user?.subscription_tier || 'beginner'] || 5;  
 
   const handleAnalyze = async (e: React.FormEvent) => {
       e.preventDefault();
-      if (user && usageCount >= tierLimit) {
-        // Don't call API — the render below will show UpgradeRequired
-        return;
-      }
       await performAnalysis(ticker);
   };
 
@@ -1303,7 +1304,7 @@ const TechnicalAnalysis: React.FC = () => {
   };
 
   // Show upgrade page if user has hit their limit
-  if (user && usageCount >= tierLimit) {
+  if (user && limitData) {
     return (
       <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
         <NavBar currentPage="technical-analysis" user={user} onLogout={handleLogout} />
@@ -1311,8 +1312,8 @@ const TechnicalAnalysis: React.FC = () => {
           feature="Technical Analysis"
           currentTier={user.subscription_tier}
           limitReached={true}
-          currentUsage={usageCount}
-          maxUsage={tierLimit}
+          currentUsage={limitData.currentUsage}
+          maxUsage={limitData.maxUsage}
         />
       </div>
     );

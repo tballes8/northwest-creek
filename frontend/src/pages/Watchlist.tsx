@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { authAPI, watchlistAPI } from '../services/api';
+import { authAPI, watchlistAPI, technicalAPI, WatchlistScreenPreset } from '../services/api';
 import { User } from '../types';
 import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
@@ -14,6 +14,15 @@ import axios from 'axios';
 import { useSectors, SECTOR_COLORS } from '../utils/sectorMap';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
+// The four watchlist screens the backend exposes. Labels say what the screen
+// finds; hints state the actual criteria so the pill is never a black box.
+const SCREEN_PRESETS: { id: WatchlistScreenPreset; label: string; hint: string }[] = [
+  { id: 'oversold', label: 'Oversold', hint: 'RSI below 30 and price below the lower Bollinger Band' },
+  { id: 'overbought', label: 'Overbought', hint: 'RSI above 70 and price above the upper Bollinger Band' },
+  { id: 'strong-uptrend', label: 'Strong Uptrend', hint: 'MACD bullish, price above both the 20- and 50-day SMA' },
+  { id: 'reversal-candidates', label: 'Reversal Candidates', hint: 'RSI below 30 with MACD turning bullish' },
+];
 
 const Watchlist: React.FC = () => {
   const navigate = useNavigate();
@@ -36,6 +45,14 @@ const Watchlist: React.FC = () => {
   const previousPricesRef = useRef<Map<string, number>>(new Map());
 
   // Sorting state
+  // Watchlist screening (Active & Professional). Server-gated and server-metered;
+  // the browser only reflects what the API says.
+  const [screenPreset, setScreenPreset] = useState<WatchlistScreenPreset | null>(null);
+  const [screenTickers, setScreenTickers] = useState<Set<string> | null>(null);
+  const [screenCriteria, setScreenCriteria] = useState<string>('');
+  const [screening, setScreening] = useState(false);
+  const [screenError, setScreenError] = useState<string>('');
+
   const [sortField, setSortField] = useState<string>('');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
@@ -350,6 +367,35 @@ const Watchlist: React.FC = () => {
   // Resolve sectors from the backend so they match the Company Details panel.
   const getSector = useSectors(useMemo(() => watchlist.map(w => w.ticker), [watchlist]));
 
+  const clearScreen = () => {
+    setScreenPreset(null);
+    setScreenTickers(null);
+    setScreenCriteria('');
+    setScreenError('');
+  };
+
+  const runScreen = async (preset: WatchlistScreenPreset) => {
+    if (screenPreset === preset) { clearScreen(); return; }
+    setScreening(true);
+    setScreenError('');
+    try {
+      const { data } = await technicalAPI.screenWatchlist(preset);
+      setScreenPreset(preset);
+      setScreenTickers(new Set(data.matches.map(m => m.ticker.toUpperCase())));
+      setScreenCriteria(data.filters_applied || '');
+    } catch (err: any) {
+      // Tier and quota refusals both arrive as a 403 with a `message` detail.
+      const detail = err.response?.data?.detail;
+      setScreenError(
+        typeof detail === 'string' ? detail : detail?.message || 'Screen failed. Please try again.'
+      );
+      setScreenPreset(null);
+      setScreenTickers(null);
+    } finally {
+      setScreening(false);
+    }
+  };
+
   const sortedWatchlist = useMemo(() => {
     if (!sortField) return watchlist;
     return [...watchlist].sort((a, b) => {
@@ -392,6 +438,11 @@ const Watchlist: React.FC = () => {
     });
   }, [watchlist, sortField, sortDirection, prices, getSector]);
 
+  const visibleWatchlist = useMemo(
+    () => (screenTickers ? sortedWatchlist.filter(s => screenTickers.has(s.ticker.toUpperCase())) : sortedWatchlist),
+    [sortedWatchlist, screenTickers]
+  );
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 dark:bg-gray-800 flex items-center justify-center transition-colors duration-200">
@@ -402,6 +453,10 @@ const Watchlist: React.FC = () => {
       </div>
     );
   }
+
+  // Mirrors WATCHLIST_SCREEN_MIN_TIERS on the backend. The server is the gate;
+  // this only decides whether to show the buttons or the upsell.
+  const canScreen = user?.subscription_tier === 'active' || user?.subscription_tier === 'professional';
 
   const watchlistLimits: Record<string, number> = { beginner: 10, casual: 20, active: 45, professional: 75 };
   const watchlistLimit = watchlistLimits[user?.subscription_tier || 'beginner'] || 10;
@@ -565,6 +620,67 @@ const Watchlist: React.FC = () => {
             </button>
           </div>
         ) : (
+          <>
+          {/* ── Screen my watchlist ──────────────────────────────────────
+              These screen YOUR watchlist by live RSI/MACD/SMA/Bollinger — they
+              are not the market-wide screener presets on the Stocks page. */}
+          <div className="mb-6 bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 border dark:border-gray-500 p-4">
+            <div className="flex flex-wrap items-center gap-3 mb-1">
+              <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">Screen my watchlist:</span>
+              {canScreen ? (
+                SCREEN_PRESETS.map(preset => (
+                  <button
+                    key={preset.id}
+                    onClick={() => runScreen(preset.id)}
+                    disabled={screening}
+                    title={preset.hint}
+                    className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                      screenPreset === preset.id
+                        ? 'bg-primary-600 text-white border-primary-600 dark:bg-primary-500 dark:border-primary-500'
+                        : 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-500 hover:border-primary-400 dark:hover:border-primary-400'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))
+              ) : (
+                <span className="text-sm text-gray-500 dark:text-gray-400">
+                  Find the oversold, overbought, trending and reversing names in your own list —
+                  available on the <span className="font-semibold text-teal-600 dark:text-teal-400">Active</span> and{' '}
+                  <span className="font-semibold text-teal-600 dark:text-teal-400">Professional</span> plans.
+                </span>
+              )}
+              {screenPreset && (
+                <button
+                  onClick={clearScreen}
+                  className="px-3 py-1.5 rounded-full text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                >
+                  ✕ Clear
+                </button>
+              )}
+            </div>
+
+            {screening && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                Screening {watchlist.length} {watchlist.length === 1 ? 'stock' : 'stocks'}…
+              </p>
+            )}
+
+            {screenError && (
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-2">{screenError}</p>
+            )}
+
+            {screenPreset && !screening && !screenError && (
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                <span className="font-semibold text-gray-700 dark:text-gray-300">
+                  {visibleWatchlist.length} of {watchlist.length} match
+                </span>
+                {screenCriteria && <> — {screenCriteria}</>}
+                . A screen is a condition, not a trade instruction.
+              </p>
+            )}
+          </div>
+
           <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 border dark:border-gray-500 overflow-hidden">
             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
               <thead className="bg-gray-50 dark:bg-gray-900">
@@ -598,7 +714,17 @@ const Watchlist: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-700 divide-y divide-gray-200 dark:divide-gray-600">
-                {sortedWatchlist.map((stock) => (
+                {screenPreset && visibleWatchlist.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="px-6 py-10 text-center text-gray-500 dark:text-gray-400">
+                      No stocks in your watchlist match this screen right now.
+                      <button onClick={clearScreen} className="ml-2 text-primary-600 dark:text-primary-400 font-medium hover:underline">
+                        Show all
+                      </button>
+                    </td>
+                  </tr>
+                )}
+                {visibleWatchlist.map((stock) => (
                   <tr key={stock.id} className="hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <button
@@ -738,6 +864,7 @@ const Watchlist: React.FC = () => {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 
