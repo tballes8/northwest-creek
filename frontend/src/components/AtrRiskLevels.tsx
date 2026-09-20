@@ -88,8 +88,6 @@ const num = (v: string): number | null => {
 
 // ─── Styling (matches TechnicalAnalysis.tsx) ─────────────────────────────
 
-const CARD =
-  'bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500';
 const INPUT =
   'w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-white';
 const LABEL = 'block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1';
@@ -282,17 +280,12 @@ const AtrRiskLevels: React.FC<Props> = ({
 
   const heldButShort = !!position && position.quantity > 0 && direction === 'short';
 
-  // ── Null state: say why, don't hide the card ──────────────────────────
+  // ── Null state: say why, don't render an empty calculator ─────────────
   if (!atr?.value || !atrRisk) {
     return (
-      <div id="chart-atr-risk" className={CARD}>
-        <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-          📐 ATR Stop &amp; Position-Size Calculator
-        </h4>
-        <p className="text-sm text-gray-600 dark:text-gray-400">
-          Not enough price history — the 22-bar trailing stop needs at least 22 sessions.
-        </p>
-      </div>
+      <p className="text-sm text-gray-600 dark:text-gray-400">
+        Not enough price history — the 22-bar trailing stop needs at least 22 sessions.
+      </p>
     );
   }
 
@@ -300,10 +293,7 @@ const AtrRiskLevels: React.FC<Props> = ({
   const anchorPoint = direction === 'long' ? atrRisk.highest_high : atrRisk.lowest_low;
 
   return (
-    <div id="chart-atr-risk" className={CARD}>
-      <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-        📐 ATR Stop &amp; Position-Size Calculator
-      </h4>
+    <div>
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
         Arithmetic on the current ATR. These are volatility distances from a price you enter — not
         entry or exit recommendations. The platform doesn&apos;t know your timeframe or your risk
@@ -614,4 +604,42 @@ const AtrRiskLevels: React.FC<Props> = ({
   );
 };
 
-export default AtrRiskLevels;
+// ─── Modal shell (matches TrueVwapModal) ─────────────────────────────────
+
+const AtrRiskModal: React.FC<Props & { onClose: () => void }> = ({ onClose, ...props }) => (
+  <div
+    className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4"
+    onClick={onClose}
+  >
+    <div
+      className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl flex flex-col overflow-hidden"
+      style={{ maxHeight: '85vh' }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 shrink-0">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+            📐 ATR Stop &amp; Position-Size Calculator — {props.ticker}
+          </h2>
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            Volatility distances, not recommendations
+          </span>
+        </div>
+        <button
+          onClick={onClose}
+          aria-label="Close calculator"
+          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+        >
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-6 py-4">
+        <AtrRiskLevels {...props} />
+      </div>
+    </div>
+  </div>
+);
+
+export default AtrRiskModal;

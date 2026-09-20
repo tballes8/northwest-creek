@@ -6,7 +6,7 @@ import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
 import UpgradeRequired from '../components/UpgradeRequired';
 import EntityTrustBlock from '../components/EntityTrustBlock';
-import AtrRiskLevels, { AtrRisk } from '../components/AtrRiskLevels';
+import AtrRiskModal, { AtrRisk } from '../components/AtrRiskLevels';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -354,7 +354,7 @@ const chartTargetForIndicator = (indicator: string): { chartId: string; category
   if (name.includes('cci')) return { chartId: 'chart-cci', category: 'momentum' };
   if (name.includes('roc') || name.includes('rate of change')) return { chartId: 'chart-roc', category: 'momentum' };
   // Volatility indicators
-  if (name.includes('atr') || name.includes('average true range')) return { chartId: 'chart-atr-risk', category: 'volatility' };
+  if (name.includes('atr') || name.includes('average true range')) return { chartId: 'chart-atr', category: 'volatility' };
   if (name.includes('keltner')) return { chartId: 'chart-keltner', category: 'volatility' };
   if (name.includes('std') || name.includes('standard dev')) return { chartId: 'chart-volatility-summary', category: 'volatility' };
   // Trend indicators
@@ -381,6 +381,7 @@ const TechnicalAnalysis: React.FC = () => {
   const [atrLots, setAtrLots] = useState<PortfolioTransaction[]>([]);
   const [atrLotsTruncated, setAtrLotsTruncated] = useState(false);
   const [atrLotsBeforeAdjust, setAtrLotsBeforeAdjust] = useState(false);
+  const [showAtrCalc, setShowAtrCalc] = useState(false);
   const [error, setError] = useState('');
   const [isWarrant, setIsWarrant] = useState(false);
   const [relatedCommonStock, setRelatedCommonStock] = useState<string | null>(null);
@@ -582,6 +583,7 @@ const TechnicalAnalysis: React.FC = () => {
     setAtrLots([]);
     setAtrLotsTruncated(false);
     setAtrLotsBeforeAdjust(false);
+    setShowAtrCalc(false);
 
     try {
       const response = await technicalAPI.analyze(symbol.toUpperCase());
@@ -2450,8 +2452,17 @@ const TechnicalAnalysis: React.FC = () => {
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">🌊 Volatility Indicators</h3>
                 {/* Volatility summary */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* ATR card — clickable, opens the stop & position-size calculator */}
+                  <div
+                    className="bg-white dark:bg-gray-700 rounded-lg shadow dark:shadow-gray-200/20 p-4 border-2 border-teal-500 dark:border-teal-600 cursor-pointer hover:ring-2 hover:ring-teal-500 transition-all"
+                    onClick={() => setShowAtrCalc(true)}
+                  >
+                    <h4 className="font-bold text-gray-900 dark:text-white mb-1">ATR</h4>
+                    <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 mb-2">{analysisData.indicators.atr?.volatility || 'N/A'}</span>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{analysisData.indicators.atr?.description || 'N/A'}</p>
+                    <p className="text-xs text-teal-500 dark:text-teal-400 mt-2 font-medium">Open stop &amp; position-size calculator →</p>
+                  </div>
                   {[
-                    { label: 'ATR', desc: analysisData.indicators.atr?.description, badge: analysisData.indicators.atr?.volatility },
                     { label: 'Keltner', desc: analysisData.indicators.keltner?.description, badge: analysisData.indicators.keltner?.position?.replace('_', ' ') },
                     { label: 'Std Dev', desc: analysisData.indicators.std_dev?.description, badge: analysisData.indicators.std_dev?.percent ? `${analysisData.indicators.std_dev.percent}%` : 'N/A' },
                   ].map(item => (
@@ -2462,18 +2473,6 @@ const TechnicalAnalysis: React.FC = () => {
                     </div>
                   ))}
                 </div>
-                {/* ATR stop & position-size calculator (click target for the ATR signal row) */}
-                <AtrRiskLevels
-                  atr={analysisData.indicators.atr}
-                  atrRisk={analysisData.indicators.atr_risk}
-                  currentPrice={analysisData.current_price}
-                  analysisDate={analysisData.analysis_date}
-                  ticker={analysisData.ticker}
-                  position={atrPosition}
-                  lots={atrLots}
-                  lotsTruncated={atrLotsTruncated}
-                  lotsBeforeAdjust={atrLotsBeforeAdjust}
-                />
                 {/* Chandelier trailing stop (price scale — the ATR chart's axis is in ATR units) */}
                 <div id="chart-atr-stop" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                   <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ATR Trailing Stop (Chandelier Exit)</h4>
@@ -2695,6 +2694,20 @@ const TechnicalAnalysis: React.FC = () => {
       </div>
       {showTrueVwap && ticker && (
         <TrueVwapModal ticker={ticker} onClose={() => setShowTrueVwap(false)} />
+      )}
+      {showAtrCalc && analysisData && (
+        <AtrRiskModal
+          atr={analysisData.indicators.atr}
+          atrRisk={analysisData.indicators.atr_risk}
+          currentPrice={analysisData.current_price}
+          analysisDate={analysisData.analysis_date}
+          ticker={analysisData.ticker}
+          position={atrPosition}
+          lots={atrLots}
+          lotsTruncated={atrLotsTruncated}
+          lotsBeforeAdjust={atrLotsBeforeAdjust}
+          onClose={() => setShowAtrCalc(false)}
+        />
       )}
       <BackToTop />
     </div>
