@@ -376,6 +376,63 @@ class TechnicalIndicators:
         }
 
     @staticmethod
+    def calculate_atr_risk_levels(highs, lows, closes, atr_period=14, lookback=22, multiplier=3.0):
+        """
+        Chandelier exit — an ATR-scaled trailing stop.
+
+        Long stop  = highest high over `lookback` bars − multiplier × ATR
+        Short stop = lowest low  over `lookback` bars + multiplier × ATR
+
+        Entry-independent by construction: every number here comes from the price
+        series alone. The entry-relative arithmetic (fixed stop, R-multiples,
+        share count) is the caller's and lives in the browser, so it recomputes
+        on keystroke without a refetch and exists in exactly one language.
+
+        `lookback` is never shrunk to fit a short series — a "22-bar chandelier"
+        computed over 19 bars is a different number wearing the same label, so a
+        series too short for either window returns None and the UI says why.
+
+        Non-directional: produces no signal row and feeds no score. `wide_stop`
+        describes THIS chandelier at its own multiplier; a caller using a
+        different multiple for a fixed stop computes its own.
+        """
+        if len(closes) < max(atr_period + 1, lookback): return None
+        atr = TechnicalIndicators.calculate_atr(highs, lows, closes, atr_period)
+        if not atr or atr.get("value") is None: return None
+
+        # A bar has a level once BOTH windows are full; before that it stays None
+        # so Chart.js starts the line late, exactly as SMA-200 does today.
+        hist = atr["history"]
+        warmup = max(atr_period - 1, lookback - 1)
+        long_h, short_h = [], []
+        for i in range(len(closes)):
+            a = hist[i] if i < len(hist) else None
+            if i < warmup or a is None:
+                long_h.append(None); short_h.append(None)
+            else:
+                hh = max(highs[i-lookback+1:i+1]); ll = min(lows[i-lookback+1:i+1])
+                long_h.append(round(hh - multiplier * a, 2))
+                short_h.append(round(ll + multiplier * a, 2))
+
+        a, cp = atr["value"], closes[-1]
+        cl, cs = long_h[-1], short_h[-1]
+        # Signed, so a stop sitting the wrong side of the close reads negative
+        # rather than silently looking like a normal distance.
+        ld = round((cp - cl) / cp * 100, 2) if cp > 0 else None
+        sd = round((cs - cp) / cp * 100, 2) if cp > 0 else None
+        return {
+            "atr": a, "atr_percent": atr["percent"],
+            "lookback": lookback, "multiplier": multiplier,
+            "highest_high": round(max(highs[-lookback:]), 2),
+            "lowest_low": round(min(lows[-lookback:]), 2),
+            "chandelier_long": cl, "chandelier_short": cs,
+            "long_stop_distance_percent": ld, "short_stop_distance_percent": sd,
+            "wide_stop": bool(cp > 0 and (multiplier * a) / cp >= 0.25),
+            "description": f"{lookback}-bar chandelier: ${cl:.2f} long / ${cs:.2f} short ({multiplier:g}× ATR of ${a:.2f})",
+            "chandelier_long_history": long_h, "chandelier_short_history": short_h
+        }
+
+    @staticmethod
     def calculate_keltner_channels(highs, lows, closes, ema_period=20, atr_period=10, multiplier=2.0):
         """Keltner Channels — EMA ± ATR multiplier."""
         if len(closes) < max(ema_period, atr_period) + 1: return None
@@ -627,6 +684,7 @@ class TechnicalIndicators:
             ("roc", lambda: self.calculate_roc(closes)),
             ("roc_divergence", lambda: self.calculate_roc_divergence(highs, lows, closes)),
             ("atr", lambda: self.calculate_atr(highs, lows, closes)),
+            ("atr_risk", lambda: self.calculate_atr_risk_levels(highs, lows, closes)),
             ("keltner", lambda: self.calculate_keltner_channels(highs, lows, closes)),
             ("std_dev", lambda: self.calculate_std_dev(closes)),
             ("parabolic_sar", lambda: self.calculate_parabolic_sar(highs, lows, closes)),
@@ -741,7 +799,7 @@ def build_signal_rows(rsi, macd_data, ma_data, bb_data, current_price, advanced=
     Each row carries a "scored" flag. Scored rows use the same indicators and
     thresholds as generate_summary(), so they reconcile with the outlook's
     "X of N indicators" count (X = bullish scored rows, N = non-neutral scored
-    rows). Unscored rows (ROC divergence, A/D Line, Keltner, Donchian) are
+    rows). Unscored rows (ROC divergence, A/D Line, Keltner, Donchian, ATR) are
     informational only and intentionally do NOT contribute to that count — a
     mismatch between total rows and N is expected, not a bug.
 
@@ -919,6 +977,18 @@ def build_signal_rows(rsi, macd_data, ma_data, bb_data, current_price, advanced=
             rows.append({"type": "bullish", "indicator": "Keltner Channels", "message": "Below the lower Keltner channel — stretched low for its recent volatility."})
         else:
             rows.append({"type": "neutral", "indicator": "Keltner Channels", "message": "Within the Keltner channels — normal volatility range."})
+
+    # ── ATR (volatility scale — informational, no direction) ──────────
+    atr_data = advanced.get("atr")
+    if atr_data and isinstance(atr_data, dict) and atr_data.get("value") is not None:
+        vol, pct, val = atr_data.get("volatility"), atr_data.get("percent"), atr_data["value"]
+        if vol in ("high", "very_high"):
+            msg = f"Wide daily range — ATR ${val:.2f} is {pct:.1f}% of price, so ordinary sessions cover a lot of ground."
+        elif vol == "low":
+            msg = f"Tight daily range — ATR ${val:.2f} ({pct:.1f}% of price); recent sessions have been quiet."
+        else:
+            msg = f"Typical daily range — ATR ${val:.2f} ({pct:.1f}% of price)."
+        rows.append({"type": "neutral", "indicator": "ATR", "message": msg})
 
     # ── Donchian Channels (20-day high/low range) ─────────────────────
     dc_data = advanced.get("donchian")
@@ -1132,3 +1202,100 @@ def generate_summary(rsi, macd_data, ma_data, bb_data, current_price, advanced=N
         "breakdown": breakdown,
         "price_range": price_range,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Self-test — offline, no network, no DB.
+#
+#   python -m app.services.technical_indicators --selftest
+#
+# Covers calculate_atr_risk_levels only: it is the one function here whose
+# output people size real positions against, and this repo has no test suite.
+# ═══════════════════════════════════════════════════════════════════════════
+
+def _ramp(n=40):
+    """Closes 100..100+n-1 with a constant $2 true range, so ATR is exactly 2.00."""
+    closes = [100.0 + i for i in range(n)]
+    return [c + 1 for c in closes], [c - 1 for c in closes], closes
+
+
+def _selftest() -> int:
+    ti = TechnicalIndicators
+
+    # ── The hand-checkable case ───────────────────────────────────────
+    # Every TR is 2.0, so ATR = 2.00 exactly and the levels are arithmetic.
+    highs, lows, closes = _ramp(40)
+    r = ti.calculate_atr_risk_levels(highs, lows, closes)
+    assert r is not None
+    assert r["atr"] == 2.0, r["atr"]
+    assert r["highest_high"] == 140.0, r            # highs[39] = 139 + 1
+    assert r["lowest_low"] == 117.0, r              # lows[18]  = 118 - 1
+    assert r["chandelier_long"] == 134.0, r         # 140 - 3 x 2
+    assert r["chandelier_short"] == 123.0, r        # 117 + 3 x 2
+    assert r["long_stop_distance_percent"] == 3.6, r   # (139-134)/139
+    # Negative on purpose: in a strong uptrend the short-side chandelier sits
+    # BELOW the close, and a signed distance says so instead of hiding it.
+    assert r["short_stop_distance_percent"] == -11.51, r  # (123-139)/139
+    assert r["wide_stop"] is False, r
+    assert r["lookback"] == 22 and r["multiplier"] == 3.0
+
+    # The identity must hold regardless of the numbers above.
+    assert r["chandelier_long"] == round(r["highest_high"] - 3 * r["atr"], 2)
+    assert r["chandelier_short"] == round(r["lowest_low"] + 3 * r["atr"], 2)
+
+    # ── History alignment: full length, 21 leading Nones (max(14-1, 22-1)) ──
+    lh, sh = r["chandelier_long_history"], r["chandelier_short_history"]
+    assert len(lh) == len(closes) == len(sh), (len(lh), len(closes))
+    assert lh[:21] == [None] * 21 and lh[21] is not None, lh[:23]
+    assert sh[:21] == [None] * 21 and sh[21] is not None
+    assert lh[-1] == r["chandelier_long"], "last history bar must equal the summary"
+    assert sh[-1] == r["chandelier_short"]
+
+    # ── Too short: never shrink the window to fit ─────────────────────
+    h21, l21, c21 = _ramp(21)
+    assert ti.calculate_atr_risk_levels(h21, l21, c21) is None, "21 bars < 22-bar lookback"
+    h22, l22, c22 = _ramp(22)
+    r22 = ti.calculate_atr_risk_levels(h22, l22, c22)
+    assert r22 is not None and r22["chandelier_long_history"][21] is not None, "22 bars is the floor"
+
+    # ── Flat/halted series: ATR 0, so the stop sits on the high itself ──
+    flat = [100.0] * 40
+    rf = ti.calculate_atr_risk_levels(flat, flat, flat)
+    assert rf["atr"] == 0.0, rf
+    assert rf["chandelier_long"] == rf["highest_high"] == 100.0, rf
+    assert rf["chandelier_short"] == rf["lowest_low"] == 100.0, rf
+
+    # ── Low-priced, high-volatility name: wide_stop fires ─────────────
+    rw = ti.calculate_atr_risk_levels([3.5] * 40, [2.5] * 40, [3.0] * 40)
+    assert rw["atr"] == 1.0, rw
+    assert rw["wide_stop"] is True, rw               # 3 x 1.00 / 3.00 = 100% of price
+
+    # ── Wired into the batch, and stripped of history by the endpoint ──
+    adv = ti().calculate_all_advanced(highs, lows, closes, [1_000_000.0] * 40)
+    assert adv.get("atr_risk") is not None, "not registered in calculate_all_advanced"
+    assert adv["atr_risk"]["chandelier_long"] == 134.0
+
+    # ── The ATR signal row: present, neutral, and never scored ────────
+    rows = build_signal_rows(None, None, {"sma_20": None, "sma_50": None, "sma_200": None},
+                             None, closes[-1], adv)
+    atr_rows = [x for x in rows if x["indicator"] == "ATR"]
+    assert len(atr_rows) == 1, rows
+    assert atr_rows[0]["type"] == "neutral", atr_rows
+    assert atr_rows[0]["scored"] is False, "ATR is non-directional and must not feed the outlook"
+    assert "$" in atr_rows[0]["message"] and "stop" not in atr_rows[0]["message"].lower(),         "the signals panel states a condition, never a stop level"
+
+    # ── The outlook must be untouched by any of this ──────────────────
+    summary = generate_summary(None, None, {"sma_20": None, "sma_50": None, "sma_200": None},
+                               None, closes[-1], adv)
+    assert not any(b["indicator"] == "ATR" for b in summary["breakdown"]), summary["breakdown"]
+
+    print("technical_indicators selftest: OK")
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "--selftest":
+        raise SystemExit(_selftest())
+    print("usage: python -m app.services.technical_indicators --selftest")
+    raise SystemExit(2)

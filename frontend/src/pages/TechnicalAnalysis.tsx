@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { authAPI, technicalAPI, watchlistAPI, financialsAPI, intradayAPI, isEntityContradicted } from '../services/api';
-import { User } from '../types';
+import { authAPI, technicalAPI, watchlistAPI, financialsAPI, intradayAPI, portfolioAPI, PortfolioTransaction, isEntityContradicted } from '../services/api';
+import { User, PortfolioPosition } from '../types';
 import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
 import UpgradeRequired from '../components/UpgradeRequired';
 import EntityTrustBlock from '../components/EntityTrustBlock';
+import AtrRiskLevels, { AtrRisk } from '../components/AtrRiskLevels';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -86,6 +87,7 @@ interface TechnicalAnalysisData {
     cci?: { value: number; signal: string; description: string } | null;
     roc?: { value: number; signal: string; description: string } | null;
     atr?: { value: number; percent: number; volatility: string; description: string } | null;
+    atr_risk?: AtrRisk | null;
     keltner?: { upper: number; middle: number; lower: number; position: string; description: string } | null;
     std_dev?: { value: number; percent: number; description: string } | null;
     parabolic_sar?: { value: number; trend: string; description: string } | null;
@@ -127,6 +129,8 @@ interface TechnicalAnalysisData {
     cci?: number | null;
     roc?: number | null;
     atr?: number | null;
+    chandelier_long?: number | null;
+    chandelier_short?: number | null;
     keltner_upper?: number | null;
     keltner_middle?: number | null;
     keltner_lower?: number | null;
@@ -350,7 +354,7 @@ const chartTargetForIndicator = (indicator: string): { chartId: string; category
   if (name.includes('cci')) return { chartId: 'chart-cci', category: 'momentum' };
   if (name.includes('roc') || name.includes('rate of change')) return { chartId: 'chart-roc', category: 'momentum' };
   // Volatility indicators
-  if (name.includes('atr') || name.includes('average true range')) return { chartId: 'chart-atr', category: 'volatility' };
+  if (name.includes('atr') || name.includes('average true range')) return { chartId: 'chart-atr-risk', category: 'volatility' };
   if (name.includes('keltner')) return { chartId: 'chart-keltner', category: 'volatility' };
   if (name.includes('std') || name.includes('standard dev')) return { chartId: 'chart-volatility-summary', category: 'volatility' };
   // Trend indicators
@@ -371,6 +375,12 @@ const TechnicalAnalysis: React.FC = () => {
   const [ticker, setTicker] = useState(urlTicker);
   const [loading, setLoading] = useState(false);
   const [analysisData, setAnalysisData] = useState<TechnicalAnalysisData | null>(null);
+  // Entry anchors for the ATR calculator. Best-effort: a failure here leaves
+  // the calculator seeded from the last close and is never surfaced as an error.
+  const [atrPosition, setAtrPosition] = useState<PortfolioPosition | null>(null);
+  const [atrLots, setAtrLots] = useState<PortfolioTransaction[]>([]);
+  const [atrLotsTruncated, setAtrLotsTruncated] = useState(false);
+  const [atrLotsBeforeAdjust, setAtrLotsBeforeAdjust] = useState(false);
   const [error, setError] = useState('');
   const [isWarrant, setIsWarrant] = useState(false);
   const [relatedCommonStock, setRelatedCommonStock] = useState<string | null>(null);
@@ -513,6 +523,46 @@ const TechnicalAnalysis: React.FC = () => {
     }
   };
 
+  // Entry anchors for the ATR calculator, read from the portfolio ledger.
+  // Fire-and-forget: never blocks the page and never raises. The ledger is
+  // append-only, so the current holding is whatever sits at or after the most
+  // recent ADJUST checkpoint — buys before it are real history but no longer
+  // describe this position, and offering one as "your entry" would be wrong.
+  const loadEntryAnchors = async (symbol: string) => {
+    const [posRes, txRes] = await Promise.allSettled([
+      portfolioAPI.getAll(),
+      portfolioAPI.getTransactions({ ticker: symbol, limit: 100 }),
+    ]);
+
+    let held: PortfolioPosition | null = null;
+    if (posRes.status === 'fulfilled') {
+      const rows: PortfolioPosition[] = posRes.value.data?.positions ?? posRes.value.data ?? [];
+      held = Array.isArray(rows)
+        ? rows.find(r => r.ticker?.toUpperCase() === symbol) ?? null
+        : null;
+      setAtrPosition(held);
+    }
+
+    if (txRes.status !== 'fulfilled') return;
+    const { transactions = [], total = 0 } = txRes.value.data ?? {};
+    // Composite sort key: trade date first, created_at only as a tiebreak.
+    // Both are lexicographically sortable, so string compare is the right order.
+    const keyOf = (t: PortfolioTransaction) => t.transaction_date + '#' + t.created_at;
+    const checkpoint = transactions
+      .filter(t => t.transaction_type === 'ADJUST')
+      .map(keyOf)
+      .sort()
+      .pop();
+
+    const buys = transactions.filter(t => t.transaction_type === 'BUY' && !t.is_voided);
+    const current = checkpoint ? buys.filter(t => keyOf(t) >= checkpoint) : buys;
+    current.sort((a, b) => keyOf(b).localeCompare(keyOf(a)));
+
+    setAtrLots(current);
+    setAtrLotsTruncated(total > transactions.length);
+    setAtrLotsBeforeAdjust(current.length === 0 && buys.length > 0);
+  };
+
   const performAnalysis = async (symbol: string) => {
     if (!symbol.trim()) {
       setError('Please enter a ticker symbol');
@@ -528,10 +578,15 @@ const TechnicalAnalysis: React.FC = () => {
     setAiSummary(null);
     setAiGeneratedAt(null);
     resetFinancialsAi();
+    setAtrPosition(null);
+    setAtrLots([]);
+    setAtrLotsTruncated(false);
+    setAtrLotsBeforeAdjust(false);
 
     try {
       const response = await technicalAPI.analyze(symbol.toUpperCase());
       setAnalysisData(response.data);
+      loadEntryAnchors(symbol.toUpperCase());
       setUsageCount(prev => prev + 1);
       
       // API-driven warrant detection — overrides any pre-fetch hint
@@ -1850,7 +1905,7 @@ const TechnicalAnalysis: React.FC = () => {
               <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Trading Signals</h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                  The outlook above is scored from the <span className="text-teal-600 dark:text-teal-400 font-medium">teal-bordered</span> indicators (trend indicators count double). Cards without a border — ROC, A/D Line, Keltner, Donchian — are informational and don't affect the score.
+                  The outlook above is scored from the <span className="text-teal-600 dark:text-teal-400 font-medium">teal-bordered</span> indicators (trend indicators count double). Cards without a border — ROC, A/D Line, Keltner, Donchian, ATR — are informational and don't affect the score.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {analysisData.signals.map((signal, index) => (
@@ -2406,6 +2461,34 @@ const TechnicalAnalysis: React.FC = () => {
                       <p className="text-xs text-gray-500 dark:text-gray-400">{item.desc || 'N/A'}</p>
                     </div>
                   ))}
+                </div>
+                {/* ATR stop & position-size calculator (click target for the ATR signal row) */}
+                <AtrRiskLevels
+                  atr={analysisData.indicators.atr}
+                  atrRisk={analysisData.indicators.atr_risk}
+                  currentPrice={analysisData.current_price}
+                  analysisDate={analysisData.analysis_date}
+                  ticker={analysisData.ticker}
+                  position={atrPosition}
+                  lots={atrLots}
+                  lotsTruncated={atrLotsTruncated}
+                  lotsBeforeAdjust={atrLotsBeforeAdjust}
+                />
+                {/* Chandelier trailing stop (price scale — the ATR chart's axis is in ATR units) */}
+                <div id="chart-atr-stop" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
+                  <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-2">ATR Trailing Stop (Chandelier Exit)</h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">The chandelier exit trails a stop at a fixed ATR multiple from the highest high (long) or lowest low (short) of the last 22 sessions. It widens automatically when volatility rises and ratchets in the direction of the trend without ever moving back. It is a level derived from price and volatility, not a signal — it says nothing about direction and implies nothing about where price will go.</p>
+                  <div className="relative" style={{ height: '350px' }}>
+                    {clearLineButton}
+                    <Line data={{
+                      labels: analysisData.chart_data.map(d => d.date),
+                      datasets: [
+                        { label: 'Price', data: analysisData.chart_data.map(d => d.close), borderColor: 'rgb(59, 130, 246)', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: false },
+                        { label: 'Chandelier Long', data: analysisData.chart_data.map(d => d.chandelier_long), borderColor: 'rgb(34, 197, 94)', borderWidth: 1.5, pointRadius: 0, tension: 0.1, borderDash: [4,4], fill: false },
+                        { label: 'Chandelier Short', data: analysisData.chart_data.map(d => d.chandelier_short), borderColor: 'rgb(239, 68, 68)', borderWidth: 1.5, pointRadius: 0, tension: 0.1, borderDash: [4,4], fill: false },
+                      ]
+                    }} options={chartOptions} plugins={[verticalLinePlugin]} />
+                  </div>
                 </div>
                 {/* ATR Chart */}
                 <div id="chart-atr" className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">

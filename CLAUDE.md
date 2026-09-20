@@ -48,7 +48,7 @@ API docs: `http://localhost:8000/api/v1/docs`
 | `portfolio.py` | `/portfolio` | CRUD |
 | `alerts.py` | `/alerts` | price alerts, SMS support |
 | `technical_alerts.py` | `/technical-alerts` | JSONB config per alert type |
-| `technical_analysis.py` | `/technical-analysis` | TA-Lib calculations |
+| `technical_analysis.py` | `/technical-analysis` | indicator calculations, ATR risk levels |
 | `dcf_valuation.py` | `/dcf` | `/suggestions/{ticker}` + `/calculate/{ticker}` |
 | `financials.py` | `/financials` | full company financials payload |
 | `stripe_payments.py` | `/stripe` | subscription create/cancel/status |
@@ -74,7 +74,9 @@ API docs: `http://localhost:8000/api/v1/docs`
 - `email_service.py` — **the single outbound email path.** Every email (verification, password reset, payment, alerts) goes through `EmailService.send_email()`, which posts to Postmark and returns `bool`. It is synchronous by design: async callers wrap it in `asyncio.to_thread`. Never construct a provider client elsewhere — route new email through here so there stays one place to swap providers.
 - `alert_checker.py` — subscribes to the WebSocket price stream; on each tick, checks `PriceAlert` rows and triggers email + SMS when crossed. **Alerts are one-shot**, so `triggered_at`/`is_active=False` is only set once a notification actually reached the user; if every channel fails the alert stays armed and retries after `NOTIFY_RETRY_SECONDS`. `technical_alert_checker.py` does the same by holding `last_state` at its pre-transition value.
 - `websocket_service.py` — manages per-ticker subscriber lists; broadcasts price ticks to connected frontend clients.
-- `technical_indicators.py` — TA-Lib based calculations (RSI, MACD, Bollinger Bands, etc.). CPU-bound; called via `/technical-analysis/analyze/{ticker}`.
+- `technical_indicators.py` — hand-rolled pandas/numpy calculations (RSI, MACD, Bollinger Bands, etc.). **No TA-Lib** — there is no such dependency; don't reach for it. CPU-bound; called via `/technical-analysis/analyze/{ticker}`.
+  `calculate_atr_risk_levels` is the chandelier exit (22-bar high − 3×ATR, and the short mirror) backing the ATR stop calculator. It is **entry-independent by design**: everything that depends on a user-supplied entry price (fixed stop, R-multiples, share count) lives in `components/AtrRiskLevels.tsx` so it recomputes on keystroke without a refetch and the formula exists in exactly one language. Don't add a server-side entry price. `lookback` is never shrunk to fit a short series — too few bars returns `None` and the UI says why.
+  Pure and offline-testable: `python -m app.services.technical_indicators --selftest`.
 - `stock_analyzer.py` — Anthropic API calls for AI price targets and company analysis.
 - `edgar_client.py` — **the single place that talks to sec.gov / data.sec.gov.** Owns one lifespan-managed httpx client, one 8 req/sec throttle and one `SEC_USER_AGENT` (SEC returns 403 without a UA naming the app and a contact email). Its limit is per-IP, so every EDGAR reader must share this throttle rather than keep its own. Use `edgar_get()`; it returns 404s as a data condition and raises `PermissionError` on 403.
 - `edgar_identity.py` — **entity identity, resolved once and gated everywhere.** A ticker is a mutable label; FMP keys on the label, so it can serve one entity's filings under another's symbol (confirmed for `TE`). CIK is the identity and EDGAR is the authority. `get_company_financials` resolves the ticker through `resolve_ticker_cik()` in the same `asyncio.gather` as the FMP calls and attaches one verdict as `entity_trust`. Tri-state: `match` proceeds, `contradiction` is a hard block, `cannot_resolve` **never blocks** (funds/ETFs are absent from `company_tickers.json` and new registrants lag it). On a contradiction the service nulls every entity-scoped key (`_ENTITY_SCOPED_KEYS`) at source, so all consumers suppress together. Never re-derive identity in a consumer — inconsistent enforcement is how a wrong-entity warning once rendered beside green "actual data" badges. Pure logic (`normalize_cik`, `build_entity_trust`) is importable with no config: `python -m app.services.edgar_identity --selftest`.
@@ -93,12 +95,12 @@ API docs: `http://localhost:8000/api/v1/docs`
 
 **Key pages:**
 - `Stocks.tsx` — stock screener backed by `DailyStockSnapshot`; includes Price History chart (Chart.js with 50/200-day MA overlays)
-- `TechnicalAnalysis.tsx` — Recharts-based candlestick + indicator panels
+- `TechnicalAnalysis.tsx` — Chart.js line/bar indicator panels (Recharts appears only in the intraday VWAP modal)
 - `DCFValuation.tsx` — calls `/dcf/suggestions/{ticker}` then `/dcf/calculate/{ticker}`
 - `Dashboard.tsx` — live-price watchlist summary, market overview
 - `Payment.tsx` — Stripe Elements form, lazy-loaded
 
-**Charting:** Two libraries in use — **Chart.js** (`react-chartjs-2`) for Price History on `Stocks.tsx`; **Recharts** for technical analysis charts. Don't mix them on the same page.
+**Charting:** Two libraries in use — **Chart.js** (`react-chartjs-2`) for Price History on `Stocks.tsx` and for every chart on `TechnicalAnalysis.tsx`; **Recharts** only inside the intraday VWAP modal. Don't mix them on the same page.
 
 **Theme:** Tailwind dark mode via `ThemeContext`. Dark variant: `dark:bg-gray-800`, `dark:text-white`. Teal accent: `#0d9488` / `teal-600`.
 

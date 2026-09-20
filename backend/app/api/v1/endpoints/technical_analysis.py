@@ -318,6 +318,8 @@ async def analyze_stock(
             entry["cci"] = safe_idx(advanced.get("cci"), "history", i)
             entry["roc"] = safe_idx(advanced.get("roc"), "history", i)
             entry["atr"] = safe_idx(advanced.get("atr"), "history", i)
+            entry["chandelier_long"] = safe_idx(advanced.get("atr_risk"), "chandelier_long_history", i)
+            entry["chandelier_short"] = safe_idx(advanced.get("atr_risk"), "chandelier_short_history", i)
             entry["keltner_upper"] = safe_idx(advanced.get("keltner"), "upper_history", i)
             entry["keltner_middle"] = safe_idx(advanced.get("keltner"), "middle_history", i)
             entry["keltner_lower"] = safe_idx(advanced.get("keltner"), "lower_history", i)
@@ -382,6 +384,7 @@ async def analyze_stock(
                 "cci": _strip_history(advanced.get("cci")),
                 "roc": _strip_history(advanced.get("roc")),
                 "atr": _strip_history(advanced.get("atr")),
+                "atr_risk": _strip_history(advanced.get("atr_risk")),
                 "keltner": _strip_history(advanced.get("keltner")),
                 "std_dev": _strip_history(advanced.get("std_dev")),
                 "parabolic_sar": _strip_history(advanced.get("parabolic_sar")),

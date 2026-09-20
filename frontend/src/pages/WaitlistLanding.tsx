@@ -271,7 +271,7 @@ const WaitlistLanding: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {[
             { icon: '📈', title: 'Trend Indicators', desc: 'Parabolic SAR, Ichimoku Cloud, and Donchian Channels — identify trend direction, reversals, and breakout setups all in one view.' },
-            { icon: '🌊', title: 'Volatility & Risk', desc: 'ATR-based stop-loss guidance, Keltner Channel squeeze detection, and position sizing context — manage risk like a pro.' },
+            { icon: '🌊', title: 'Volatility & Risk', desc: 'ATR-based stop and position-size calculators, Keltner Channel squeeze detection, and volatility context — size and manage risk deliberately.' },
             { icon: '📄', title: 'Financial Summary', desc: 'SEC-sourced income statements, balance sheets, cash flows, and key ratios pulled from live 10-K and 10-Q filings.' },
             { icon: '🔥', title: 'Momentum Indicators', desc: 'Understand what drives a trend, how long it lasts, and the key indicators every momentum trader should know.' },
             { icon: '💰', title: 'DCF Valuation', desc: "Automatically pull a company's current SEC filings to calculate intrinsic value with AI-suggested assumptions." },
