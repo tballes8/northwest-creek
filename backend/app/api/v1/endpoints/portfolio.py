@@ -615,16 +615,29 @@ async def get_transactions(
     db: AsyncSession = Depends(get_db)
 ):
     """The user's transaction ledger, newest first."""
-    filters = [PortfolioTransaction.user_id == current_user.id]
+    # The ticker filter is held apart from the rest: the dropdown that drives it
+    # has to list every ticker the user could pick, which is the set *before*
+    # that filter narrows it.
+    unscoped_filters = [PortfolioTransaction.user_id == current_user.id]
+    if transaction_type:
+        unscoped_filters.append(PortfolioTransaction.transaction_type == transaction_type)
+
+    filters = list(unscoped_filters)
     if ticker:
         filters.append(PortfolioTransaction.ticker == ticker.upper())
-    if transaction_type:
-        filters.append(PortfolioTransaction.transaction_type == transaction_type)
 
     count_result = await db.execute(
         select(func.count(PortfolioTransaction.id)).where(and_(*filters))
     )
     total = count_result.scalar() or 0
+
+    ticker_result = await db.execute(
+        select(PortfolioTransaction.ticker)
+        .where(and_(*unscoped_filters))
+        .distinct()
+        .order_by(PortfolioTransaction.ticker)
+    )
+    tickers = list(ticker_result.scalars().all())
 
     # transaction_date is what the user reported; created_at breaks ties for
     # several trades booked on the same day.
@@ -684,5 +697,6 @@ async def get_transactions(
         transactions=transactions,
         total=total,
         limit=limit,
-        offset=offset
+        offset=offset,
+        tickers=tickers
     )

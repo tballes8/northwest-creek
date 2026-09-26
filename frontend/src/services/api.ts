@@ -197,6 +197,8 @@ export interface PortfolioTransactionsResponse {
   total: number;
   limit: number;
   offset: number;
+  /** Every ticker in the ledger, not only those on this page. */
+  tickers: string[];
 }
 
 export const portfolioAPI = {

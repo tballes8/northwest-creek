@@ -115,6 +115,10 @@ class PortfolioTransactionListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+    # Every ticker in the user's ledger, not just the ones on this page — the
+    # filter dropdown is built from it, and a page-derived list would silently
+    # drop tickers whose only trades sit on a later page.
+    tickers: list[str] = []
 
 
 class PortfolioSellResponse(BaseModel):

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   portfolioAPI,
   PortfolioTransaction,
@@ -23,46 +23,65 @@ const TYPE_PILL: Record<TransactionType, string> = {
   REVERSAL: 'bg-gray-100 dark:bg-gray-600 text-gray-700 dark:text-gray-300',
 };
 
+// The ledger is append-only and never pruned, so it outgrows any single fetch.
+// One screenful per request, and the export walks the whole thing at the
+// endpoint's ceiling rather than shipping whatever happens to be on screen.
+const PAGE_SIZE = 50;
+const EXPORT_PAGE_SIZE = 200;
+
 const TransactionHistoryModal: React.FC<TransactionHistoryModalProps> = ({
   onClose,
   onVoided,
   totalRealizedPL,
 }) => {
   const [transactions, setTransactions] = useState<PortfolioTransaction[]>([]);
+  const [total, setTotal] = useState(0);
+  const [tickers, setTickers] = useState<string[]>([]);
+  const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState('');
   const [tickerFilter, setTickerFilter] = useState('');
   const [voidingId, setVoidingId] = useState<string | null>(null);
 
-  const load = async () => {
+  // Paging and filtering are both the server's job now. A page-local filter
+  // would search only the rows already fetched, which on a long ledger means
+  // "no AAPL trades" when the AAPL trades are simply on page four.
+  const load = useCallback(async (pageOffset: number, ticker: string) => {
+    setLoading(true);
     try {
-      const response = await portfolioAPI.getTransactions({ limit: 200 });
-      setTransactions(response.data.transactions || []);
+      const response = await portfolioAPI.getTransactions({
+        limit: PAGE_SIZE,
+        offset: pageOffset,
+        ticker: ticker || undefined,
+      });
+      const data = response.data;
+      setTransactions(data.transactions || []);
+      setTotal(data.total || 0);
+      setTickers(data.tickers || []);
       setError('');
+      // Rows are only ever appended, so an offset can outrun the ledger only if
+      // it was stale to begin with. Fall back to the first page rather than
+      // show an empty table above a non-zero count.
+      if (pageOffset > 0 && (data.transactions || []).length === 0 && (data.total || 0) > 0) {
+        setOffset(0);
+      }
     } catch (err) {
       console.error('Failed to load transactions:', err);
       setError('Could not load your transaction history.');
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const tickers = useMemo(
-    () => Array.from(new Set(transactions.map(t => t.ticker))).sort(),
-    [transactions]
-  );
+  useEffect(() => {
+    load(offset, tickerFilter);
+  }, [load, offset, tickerFilter]);
 
-  // Client-side: a retail ledger is tens of rows, so a server round trip per
-  // filter change would be pure latency.
-  const visible = useMemo(
-    () => (tickerFilter ? transactions.filter(t => t.ticker === tickerFilter) : transactions),
-    [transactions, tickerFilter]
-  );
+  const handleTickerFilter = (value: string) => {
+    setTickerFilter(value);
+    setOffset(0);
+  };
 
   const handleVoid = async (txn: PortfolioTransaction) => {
     if (
@@ -76,7 +95,7 @@ const TransactionHistoryModal: React.FC<TransactionHistoryModalProps> = ({
     setVoidingId(txn.id);
     try {
       await portfolioAPI.voidTransaction(txn.id);
-      await load();
+      await load(offset, tickerFilter);
       onVoided?.();
     } catch (err: any) {
       console.error('Void error:', err.response?.data);
@@ -86,38 +105,74 @@ const TransactionHistoryModal: React.FC<TransactionHistoryModalProps> = ({
     }
   };
 
-  // Exports exactly what is on screen, filter included — a per-ticker export is
-  // the common case when reconciling one holding against a broker statement.
-  // Voided rows are kept with a flag rather than dropped: they are struck
-  // through here, not deleted, and a reconciliation needs to see them.
-  const exportCSV = () => {
-    const header = [
-      'Date', 'Ticker', 'Type', 'Shares', 'Price', 'Amount',
-      'Cost Basis Per Share', 'Realized P&L', 'Realized P&L %', 'Voided', 'Notes',
-    ];
-    const rows = visible.map(txn => [
-      txn.transaction_date,
-      txn.ticker,
-      txn.transaction_type,
-      txn.quantity,
-      txn.price.toFixed(2),
-      txn.amount.toFixed(2),
-      txn.cost_basis_per_share == null ? '' : txn.cost_basis_per_share.toFixed(4),
-      txn.realized_pl == null ? '' : txn.realized_pl.toFixed(2),
-      txn.realized_pl_percent == null ? '' : txn.realized_pl_percent.toFixed(2),
-      txn.is_voided ? 'Yes' : 'No',
-      txn.notes || '',
-    ]);
-    const scope = tickerFilter ? `${tickerFilter}_` : '';
-    downloadCSV(
-      `transaction_history_${scope}${new Date().toISOString().slice(0, 10)}.csv`,
-      header,
-      rows
-    );
+  // Exports the whole filtered history, not the visible page — a CSV that
+  // stopped at the page boundary would reconcile against a broker statement and
+  // appear to be missing trades. Voided rows are kept with a flag rather than
+  // dropped: they are struck through here, not deleted, and a reconciliation
+  // needs to see them.
+  const exportCSV = async () => {
+    setExporting(true);
+    try {
+      const all: PortfolioTransaction[] = [];
+      let ledgerTotal = Infinity;
+      for (let page = 0; all.length < ledgerTotal; page += 1) {
+        const response = await portfolioAPI.getTransactions({
+          limit: EXPORT_PAGE_SIZE,
+          offset: page * EXPORT_PAGE_SIZE,
+          ticker: tickerFilter || undefined,
+        });
+        ledgerTotal = response.data.total || 0;
+        const batch = response.data.transactions || [];
+        if (batch.length === 0) break;
+        all.push(...batch);
+      }
+
+      const header = [
+        'Date', 'Ticker', 'Type', 'Shares', 'Price', 'Amount',
+        'Cost Basis Per Share', 'Realized P&L', 'Realized P&L %', 'Voided', 'Notes',
+      ];
+      const rows = all.map(txn => [
+        txn.transaction_date,
+        txn.ticker,
+        txn.transaction_type,
+        txn.quantity,
+        txn.price.toFixed(2),
+        txn.amount.toFixed(2),
+        txn.cost_basis_per_share == null ? '' : txn.cost_basis_per_share.toFixed(4),
+        txn.realized_pl == null ? '' : txn.realized_pl.toFixed(2),
+        txn.realized_pl_percent == null ? '' : txn.realized_pl_percent.toFixed(2),
+        txn.is_voided ? 'Yes' : 'No',
+        txn.notes || '',
+      ]);
+      const scope = tickerFilter ? `${tickerFilter}_` : '';
+      downloadCSV(
+        `transaction_history_${scope}${new Date().toISOString().slice(0, 10)}.csv`,
+        header,
+        rows
+      );
+    } catch (err) {
+      console.error('Export error:', err);
+      setError('Could not export your transaction history.');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const gainClass = (value: number) =>
     value >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400';
+
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const currentPage = Math.floor(offset / PAGE_SIZE) + 1;
+  const rangeStart = total === 0 ? 0 : offset + 1;
+  // While a page is in flight `transactions` still holds the previous page, so
+  // the range is projected from the offset rather than read off stale rows.
+  const rangeEnd = loading
+    ? Math.min(offset + PAGE_SIZE, total)
+    : offset + transactions.length;
+  const pagerButton =
+    'px-2.5 py-1 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 ' +
+    'dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ' +
+    'disabled:opacity-40 disabled:cursor-not-allowed';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -137,19 +192,19 @@ const TransactionHistoryModal: React.FC<TransactionHistoryModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={exportCSV}
-              disabled={visible.length === 0}
-              title={visible.length ? 'Download transaction history as CSV' : 'No transactions to export'}
+              disabled={total === 0 || exporting}
+              title={total ? 'Download full transaction history as CSV' : 'No transactions to export'}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-teal-500/50 text-teal-600 dark:text-teal-400 hover:bg-teal-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M7 1v8m-3-3l3 3 3-3M1 11h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              Export CSV
+              {exporting ? 'Exporting…' : 'Export CSV'}
             </button>
-            {tickers.length > 1 && (
+            {(tickers.length > 1 || tickerFilter) && (
               <select
                 value={tickerFilter}
-                onChange={(e) => setTickerFilter(e.target.value)}
+                onChange={(e) => handleTickerFilter(e.target.value)}
                 className="px-3 py-1.5 text-xs rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
               >
                 <option value="">All tickers</option>
@@ -182,11 +237,13 @@ const TransactionHistoryModal: React.FC<TransactionHistoryModalProps> = ({
               <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600 mx-auto"></div>
               <p className="mt-4 text-gray-600 dark:text-gray-400">Loading history...</p>
             </div>
-          ) : visible.length === 0 ? (
+          ) : transactions.length === 0 ? (
             <div className="text-center py-12">
               <div className="text-4xl mb-3">📭</div>
               <p className="text-gray-600 dark:text-gray-400">
-                No transactions recorded yet.
+                {tickerFilter
+                  ? `No ${tickerFilter} transactions recorded.`
+                  : 'No transactions recorded yet.'}
               </p>
             </div>
           ) : (
@@ -206,7 +263,7 @@ const TransactionHistoryModal: React.FC<TransactionHistoryModalProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y dark:divide-gray-700">
-                  {visible.map(txn => (
+                  {transactions.map(txn => (
                     <tr
                       key={txn.id}
                       className={`hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${
@@ -265,6 +322,38 @@ const TransactionHistoryModal: React.FC<TransactionHistoryModalProps> = ({
             </div>
           )}
         </div>
+
+        {/* Pager — the count shows even on a single page, so the ledger and its
+            export are never quietly narrower than they look. */}
+        {total > 0 && (
+          <div className="flex items-center justify-between gap-3 px-6 py-3 border-t dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400">
+            <span>
+              Showing {rangeStart}–{rangeEnd} of {total}
+              {tickerFilter ? ` ${tickerFilter}` : ''} transaction{total === 1 ? '' : 's'}
+            </span>
+            {pageCount > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+                  disabled={loading || offset === 0}
+                  className={pagerButton}
+                >
+                  Previous
+                </button>
+                <span className="whitespace-nowrap">
+                  Page {currentPage} of {pageCount}
+                </span>
+                <button
+                  onClick={() => setOffset(offset + PAGE_SIZE)}
+                  disabled={loading || offset + PAGE_SIZE >= total}
+                  className={pagerButton}
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
