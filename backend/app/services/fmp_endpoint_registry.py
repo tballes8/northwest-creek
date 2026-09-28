@@ -150,8 +150,11 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
     {"path": "exchange-market-hours", "description": "Market open/closed status for an exchange",
      "used_by": ["api/v1/endpoints/intraday.py:34"],
      "key_fields": ["exchange", "isMarketOpen", "openingHour", "closingHour"]},
+    # _get_holiday_dates reads `date` + `isClosed` and ignores `name`. isClosed is
+    # load-bearing: half-days are returned too, and if it ever vanishes the set comes
+    # back empty and every holiday silently becomes a trading day.
     {"path": "holidays-by-exchange", "description": "Market holidays for an exchange",
-     "used_by": ["api/v1/endpoints/intraday.py:131"], "key_fields": ["date", "name"]},
+     "used_by": ["api/v1/endpoints/intraday.py:131"], "key_fields": ["date", "isClosed"]},
     {"path": "ipos-calendar", "description": "Upcoming/recent IPO calendar",
      "used_by": ["api/v1/endpoints/stocks.py:695"], "key_fields": ["symbol", "date", "company", "priceRange"]},
     {"path": "earnings-calendar", "description": "Earnings report calendar with date range",
