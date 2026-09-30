@@ -259,7 +259,15 @@ class MarketDataService:
         self.api_key = settings.MASSIVE_API_KEY
         self._quote_cache = SimpleCache(ttl_seconds=15)
         self._profile_cache = SimpleCache(ttl_seconds=3600)
-        self._dividend_cache = SimpleCache(ttl_seconds=43200)  # 12 hours — dividends change quarterly
+        # 15 min, matching the quote refresh cadence. This was 12h on the reasoning
+        # that "dividends change quarterly" — true of the payers the app was built
+        # around, false of weekly distributors (ULTY files a new ex-date every week).
+        # It also shares a process with the APScheduler snapshot job, whose daily
+        # _update_dividends pass warms this cache for every payer in the universe at
+        # the first refresh of the trading day; at 12h that fill decided what the
+        # Portfolio page showed until the evening, so a record FMP published mid-
+        # morning stayed invisible for the rest of the session.
+        self._dividend_cache = SimpleCache(ttl_seconds=900)
         self._etf_info_cache = SimpleCache(ttl_seconds=86400)  # 24 hours — fund metadata changes rarely
 
     @staticmethod
