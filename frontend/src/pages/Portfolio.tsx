@@ -1106,7 +1106,10 @@ const Portfolio: React.FC = () => {
                           className="w-full px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                         />
                       ) : (
-                        <div className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate">
+                        <div
+                          className="text-sm text-gray-600 dark:text-gray-400 max-w-xs truncate"
+                          title={position.notes || undefined}
+                        >
                           {position.notes || '-'}
                         </div>
                       )}
