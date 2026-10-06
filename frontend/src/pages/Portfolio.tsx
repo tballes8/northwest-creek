@@ -284,6 +284,11 @@ const Portfolio: React.FC = () => {
             setPriceFlash(pf => ({ ...pf, [pos.ticker]: isUp ? 'green' : 'red' }));
             setTimeout(() => setPriceFlash(pf => ({ ...pf, [pos.ticker]: null })), 600);
 
+            // Keep the flash baseline with the price we just showed. Without this
+            // the ref holds an older websocket tick, and a repeat of that tick
+            // compares equal and is silently dropped.
+            previousPricesRef.current.set(pos.ticker, freshPrice);
+
             return { ...pos, ...deriveValues(pos, freshPrice) };
           }
           return pos;
@@ -383,8 +388,22 @@ const Portfolio: React.FC = () => {
     await loadData();
   };
 
+  // One price per row, shared by every column that quotes money. Current Price
+  // and Day Change have always read the live map, while Total Value and P&L read
+  // total_value/profit_loss as written by deriveValues in the effects below. The
+  // two drift: the 30s /intraday/batch poll rewrites the stored figures without
+  // touching previousPricesRef, so a repeat websocket tick fails the !== guard
+  // and never resyncs them. A thin ticker could then show $24.82 with a P&L
+  // computed at $24.75. Deriving at render keeps a row consistent with itself
+  // whichever source won; it does not change which price wins.
+  const rowValues = useCallback(
+    (pos: PortfolioPosition): Partial<PortfolioPosition> =>
+      deriveValues(pos, prices.get(pos.ticker)?.price ?? pos.current_price),
+    [prices]
+  );
+
   const calculateTotals = () => {
-    const totalValue = portfolio.reduce((sum, pos) => sum + (pos.total_value || 0), 0);
+    const totalValue = portfolio.reduce((sum, pos) => sum + (rowValues(pos).total_value || 0), 0);
     const totalCost = portfolio.reduce((sum, pos) => sum + (pos.buy_price * pos.quantity), 0);
     const totalPL = totalValue - totalCost;
     const totalPLPercent = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
@@ -394,7 +413,7 @@ const Portfolio: React.FC = () => {
     // its full current value isn't miscounted as a one-day move. Skip positions
     // we can't value at all, keeping the baseline symmetric with totalValue.
     const totalPrevClose = portfolio.reduce((sum, pos) => {
-      if (pos.total_value == null) return sum;
+      if (rowValues(pos).total_value == null) return sum;
       const baseline = prevCloseMap[pos.ticker] ?? pos.buy_price;
       return sum + (baseline ? baseline * pos.quantity : 0);
     }, 0);
@@ -627,12 +646,12 @@ const Portfolio: React.FC = () => {
             break;
           }
           case 'total_value':
-            aVal = a.total_value ?? 0;
-            bVal = b.total_value ?? 0;
+            aVal = rowValues(a).total_value ?? 0;
+            bVal = rowValues(b).total_value ?? 0;
             break;
           case 'profit_loss':
-            aVal = a.profit_loss ?? 0;
-            bVal = b.profit_loss ?? 0;
+            aVal = rowValues(a).profit_loss ?? 0;
+            bVal = rowValues(b).profit_loss ?? 0;
             break;
           default:
             return 0;
@@ -647,7 +666,7 @@ const Portfolio: React.FC = () => {
     }
 
     return result;
-  }, [portfolio, sectorFilter, sortColumn, sortDirection, prices, prevCloseMap, getSector]);
+  }, [portfolio, sectorFilter, sortColumn, sortDirection, prices, prevCloseMap, getSector, rowValues]);
 
   // Re-derived every render so the modal always sees current price and basis,
   // and self-closes if the row disappears underneath it.
@@ -1076,25 +1095,30 @@ const Portfolio: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="text-sm text-gray-900 dark:text-white">
-                        ${position.total_value?.toFixed(2) || '-'}
+                        ${rowValues(position).total_value?.toFixed(2) || '-'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className={`text-sm font-semibold ${
-                        (position.profit_loss ?? 0) >= 0
-                          ? 'text-green-600 dark:text-green-400'
-                          : 'text-red-600 dark:text-red-400'
-                      }`}>
-                        {position.profit_loss !== undefined 
-                          ? `${position.profit_loss >= 0 ? '+' : ''}$${position.profit_loss.toFixed(2)}` 
-                          : '-'
-                        }
-                        {position.profit_loss_percent !== undefined && (
-                          <div className="text-xs">
-                            ({position.profit_loss_percent >= 0 ? '+' : ''}{position.profit_loss_percent.toFixed(2)}%)
+                      {(() => {
+                        const { profit_loss: pl, profit_loss_percent: plPct } = rowValues(position);
+                        return (
+                          <div className={`text-sm font-semibold ${
+                            (pl ?? 0) >= 0
+                              ? 'text-green-600 dark:text-green-400'
+                              : 'text-red-600 dark:text-red-400'
+                          }`}>
+                            {pl !== undefined
+                              ? `${pl >= 0 ? '+' : ''}$${pl.toFixed(2)}`
+                              : '-'
+                            }
+                            {plPct !== undefined && (
+                              <div className="text-xs">
+                                ({plPct >= 0 ? '+' : ''}{plPct.toFixed(2)}%)
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4">
                       {editingPosition === position.id ? (
