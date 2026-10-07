@@ -95,6 +95,8 @@ const median = (vals: (number | null | undefined)[]): number | null => {
 // A P/E above this ceiling signals a near-zero earnings base and distorts the
 // median the same way a 91× trailing P/E does for the target company.
 const PE_MAX = 100;
+// Below this many industry matches, the peer pull widens to the sector.
+const MIN_INDUSTRY_PEERS = 3;
 const isPeMeaningful = (v: number | null | undefined): boolean =>
   v != null && isFinite(v) && v > 0 && v <= PE_MAX;
 const isEveMeaningful = (v: number | null | undefined): boolean =>
@@ -206,6 +208,7 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
   const [result, setResult] = useState<RelvalResult | null>(null);
   const [calculating, setCalculating] = useState(false);
   const [error, setError] = useState('');
+  const [peerNotice, setPeerNotice] = useState('');
   const [limitData, setLimitData] = useState<{ currentUsage: number; maxUsage: number } | null>(null);
 
   // ── Load pre-filled inputs when the ticker changes ──────────────────────
@@ -272,6 +275,7 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
   useEffect(() => {
     loadInputs();
     setPeers([]);
+    setPeerNotice('');
     setMedianPe('');
     setMedianPs('');
     setMedianEve('');
@@ -329,6 +333,7 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
     }
     setLoadingPeers(true);
     setError('');
+    setPeerNotice('');
     try {
       // Cap band ($B → raw $). Empty min keeps the prior 300M floor.
       const minB = numOrNull(capMin);
@@ -338,21 +343,43 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
       };
       if (maxB != null) market_cap.max = maxB * 1e9;
 
-      const criteria: any = {
-        market_cap,
-        exclude_etfs: true,
-        page_size: 25,
-        sort_by: 'market_cap',
-        sort_desc: true,
+      const subject = ticker.toUpperCase();
+      const screen = async (filter: { industry?: string[]; sector?: string[] }) => {
+        const res = await screenerAPI.runScreen({
+          market_cap,
+          exclude_etfs: true,
+          page_size: 25,
+          sort_by: 'market_cap',
+          sort_desc: true,
+          ...filter,
+        });
+        return (res.data.results || [])
+          .map((r: any) => r.symbol as string)
+          .filter((s: string) => s && s !== subject);
       };
-      if (subjectIndustry) criteria.industry = [subjectIndustry];
-      else if (subjectSector) criteria.sector = [subjectSector];
-      const res = await screenerAPI.runScreen(criteria);
-      const symbols: string[] = (res.data.results || [])
-        .map((r: any) => r.symbol)
-        .filter((s: string) => s && s !== ticker.toUpperCase());
+
+      // Industry first. FMP's industry tags include near-empty catch-all buckets
+      // (SPH is the only live name in "Oil & Gas Energy"), so a thin industry
+      // result widens to the sector rather than dead-ending. Sector comps are
+      // looser, which is why the user is told it widened.
+      const industryHits: string[] = subjectIndustry ? await screen({ industry: [subjectIndustry] }) : [];
+      let symbols = industryHits;
+      if (industryHits.length < MIN_INDUSTRY_PEERS && subjectSector) {
+        const sectorHits = await screen({ sector: [subjectSector] });
+        if (sectorHits.length > industryHits.length) {
+          // Industry matches lead, so a 20-name cut keeps the closest comps.
+          symbols = Array.from(new Set([...industryHits, ...sectorHits]));
+          setPeerNotice(
+            subjectIndustry
+              ? `Only ${industryHits.length} other ${industryHits.length === 1 ? 'company is' : 'companies are'} tagged "${subjectIndustry}" in this band, so the pull widened to the ${subjectSector} sector. Sector comps are loose — cut hard.`
+              : `No industry tag for this ticker; pulled the ${subjectSector} sector. Sector comps are loose — cut hard.`,
+          );
+        }
+      }
       if (!symbols.length) {
-        setError('Screener returned no peers for this sector/industry — add peers manually.');
+        setError(
+          `No ${subjectIndustry || subjectSector} companies in this market-cap band — widen the band or add peers manually.`,
+        );
         return;
       }
       await addPeerRatios(symbols.slice(0, 20), true);
@@ -710,6 +737,12 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
             </button>
           </div>
         </div>
+
+        {peerNotice && (
+          <p className="mb-3 px-3 py-2 rounded-lg text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+            {peerNotice}
+          </p>
+        )}
 
         {peers.length > 0 ? (
           <div className="overflow-x-auto">
