@@ -77,7 +77,8 @@ Each changelog item gets exactly one row in the Findings table.
 or a sample response rather than a changelog; then there is no "before", so do not \
 describe anything as "now" added, removed, or nullable. Values in an example (a `null`, \
 a sample number) are illustrations, not evidence of a behavior change. In that case, \
-only report registry fields that are absent from the documented response.
+only report registry fields that are absent from the documented response. Do not \
+call an endpoint or feature "new" unless the text itself says it is new.
 - Response fields the docs show but the registry does not list are not evidence that \
 NWC ignores them — the registry may be incomplete. Say "not in the registry", never \
 "NWC does not read".
@@ -115,7 +116,8 @@ One or two sentences: how many relevant items, highest severity.
 
 ## Findings
 A markdown table with columns: Severity | Changelog item | What it touches | Affected NWC files | Recommended action.
-If there are no relevant items, write "No changes affect NWC's current {vendor_display} usage." and skip the table.
+If every item is Irrelevant, write exactly "No changes affect NWC's current {vendor_display} usage." \
+and nothing else in this section — no table. Never write that sentence and a table together.
 
 ## For Claude Code
 A concrete, ordered checklist of things to verify or change in the NWC codebase, \
