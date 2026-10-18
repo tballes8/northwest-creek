@@ -45,7 +45,9 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
     # ── Company info / profile / financials ──────────────────────────
     {"path": "profile", "description": "Company profile: name, sector, industry, website, employees, country",
      "used_by": ["services/market_data.py:157", "services/financials_service.py:88",
-                 "api/v1/endpoints/relative_valuation.py (peer-ratios)"],
+                 "api/v1/endpoints/relative_valuation.py (peer-ratios: name/sector/market cap "
+                 "for tickers the user already chose; it does not discover peers)",
+                 "tasks/refresh_stock_snapshots.py (sector/industry/avg_volume into stock_snapshots)"],
      # Stable profile uses `exchange` (not `exchangeShortName`) and has no `type` field
      # (use isEtf/isFund/isAdr booleans). See scripts/audit_fmp_fields.py.
      # averageVolume is read here and ONLY here — it is the source for
@@ -173,6 +175,11 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
                      "twice per daily rebuild - isEtf=false for the stock leg, isEtf=true for the "
                      "ETF leg; which leg a symbol arrives on IS the definition of "
                      "stock_snapshots.is_etf. Response shape is identical on both."),
+     # Relative Valuation's peer pull does NOT call FMP: the frontend
+     # (RelativeValuation.tsx) queries NWC's own screener (api/v1/endpoints/screener.py,
+     # backed by stock_snapshots) by industry, widening to sector, within a user-set
+     # market-cap band. The user then cuts bad comps by hand. FMP reaches it only
+     # through the daily stock_snapshots rebuild.
      "used_by": ["api/v1/endpoints/stocks.py (GET /stocks/screener)",
                  "tasks/refresh_stock_snapshots.py:_build_universe (both legs)"],
      "key_fields": ["symbol", "companyName", "marketCap", "sector", "industry", "beta", "price",
@@ -226,7 +233,12 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
 
 def render_registry_for_prompt() -> str:
     """Compact text rendering of the registry for inclusion in the Claude prompt."""
-    lines: list[str] = []
+    lines: list[str] = [
+        "Automated audit: a weekly job (tasks/audit_fmp_fields_task.py) calls every path "
+        "below and emails the owner if any listed field is missing from the live response. "
+        "Field renames/removals on these paths are therefore caught without a changelog.",
+        "",
+    ]
     for e in FMP_ENDPOINTS:
         fields = ", ".join(e.get("key_fields") or []) or "—"
         used = "; ".join(e.get("used_by") or []) or "—"

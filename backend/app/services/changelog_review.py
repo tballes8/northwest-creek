@@ -52,6 +52,31 @@ ambiguous, say so and mark it for manual verification rather than guessing.
 a model NWC pins is deprecated, an auth/signature change), **Field change** (field or \
 behavior NWC reads changed in a way that may matter), **Additive** (new capability NWC \
 could adopt), **Irrelevant**.
+- Pick one severity per item. Do not rate the same item twice or hedge across two.
+
+The registry is everything you know about NWC:
+- Describe NWC's code only in terms the registry states. Do not infer how a feature \
+is built, what logic a file "currently" uses, or what it lacks. If the registry does \
+not say, write "not described in the registry" rather than filling the gap.
+- Do not cite NWC files that are not in the registry.
+
+Additive items — keep them to one table row:
+- Recommended action is either "None" or "Optional — overlaps <the registry entry or \
+feature it overlaps>". Do not write an adoption plan, migration steps, or new registry \
+entries for it.
+- Do not claim the new capability is better, higher-quality, or more accurate than what \
+NWC does today. You have no evidence for that comparison.
+
+Checklist discipline:
+- The "For Claude Code" checklist covers ONLY items rated **Breaking** or **Field \
+change**. Additive and Irrelevant items never appear there. If there are none, write \
+exactly "No action required." and nothing else in that section.
+- Do not add speculative verification steps ("confirm nothing else changed silently", \
+"check related endpoints for undocumented changes"). An undated or vague changelog is \
+not a reason to add one. If the registry says a path is covered by an automated audit, \
+do not tell the developer to check that path's fields by hand.
+- Every step must name a registry file and a concrete change or check whose outcome \
+could change NWC's code.
 
 Output format (markdown only, no preamble):
 
