@@ -26,7 +26,7 @@ rendered next to green "actual data" badges. See `edgar_identity`.
 """
 import asyncio
 from datetime import datetime, timezone, timedelta
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 from app.services.fmp_client import get_fmp_client, API_KEY
 from app.services.analyst_estimates import fetch_estimates, derive_consensus_growth
 from app.services.edgar_identity import (
@@ -68,12 +68,14 @@ def _sum_quarters(quarters: List[dict], field: str) -> Optional[float]:
 
 def _trailing_pe_by_quarter(
     income_quarters: List[dict], price_rows: List[dict]
-) -> List[Optional[float]]:
+) -> List[Tuple[Optional[float], Optional[str]]]:
     """Trailing P/E at each quarter end: close on/before period_end ÷ TTM diluted EPS.
 
     TTM EPS requires a full 4-quarter window — a partial sum would understate
-    EPS and inflate the multiple. A quarter's P/E is None when the price or a
-    full EPS window is unavailable, or when TTM EPS <= 0 (meaningless multiple).
+    EPS and inflate the multiple. Returns (pe, status) per quarter; when pe is
+    None, status says why so the UI can tell the user instead of a bare dash:
+    "negative_earnings" when TTM EPS <= 0 (meaningless multiple), "no_data"
+    when the price or a full EPS window is unavailable.
     Expects income_quarters newest-first (FMP default).
     """
     closes: Dict[str, float] = {}
@@ -81,9 +83,10 @@ def _trailing_pe_by_quarter(
         if row.get("date") and row.get("close") is not None:
             closes[row["date"]] = row["close"]
 
-    pes: List[Optional[float]] = []
+    pes: List[Tuple[Optional[float], Optional[str]]] = []
     for i, q in enumerate(income_quarters):
         pe = None
+        status = "no_data"
         window = [x.get("epsDiluted") for x in income_quarters[i:i + 4]]
         period_end = q.get("date")
         if period_end and len(window) == 4 and all(v is not None for v in window):
@@ -98,9 +101,12 @@ def _trailing_pe_by_quarter(
                     day -= timedelta(days=1)
             except (ValueError, TypeError):
                 price = None
-            if price is not None and ttm_eps > 0:
+            if ttm_eps <= 0:
+                status = "negative_earnings"
+            elif price is not None:
                 pe = round(price / ttm_eps, 1)
-        pes.append(pe)
+                status = None
+        pes.append((pe, status))
     return pes
 
 
@@ -457,7 +463,8 @@ async def get_company_financials(
             "operating_margin_pct": _pct(q.get("operatingIncome"), q.get("revenue")),
             "eps_diluted": _fmt(q.get("epsDiluted")),
             "diluted_shares_outstanding": q.get("weightedAverageShsOutDil"),
-            "pe_ratio": quarter_pes[i],
+            "pe_ratio": quarter_pes[i][0],
+            "pe_status": quarter_pes[i][1],
         })
 
     # ── DCF Suggestions (derived from actuals) ────────────────────────

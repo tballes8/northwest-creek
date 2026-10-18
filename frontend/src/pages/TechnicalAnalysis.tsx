@@ -1808,7 +1808,7 @@ const TechnicalAnalysis: React.FC = () => {
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-600">
-                                <th className="pb-2 pr-4">Quarter</th>
+                                <th className="pb-2 pr-4 w-px whitespace-nowrap">Quarter</th>
                                 <th className="pb-2 pr-4 text-right">Revenue</th>
                                 <th className="pb-2 pr-4 text-right">Net Income</th>
                                 <th className="pb-2 pr-4 text-right">Gross Margin</th>
@@ -1820,7 +1820,7 @@ const TechnicalAnalysis: React.FC = () => {
                             <tbody>
                               {[...financialsData.quarterly_trend].map((q: any, i: number) => (
                                 <tr key={i} className="border-b border-gray-100 dark:border-gray-700 text-gray-900 dark:text-gray-200">
-                                  <td className="py-2 pr-4 font-medium">
+                                  <td className="py-2 pr-4 font-medium whitespace-nowrap">
                                     {q.fiscal_year ? `FY${q.fiscal_year} ${q.fiscal_quarter}` : q.period_end}
                                   </td>
                                   <td className="py-2 pr-4 text-right">{fmtB(q.revenue)}</td>
@@ -1828,7 +1828,18 @@ const TechnicalAnalysis: React.FC = () => {
                                   <td className="py-2 pr-4 text-right">{fmtPct(q.gross_margin_pct)}</td>
                                   <td className="py-2 pr-4 text-right">{fmtPct(q.operating_margin_pct)}</td>
                                   <td className="py-2 pr-4 text-right">{fmtNum(q.eps_diluted)}</td>
-                                  <td className="py-2 text-right">{q.pe_ratio != null ? `${fmtNum(q.pe_ratio, 1)}x` : '—'}</td>
+                                  <td className="py-2 text-right whitespace-nowrap">
+                                    {q.pe_ratio != null ? `${fmtNum(q.pe_ratio, 1)}x` : (
+                                      <span
+                                        className="text-xs text-gray-400 dark:text-gray-500"
+                                        title={q.pe_status === 'negative_earnings'
+                                          ? 'Trailing 12-month EPS was zero or negative, so a P/E multiple is not meaningful.'
+                                          : 'Price or a full four quarters of EPS was unavailable for this period.'}
+                                      >
+                                        {q.pe_status === 'negative_earnings' ? 'Negative Earnings' : 'No Data'}
+                                      </span>
+                                    )}
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
