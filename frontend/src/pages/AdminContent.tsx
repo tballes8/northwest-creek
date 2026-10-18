@@ -78,11 +78,16 @@ const AdminContent: React.FC = () => {
   const [customVendor, setCustomVendor] = useState('');
   const [reviewRunning, setReviewRunning] = useState(false);
   const [reviewMarkdown, setReviewMarkdown] = useState<string | null>(null);
+  // The text the report was based on (credentials redacted server-side) and the
+  // vendor it was run for — a past report's vendor, not the current dropdown.
+  const [reviewSource, setReviewSource] = useState<string>('');
+  const [reviewVendor, setReviewVendor] = useState<string>('');
   const [maintReports, setMaintReports] = useState<{ id: string; vendor: string; created_at: string | null }[]>([]);
 
   // Vendors NWC has a code-level dependency registry for → grounded review.
   // Anything else (Railway, Cloudflare, custom) gets a best-effort generic review.
-  const GROUNDED_VENDORS = ['FMP', 'Stripe', 'Anthropic', 'Twilio', 'SendGrid'];
+  // Must match the VENDORS keys in backend services/vendor_registries.py.
+  const GROUNDED_VENDORS = ['FMP', 'Stripe', 'Anthropic', 'Twilio', 'Postmark'];
   const VENDOR_OPTIONS = [...GROUNDED_VENDORS, 'Railway', 'Cloudflare', 'Other'];
   const effectiveVendor = vendor === 'Other' ? customVendor.trim() : vendor;
   const isGrounded = GROUNDED_VENDORS.includes(effectiveVendor);
@@ -107,6 +112,23 @@ const AdminContent: React.FC = () => {
     setMaintReports(res.data);
   }, [getHeaders]);
 
+  const showReport = (r: { report_markdown: string; source_text?: string; vendor: string }) => {
+    setReviewMarkdown(r.report_markdown);
+    setReviewSource(r.source_text || '');
+    setReviewVendor(r.vendor);
+  };
+
+  // Report + the submitted text, so whoever receives the file (usually Claude Code)
+  // can check the findings against the evidence. The fence is one backtick longer
+  // than any run inside the source, so pasted markdown can't close it early.
+  const fullReport = (): string => {
+    if (!reviewMarkdown) return '';
+    if (!reviewSource) return reviewMarkdown;
+    const longestRun = Math.max(2, ...(reviewSource.match(/`+/g) || []).map(s => s.length));
+    const fence = '`'.repeat(longestRun + 1);
+    return `${reviewMarkdown}\n\n## Source as submitted\n\n${fence}text\n${reviewSource}\n${fence}\n`;
+  };
+
   const runChangelogReview = async () => {
     if (!changelogText.trim() || !effectiveVendor) return;
     setReviewRunning(true);
@@ -117,7 +139,7 @@ const AdminContent: React.FC = () => {
         { changelog_text: changelogText, vendor: effectiveVendor },
         { headers: getHeaders() },
       );
-      setReviewMarkdown(res.data.report_markdown);
+      showReport(res.data);
       setMessage({ type: 'success', text: 'Changelog review complete.' });
       await loadMaintReports();
     } catch (err: any) {
@@ -130,7 +152,7 @@ const AdminContent: React.FC = () => {
   const viewMaintReport = async (id: string) => {
     try {
       const res = await axios.get(`${API_URL}/api/v1/content/admin/maintenance/reports/${id}`, { headers: getHeaders() });
-      setReviewMarkdown(res.data.report_markdown);
+      showReport(res.data);
     } catch {
       setMessage({ type: 'error', text: 'Could not load report.' });
     }
@@ -141,7 +163,7 @@ const AdminContent: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    const slug = (effectiveVendor || 'vendor').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const slug = (reviewVendor || effectiveVendor || 'vendor').toLowerCase().replace(/[^a-z0-9]+/g, '-');
     a.download = `${slug}-changelog-review-${new Date().toISOString().slice(0, 10)}.md`;
     a.click();
     URL.revokeObjectURL(url);
@@ -768,7 +790,7 @@ const AdminContent: React.FC = () => {
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                 Pick the vendor, then paste their changelog (e.g. from an update email). Claude reviews it and
                 returns a markdown report flagging anything that may need a code change — download it and hand it
-                to Claude Code. For FMP, Stripe, Anthropic, Twilio, and SendGrid it checks against NWC's actual
+                to Claude Code. For FMP, Stripe, Anthropic, Twilio, and Postmark it checks against NWC's actual
                 code dependencies; for any other vendor it does a best-effort review against NWC's stack.
               </p>
 
@@ -836,13 +858,13 @@ const AdminContent: React.FC = () => {
                   <h3 className="text-base font-semibold text-gray-900 dark:text-white">Review report</h3>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => navigator.clipboard.writeText(reviewMarkdown)}
+                      onClick={() => navigator.clipboard.writeText(fullReport())}
                       className="text-sm px-3 py-1.5 rounded border border-gray-300 dark:border-gray-500 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600"
                     >
                       Copy
                     </button>
                     <button
-                      onClick={() => downloadMarkdown(reviewMarkdown)}
+                      onClick={() => downloadMarkdown(fullReport())}
                       className="text-sm px-3 py-1.5 rounded bg-teal-600 hover:bg-teal-700 text-white"
                     >
                       Download .md
@@ -852,6 +874,16 @@ const AdminContent: React.FC = () => {
                 <pre className="whitespace-pre-wrap break-words text-sm text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-800 rounded p-4 max-h-[32rem] overflow-auto font-mono">
                   {reviewMarkdown}
                 </pre>
+                {reviewSource && (
+                  <details className="mt-4">
+                    <summary className="cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Submitted text ({reviewSource.length.toLocaleString()} chars, credentials redacted)
+                    </summary>
+                    <pre className="mt-2 whitespace-pre-wrap break-words text-xs text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 rounded p-4 max-h-[24rem] overflow-auto font-mono">
+                      {reviewSource}
+                    </pre>
+                  </details>
+                )}
               </div>
             )}
 

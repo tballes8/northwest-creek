@@ -20,7 +20,7 @@ from app.schemas.content import (
     BlogPostCreate, BlogPostUpdate, BlogPostResponse, BlogPostListItem,
     ChangelogReviewRequest, MaintenanceReportResponse, MaintenanceReportListItem,
 )
-from app.services.changelog_review import assess_changelog
+from app.services.changelog_review import assess_changelog, redact_secrets
 
 # ── Auth dependencies ──────────────────────────────────────
 # Adjust these imports to match your existing auth setup
@@ -326,14 +326,16 @@ async def review_changelog(
     """Run Claude over a pasted vendor changelog against that vendor's NWC
     dependency registry (or a best-effort generic review for vendors we don't
     have a registry for), persist the markdown assessment, and return it."""
+    # Redact once, up front: the same text goes to Claude, the DB and the panel.
+    source_text = redact_secrets(data.changelog_text)
     try:
-        markdown = await assess_changelog(data.changelog_text, data.vendor)
+        markdown = await assess_changelog(source_text, data.vendor)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"AI review failed: {e}")
 
     report = MaintenanceReport(
         vendor=(data.vendor or "FMP").strip(),
-        source_text=data.changelog_text,
+        source_text=source_text,
         report_markdown=markdown,
         created_by=admin.id,
     )
@@ -361,7 +363,7 @@ async def get_maintenance_report(
     admin: User = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get a single changelog review with its full markdown."""
+    """Get a single changelog review with its full markdown and submitted text."""
     result = await db.execute(select(MaintenanceReport).where(MaintenanceReport.id == report_id))
     report = result.scalar_one_or_none()
     if not report:

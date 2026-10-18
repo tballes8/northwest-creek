@@ -817,15 +817,26 @@ async def get_ipos():
     def _build_ipo_item(ipo: dict, status: str) -> dict:
         """Map FMP IPO response to our frontend schema."""
         low, high = _parse_price_range(ipo.get("priceRange"))
+        # Stable has no issue-price field. On a Priced deal, dealSize is exactly
+        # shares x issue price (CTY: 199,999,998 / 11,111,111 = $18.00). On an
+        # Expected deal it is the top of the range plus the 15% over-allotment
+        # (OURA: 50M x $44 x 1.15), so the division would overstate the price.
+        shares = _safe_float(ipo.get("shares"))
+        deal_size = _safe_float(ipo.get("dealSize"))
+        issue_price = (
+            round(deal_size / shares, 2)
+            if ipo.get("actions") == "Priced" and shares and deal_size
+            else None
+        )
         return {
             "ticker": ipo.get("symbol", "N/A"),
             "issuer_name": ipo.get("company", "Unknown"),
             "listing_date": ipo.get("date"),
             "announced_date": None,
-            "final_issue_price": _safe_float(ipo.get("price")),
+            "final_issue_price": issue_price,
             "lowest_offer_price": low,
             "highest_offer_price": high,
-            "total_offer_size": ipo.get("numberOfShares"),
+            "total_offer_size": deal_size,
             "shares_outstanding": None,
             "primary_exchange": ipo.get("exchange"),
             "security_type": None,
@@ -837,7 +848,7 @@ async def get_ipos():
             "last_updated": None,
             "currency_code": "USD",
             "min_shares_offered": None,
-            "max_shares_offered": None,
+            "max_shares_offered": shares,
             "current_price": None,
             "change_percent": None,
             "volume": None,

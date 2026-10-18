@@ -111,6 +111,9 @@ class MaintenanceReportResponse(BaseModel):
     id: UUID
     vendor: str
     report_markdown: str
+    # What the admin pasted (credentials redacted). Returned so the panel and its
+    # download carry the evidence the report was based on.
+    source_text: str
     created_at: Optional[datetime] = None
 
     class Config:

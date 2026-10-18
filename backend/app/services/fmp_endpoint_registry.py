@@ -157,8 +157,18 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
     # back empty and every holiday silently becomes a trading day.
     {"path": "holidays-by-exchange", "description": "Market holidays for an exchange",
      "used_by": ["api/v1/endpoints/intraday.py:131"], "key_fields": ["date", "isClosed"]},
+    # `exchange` is load-bearing: _parse_ipo_response drops any row whose exchange is
+    # not in US_EXCHANGES, so a rename would silently let every foreign listing through.
+    # priceRange is parsed null-safely (_parse_price_range returns (None, None)).
+    # There is no issue-price field: _build_ipo_item derives it as dealSize / shares,
+    # and only when actions == "Priced" (Expected deals' dealSize includes the 15%
+    # over-allotment). A change to the "Priced" label silently blanks Issue Price.
+    # shares and dealSize are null on many rows (ETFs, SPAC rights/warrants), but the
+    # keys are on every row, so the audit's key-presence check does not false-alarm.
     {"path": "ipos-calendar", "description": "Upcoming/recent IPO calendar",
-     "used_by": ["api/v1/endpoints/stocks.py:695"], "key_fields": ["symbol", "date", "company", "priceRange"]},
+     "used_by": ["api/v1/endpoints/stocks.py (GET /stocks/ipos: _parse_ipo_response, _build_ipo_item)"],
+     "key_fields": ["symbol", "date", "company", "priceRange", "exchange", "actions",
+                    "shares", "dealSize"]},
     {"path": "earnings-calendar", "description": "Earnings report calendar with date range",
      "used_by": ["api/v1/endpoints/stocks.py:1029"],
      "key_fields": ["symbol", "date", "epsEstimated", "epsActual", "revenueEstimated", "revenueActual"]},

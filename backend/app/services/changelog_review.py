@@ -14,6 +14,8 @@ Two paths:
 No auto-fetch: many changelog pages 403 bots, so the owner pastes the changelog
 (usually received by email) into the Admin panel.
 """
+import re
+
 import httpx
 
 from app.config import get_settings
@@ -30,6 +32,23 @@ ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 # so it is the longest thing NWC asks Claude for — and the one most likely to be
 # truncated when an admin pastes a large changelog.
 MAX_TOKENS = 2000
+
+# Admins paste API calls alongside the changelog to show a live response, and the
+# URL usually carries the key (`...?apikey=abc123`). Pasted text is stored on the
+# MaintenanceReport, sent to Anthropic and shown back in the panel and its
+# download, so credentials are blanked before any of that happens.
+_SECRET_PARAM = re.compile(
+    r"(?i)\b(apikey|api_key|access_token|token|secret|key)=([^&\s\"'<>]+)"
+)
+_SECRET_HEADER = re.compile(
+    r"(?im)^(\s*(?:authorization|x-api-key|api-key)\s*:\s*)(?:bearer\s+)?\S+"
+)
+
+
+def redact_secrets(text: str) -> str:
+    """Blank credential values in query strings and header lines."""
+    text = _SECRET_PARAM.sub(r"\1=[REDACTED]", text)
+    return _SECRET_HEADER.sub(r"\1[REDACTED]", text)
 
 
 def _grounded_system_prompt(vendor_display: str) -> str:
@@ -52,7 +71,16 @@ ambiguous, say so and mark it for manual verification rather than guessing.
 a model NWC pins is deprecated, an auth/signature change), **Field change** (field or \
 behavior NWC reads changed in a way that may matter), **Additive** (new capability NWC \
 could adopt), **Irrelevant**.
-- Pick one severity per item. Do not rate the same item twice or hedge across two.
+- Pick one severity per item. Do not rate the same item twice or hedge across two. \
+Each changelog item gets exactly one row in the Findings table.
+- A change is something the text says changed. The user may paste API reference docs \
+or a sample response rather than a changelog; then there is no "before", so do not \
+describe anything as "now" added, removed, or nullable. Values in an example (a `null`, \
+a sample number) are illustrations, not evidence of a behavior change. In that case, \
+only report registry fields that are absent from the documented response.
+- Response fields the docs show but the registry does not list are not evidence that \
+NWC ignores them — the registry may be incomplete. Say "not in the registry", never \
+"NWC does not read".
 
 The registry is everything you know about NWC:
 - Describe NWC's code only in terms the registry states. Do not infer how a feature \
