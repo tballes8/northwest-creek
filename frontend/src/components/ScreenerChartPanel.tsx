@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import {
   AreaChart, Area, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer, Customized,
+  Tooltip, Legend, ResponsiveContainer, Customized, ReferenceLine,
 } from 'recharts';
 import { intradayAPI } from '../services/api';
 
@@ -325,10 +325,37 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
   // would push every fib/trend line below its true price.
   const [plotRect, setPlotRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
 
+  // Day's open for the above/below-open split. The snapshot's session open is
+  // only trustworthy when the bars are today's; on a closed-market fallback day
+  // the first bar's open is the open of the day actually being charted.
+  const dayOpen = useMemo<number | null>(() => {
+    const firstBarOpen = barsData?.bars[0]?.open ?? null;
+    if (barsData?.is_today && snapshot?.session?.open != null) return snapshot.session.open;
+    return firstBarOpen;
+  }, [barsData, snapshot?.session?.open]);
+
+  // Where the open sits within the price line's own bounding box (0 = top, 1 = bottom).
+  // The stroke gradient uses objectBoundingBox, which is the curve's min→max price
+  // span (monotone interpolation never overshoots), so the color flips exactly at
+  // the open. null = flat line (zero-height bbox can't take a gradient) or no open.
+  const openSplitOffset = useMemo<number | null>(() => {
+    if (dayOpen == null) return null;
+    const prices = visibleChartData
+      .map(d => d.price)
+      .filter((v): v is number => v != null && Number.isFinite(v));
+    if (!prices.length) return null;
+    const hi = Math.max(...prices);
+    const lo = Math.min(...prices);
+    if (hi === lo) return null;
+    return Math.max(0, Math.min(1, (hi - dayOpen) / (hi - lo)));
+  }, [visibleChartData, dayOpen]);
+
   // ─── Coordinate helpers (data ↔ SVG-%) ────────────────────────────────────
   // yDomain mirrors what Recharts renders so our SVG overlay stays in sync.
   const yDomain = useMemo<[number, number]>(() => {
     const vals: number[] = [];
+    // Keep the open line on-screen even when the visible window never touches it
+    if (dayOpen != null && Number.isFinite(dayOpen)) vals.push(dayOpen);
     for (const d of visibleChartData) {
       for (const v of [d.price, d.high, d.low]) {
         if (v != null && Number.isFinite(v)) vals.push(v as number);
@@ -339,7 +366,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
     const hi = Math.max(...vals);
     const pad = (hi - lo) * 0.05 || 0.5;
     return [lo - pad, hi + pad];
-  }, [visibleChartData]);
+  }, [visibleChartData, dayOpen]);
 
   const priceToSvgY = useCallback(
     (price: number) => ((yDomain[1] - price) / (yDomain[1] - yDomain[0])) * 100,
@@ -381,6 +408,17 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
     if (!snapshot?.session?.change) return '#3b82f6';
     return snapshot.session.change >= 0 ? '#10b981' : '#ef4444';
   };
+
+  // Above/at open = green, below = red; falls back to the day-change color without an open
+  const colorVsOpen = (price: number | null | undefined) => {
+    if (dayOpen == null || price == null) return priceColor();
+    return price >= dayOpen ? '#10b981' : '#ef4444';
+  };
+
+  // Flat line or no open → solid color; otherwise the green/red split gradient
+  const priceStroke = openSplitOffset == null
+    ? colorVsOpen(visibleChartData[visibleChartData.length - 1]?.price)
+    : 'url(#scpOpenSplit)';
 
   const changeColorCls = (v: number | null | undefined) =>
     v == null ? 'text-gray-400' : v >= 0 ? 'text-green-400' : 'text-red-400';
@@ -500,7 +538,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
         cx={props.cx}
         cy={props.cy}
         r={3}
-        fill={priceColor()}
+        fill={colorVsOpen(props.payload?.price)}
         stroke="#1f2937"
         strokeWidth={1}
       />
@@ -701,6 +739,13 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                           <stop offset="5%"  stopColor="rgb(59,130,246)" stopOpacity={0.6} />
                           <stop offset="95%" stopColor="rgb(59,130,246)" stopOpacity={0.03} />
                         </linearGradient>
+                        {/* Hard stop at the open: green above, red below */}
+                        {openSplitOffset != null && (
+                          <linearGradient id="scpOpenSplit" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset={openSplitOffset} stopColor="#10b981" />
+                            <stop offset={openSplitOffset} stopColor="#ef4444" />
+                          </linearGradient>
+                        )}
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                       <XAxis
@@ -723,11 +768,27 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                       <Tooltip content={<ChartTooltip />} />
                       <Legend wrapperStyle={{ fontSize: '11px' }} />
 
-                      {/* Price area — dots rendered only on live ticks */}
+                      {/* Day-open reference line, full width */}
+                      {dayOpen != null && (
+                        <ReferenceLine
+                          y={dayOpen}
+                          stroke="#ffffff"
+                          strokeDasharray="4 4"
+                          strokeWidth={1}
+                          label={{
+                            value: `Open $${fmt2(dayOpen)}`,
+                            position: 'insideTopLeft',
+                            fill: '#ffffff',
+                            fontSize: 10,
+                          }}
+                        />
+                      )}
+
+                      {/* Price area — green above the open, red below; dots only on live ticks */}
                       <Area
                         type="monotone"
                         dataKey="price"
-                        stroke={priceColor()}
+                        stroke={priceStroke}
                         strokeWidth={2}
                         fill="url(#scpPriceFill)"
                         dot={renderDot}
