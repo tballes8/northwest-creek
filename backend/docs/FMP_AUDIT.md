@@ -20,7 +20,7 @@ python scripts/audit_fmp_fields.py --json         # machine-readable
 python scripts/audit_fmp_fields.py profile quote  # only these endpoints
 ```
 
-Requires `MASSIVE_API_KEY` — export it or put it in `backend/.env` (gitignored).
+Requires `FMP_API_KEY` — export it or put it in `backend/.env` (gitignored).
 **Never commit the key in the script.** Exit code is non-zero if anything is
 `[MISSING]`, so it can gate CI.
 

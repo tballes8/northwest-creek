@@ -69,7 +69,7 @@ API docs: `http://localhost:8000/api/v1/docs`
 - `DailyStockSnapshot` — ticker, open/close/change_pct, snapshot_date, asset_type (CS|ETF)
 
 **Services** (`services/`):
-- `fmp_client.py` — persistent `httpx.AsyncClient`, base `https://financialmodelingprep.com/stable/`. All market data flows through here. The env var for the API key is `MASSIVE_API_KEY`.
+- `fmp_client.py` — persistent `httpx.AsyncClient`, base `https://financialmodelingprep.com/stable/`. All market data flows through here. The env var for the API key is `FMP_API_KEY`.
 - `financials_service.py` — assembles the full financials payload; derives DCF suggestions including YoY revenue growth (date-based matching, not index-based) and a 20% conservative haircut on the suggested growth rate.
 - `email_service.py` — **the single outbound email path.** Every email (verification, password reset, payment, alerts) goes through `EmailService.send_email()`, which posts to Postmark and returns `bool`. It is synchronous by design: async callers wrap it in `asyncio.to_thread`. Never construct a provider client elsewhere — route new email through here so there stays one place to swap providers.
 - `alert_checker.py` — subscribes to the WebSocket price stream; on each tick, checks `PriceAlert` rows and triggers email + SMS when crossed. **Alerts are one-shot**, so `triggered_at`/`is_active=False` is only set once a notification actually reached the user; if every channel fails the alert stays armed and retries after `NOTIFY_RETRY_SECONDS`. `technical_alert_checker.py` does the same by holding `last_state` at its pre-transition value.
@@ -112,7 +112,7 @@ API docs: `http://localhost:8000/api/v1/docs`
 ```
 DATABASE_URL=postgresql+asyncpg://...
 SECRET_KEY=
-MASSIVE_API_KEY=          # FMP API key
+FMP_API_KEY=          # FMP API key
 ANTHROPIC_API_KEY=
 STRIPE_SECRET_KEY=
 STRIPE_PUBLISHABLE_KEY=

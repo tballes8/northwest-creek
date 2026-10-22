@@ -23,8 +23,8 @@ async def run_check():
         print("❌ ERROR: No DATABASE_URL found")
         return
 
-    if not os.getenv("MASSIVE_API_KEY"):
-        print("❌ ERROR: MASSIVE_API_KEY not set")
+    if not os.getenv("FMP_API_KEY"):
+        print("❌ ERROR: FMP_API_KEY not set")
         return
 
     engine = make_async_engine(database_url)

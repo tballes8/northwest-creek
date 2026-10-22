@@ -11,7 +11,7 @@ from app.config import get_settings
 settings = get_settings()
 
 FMP_BASE = "https://financialmodelingprep.com/stable/"
-API_KEY = settings.MASSIVE_API_KEY
+API_KEY = settings.FMP_API_KEY
 
 _client: httpx.AsyncClient | None = None
 

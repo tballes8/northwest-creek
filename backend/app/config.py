@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=90, env="ACCESS_TOKEN_EXPIRE_MINUTES")
     
     # Alpha Vantage API
-    MASSIVE_API_KEY: str = Field(..., env="MASSIVE_API_KEY")
+    FMP_API_KEY: str = Field(..., env="FMP_API_KEY")
     
     # CORS
     CORS_ORIGINS: List[str] = Field(default=["http://localhost:3000"], env="CORS_ORIGINS")
@@ -113,5 +113,5 @@ def get_settings() -> Settings:
         print(f"   TWILIO_ACCOUNT_SID = {'✅ SET' if settings.TWILIO_ACCOUNT_SID else '❌ NOT SET'}")
         print(f"   TWILIO_FROM_NUMBER = {settings.TWILIO_FROM_NUMBER or '❌ NOT SET'}")
         print(f"   DATABASE_URL = {'✅ SET' if settings.DATABASE_URL else '❌ NOT SET'}")
-        print(f"   MASSIVE_API_KEY = {'✅ SET' if settings.MASSIVE_API_KEY else '❌ NOT SET'}")
+        print(f"   FMP_API_KEY = {'✅ SET' if settings.FMP_API_KEY else '❌ NOT SET'}")
     return settings

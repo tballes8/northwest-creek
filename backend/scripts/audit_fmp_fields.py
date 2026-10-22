@@ -10,7 +10,7 @@ The audit logic lives in app/services/fmp_field_audit.py (shared with the weekly
 scheduled job app/tasks/audit_fmp_fields_task.py). This file is just the CLI:
 it loads the API key from env / backend/.env and prints the report.
 
-Run from backend/ with MASSIVE_API_KEY available (export it or put it in backend/.env):
+Run from backend/ with FMP_API_KEY available (export it or put it in backend/.env):
 
     python scripts/audit_fmp_fields.py                # full report
     python scripts/audit_fmp_fields.py --json         # machine-readable
@@ -34,8 +34,8 @@ from app.services.fmp_field_audit import run_audit, format_text_report, summariz
 
 
 def _load_api_key() -> str:
-    """MASSIVE_API_KEY from the environment, falling back to backend/.env."""
-    key = os.environ.get("MASSIVE_API_KEY", "").strip()
+    """FMP_API_KEY from the environment, falling back to backend/.env."""
+    key = os.environ.get("FMP_API_KEY", "").strip()
     if key:
         return key
     env_path = os.path.join(_BACKEND_DIR, ".env")
@@ -43,7 +43,7 @@ def _load_api_key() -> str:
         with open(env_path, encoding="utf-8") as fh:
             for line in fh:
                 line = line.strip()
-                if line.startswith("MASSIVE_API_KEY="):
+                if line.startswith("FMP_API_KEY="):
                     return line.split("=", 1)[1].strip().strip("'\"")
     except OSError:
         pass
@@ -67,7 +67,7 @@ def main() -> int:
         pass
 
     if not API_KEY:
-        print("ERROR: MASSIVE_API_KEY is not set (env or backend/.env) - cannot hit the FMP API.",
+        print("ERROR: FMP_API_KEY is not set (env or backend/.env) - cannot hit the FMP API.",
               file=sys.stderr)
         return 2
 

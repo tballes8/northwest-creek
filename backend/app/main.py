@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
         refresh_stock_snapshots_job,
         "interval",
         minutes=15,
-        kwargs={"api_key": settings.MASSIVE_API_KEY},
+        kwargs={"api_key": settings.FMP_API_KEY},
         id="refresh_stock_snapshots",
         replace_existing=True,
         max_instances=1,

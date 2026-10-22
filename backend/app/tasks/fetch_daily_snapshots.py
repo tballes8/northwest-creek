@@ -62,11 +62,11 @@ async def fetch_and_store_snapshots():
     print("📊 Starting daily snapshot fetch...")
 
     # Get environment variables
-    api_key = os.getenv("MASSIVE_API_KEY")
+    api_key = os.getenv("FMP_API_KEY")
     database_url = os.getenv("DATABASE_URL")
 
     if not api_key:
-        print("❌ ERROR: MASSIVE_API_KEY not set in environment")
+        print("❌ ERROR: FMP_API_KEY not set in environment")
         return
 
     if not database_url:

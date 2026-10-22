@@ -28,9 +28,9 @@ logger = logging.getLogger(__name__)
 async def fmp_field_audit_job() -> None:
     """APScheduler entrypoint: audit FMP fields, alert on drift."""
     settings = get_settings()
-    api_key = settings.MASSIVE_API_KEY
+    api_key = settings.FMP_API_KEY
     if not api_key:
-        logger.warning("FMP field audit skipped: MASSIVE_API_KEY not configured")
+        logger.warning("FMP field audit skipped: FMP_API_KEY not configured")
         return
 
     try:

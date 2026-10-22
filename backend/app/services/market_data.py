@@ -256,7 +256,7 @@ def _article_names_company(article: Dict[str, Any], tokens: set) -> bool:
 class MarketDataService:
 
     def __init__(self):
-        self.api_key = settings.MASSIVE_API_KEY
+        self.api_key = settings.FMP_API_KEY
         self._quote_cache = SimpleCache(ttl_seconds=15)
         self._profile_cache = SimpleCache(ttl_seconds=3600)
         # 15 min, matching the quote refresh cadence. This was 12h on the reasoning

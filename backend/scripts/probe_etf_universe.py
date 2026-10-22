@@ -5,7 +5,7 @@ Answers the questions that gate the ETF-screener build and cannot be answered fr
 the code. Nothing here writes to the database or to disk; it makes live FMP calls
 and prints a report.
 
-Run from backend/ with MASSIVE_API_KEY available (export it or put it in backend/.env):
+Run from backend/ with FMP_API_KEY available (export it or put it in backend/.env):
 
     python scripts/probe_etf_universe.py           # full report
     python scripts/probe_etf_universe.py --json    # machine-readable
@@ -77,8 +77,8 @@ ETF_INFO_SAMPLE = [
 
 
 def _load_api_key() -> str:
-    """MASSIVE_API_KEY from the environment, falling back to backend/.env."""
-    key = os.environ.get("MASSIVE_API_KEY", "").strip()
+    """FMP_API_KEY from the environment, falling back to backend/.env."""
+    key = os.environ.get("FMP_API_KEY", "").strip()
     if key:
         return key
     env_path = os.path.join(_BACKEND_DIR, ".env")
@@ -86,7 +86,7 @@ def _load_api_key() -> str:
         with open(env_path, encoding="utf-8") as fh:
             for line in fh:
                 line = line.strip()
-                if line.startswith("MASSIVE_API_KEY="):
+                if line.startswith("FMP_API_KEY="):
                     return line.split("=", 1)[1].strip().strip("'\"")
     except OSError:
         pass
@@ -376,7 +376,7 @@ def main() -> int:
 
     api_key = _load_api_key()
     if not api_key:
-        print("ERROR: MASSIVE_API_KEY is not set (env or backend/.env) - cannot hit the FMP API.",
+        print("ERROR: FMP_API_KEY is not set (env or backend/.env) - cannot hit the FMP API.",
               file=sys.stderr)
         return 2
 
