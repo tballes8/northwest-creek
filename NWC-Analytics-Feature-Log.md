@@ -1,6 +1,6 @@
 # NWC-Analytics — Shipped Features Log
 
-**Last Updated:** September 20, 2026  
+**Last Updated:** October 22, 2026  
 **Purpose:** Cross-project reference document. Attach to NWC Marketing, NWC Blog/SM Post, NWC Enhancements, and NWC Sandbox projects so all workstreams have visibility into what has shipped, what tier it lives on, and what content angles it unlocks.
 
 ---
@@ -1346,6 +1346,150 @@ It also completes the trend and volatility video series, which walks viewers thr
 - Volatility is not direction — what ATR can and cannot tell you
 
 > **Honest limits to carry into content:** The entry price is seeded from the most recent daily close, not a live tick, and the panel says so — users holding a position should enter their actual fill. Position sizing answers one question only: how many shares keep the loss at a set amount if the stop is hit. It does not check buying power, commissions or slippage, though it does warn when the resulting position would need more capital than the account size entered. Open risk is shown for long positions only; the portfolio does not model shorts. And as noted in the transaction-ledger entry above, positions built from multiple purchases *before* that ledger shipped were stored as a single blended average — for those, the calculator can offer average cost but not the individual purchase lots, because that detail was never recorded.
+
+---
+
+### September 25, 2026
+
+---
+
+#### Portfolio — Transaction History Shows the Full Ledger, and the CSV Export Covers All of It
+
+**What It Does:** The Transaction History view opened from the Realized P&L card loaded the most recent 200 transactions and stopped. Its ticker filter and its Export CSV button both worked only on those 200 rows, so on a long history a search for AAPL could report no trades when the AAPL trades simply sat further back, and an export could quietly end partway through the record.
+
+The view now pages through the entire ledger, 50 transactions at a time. The ticker filter runs on the server against every transaction, and its dropdown lists every ticker the user has ever traded rather than only the ones on the current page. **Export CSV now downloads the complete history** (or the complete history for the selected ticker), however many pages that spans. Voided transactions are included in the export with a flag rather than dropped, matching how they appear struck through on screen.
+
+**Tier Availability:** All tiers (Portfolio page), not tier-gated, consistent with the original ledger release
+
+**Marketing Angle:** The point of an export is reconciliation: lining up the platform's record against a broker statement. An export that stops at a page boundary makes that reconciliation look like it is missing trades, which is worse than having no export at all. The full-history export is the portfolio-history export the August 19 ledger entry described as groundwork, now delivered as CSV.
+
+**Blog/Content Hooks:**
+- How to reconcile your portfolio tracker against your broker statement
+- Why voided trades belong in your records (and in your export)
+
+---
+
+### September 30, 2026
+
+---
+
+#### Portfolio — Dividend Data Now Refreshes Every 15 Minutes
+
+**What It Does:** Dividend records were cached for 12 hours on the assumption that dividends change quarterly. That holds for traditional payers but not for weekly distributors such as ULTY, which announce a new ex-date every week. A record published mid-morning could stay invisible on the Portfolio page until evening. Dividend data now refreshes on the same 15-minute cadence as quotes.
+
+**Tier Availability:** All tiers (Portfolio page)
+
+**Marketing Angle:** Weekly-distribution ETFs are a fast-growing income category, and their holders check payout details more often than quarterly-dividend investors do. Showing the new distribution the same session it is announced is table stakes for that audience.
+
+**Blog/Content Hooks:** None — data freshness fix
+
+---
+
+### October 6, 2026
+
+---
+
+#### Portfolio — Every Column in a Row Now Uses the Same Price
+
+**What It Does:** A portfolio row draws its price from two live sources: the streaming price feed and a 30-second refresh. Current Price and Day Change always showed the latest price, but Total Value and P&L could keep a figure computed from a slightly older one. A thinly traded stock could show $24.82 as its price while its P&L was calculated at $24.75. Total Value, P&L, the summary totals and sorting by value or P&L are now all calculated from the price on screen, so every number in a row agrees with every other.
+
+Also shipped (October 1): position notes that are too long for the column are cut off with an ellipsis, and hovering over one now shows the full note.
+
+**Tier Availability:** All tiers (Portfolio page)
+
+**Marketing Angle:** None worth announcing. A row that disagrees with itself erodes trust in every number on the page, and this removes the disagreement.
+
+**Blog/Content Hooks:** None — bug fix
+
+---
+
+### October 7, 2026
+
+---
+
+#### Relative Valuation — Peer Search Widens to the Sector When an Industry Is Too Thin
+
+**What It Does:** The Relative Valuation calculator finds its comparable companies by screening for the subject's industry within a market-cap band. Some of the vendor's industry tags are nearly empty catch-all buckets. SPH, for example, is the only active company tagged "Oil & Gas Energy," so the calculator found no peers and dead-ended. When fewer than three other companies share the industry, the search now widens to the full sector. Industry matches stay at the top of the list, and an amber notice tells the user the search was widened and that sector comps are looser, so they should cut the list hard. When even the sector turns up nothing, the error now names the industry or sector that came up empty and suggests widening the market-cap band.
+
+**Tier Availability:** All tiers with Relative Valuation access
+
+**Marketing Angle:** A valuation tool that returns "no peers found" for a real company looks broken. Widening the search, and saying so out loud rather than silently padding the peer list with loose comps, keeps the tool useful on the hard cases while keeping the user in charge of which comparisons count.
+
+**Blog/Content Hooks:**
+- How to pick comparable companies — and when "same industry" isn't specific enough
+- Industry vs. sector comps: why looser peers need a harder cut
+
+---
+
+### October 18, 2026
+
+---
+
+#### Technical Analysis — Quarterly P/E Explains Missing Values
+
+**What It Does:** The Quarterly Trend table showed a bare dash whenever a quarter had no P/E ratio, which looked the same whether the company had lost money or the data simply was not available. The cell now reads **Negative Earnings** when trailing 12-month EPS was zero or negative (a P/E multiple means nothing there), or **No Data** when the price or four full quarters of EPS were missing, with a hover explanation for each.
+
+**Tier Availability:** All tiers with Technical Analysis access
+
+**Marketing Angle:** "No P/E because the company lost money" is information; a dash is not. This is small, but it is one more place where the platform says why a number is missing instead of leaving the user to guess.
+
+**Blog/Content Hooks:**
+- Why unprofitable companies have no P/E ratio — and what to look at instead
+
+---
+
+#### Dashboard — IPO Issue Price Now Shown Correctly
+
+**What It Does:** The IPO detail view on the Dashboard read its issue price from a field the market-data vendor no longer provides, so the Issue Price showed "—" for every deal. It is now calculated from the deal size and share count for deals that have priced. Deals that are still expected show no issue price rather than an overstated one, because their deal size includes the top of the price range plus the over-allotment. Total offer size now shows the deal's dollar size, and the share count is filled in.
+
+**Tier Availability:** All tiers (Dashboard)
+
+**Marketing Angle:** None — data correctness fix
+
+**Blog/Content Hooks:** None — bug fix
+
+---
+
+#### Admin Maintenance Console — Changelog Review Strips API Keys and Exports Its Evidence
+
+**What It Does:** Admins often paste example API calls alongside a vendor changelog, and those URLs usually carry an API key. Pasted text is now scrubbed of credentials before it is stored, sent for AI review or shown back. The downloaded review report now also includes the redacted source text it was based on, so whoever receives the file can check each finding against the evidence. Past reports remember which vendor they were run for.
+
+**Tier Availability:** Admin only
+
+**Marketing Angle:** None — internal tooling
+
+**Blog/Content Hooks:** None — internal tooling
+
+---
+
+### October 22, 2026
+
+---
+
+#### Intraday Chart — Day-Open Line and Above/Below-Open Coloring
+
+**What It Does:** The intraday chart (opened from a ticker on the Stocks screener, Portfolio or Watchlist) now draws a dashed reference line at the day's opening price, labeled with that price. The price line turns **green while the stock trades at or above the open and red while it trades below it**, switching exactly where it crosses. The chart's scale always keeps the open line in view. On a day the market is closed, the chart uses the open of the session it is actually showing.
+
+**Tier Availability:** All tiers with intraday chart access (Stocks, Portfolio, Watchlist)
+
+**Marketing Angle:** The daily change figure answers "how is it doing versus yesterday?" The open line answers a different question intraday traders care about: "has today's session been buyers or sellers?" Biohaven (BHVN) on October 22 shows why they differ: it gapped up 37% at the open, then sold off all session, so the header read **+26%** while the line ran red from the first few minutes. Gap-and-fade, gap-and-go, and an opening-range breakout are all visible at a glance now, without the user drawing the line themselves.
+
+**Blog/Content Hooks:**
+- Up on the day but down from the open — how to read a gap-and-fade
+- Why the opening price is the most important level on an intraday chart
+- Gap-and-go vs. gap-and-fade: what the first hour tells you
+
+---
+
+#### Site Updates Now Reach Users Without a Hard Refresh
+
+**What It Does:** The site's pages were served without a caching instruction, so browsers decided on their own to reuse an old copy and could keep running the previous version of the app after a release. That meant users missed new features until they hard-refreshed, and a stale page could break when it tried to load files from a build that no longer existed. Browsers are now told to check for a new version on every visit. The app's code files are still cached normally, since each release gives them new file names.
+
+**Tier Availability:** All tiers
+
+**Marketing Angle:** None to announce, but it matters for every future announcement: a feature that ships is now a feature users actually see on their next visit, which makes "now live" copy accurate the moment it goes out.
+
+**Blog/Content Hooks:** None — infrastructure fix
 
 ---
 
