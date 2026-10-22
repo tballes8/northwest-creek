@@ -322,6 +322,12 @@ const server = http.createServer(async (req, res) => {
     // SPA shell. Serving must never 500 because of the OG feature.
     console.error('[server] request handling error, falling back to static:', err.message);
   }
+  // Everything outside /static/ can be the SPA shell. Without an explicit header
+  // browsers heuristically cache it and keep loading the previous deploy's
+  // bundle; /static/* is content-hashed, so it is left cacheable.
+  if (!req.url.startsWith('/static/')) {
+    res.setHeader('Cache-Control', 'no-cache');
+  }
   return handler(req, res, HANDLER_CONFIG);
 });
 
