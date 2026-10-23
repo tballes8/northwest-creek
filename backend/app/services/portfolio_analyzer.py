@@ -133,8 +133,10 @@ Write a 3-5 sentence plain-language summary explaining what is happening in this
             response.raise_for_status()
             data = response.json()
             return extract_text(data)
-    except Exception:
-        logger.exception("Portfolio AI analysis request failed (model=%s)", settings.ANTHROPIC_MODEL)
+    except Exception as e:
+        # Anthropic's error body names the actual cause (credits, bad param, ...)
+        body = e.response.text if isinstance(e, httpx.HTTPStatusError) else ""
+        logger.exception("Portfolio AI analysis request failed (model=%s) %s", settings.ANTHROPIC_MODEL, body)
         return (
             "Unable to generate AI analysis at this time. "
             "Please try again in a moment."

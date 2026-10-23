@@ -131,8 +131,10 @@ Summarize what these indicators suggest about this stock's momentum, trend stren
             response.raise_for_status()
             data = response.json()
             return extract_text(data)
-    except Exception:
-        logger.exception("Stock AI analysis request failed for %s (model=%s)", ticker, settings.ANTHROPIC_MODEL)
+    except Exception as e:
+        # Anthropic's error body names the actual cause (credits, bad param, ...)
+        body = e.response.text if isinstance(e, httpx.HTTPStatusError) else ""
+        logger.exception("Stock AI analysis request failed for %s (model=%s) %s", ticker, settings.ANTHROPIC_MODEL, body)
         return (
             "Unable to generate AI analysis at this time. "
             "Please try again in a moment."
@@ -254,6 +256,7 @@ Respond with ONLY this JSON (no markdown, no explanation outside the object):
                 "bull": round(values[2], 2),
                 "rationale": rationale,
             }
-    except Exception:
-        logger.exception("Stock price forecast request failed (model=%s)", settings.ANTHROPIC_MODEL)
+    except Exception as e:
+        body = e.response.text if isinstance(e, httpx.HTTPStatusError) else ""
+        logger.exception("Stock price forecast request failed (model=%s) %s", settings.ANTHROPIC_MODEL, body)
         return None
