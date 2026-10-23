@@ -13,6 +13,7 @@ from app.api.dependencies import get_current_user
 from app.db.models import User, Portfolio, FeatureUsage
 from app.services.market_data import market_data_service, evaluate_dividend
 from app.services.portfolio_analyzer import analyze_portfolio
+from app.api.v1.endpoints.stocks import get_index_quotes
 from app.core.tier_limits import get_tier_limit, get_review_period, get_upgrade_tier
 
 router = APIRouter()
@@ -145,14 +146,17 @@ async def analyze_user_portfolio(
     # Fetch index quotes for market context (best-effort)
     index_context: list = []
     try:
-        index_quotes = await market_data_service.get_batch_quotes(["^GSPC", "^IXIC", "^DJI"])
+        # Same source as the dashboard index card: batch-quote does not reliably
+        # return index symbols, and its field was read under the wrong name, so
+        # market context was silently empty on every analysis.
+        index_quotes = {i["symbol"]: i for i in (await get_index_quotes())["indexes"]}
         name_map = {"^GSPC": "S&P 500", "^IXIC": "NASDAQ", "^DJI": "Dow Jones"}
         for symbol, label in name_map.items():
             q = index_quotes.get(symbol, {})
-            if q.get("changesPercentage") is not None:
+            if q.get("changePercent") is not None:
                 index_context.append({
                     "name": label,
-                    "changePercent": float(q["changesPercentage"]),
+                    "changePercent": float(q["changePercent"]),
                 })
     except Exception:
         pass
