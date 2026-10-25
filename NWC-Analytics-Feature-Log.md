@@ -1,6 +1,6 @@
 # NWC-Analytics — Shipped Features Log
 
-**Last Updated:** October 22, 2026  
+**Last Updated:** October 24, 2026  
 **Purpose:** Cross-project reference document. Attach to NWC Marketing, NWC Blog/SM Post, NWC Enhancements, and NWC Sandbox projects so all workstreams have visibility into what has shipped, what tier it lives on, and what content angles it unlocks.
 
 ---
@@ -1490,6 +1490,30 @@ Also shipped (October 1): position notes that are too long for the column are cu
 **Marketing Angle:** None to announce, but it matters for every future announcement: a feature that ships is now a feature users actually see on their next visit, which makes "now live" copy accurate the moment it goes out.
 
 **Blog/Content Hooks:** None — infrastructure fix
+
+---
+
+### October 24, 2026
+
+---
+
+#### Stock Screener — Valuation Filters (P/E, P/B, EV/EBITDA) and a Classic Value Preset
+
+**What It Does:** The Stock Screener could find stocks that were out of favor, such as names near a 52-week low or below their 200-day moving average, but it could not find stocks that were actually cheap. No valuation ratio was available to filter on. Stock mode now has a **Valuation (TTM, max)** block under Market Cap with three boxes: **P/E**, **P/B** and **EV/EBITDA**. The results table shows all three as sortable columns next to market cap.
+
+A new **Classic Value** preset applies the textbook value screen in one click. It keeps stocks with P/E under 15, P/B under 1.5, EV/EBITDA under 10 and a market cap above $2B, sorted cheapest P/E first. The preset description calls the result a shortlist, not a buy list, and tells the user to find out why each stock is cheap.
+
+The ratios are trailing-twelve-month figures, refreshed daily for the whole stock universe. They are the same numbers the Financials tab shows for each company, so the screener and the company page always agree. Companies with negative earnings, book value or EBITDA have no ratio and never match a valuation filter. Without that rule, "P/E under 15" would return every money-losing company. Each ticker also passes the same SEC EDGAR identity check that guards the Financials page. When the data vendor's figures belong to a different company than the ticker, the ratios are withheld rather than shown.
+
+**Tier Availability:** All tiers (Stock Screener, stock mode). Not shown in ETF mode, because funds have no earnings or EBITDA of their own.
+
+**Marketing Angle:** "Show me profitable large caps trading under 15 times earnings and below book value" is the first question a value investor asks a screener, and until now NWC-Analytics could not answer it. The preset puts Benjamin Graham's classic screen one click away. Excluding loss-makers and wrong-company data means the list is clean enough to work from, not one the user has to sift for junk first.
+
+**Blog/Content Hooks:**
+- How to build a value stock screen: P/E, P/B and EV/EBITDA thresholds explained
+- Why a negative P/E is not a cheap P/E
+- The value trap: why a stock that passes every value screen can still be a bad buy
+- Supports the Value Investing episode of *The 7 Investment Styles* video series
 
 ---
 
