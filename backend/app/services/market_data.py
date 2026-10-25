@@ -421,6 +421,10 @@ class MarketDataService:
                 # what fills stock_snapshots.avg_volume — which the screener's RVOL filter
                 # divides today's volume into. Already-fetched data; costs no extra call.
                 "average_volume": result.get("averageVolume"),
+                # The vendor's CIK for this ticker. The daily profile pass stores it so the
+                # valuation pass can check it against SEC EDGAR (edgar_identity) before
+                # the screener filters on ratios FMP keyed by this ticker.
+                "cik": result.get("cik"),
                 "phone": result.get("phone", ""),
                 "employees": result.get("fullTimeEmployees"),
                 "country": result.get("country", "US"),

@@ -200,6 +200,12 @@ interface ScreenerResult {
   asset_class: string | null;
   etf_company: string | null;
   inception_date: string | null;   // 'YYYY-MM-DD'
+  // TTM valuation multiples, stocks only. null = not meaningful (negative earnings, book
+  // or EBITDA), not yet fetched, or suppressed because the ticker failed the EDGAR
+  // identity check. The backend never sends a negative multiple.
+  pe_ratio: number | null;
+  pb_ratio: number | null;
+  ev_to_ebitda: number | null;
 }
 
 // Which slice of the universe the screener is looking at. Swaps the filter panel and
@@ -214,6 +220,8 @@ type ScreenerMode = 'stocks' | 'etfs';
 const STOCK_ONLY_KEYS = [
   'marketCapMinB', 'marketCapMaxB',
   'sector', 'industry',
+  // Funds have no earnings or EBITDA of their own; the backend stores no multiples for them.
+  'peMax', 'pbMax', 'evEbitdaMax',
   // Squeeze is stocks-only for now purely as a timing matter: compute_squeeze seeds
   // fund history on its first post-close run after ETFs land, so until then a squeeze
   // filter in ETF mode would return zero rows with no explanation. Promoting it later
@@ -233,6 +241,8 @@ interface ScreenerFormState {
   marketCapMinB: string; marketCapMaxB: string;
   changePctMin: string; changePctMax: string;
   dividendYieldMin: string; dividendYieldMax: string;
+  // Max only, like expenseRatioMax: a value screen asks "at most N".
+  peMax: string; pbMax: string; evEbitdaMax: string;
   betaMin: string; betaMax: string;
   dollarVolMinM: string;
   volumeMinM: string; volumeMaxM: string;
@@ -292,6 +302,7 @@ const defaultScreenerForm: ScreenerFormState = {
   marketCapMinB: '', marketCapMaxB: '',
   changePctMin: '', changePctMax: '',
   dividendYieldMin: '', dividendYieldMax: '',
+  peMax: '', pbMax: '', evEbitdaMax: '',
   betaMin: '', betaMax: '',
   dollarVolMinM: '',
   volumeMinM: '', volumeMaxM: '',
@@ -332,6 +343,9 @@ const STOCK_COLS = [
   { key: 'price', label: 'Price' },
   { key: 'change_percentage', label: 'Chg%' },
   { key: 'market_cap', label: 'Mkt Cap' },
+  { key: 'pe_ratio', label: 'P/E' },
+  { key: 'pb_ratio', label: 'P/B' },
+  { key: 'ev_to_ebitda', label: 'EV/EBITDA' },
   { key: 'volume', label: 'Volume' },
   { key: 'rvol', label: 'RVOL' },
   { key: 'dividend_yield', label: 'Div Yld' },
@@ -437,6 +451,9 @@ function buildScreenerCriteria(
     if (form.squeezeMaxRatio !== '') c.squeeze_max_ratio = parseFloat(form.squeezeMaxRatio);
     if (form.sector) c.sector = [form.sector];
     if (form.industry) c.industry = [form.industry];
+    if (form.peMax !== '') c.pe_ratio = { max: parseFloat(form.peMax) };
+    if (form.pbMax !== '') c.pb_ratio = { max: parseFloat(form.pbMax) };
+    if (form.evEbitdaMax !== '') c.ev_to_ebitda = { max: parseFloat(form.evEbitdaMax) };
   }
 
   if (mode === 'etfs') {
@@ -498,6 +515,9 @@ function hydrateFormFromCriteria(c: Record<string, any>): {
     changePctMax: c.change_percentage?.max?.toString() ?? '',
     dividendYieldMin: c.dividend_yield?.min?.toString() ?? '',
     dividendYieldMax: c.dividend_yield?.max?.toString() ?? '',
+    peMax: c.pe_ratio?.max?.toString() ?? '',
+    pbMax: c.pb_ratio?.max?.toString() ?? '',
+    evEbitdaMax: c.ev_to_ebitda?.max?.toString() ?? '',
     betaMin: c.beta?.min?.toString() ?? '',
     betaMax: c.beta?.max?.toString() ?? '',
     dollarVolMinM: c.dollar_volume?.min != null ? (c.dollar_volume.min / 1e6).toString() : '',
@@ -3443,18 +3463,46 @@ const Stocks: React.FC = () => {
               </div>
 
               {screenerMode === 'stocks' ? (
-                /* Market Cap */
-                <div className="mb-3">
-                  <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Market Cap ($B)</div>
-                  <div className="flex gap-1.5">
-                    <input type="number" placeholder="Min" value={screenerForm.marketCapMinB}
-                      onChange={e => setScreenerForm(f => ({ ...f, marketCapMinB: e.target.value }))}
-                      className={screenerInputCls} />
-                    <input type="number" placeholder="Max" value={screenerForm.marketCapMaxB}
-                      onChange={e => setScreenerForm(f => ({ ...f, marketCapMaxB: e.target.value }))}
-                      className={screenerInputCls} />
+                <>
+                  {/* Market Cap */}
+                  <div className="mb-3">
+                    <div className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Market Cap ($B)</div>
+                    <div className="flex gap-1.5">
+                      <input type="number" placeholder="Min" value={screenerForm.marketCapMinB}
+                        onChange={e => setScreenerForm(f => ({ ...f, marketCapMinB: e.target.value }))}
+                        className={screenerInputCls} />
+                      <input type="number" placeholder="Max" value={screenerForm.marketCapMaxB}
+                        onChange={e => setScreenerForm(f => ({ ...f, marketCapMaxB: e.target.value }))}
+                        className={screenerInputCls} />
+                    </div>
                   </div>
-                </div>
+
+                  {/* Valuation. Max only, and labelled above each box rather than by
+                      placeholder so the label survives typing. Negative multiples are
+                      never stored, so a max never admits a loss-maker. */}
+                  <div className="mb-3">
+                    <div
+                      className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1"
+                      title="Trailing-twelve-month multiples, refreshed daily. Companies with negative earnings, book value or EBITDA have no multiple and never match."
+                    >
+                      Valuation (TTM, max)
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {([
+                        ['peMax', 'P/E', 'e.g. 15'],
+                        ['pbMax', 'P/B', 'e.g. 1.5'],
+                        ['evEbitdaMax', 'EV/EBITDA', 'e.g. 10'],
+                      ] as const).map(([key, label, ph]) => (
+                        <div key={key}>
+                          <div className="text-[10px] text-gray-500 dark:text-gray-400 mb-0.5">{label}</div>
+                          <input type="number" step="0.1" placeholder={ph} value={screenerForm[key]}
+                            onChange={e => setScreenerForm(f => ({ ...f, [key]: e.target.value }))}
+                            className={screenerInputCls} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
               ) : (
                 <>
                   {/* AUM in $M, not $B: a large share of funds sit between $50M and
@@ -3858,6 +3906,15 @@ const Stocks: React.FC = () => {
                               {screenerMode === 'stocks' ? (
                                 <>
                                   <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap">{fmtMarketCap(r.market_cap)}</td>
+                                  {[r.pe_ratio, r.pb_ratio, r.ev_to_ebitda].map((v, i) => (
+                                    <td
+                                      key={i}
+                                      className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums"
+                                      title={v == null ? 'Not meaningful or unavailable: negative earnings, book value or EBITDA, or no verified data' : undefined}
+                                    >
+                                      {v != null ? `${v.toFixed(1)}x` : '—'}
+                                    </td>
+                                  ))}
                                   <td className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap">{fmtVolume(r.volume)}</td>
                                   <td
                                     className="px-3 py-2.5 text-gray-600 dark:text-gray-300 whitespace-nowrap tabular-nums"

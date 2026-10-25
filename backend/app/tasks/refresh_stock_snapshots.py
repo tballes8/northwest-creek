@@ -14,7 +14,8 @@ which is what the screener's Stocks|ETFs mode filters on. Subsequent intraday ru
 only re-fetch quotes for the existing symbol universe.
 
 Daily enrichment runs in a fixed order after the upsert: company profiles (stocks
-only), then ETF metadata (funds only), then dividends (universe-wide).
+only), then ETF metadata (funds only), then dividends (universe-wide), then valuation
+multiples (stocks only, after profiles because it reads the CIK they store).
 """
 import asyncio
 import logging
@@ -26,13 +27,17 @@ from decimal import Decimal
 import httpx
 import pytz
 from sqlalchemy import (
-    Date, DateTime, Integer, Numeric, String, Text, bindparam, delete, func, or_, select,
+    BigInteger, Date, DateTime, Integer, Numeric, String, Text, bindparam, delete, func, or_, select,
     update,
 )
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.models import StockSnapshot
 from app.db.session import async_session
+from app.services.edgar_identity import (
+    CANNOT_RESOLVE, CONTRADICTION, build_entity_trust, normalize_cik,
+    resolve_contradiction, resolve_fund_ticker, resolve_ticker_cik, warm_ticker_map,
+)
 from app.services.market_data import evaluate_dividend, market_data_service
 
 logger = logging.getLogger(__name__)
@@ -72,6 +77,15 @@ ETF_INFO_LIMIT = 8_000  # runaway guard, same spirit as PROFILE_FILL_LIMIT
 # are evaluated: one it reports as zero cannot produce a false *high* yield, which is the
 # failure mode being fixed, and this roughly halves the added calls.
 DIVIDEND_CONCURRENCY = 8
+
+# Valuation pass: one /stable/ratios-ttm call per stock, ~4.4k a day. Same budget and
+# concurrency as the profile pass, which it runs after.
+VALUATION_CONCURRENCY = 8
+
+# Anything at or past this is a vendor artefact, not a multiple (a P/E of a billion means
+# earnings rounded to ~0). Dropped so it costs that field rather than overflowing the
+# Numeric(14, 4) column and failing the whole batch UPDATE.
+_MULTIPLE_CEILING = 1e9
 
 # Exchanges that count as a US listing for the screener universe.
 #
@@ -642,6 +656,9 @@ async def _update_company_profiles(
                 "b_avg_volume": avg_vol,
                 "b_industry": info.get("industry") or None,
                 "b_description": info.get("description") or None,
+                # Read by _update_valuations' identity check. normalize_cik because FMP
+                # sends it as a zero-padded string ("0000320193").
+                "b_fmp_cik": normalize_cik(info.get("cik")),
                 # is_etf is NOT written here. _fetch_quotes owns it, from which
                 # company-screener leg the symbol arrived on. Two writers was a real
                 # hazard: FMP flags some ETNs and closed-end funds as isFund rather than
@@ -675,6 +692,7 @@ async def _update_company_profiles(
                 industry=func.coalesce(bindparam("b_industry", type_=String), tbl.c.industry),
                 description=func.coalesce(bindparam("b_description", type_=Text), tbl.c.description),
                 avg_volume=func.coalesce(bindparam("b_avg_volume", type_=Numeric), tbl.c.avg_volume),
+                fmp_cik=func.coalesce(bindparam("b_fmp_cik", type_=BigInteger), tbl.c.fmp_cik),
             )
         )
 
@@ -952,6 +970,154 @@ async def _update_dividends() -> int | None:
         return None
 
 
+def clean_multiple(raw) -> Decimal | None:
+    """A valuation multiple as stored, or None.
+
+    None for anything non-positive: a negative P/E, P/B or EV/EBITDA means negative
+    earnings, book value or EBITDA, which is "not meaningful", not "cheap". Kept as a
+    number it would pass every "at most N" screen. None also for garbage: non-numeric,
+    NaN, infinite, or at/past _MULTIPLE_CEILING.
+    """
+    try:
+        val = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if val != val or val <= 0 or val >= _MULTIPLE_CEILING:  # val != val catches NaN
+        return None
+    return Decimal(str(round(val, 4)))
+
+
+async def _identity_verdict(symbol: str, fmp_cik: int | None) -> str:
+    """The edgar_identity verdict for one ticker, from the stored profile CIK.
+
+    The same build_entity_trust / resolve_contradiction pair financials_service uses, so
+    identity is never re-derived here. The EDGAR ticker map is one cached file, so the
+    common path makes no network call. Only a contradiction fetches submissions, to tell
+    a successor registrant (kept) from genuine reuse (suppressed).
+    """
+    edgar = await resolve_ticker_cik(symbol)
+    fund = None if edgar else await resolve_fund_ticker(symbol)
+    trust = build_entity_trust(symbol, edgar, None, fmp_cik, fund=fund)
+    if trust["verdict"] == CONTRADICTION:
+        trust = await resolve_contradiction(trust)
+    return trust["verdict"]
+
+
+async def _update_valuations() -> int | None:
+    """Store P/E, P/B and EV/EBITDA from /stable/ratios-ttm for every stock.
+
+    Stocks only (_STOCK_ONLY): a fund has no earnings or EBITDA of its own, and the
+    screener's ETF mode does not offer these filters.
+
+    Runs after _update_company_profiles so fmp_cik is current. Each ticker's figures are
+    gated on its identity verdict before they are written. On a contradiction all three
+    are stored as NULL, matching how financials_service nulls entity-scoped keys at
+    source. A successor registrant or an unresolvable ticker keeps its figures, per the
+    edgar_identity contract.
+
+    Writes are unguarded (no COALESCE), like _update_dividends, so a stock that swings
+    to a loss clears its P/E. A failed fetch skips the row instead of blanking it.
+
+    **Returns:** how many stocks were written, or None if the run failed.
+    """
+    try:
+        async with async_session() as session:
+            targets = (await session.execute(
+                select(StockSnapshot.symbol, StockSnapshot.fmp_cik)
+                .where(_STOCK_ONLY)
+                .order_by(StockSnapshot.market_cap.desc().nulls_last())
+            )).all()
+
+        if not targets:
+            print("📊 Valuations: no stocks in the universe yet", flush=True)
+            return 0
+
+        print(f"📊 Valuations: fetching ratios for {len(targets)} stocks", flush=True)
+
+        # Probe EDGAR once. If the ticker map cannot load, every per-ticker lookup below
+        # would retry the download against SEC's shared 8 req/s throttle, thousands of
+        # times. Unverifiable never blocks, so skipping the check loses nothing that a
+        # degraded per-ticker check would have caught.
+        await warm_ticker_map()
+        edgar_up = await resolve_ticker_cik("AAPL") is not None
+        if not edgar_up:
+            msg = "Valuations: EDGAR ticker map unavailable, identity recorded as cannot_resolve this run"
+            print(f"⚠️ {msg}", flush=True)
+            logger.warning(msg)
+
+        sem = asyncio.Semaphore(VALUATION_CONCURRENCY)
+
+        async def _fetch(symbol: str, fmp_cik) -> dict | None:
+            async with sem:
+                try:
+                    data = await market_data_service._fmp_get("ratios-ttm", {"symbol": symbol})
+                except Exception as e:
+                    logger.debug(f"Failed to fetch ratios-ttm for {symbol}: {e}")
+                    return None
+            if not data or not isinstance(data, list) or not isinstance(data[0], dict):
+                return None
+            r = data[0]
+
+            try:
+                verdict = (
+                    await _identity_verdict(symbol, normalize_cik(fmp_cik))
+                    if edgar_up else CANNOT_RESOLVE
+                )
+            except Exception as e:
+                # Never fail the pass over identity. Unverifiable does not block.
+                logger.debug(f"Identity check failed for {symbol}: {e}")
+                verdict = CANNOT_RESOLVE
+            blocked = verdict == CONTRADICTION
+
+            return {
+                "b_symbol": symbol,
+                "b_pe": None if blocked else clean_multiple(r.get("priceToEarningsRatioTTM")),
+                "b_pb": None if blocked else clean_multiple(r.get("priceToBookRatioTTM")),
+                "b_ev": None if blocked else clean_multiple(r.get("enterpriseValueMultipleTTM")),
+                "b_trust": verdict,
+                "b_refreshed_at": datetime.now(timezone.utc),
+            }
+
+        fetched = await asyncio.gather(*(_fetch(sym, cik) for sym, cik in targets))
+        rows = [r for r in fetched if r]
+
+        if not rows:
+            logger.info("No valuations resolved")
+            return 0
+
+        # UPDATE-only, like every other enrichment pass.
+        tbl = StockSnapshot.__table__
+        stmt = (
+            update(tbl)
+            .where(tbl.c.symbol == bindparam("b_symbol"))
+            .values(
+                pe_ratio=bindparam("b_pe", type_=Numeric(14, 4)),
+                pb_ratio=bindparam("b_pb", type_=Numeric(14, 4)),
+                ev_to_ebitda=bindparam("b_ev", type_=Numeric(14, 4)),
+                valuation_trust=bindparam("b_trust", type_=String),
+                valuation_refreshed_at=bindparam("b_refreshed_at", type_=DateTime(timezone=True)),
+            )
+        )
+
+        async with async_session() as session:
+            for i in range(0, len(rows), _PROFILE_CHUNK):
+                await session.execute(stmt, rows[i:i + _PROFILE_CHUNK])
+            await session.commit()
+
+        by_trust = Counter(r["b_trust"] for r in rows)
+        with_pe = sum(1 for r in rows if r["b_pe"] is not None)
+        summary = (
+            f"Valuations: wrote {len(rows)}/{len(targets)} stocks, {with_pe} with a "
+            "positive P/E; identity " + ", ".join(f"{k}={v}" for k, v in sorted(by_trust.items()))
+        )
+        print(f"📊 {summary}", flush=True)
+        logger.info(summary)
+        return len(rows)
+    except Exception as e:
+        logger.warning(f"Failed to update valuations: {e}")
+        return None
+
+
 async def refresh_stock_snapshots_job(api_key: str) -> None:
     """Entry point called by APScheduler every 15 minutes."""
     if not _is_market_hours():
@@ -999,6 +1165,8 @@ async def refresh_stock_snapshots_job(api_key: str) -> None:
             # ETF payers are picked up automatically — company-screener reports
             # lastAnnualDividend for ~81% of funds, so no separate gate is needed.
             await _update_dividends()
+            # After profiles: reads the fmp_cik that pass just refreshed.
+            await _update_valuations()
 
         print(f"✅ Snapshot refresh complete — {len(rows)} symbols", flush=True)
         logger.info(f"Snapshot refresh complete — {len(rows)} symbols")
@@ -1044,5 +1212,35 @@ async def _drain_company_profiles() -> None:
         await close_fmp_client()
 
 
+async def _backfill_valuations() -> None:
+    """Fill the valuation columns now instead of waiting for the next daily rebuild.
+
+    Runs the full profile pass first (stores fmp_cik for the identity check), then the
+    valuation pass. Roughly 4k + 4k FMP calls, a few minutes each.
+
+        railway run python -m app.tasks.refresh_stock_snapshots --valuations
+    """
+    from app.services.edgar_client import close_edgar_client, init_edgar_client
+    from app.services.fmp_client import close_fmp_client, init_fmp_client
+
+    await init_fmp_client()
+    await init_edgar_client()
+    try:
+        await _update_company_profiles()
+        written = await _update_valuations()
+        if written is None:
+            print("❌ Valuation pass failed, see log", flush=True)
+        else:
+            print(f"✅ Valuations backfilled for {written} stocks", flush=True)
+    finally:
+        await close_edgar_client()
+        await close_fmp_client()
+
+
 if __name__ == "__main__":
-    asyncio.run(_drain_company_profiles())
+    import sys
+
+    if "--valuations" in sys.argv[1:]:
+        asyncio.run(_backfill_valuations())
+    else:
+        asyncio.run(_drain_company_profiles())

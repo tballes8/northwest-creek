@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Numeric, Date, Index, Integer, UniqueConstraint, CheckConstraint
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Numeric, Date, Index, Integer, BigInteger, UniqueConstraint, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -327,6 +327,22 @@ class StockSnapshot(Base):
     # Every field above is written with COALESCE, so without this a value stale
     # because etf/info has been erroring for days is indistinguishable from a fresh one.
     etf_info_refreshed_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Valuation multiples — populated on stock rows only, by
+    # refresh_stock_snapshots._update_valuations from /stable/ratios-ttm (the same
+    # fields financials_service shows). Non-positive values are stored as NULL: a
+    # negative P/E is not cheap, it is not meaningful. All three are nulled when
+    # valuation_trust is a contradiction, so the screener never ranks a ticker on
+    # another company's figures. See migration 034.
+    pe_ratio = Column(Numeric(precision=14, scale=4), nullable=True)
+    pb_ratio = Column(Numeric(precision=14, scale=4), nullable=True)
+    ev_to_ebitda = Column(Numeric(precision=14, scale=4), nullable=True)
+    # CIK from FMP's /stable/profile, written by the profile pass. Compared against
+    # SEC EDGAR by the valuation pass via edgar_identity.build_entity_trust.
+    fmp_cik = Column(BigInteger, nullable=True)
+    valuation_trust = Column(String(24), nullable=True)  # an edgar_identity verdict
+    # Unguarded writes, so this is the age of the three multiples above.
+    valuation_refreshed_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index('idx_ss_market_cap', 'market_cap'),

@@ -47,7 +47,7 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
      "used_by": ["services/market_data.py:157", "services/financials_service.py:88",
                  "api/v1/endpoints/relative_valuation.py (peer-ratios: name/sector/market cap "
                  "for tickers the user already chose; it does not discover peers)",
-                 "tasks/refresh_stock_snapshots.py (sector/industry/avg_volume into stock_snapshots)"],
+                 "tasks/refresh_stock_snapshots.py (sector/industry/avg_volume/cik into stock_snapshots)"],
      # Stable profile uses `exchange` (not `exchangeShortName`) and has no `type` field
      # (use isEtf/isFund/isAdr booleans). See scripts/audit_fmp_fields.py.
      # averageVolume is read here and ONLY here — it is the source for
@@ -77,7 +77,8 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
      "key_fields": ["date", "freeCashFlow", "operatingCashFlow", "capitalExpenditure"]},
     {"path": "ratios-ttm", "description": "Trailing-twelve-month financial ratios",
      "used_by": ["services/financials_service.py:81",
-                 "api/v1/endpoints/relative_valuation.py (peer-ratios)"],
+                 "api/v1/endpoints/relative_valuation.py (peer-ratios)",
+                 "tasks/refresh_stock_snapshots.py (pe/pb/ev_to_ebitda into stock_snapshots)"],
      "key_fields": ["priceToEarningsRatioTTM", "priceToSalesRatioTTM", "priceToBookRatioTTM",
                     "priceToFreeCashFlowRatioTTM", "enterpriseValueMultipleTTM",
                     "debtToEquityRatioTTM", "currentRatioTTM", "quickRatioTTM", "dividendYieldTTM"]},

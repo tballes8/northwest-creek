@@ -77,6 +77,11 @@ SORT_COL = {
     "holdings_count": StockSnapshot.holdings_count,
     "nav": StockSnapshot.nav,
     "inception_date": StockSnapshot.inception_date,
+    # Valuation multiples. NULL (not meaningful) sorts last in both directions, so an
+    # ascending P/E sort leads with the cheapest real multiple, not with loss-makers.
+    "pe_ratio": StockSnapshot.pe_ratio,
+    "pb_ratio": StockSnapshot.pb_ratio,
+    "ev_to_ebitda": StockSnapshot.ev_to_ebitda,
 }
 
 # Default sort per universe. ETF mode cannot default to market_cap: batch-quote is
@@ -100,6 +105,12 @@ class ScreenerCriteria(BaseModel):
     price_avg_200: Optional[NumericRange] = None
     dividend_yield: Optional[NumericRange] = None  # percent, e.g. min 3 = ≥3% yield
     beta: Optional[NumericRange] = None  # e.g. max 1 = defensive, min 1.5 = high-beta
+    # Valuation multiples, TTM. Stored NULL when non-positive or identity-blocked, and a
+    # NULL fails any range, so "P/E at most 15" never returns a loss-maker. Stock mode
+    # only: funds carry no value, so the frontend omits these in ETF mode.
+    pe_ratio: Optional[NumericRange] = None
+    pb_ratio: Optional[NumericRange] = None
+    ev_to_ebitda: Optional[NumericRange] = None
     exchange: Optional[list[str]] = None
 
     pct_from_52wk_high: Optional[NumericRange] = None
@@ -211,6 +222,9 @@ _ROW_COLS = (
     StockSnapshot.asset_class,
     StockSnapshot.etf_company,
     StockSnapshot.inception_date,
+    StockSnapshot.pe_ratio,
+    StockSnapshot.pb_ratio,
+    StockSnapshot.ev_to_ebitda,
 )
 
 
@@ -282,6 +296,11 @@ def _build_row(row: StockSnapshot) -> dict:
         "asset_class": row.asset_class,
         "etf_company": row.etf_company,
         "inception_date": row.inception_date.isoformat() if row.inception_date else None,
+        # TTM multiples. None means not meaningful (non-positive), not fetched, or
+        # suppressed on an identity contradiction. The UI shows all three as "—".
+        "pe_ratio": _f(row.pe_ratio),
+        "pb_ratio": _f(row.pb_ratio),
+        "ev_to_ebitda": _f(row.ev_to_ebitda),
     }
 
 
@@ -330,6 +349,9 @@ async def run_screener(
     add_range(DIV_YIELD_EXPR, criteria.dividend_yield)
     add_range(StockSnapshot.beta, criteria.beta)
     add_range(RVOL_EXPR, criteria.rvol)
+    add_range(StockSnapshot.pe_ratio, criteria.pe_ratio)
+    add_range(StockSnapshot.pb_ratio, criteria.pb_ratio)
+    add_range(StockSnapshot.ev_to_ebitda, criteria.ev_to_ebitda)
 
     # ETF-only. All push down to SQL, so _passes_derived needs no change.
     add_range(StockSnapshot.expense_ratio, criteria.expense_ratio)
@@ -659,6 +681,24 @@ _PRESETS = [
             "market_cap": {"min": 2_000_000_000},
             "sort_by": "dividend_yield",
             "sort_desc": True,
+        },
+    },
+    {
+        "id": "classic_value",
+        "name": "Classic Value",
+        "universe": "stocks",
+        "description": (
+            "Cheap on all three multiples: P/E under 15, P/B under 1.5 and EV/EBITDA under 10, "
+            "market cap above $2B. A shortlist, not a buy list. Find out why each one is cheap."
+        ),
+        "criteria": {
+            "universe": "stocks",
+            "pe_ratio": {"max": 15},
+            "pb_ratio": {"max": 1.5},
+            "ev_to_ebitda": {"max": 10},
+            "market_cap": {"min": 2_000_000_000},
+            "sort_by": "pe_ratio",
+            "sort_desc": False,
         },
     },
     {
