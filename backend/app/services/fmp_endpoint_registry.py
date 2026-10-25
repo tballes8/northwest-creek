@@ -185,7 +185,9 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
      "description": ("Filter stocks/build the screener universe. refresh_stock_snapshots calls it "
                      "twice per daily rebuild - isEtf=false for the stock leg, isEtf=true for the "
                      "ETF leg; which leg a symbol arrives on IS the definition of "
-                     "stock_snapshots.is_etf. Response shape is identical on both."),
+                     "stock_snapshots.is_etf. Response shape is identical on both. Both legs pass "
+                     "exchange=AMEX,CBOE,NASDAQ,NYSE: `country` is domicile, not listing, and "
+                     "country=US dropped ~1,400 US-listed foreign companies (TSM, ACN, LIN)."),
      # Relative Valuation's peer pull does NOT call FMP: the frontend
      # (RelativeValuation.tsx) queries NWC's own screener (api/v1/endpoints/screener.py,
      # backed by stock_snapshots) by industry, widening to sector, within a user-set

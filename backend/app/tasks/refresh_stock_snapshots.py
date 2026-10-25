@@ -8,7 +8,8 @@ Cadence (enforced inside the job, not by the scheduler):
   on weekends, so hourly re-fetches were pure API waste
 
 Universe: /company-screener is called twice on the daily rebuild — isEtf=false for
-US common stocks and isEtf=true for US ETFs. Mutual funds and CEFs are excluded from
+common stocks and isEtf=true for ETFs, both restricted to symbols LISTED on a US exchange
+(not US-domiciled; see _SCREENER_EXCHANGES). Mutual funds and CEFs are excluded from
 both legs. Which leg a symbol arrives on is the definition of stock_snapshots.is_etf,
 which is what the screener's Stocks|ETFs mode filters on. Subsequent intraday runs
 only re-fetch quotes for the existing symbol universe.
@@ -123,6 +124,21 @@ US_EXCHANGES = {"NYSE", "NASDAQ", "AMEX", "CBOE"}
 # whitespace change ("Nasdaq", "NYSE ") would quietly shrink the universe.
 _US_EXCHANGES_NORM = {e.upper() for e in US_EXCHANGES}
 
+# The universe is "listed on a US exchange", asked of /company-screener by exchange.
+#
+# It used to be country=US, but FMP's `country` is where the company is domiciled, not
+# where it trades. Measured 2026-10-25: that left out 1,396 US-listed stocks, 233 of them
+# over $10B — TSM, ASML, Toyota, Shopify, Royal Bank, and S&P 500 members domiciled in
+# Ireland, the UK, Switzerland or Bermuda (Accenture, Medtronic, Linde, Chubb, Eaton).
+# The exchange filter keeps every domestic name the old filter had, bar one stock the
+# screener had already moved to OTC. On the ETF leg it adds one fund (GDLC, Cayman).
+#
+# The `exchange` parameter takes the same short names batch-quote reports (each value
+# verified to return only its own exchangeShortName; CBOE carries one stock and ~1,600
+# ETFs), so this is derived from US_EXCHANGES rather than kept as a second list that
+# could drift. One comma-separated call returns exactly the union of per-exchange calls.
+_SCREENER_EXCHANGES = ",".join(sorted(US_EXCHANGES))
+
 # /company-screener page size. The request is unpaginated, so a universe that outgrows
 # this is silently clipped — there is no error, the response is just short.
 #
@@ -204,8 +220,13 @@ async def _last_refresh_ts() -> datetime | None:
 # the parent's market cap (a Bank of America note at $175B). They passed every screen
 # and, carrying junk multiples, led every P/E-ascending sort.
 _NON_COMMON_SYMBOL = re.compile(r"-(P[A-Z]?|WT|WS|UN?|RI?)$")   # -PA preferred, -WT warrant, -UN unit, -RI rights
+# "Depositary shares" means a preferred stake only when it is not "American Depositary
+# Shares": an ADR is the US line of a foreign company's common stock (ARM, $224B, is
+# named "Arm Holdings plc American Depositary Shares"). Every depositary name on the
+# 2026-10-25 universe was an ADR; preferred depositaries are also caught by
+# _PREFERRED_CONTEXT and their -P symbol suffixes.
 _NON_COMMON_NAME = re.compile(
-    r"\b(warrants?|units?|rights?|contingent value|pfd|depositary (shares?|receipts?)|"
+    r"\b(warrants?|units?|rights?|contingent value|pfd|(?<!american )depositary (shares?|receipts?)|"
     r"debentures?|subordinated|senior notes?|notes? due|bonds? due|trust certificates?|"
     r"synthetic fixed-income|strats|corts|saturns|pplus)\b",
     re.I,
@@ -261,7 +282,10 @@ async def _screener_leg(client, api_key: str, *, is_etf: bool) -> list[UniverseR
             # mean them. (The probe counted ~4.3k of them, if that ever changes.)
             "isFund": "false",
             "isActivelyTrading": "true",
-            "country": "US",
+            # By listing, not domicile — see _SCREENER_EXCHANGES. The "." filter below
+            # and the US_EXCHANGES gate in _fetch_quotes still keep foreign home-market
+            # lines (SHOP.TO, HSBA.L) out.
+            "exchange": _SCREENER_EXCHANGES,
             "limit": SCREENER_LIMIT,
             "apikey": api_key,
         },
@@ -1373,6 +1397,9 @@ def _selftest() -> None:
         ("APTS", "Preferred Apartment Communities, Inc."), ("IPHX", "Inflection Point Acquisition Corp. VIII"),
         ("UAL", "United Airlines Holdings, Inc."), ("ACQU", "Acquire Holdings"),
         ("GOOGL", "Alphabet Inc."), ("LBTYA", "Liberty Global Ltd."), ("SHOW", "ShowBiz Inc."),
+        ("ARM", "Arm Holdings plc American Depositary Shares"), ("TSM", "Taiwan Semiconductor Manufacturing Company Limited"),
+        ("ACN", "Accenture plc"), ("PBR-A", "Petróleo Brasileiro S.A. - Petrobras"),
+        ("JOYY", "JOYY, Inc. Sponsored ADR Class A"),
     ]:
         assert _is_common_stock(sym, name), (sym, name)
     # ...and every instrument class found on the stock leg 2026-10-25 goes out
@@ -1388,8 +1415,11 @@ def _selftest() -> None:
         ("NIOBW", "NioCorp Developments Ltd."), ("MDAIW", "Spectral AI, Inc."),
         ("HVMCU", "Highview Merger Corp."), ("XSLLU", "Xsolla SPAC 1"), ("GHXIU", "Gores Holdings XI, Inc."),
         ("TRGSR", "TRG Latin America Acquisitions Corp."), ("JONER", "Jones Ventures INTL Acquisition1 Corp"),
+        ("XYZP", "Depositary Shares each representing a 1/1000th interest in a 5.375% Series H Preferred"),
+        ("LILAP", "Liberty Latin America Ltd. 9% Cum Perp Red Pfd Shs Series A"),
     ]:
         assert not _is_common_stock(sym, name), (sym, name)
+    assert set(_SCREENER_EXCHANGES.split(",")) == US_EXCHANGES
     print("refresh_stock_snapshots selftest OK")
 
 
