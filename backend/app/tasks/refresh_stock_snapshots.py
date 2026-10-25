@@ -19,6 +19,7 @@ multiples (stocks only, after profiles because it reads the CIK they store).
 """
 import asyncio
 import logging
+import re
 from collections import Counter
 from datetime import date, datetime, time, timedelta, timezone
 from typing import NamedTuple
@@ -86,6 +87,20 @@ VALUATION_CONCURRENCY = 8
 # earnings rounded to ~0). Dropped so it costs that field rather than overflowing the
 # Numeric(14, 4) column and failing the whole batch UPDATE.
 _MULTIPLE_CEILING = 1e9
+# Floors, applied in clean_multiple: below these a multiple is a data artifact, not a
+# bargain, and is stored as NULL like a negative one. Measured on the 2026-10-25 local
+# rebuild (4,642 stocks):
+# - P/E < 1 (33 rows) was SPAC trust interest against a $10 share, a one-time gain
+#   (Sabre's unit sale, Aimco's asset sales) or a CVR. Earning more than the whole
+#   market cap in twelve months is an event, not a valuation.
+# - P/B < 0.1 (97 rows) was FMP's book value mis-scaled: Atlantic Union Bankshares at
+#   0.001, Alpha and Omega Semiconductor at 0.001, Cable One at 0.084. A bank trades
+#   at 0.3x book in a crisis, never 0.001x. 0.1 keeps the distressed REITs and BDCs.
+# - EV/EBITDA < 1 (107 rows) was almost entirely negative EV over negative EBITDA,
+#   two minus signs cancelling into a "cheap" positive on cash-rich biotechs.
+_PE_FLOOR = 1.0
+_PB_FLOOR = 0.1
+_EV_EBITDA_FLOOR = 1.0
 
 # Exchanges that count as a US listing for the screener universe.
 #
@@ -180,6 +195,54 @@ async def _last_refresh_ts() -> datetime | None:
         return result
 
 
+# Instruments /company-screener's stock leg returns that are not common stock: warrants,
+# SPAC units and rights, preferreds and depositary shares, exchange-traded notes and
+# baby bonds, and synthetic trust certificates. FMP has no instrument-type field on the
+# screener and the symbol alone is not enough: most carry a plain five-letter ticker
+# (ACGCW warrants, IDACU units, CGABL notes), so the name is checked too. Measured
+# 2026-10-25: 286 of 4,642 stock-leg rows, none of them common stock, many listed with
+# the parent's market cap (a Bank of America note at $175B). They passed every screen
+# and, carrying junk multiples, led every P/E-ascending sort.
+_NON_COMMON_SYMBOL = re.compile(r"-(P[A-Z]?|WT|WS|UN?|RI?)$")   # -PA preferred, -WT warrant, -UN unit, -RI rights
+_NON_COMMON_NAME = re.compile(
+    r"\b(warrants?|units?|rights?|contingent value|pfd|depositary (shares?|receipts?)|"
+    r"debentures?|subordinated|senior notes?|notes? due|bonds? due|trust certificates?|"
+    r"synthetic fixed-income|strats|corts|saturns|pplus)\b",
+    re.I,
+)
+# "Preferred" alone is a real company name (Preferred Bank, Preferred Apartment
+# Communities); a preferred security's name also carries a coupon, series or share word.
+_PREFERRED_WORD = re.compile(r"\bpreferred\b", re.I)
+_PREFERRED_CONTEXT = re.compile(r"%|\b(series|stock|shares?|pfd|cum|non-?cum|perpetual|depositary|redeemable)\b", re.I)
+# Nasdaq's fifth letter is an instrument code: W is a warrant, U a unit. FMP names most
+# of these after the parent ("NioCorp Developments Ltd." for NIOBW, "Gores Holdings XI"
+# for GHXIU), so the name rule above cannot see them; the shape alone can. Measured
+# 2026-10-25 over 4,642 stock-leg rows: 22 five-letter-W symbols, all warrants; 84
+# five-letter-U, all SPAC units; no common stock of either shape.
+_UNIT_OR_WARRANT_SYMBOL = re.compile(r"^[A-Z]{4}[UW]$")
+# Rights (fifth letter R) are rarer and a five-letter common could end in R, so they
+# stay gated on a SPAC-shaped name. No trailing boundary: "Acquisitions Corp." and
+# "Acquisition1 Corp" are both real names.
+_SPAC_RIGHT_SYMBOL = re.compile(r"^[A-Z]{4}R$")
+_SPAC_NAME = re.compile(r"\b(acquisition|merger|spac)", re.I)
+
+
+def _is_common_stock(symbol: str, name: str) -> bool:
+    """False for any instrument the screener's stock universe should not carry."""
+    name = name or ""
+    if _NON_COMMON_SYMBOL.search(symbol):
+        return False
+    if _NON_COMMON_NAME.search(name):
+        return False
+    if _PREFERRED_WORD.search(name) and _PREFERRED_CONTEXT.search(name):
+        return False
+    if _UNIT_OR_WARRANT_SYMBOL.match(symbol):
+        return False
+    if _SPAC_RIGHT_SYMBOL.match(symbol) and _SPAC_NAME.search(name):
+        return False
+    return True
+
+
 async def _screener_leg(client, api_key: str, *, is_etf: bool) -> list[UniverseRow]:
     """One /company-screener call — the stock leg or the ETF leg.
 
@@ -232,6 +295,7 @@ async def _screener_leg(client, api_key: str, *, is_etf: bool) -> list[UniverseR
             return None
 
     out: list[UniverseRow] = []
+    excluded = 0
     for r in (rows or []):
         if not isinstance(r, dict):
             continue
@@ -239,6 +303,9 @@ async def _screener_leg(client, api_key: str, *, is_etf: bool) -> list[UniverseR
         if not sym or "." in sym or len(sym) > 10:
             continue
         name = r.get("companyName") or r.get("name") or ""
+        if not is_etf and not _is_common_stock(sym, name):
+            excluded += 1
+            continue
         div = _num(r.get("lastAnnualDividend"))
         # Guard against FMP's occasional negative/garbage dividend values.
         if div is not None and div < 0:
@@ -246,6 +313,11 @@ async def _screener_leg(client, api_key: str, *, is_etf: bool) -> list[UniverseR
         beta = _num(r.get("beta"))
         out.append(UniverseRow(sym, name, div, beta, is_etf))
 
+    if excluded:
+        msg = (f"company-screener {leg} leg: excluded {excluded} non-common instruments "
+               "(warrants, units, rights, preferreds, notes)")
+        print(f"📊 {msg}", flush=True)
+        logger.info(msg)
     return out
 
 
@@ -911,13 +983,24 @@ async def _update_dividends() -> int | None:
 
         sem = asyncio.Semaphore(DIVIDEND_CONCURRENCY)
 
+        # A failed fetch is skipped, never written, so the row keeps yesterday's figures.
+        # get_dividends swallows its own errors and returns an empty history, which
+        # evaluate_dividend reads as "none": on 2026-10-25 a burst of 429s turned 2,186
+        # payers into non-payers that way. It now flags the failure instead.
+        skipped = Counter()
+        retries_before = market_data_service.throttle_retries
+
         async def _fetch(symbol: str, price) -> dict | None:
             async with sem:
                 try:
                     info = await market_data_service.get_dividends(symbol)
                 except Exception as e:
+                    skipped["fetch failed"] += 1
                     logger.debug(f"Failed to fetch dividends for {symbol}: {e}")
                     return None
+            if info.get("fetch_failed"):
+                skipped["fetch failed"] += 1
+                return None
 
             # Price matters: evaluate_dividend reports "unknown" rather than "active"
             # when it has no price to quote a yield against.
@@ -936,6 +1019,13 @@ async def _update_dividends() -> int | None:
 
         fetched = await asyncio.gather(*(_fetch(sym, px) for sym, px in payers))
         rows = [r for r in fetched if r]
+
+        retries = market_data_service.throttle_retries - retries_before
+        if skipped["fetch failed"]:
+            warn = (f"Dividends: {skipped['fetch failed']} of {len(payers)} fetches failed "
+                    f"after {retries} 429 retries; those rows were left untouched")
+            print(f"⚠️ {warn}", flush=True)
+            logger.warning(warn)
 
         if not rows:
             logger.info("No dividends resolved")
@@ -961,6 +1051,8 @@ async def _update_dividends() -> int | None:
         summary = (
             f"Dividends: evaluated {len(rows)}/{len(payers)} payers — "
             + ", ".join(f"{k}={v}" for k, v in sorted(by_status.items()))
+            + (f"; skipped {skipped['fetch failed']} (fetch failed)" if skipped else "")
+            + (f"; {retries} 429 retries" if retries else "")
         )
         print(f"📊 {summary}", flush=True)
         logger.info(summary)
@@ -970,19 +1062,21 @@ async def _update_dividends() -> int | None:
         return None
 
 
-def clean_multiple(raw) -> Decimal | None:
+def clean_multiple(raw, floor: float = 0.0) -> Decimal | None:
     """A valuation multiple as stored, or None.
 
     None for anything non-positive: a negative P/E, P/B or EV/EBITDA means negative
     earnings, book value or EBITDA, which is "not meaningful", not "cheap". Kept as a
-    number it would pass every "at most N" screen. None also for garbage: non-numeric,
-    NaN, infinite, or at/past _MULTIPLE_CEILING.
+    number it would pass every "at most N" screen. None also below `floor` (see
+    _PE_FLOOR and friends: a P/E of 0.03 is an artifact, and it would otherwise lead
+    every ascending sort) and for garbage: non-numeric, NaN, infinite, or at/past
+    _MULTIPLE_CEILING.
     """
     try:
         val = float(raw)
     except (TypeError, ValueError):
         return None
-    if val != val or val <= 0 or val >= _MULTIPLE_CEILING:  # val != val catches NaN
+    if val != val or val <= 0 or val < floor or val >= _MULTIPLE_CEILING:  # val != val catches NaN
         return None
     return Decimal(str(round(val, 4)))
 
@@ -1046,15 +1140,24 @@ async def _update_valuations() -> int | None:
             logger.warning(msg)
 
         sem = asyncio.Semaphore(VALUATION_CONCURRENCY)
+        # Why a row was skipped. A failed fetch leaves the stored figures untouched and
+        # must never be written as "no multiples". Counted so the summary says how much
+        # of the universe the run actually covered: on 2026-10-25 a silent burst of
+        # 429s left the top 2,000 market caps NULL with nothing in the log.
+        skipped = Counter()
+        retries_before = market_data_service.throttle_retries
 
         async def _fetch(symbol: str, fmp_cik) -> dict | None:
             async with sem:
                 try:
                     data = await market_data_service._fmp_get("ratios-ttm", {"symbol": symbol})
                 except Exception as e:
+                    status = getattr(getattr(e, "response", None), "status_code", None)
+                    skipped["throttled (429)" if status == 429 else "fetch failed"] += 1
                     logger.debug(f"Failed to fetch ratios-ttm for {symbol}: {e}")
                     return None
             if not data or not isinstance(data, list) or not isinstance(data[0], dict):
+                skipped["no data"] += 1
                 return None
             r = data[0]
 
@@ -1071,15 +1174,24 @@ async def _update_valuations() -> int | None:
 
             return {
                 "b_symbol": symbol,
-                "b_pe": None if blocked else clean_multiple(r.get("priceToEarningsRatioTTM")),
-                "b_pb": None if blocked else clean_multiple(r.get("priceToBookRatioTTM")),
-                "b_ev": None if blocked else clean_multiple(r.get("enterpriseValueMultipleTTM")),
+                "b_pe": None if blocked else clean_multiple(r.get("priceToEarningsRatioTTM"), _PE_FLOOR),
+                "b_pb": None if blocked else clean_multiple(r.get("priceToBookRatioTTM"), _PB_FLOOR),
+                "b_ev": None if blocked else clean_multiple(r.get("enterpriseValueMultipleTTM"), _EV_EBITDA_FLOOR),
                 "b_trust": verdict,
                 "b_refreshed_at": datetime.now(timezone.utc),
             }
 
         fetched = await asyncio.gather(*(_fetch(sym, cik) for sym, cik in targets))
         rows = [r for r in fetched if r]
+
+        retries = market_data_service.throttle_retries - retries_before
+        failed = skipped["throttled (429)"] + skipped["fetch failed"]
+        if failed:
+            warn = (f"Valuations: {failed} of {len(targets)} fetches failed "
+                    f"({skipped['throttled (429)']} still throttled after {retries} retries); "
+                    "those rows were left untouched")
+            print(f"⚠️ {warn}", flush=True)
+            logger.warning(warn)
 
         if not rows:
             logger.info("No valuations resolved")
@@ -1109,6 +1221,8 @@ async def _update_valuations() -> int | None:
         summary = (
             f"Valuations: wrote {len(rows)}/{len(targets)} stocks, {with_pe} with a "
             "positive P/E; identity " + ", ".join(f"{k}={v}" for k, v in sorted(by_trust.items()))
+            + ("; skipped " + ", ".join(f"{k}={v}" for k, v in sorted(skipped.items())) if skipped else "")
+            + (f"; {retries} 429 retries" if retries else "")
         )
         print(f"📊 {summary}", flush=True)
         logger.info(summary)
@@ -1237,10 +1351,54 @@ async def _backfill_valuations() -> None:
         await close_fmp_client()
 
 
+def _selftest() -> None:
+    """Offline checks for the pure helpers:
+        python -m app.tasks.refresh_stock_snapshots --selftest
+    """
+    # clean_multiple: sign, floor, ceiling, garbage
+    assert clean_multiple(39.74) == Decimal("39.74")
+    assert clean_multiple(-5) is None and clean_multiple(0) is None
+    for junk in ("nan", "abc", None, float("inf"), _MULTIPLE_CEILING):
+        assert clean_multiple(junk) is None, junk
+    assert clean_multiple(0.39, _PE_FLOOR) is None              # SPAC trust interest
+    assert clean_multiple(1.0, _PE_FLOOR) == Decimal("1.0")      # floor is inclusive
+    assert clean_multiple(2.78, _PE_FLOOR) == Decimal("2.78")
+    assert clean_multiple(0.001, _PB_FLOOR) is None             # mis-scaled book value
+    assert clean_multiple(0.25, _PB_FLOOR) == Decimal("0.25")    # distressed, kept
+    assert clean_multiple(0.26, _EV_EBITDA_FLOOR) is None
+    # _is_common_stock: real companies, share classes and awkward names stay in
+    for sym, name in [
+        ("AAPL", "Apple Inc."), ("BRK-B", "Berkshire Hathaway Inc."), ("BF-B", "Brown-Forman Corporation"),
+        ("MKC-V", "McCormick & Company, Incorporated"), ("PFBC", "Preferred Bank"),
+        ("APTS", "Preferred Apartment Communities, Inc."), ("IPHX", "Inflection Point Acquisition Corp. VIII"),
+        ("UAL", "United Airlines Holdings, Inc."), ("ACQU", "Acquire Holdings"),
+        ("GOOGL", "Alphabet Inc."), ("LBTYA", "Liberty Global Ltd."), ("SHOW", "ShowBiz Inc."),
+    ]:
+        assert _is_common_stock(sym, name), (sym, name)
+    # ...and every instrument class found on the stock leg 2026-10-25 goes out
+    for sym, name in [
+        ("SCE-PG", "SCE Trust II TR PFD SECS 5.1%"), ("CELG-RI", "Bristol-Myers Squibb Company Contingent Value Rights"),
+        ("ACGCW", "ACP Holdings Acquisition Corp. Warrants"), ("IPHXU", "Inflection Point Acquisition Corp. VIII"),
+        ("SORNR", "Soren Acquisition Corp."), ("CGABL", "The Carlyle Group Inc. 4.625% Subordinated Notes due 2061"),
+        ("STRF", "MicroStrategy Incorporated 10.00% Series A Perpetual Strife Preferred Stock"),
+        ("DUKU", "Duke Energy Corporation Units 1.08.29"), ("MER-PK", "Bank of America Corp 6.45 % Notes 2018-15.12.66"),
+        ("AAC-UN", "Ares Acquisition Corporation II"), ("PEW-WT", "GrabAGun Digital Holdings Inc."),
+        ("CTA-PB", "EIDP, Inc. USD 4.50 Cum Pfd Registered Shs"), ("ETI-P", "Entergy Texas, Inc."),
+        ("GJO", "STRATS(SM) Trust for Wal-Mart Stores, Inc. Securities, Series 2004-5"),
+        ("NIOBW", "NioCorp Developments Ltd."), ("MDAIW", "Spectral AI, Inc."),
+        ("HVMCU", "Highview Merger Corp."), ("XSLLU", "Xsolla SPAC 1"), ("GHXIU", "Gores Holdings XI, Inc."),
+        ("TRGSR", "TRG Latin America Acquisitions Corp."), ("JONER", "Jones Ventures INTL Acquisition1 Corp"),
+    ]:
+        assert not _is_common_stock(sym, name), (sym, name)
+    print("refresh_stock_snapshots selftest OK")
+
+
 if __name__ == "__main__":
     import sys
 
-    if "--valuations" in sys.argv[1:]:
+    if "--selftest" in sys.argv[1:]:
+        _selftest()
+    elif "--valuations" in sys.argv[1:]:
         asyncio.run(_backfill_valuations())
     else:
         asyncio.run(_drain_company_profiles())

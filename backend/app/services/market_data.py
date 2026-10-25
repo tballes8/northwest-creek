@@ -1,6 +1,8 @@
 """
 Market data service - Financial Modeling Prep (FMP) integration
 """
+import asyncio
+import logging
 import re
 import httpx
 from typing import Dict, Any, List, Optional
@@ -8,6 +10,26 @@ from datetime import datetime, timezone, timedelta, date
 from app.config import get_settings
 from app.services.fmp_client import get_fmp_client
 from app.utils.cache import SimpleCache
+
+logger = logging.getLogger(__name__)
+
+# 429 handling for every FMP call, see _fmp_get. Three retries at 1s, 2s, 4s is
+# ~7s of patience per call — enough to ride out a per-minute window at the
+# enrichment passes' concurrency of 8 without stalling a user request for long.
+FMP_429_MAX_RETRIES = 3
+FMP_429_MAX_WAIT = 15.0
+
+
+def _retry_after_seconds(response) -> float | None:
+    """A numeric Retry-After header as seconds, capped at FMP_429_MAX_WAIT; None when
+    absent or in HTTP-date form (the caller then falls back to exponential backoff)."""
+    raw = response.headers.get("Retry-After")
+    if not raw:
+        return None
+    try:
+        return min(max(float(raw), 0.0), FMP_429_MAX_WAIT)
+    except ValueError:
+        return None
 
 settings = get_settings()
 
@@ -256,6 +278,7 @@ def _article_names_company(article: Dict[str, Any], tokens: set) -> bool:
 class MarketDataService:
 
     def __init__(self):
+        self.throttle_retries = 0  # 429 sleeps taken by _fmp_get, for pass summaries
         self.api_key = settings.FMP_API_KEY
         self._quote_cache = SimpleCache(ttl_seconds=15)
         self._profile_cache = SimpleCache(ttl_seconds=3600)
@@ -284,15 +307,30 @@ class MarketDataService:
         return False
 
     async def _fmp_get(self, path: str, params: dict = None) -> Any:
-        """Central FMP request helper. Appends apikey and handles errors."""
+        """Central FMP request helper. Appends apikey and handles errors.
+
+        A 429 is retried up to FMP_429_MAX_RETRIES times, waiting for the vendor's
+        Retry-After when it sends one and backing off 1s, 2s, 4s otherwise. The
+        enrichment passes fire thousands of calls at concurrency 8; on 2026-10-25 a
+        burst of 429s on /dividends was recorded as "pays no dividend" for 2,186
+        payers because nothing told a throttled fetch from an empty one. Backing off
+        here covers every caller at once. A 429 that outlives the retries still
+        raises, and each caller decides what a failed fetch means — the enrichment
+        passes skip the row and never write a value for it. `throttle_retries` counts
+        the sleeps so a pass summary can say how hard the run was throttled.
+        """
         if params is None:
             params = {}
         params["apikey"] = self.api_key
         client = get_fmp_client()
-        response = await client.get(
-            path,
-            params=params,
-        )
+        for attempt in range(FMP_429_MAX_RETRIES + 1):
+            response = await client.get(path, params=params)
+            if response.status_code != 429 or attempt == FMP_429_MAX_RETRIES:
+                break
+            delay = _retry_after_seconds(response) or float(2 ** attempt)
+            self.throttle_retries += 1
+            logger.debug(f"FMP 429 on /{path}, retry {attempt + 1}/{FMP_429_MAX_RETRIES} in {delay:.0f}s")
+            await asyncio.sleep(delay)
         response.raise_for_status()
         return response.json()
 
@@ -759,10 +797,14 @@ class MarketDataService:
 
         except Exception as e:
             print(f"Error fetching dividends for {ticker}: {e}")
+            # fetch_failed tells the screener's dividend pass to skip this symbol.
+            # Without it an empty history is indistinguishable from "no dividends",
+            # which is how a 429 burst once rewrote 2,186 payers as non-payers.
             return {
                 "ticker": ticker,
                 "dividends": [],
                 "has_dividends": False,
+                "fetch_failed": True,
             }
         
     async def get_top_gainers(self, limit: int = 10) -> Dict[str, Any]:
