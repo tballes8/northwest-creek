@@ -31,7 +31,8 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
                     "exchange", "previousClose", "timestamp"]},
     {"path": "historical-price-eod/full", "description": "End-of-day historical prices with date range",
      "used_by": ["services/market_data.py:213",
-                 "services/financials_service.py (quarter-end closes for trailing P/E)"],
+                 "services/financials_service.py (quarter-end closes for trailing P/E)",
+                 "services/fx.py:get_fx_history (symbol=USDxxx, quarter-end rates for that P/E)"],
      "key_fields": ["date", "close", "open", "high", "low", "volume"]},
     {"path": "historical-chart/1min", "description": "Intraday 1-minute bars for a date range",
      "used_by": ["api/v1/endpoints/intraday.py:327"],
@@ -67,8 +68,12 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
      # primary input to the entity-identity gate (services/edgar_identity.py) —
      # preferred over profile.cik because it is stamped on these very rows. See
      # the note on `profile` above; losing it makes the gate fail open.
+     # `reportedCurrency` and `netIncome` feed the valuation cross-check
+     # (services/valuation_check) in financials_service and RelVal peer-ratios, with
+     # profile.marketCap; a rename makes every row "unverifiable" and blanks the
+     # multiples on every company page and every peer.
      "key_fields": ["date", "revenue", "netIncome", "eps", "epsDiluted", "operatingIncome",
-                    "grossProfit", "cik"]},
+                    "grossProfit", "cik", "reportedCurrency"]},
     {"path": "balance-sheet-statement", "description": "Quarterly/annual balance sheet",
      "used_by": ["services/financials_service.py:75"],
      "key_fields": ["date", "totalDebt", "netDebt", "cashAndCashEquivalents", "totalAssets", "totalEquity"]},
@@ -84,13 +89,15 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
                     "debtToEquityRatioTTM", "currentRatioTTM", "quickRatioTTM", "dividendYieldTTM"]},
     {"path": "income-statement-ttm", "description": "Trailing-twelve-month income statement",
      # The independent half of the screener's valuation cross-check: netIncome in
-     # reportedCurrency, against market cap at the day's rate (refresh_stock_snapshots
-     # _valuation_check). A rename of either field makes every row "unverifiable" and
-     # silently blanks the screener's P/E, P/B and EV/EBITDA columns.
+     # reportedCurrency, against market cap at the day's rate (services/valuation_check).
+     # A rename of either field makes every row "unverifiable" and silently blanks the
+     # screener's P/E, P/B and EV/EBITDA columns.
      "used_by": ["tasks/refresh_stock_snapshots.py:_update_valuations (valuation cross-check)"],
      "key_fields": ["date", "reportedCurrency", "netIncome"]},
     {"path": "batch-forex-quotes", "description": "Every forex pair's latest quote",
-     "used_by": ["tasks/refresh_stock_snapshots.py:_update_valuations (USD rates for the cross-check)"],
+     "used_by": ["tasks/refresh_stock_snapshots.py:_update_valuations (USD rates for the cross-check)",
+                 "services/fx.py:get_fx_per_usd (cached; USD conversion in financials_service, "
+                 "relative_valuation and stocks.py /analyst-estimates)"],
      "key_fields": ["symbol", "price"]},
     {"path": "key-metrics-ttm", "description": "Trailing-twelve-month key metrics",
      "used_by": ["services/financials_service.py:84"],
@@ -114,7 +121,9 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
     {"path": "analyst-estimates", "description": "EPS/revenue/EBITDA analyst estimates (requires period param)",
      # Single caller: services/analyst_estimates.py owns the schema. Its consumers are
      # financials_service (DCF growth suggestion), relative_valuation (forward multiples)
-     # and stocks.py (/analyst-estimates/{ticker}).
+     # and stocks.py (/analyst-estimates/{ticker}). Figures are in the company's
+     # reporting currency with no currency field; each consumer converts them with
+     # analyst_estimates.estimates_to_usd.
      "used_by": ["services/analyst_estimates.py (fetch_estimates)"],
      "key_fields": ["date", "revenueAvg", "epsAvg", "epsHigh", "epsLow", "ebitdaAvg", "numAnalystsEps"]},
     {"path": "price-target-consensus", "description": "Analyst price-target consensus",

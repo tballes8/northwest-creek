@@ -20,7 +20,6 @@ multiples (stocks only, after profiles because it reads the CIK they store).
 """
 import asyncio
 import logging
-import math
 import re
 from collections import Counter
 from datetime import date, datetime, time, timedelta, timezone
@@ -42,6 +41,8 @@ from app.services.edgar_identity import (
     resolve_contradiction, resolve_fund_ticker, resolve_ticker_cik, warm_ticker_map,
 )
 from app.services.market_data import evaluate_dividend, market_data_service
+from app.services.fx import fx_per_usd
+from app.services.valuation_check import valuation_check
 
 logger = logging.getLogger(__name__)
 
@@ -103,22 +104,9 @@ _MULTIPLE_CEILING = 1e9
 _PE_FLOOR = 1.0
 _PB_FLOOR = 0.1
 _EV_EBITDA_FLOOR = 1.0
-
-# Valuation cross-check, see _valuation_check. ratios-ttm is stored only when its P/E
-# agrees within this factor with one computed independently: market cap (USD, from
-# batch-quote) over TTM net income (income-statement-ttm, in the reporting currency)
-# converted at today's rate. Measured 2026-10-25 over 2,950 stocks where both exist:
-# 93% of USD reporters and 87% of foreign reporters agree within 1.5x, and the >2x tail
-# was FMP's error, not ours: Sabesp reported a P/E of 2.1 against 15 because FMP divided
-# a dollar price by earnings in reais; Biogen 1.7 against 106; HCA 58 against 15; TAL
-# 2.1 against 6.8. The floors cannot catch these, since a wrong 2.1 looks like a bargain.
-# 2x sits past the agreeing mass and below the smallest currency miss that matters.
-_VALUATION_CHECK_TOLERANCE = 2.0
-# A reporting currency within this factor of the dollar (EUR, GBP, CAD, CHF, AUD, SGD)
-# cannot be told apart from an unconverted one by a 2x check, and an unconverted figure
-# there is at most ~40% off. Beyond it (BRL, CNY, JPY, KRW, INR, ARS) a multiple that
-# could not be checked is not stored: an unconverted one would be 5x to 1,500x off.
-_FAR_FX = 2.0
+# On top of the floors, every row passes services/valuation_check, the cross-check of
+# FMP's P/E against the company's own earnings. It lives there, not here, because
+# financials_service applies the same rule to what it serves.
 
 # Exchanges that count as a US listing for the screener universe.
 #
@@ -1122,84 +1110,6 @@ def clean_multiple(raw, floor: float = 0.0) -> Decimal | None:
     return Decimal(str(round(val, 4)))
 
 
-def _fx_per_usd(quotes) -> dict[str, float]:
-    """Units of each currency per US dollar, from /stable/batch-forex-quotes rows.
-
-    USDxxx is read directly; a currency quoted only as xxxUSD is inverted. Rows without
-    a positive price are ignored. USD itself is always 1.
-    """
-    direct: dict[str, float] = {}
-    inverse: dict[str, float] = {}
-    for q in quotes or []:
-        if not isinstance(q, dict):
-            continue
-        sym = (q.get("symbol") or "").upper()
-        try:
-            price = float(q.get("price"))
-        except (TypeError, ValueError):
-            continue
-        if len(sym) != 6 or not price > 0 or not math.isfinite(price):
-            continue
-        if sym.startswith("USD"):
-            direct[sym[3:]] = price
-        elif sym.endswith("USD"):
-            inverse[sym[:3]] = 1.0 / price
-    rates = {**inverse, **direct}
-    rates["USD"] = 1.0
-    return rates
-
-
-def _valuation_check(fmp_pe, market_cap, net_income, currency, fx: dict[str, float]) -> str:
-    """Whether a ratios-ttm row may be stored: "ok", "mismatch" or "unverifiable".
-
-    Anything but "ok" stores all three multiples as NULL. A P/E that disagrees with the
-    company's own earnings says the row was computed on the wrong basis (unconverted
-    currency, ADR share ratio, stale statement), and P/B and EV/EBITDA share that basis.
-    See _VALUATION_CHECK_TOLERANCE for the measurements behind the rule.
-
-    - Both P/E and TTM net income positive: compare FMP's P/E with market cap x rate /
-      net income. Within tolerance is "ok", outside is "mismatch".
-    - Exactly one positive: FMP and the statement disagree on whether the company made
-      money. "mismatch".
-    - Both non-positive (a loss-maker): there is no P/E to check. "ok" for a reporting
-      currency near the dollar, "unverifiable" for one far from it (see _FAR_FX).
-    - No statement, no currency, no rate, or no market cap: "unverifiable". On the
-      2026-10-25 universe the 20 such rows carrying a P/E were SPACs, notes and
-      micro-caps, one at a P/E of 0.4.
-    """
-    def _pos(x) -> float | None:
-        try:
-            v = float(x)
-        except (TypeError, ValueError):
-            return None
-        return v if math.isfinite(v) and v > 0 else None
-
-    def _num(x) -> float | None:
-        try:
-            v = float(x)
-        except (TypeError, ValueError):
-            return None
-        return v if math.isfinite(v) else None
-
-    ccy = (currency or "").upper()
-    rate = fx.get(ccy) if ccy else None
-    ni = _num(net_income)
-    if not ccy or rate is None or ni is None:
-        return "unverifiable"
-
-    pe, profit = _pos(fmp_pe), ni > 0
-    if pe is None and not profit:
-        return "unverifiable" if abs(math.log(rate)) >= math.log(_FAR_FX) else "ok"
-    if (pe is None) != (not profit):
-        return "mismatch"
-
-    mcap = _pos(market_cap)
-    if mcap is None:
-        return "unverifiable"
-    independent = mcap * rate / ni
-    return "ok" if abs(math.log(pe / independent)) <= math.log(_VALUATION_CHECK_TOLERANCE) else "mismatch"
-
-
 async def _identity_verdict(symbol: str, fmp_cik: int | None) -> str:
     """The edgar_identity verdict for one ticker, from the stored profile CIK.
 
@@ -1228,7 +1138,7 @@ async def _update_valuations() -> int | None:
     source. A successor registrant or an unresolvable ticker keeps its figures, per the
     edgar_identity contract.
 
-    They are also gated on _valuation_check: income-statement-ttm is fetched alongside
+    They are also gated on valuation_check: income-statement-ttm is fetched alongside
     ratios-ttm, and a row whose P/E disagrees with the company's own earnings and market
     cap is stored as NULL on all three. Exchange rates come from one batch-forex-quotes
     call per pass; if that fails the pass is abandoned and every row keeps yesterday's
@@ -1252,7 +1162,7 @@ async def _update_valuations() -> int | None:
             return 0
 
         try:
-            fx = _fx_per_usd(await market_data_service._fmp_get("batch-forex-quotes"))
+            fx = fx_per_usd(await market_data_service._fmp_get("batch-forex-quotes"))
         except Exception as e:
             fx = {}
             logger.debug(f"batch-forex-quotes failed: {e}")
@@ -1281,7 +1191,7 @@ async def _update_valuations() -> int | None:
         # of the universe the run actually covered: on 2026-10-25 a silent burst of
         # 429s left the top 2,000 market caps NULL with nothing in the log.
         skipped = Counter()
-        # Rows written with all three multiples NULL because _valuation_check refused them.
+        # Rows written with all three multiples NULL because valuation_check refused them.
         suppressed = Counter()
         retries_before = market_data_service.throttle_retries
 
@@ -1305,7 +1215,7 @@ async def _update_valuations() -> int | None:
                 return None
             r = data[0]
             stmt0 = stmt_rows[0] if isinstance(stmt_rows, list) and stmt_rows and isinstance(stmt_rows[0], dict) else {}
-            check = _valuation_check(
+            check = valuation_check(
                 r.get("priceToEarningsRatioTTM"), market_cap,
                 stmt0.get("netIncome"), stmt0.get("reportedCurrency"), fx,
             )
@@ -1549,28 +1459,7 @@ def _selftest() -> None:
     ]:
         assert not _is_common_stock(sym, name), (sym, name)
     assert set(_SCREENER_EXCHANGES.split(",")) == US_EXCHANGES
-    # _fx_per_usd: direct pairs win, inverse pairs fill gaps, junk is ignored
-    fx = _fx_per_usd([
-        {"symbol": "USDBRL", "price": 5.42}, {"symbol": "EURUSD", "price": 1.16},
-        {"symbol": "USDJPY", "price": 157.9}, {"symbol": "USDCNY", "price": 6.65},
-        {"symbol": "BRLUSD", "price": 0.5}, {"symbol": "USDXXX", "price": 0}, {"symbol": "BAD"},
-    ])
-    assert fx["BRL"] == 5.42 and abs(fx["EUR"] - 1 / 1.16) < 1e-12 and fx["USD"] == 1.0 and "XXX" not in fx
-    # _valuation_check, figures from the 2026-10-25 measurement
-    assert _valuation_check(39.74, 5.075e12, 1.2771e11, "USD", fx) == "ok"                 # AAPL
-    assert _valuation_check(2.14, 21.9e9, 7.874e9, "BRL", fx) == "mismatch"                # SBS, reais left unconverted
-    assert _valuation_check(15.06, 21.9e9, 7.874e9, "BRL", fx) == "ok"                     # SBS, what a correct row looks like
-    assert _valuation_check(8.84, 233e9, 233e9 * 157.9 / 8.84, "JPY", fx) == "ok"          # TM, converted
-    assert _valuation_check(1.67, 37.0e9, 37.0e9 / 106.44, "USD", fx) == "mismatch"        # BIIB
-    assert _valuation_check(10, 5e9, -1e9, "USD", fx) == "mismatch"                        # profit vs loss
-    assert _valuation_check(-12, 5e9, 1e9, "USD", fx) == "mismatch"                        # loss vs profit
-    assert _valuation_check(None, 5e9, -1e9, "EUR", fx) == "ok"                            # loss-maker, near FX
-    assert _valuation_check(None, 5e9, -1e9, "CNY", fx) == "unverifiable"                  # loss-maker, far FX
-    assert _valuation_check(25, 5e9, None, None, fx) == "unverifiable"                     # no statement
-    assert _valuation_check(25, 5e9, 2e8, "ZZZ", fx) == "unverifiable"                     # no rate
-    assert _valuation_check(25, None, 2e8, "USD", fx) == "unverifiable"                    # no market cap
-    assert _valuation_check(30, 5e9, 2e8, "USD", fx) == "ok"                               # 30 vs 25, inside 2x
-    assert _valuation_check(60, 5e9, 2e8, "USD", fx) == "mismatch"                         # 60 vs 25, outside 2x
+    # The P/E cross-check has its own: python -m app.services.valuation_check --selftest
     print("refresh_stock_snapshots selftest OK")
 
 

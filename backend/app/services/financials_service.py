@@ -12,6 +12,15 @@ FMP Stable endpoints used:
   /stable/key-metrics-ttm?symbol=X     (pre-computed trailing-twelve-month metrics)
   /stable/historical-price-eod/full?symbol=X  (quarter-end closes for trailing P/E)
   /stable/analyst-estimates?symbol=X&period=annual  (via services/analyst_estimates)
+  /stable/batch-forex-quotes           (via services/fx, cached)
+  /stable/historical-price-eod/full?symbol=USDxxx  (via services/fx, foreign filers only)
+
+US dollars
+----------
+Statements, key metrics and analyst estimates arrive in the company's reporting
+currency (yen for Toyota). They are converted to dollars here, at today's rate,
+before anything is derived from them, so every consumer works in dollars. The
+payload says what it converted from in `usd_conversion`. See `services/fx`.
 
 Entity identity gate
 --------------------
@@ -28,7 +37,11 @@ import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional, List, Tuple
 from app.services.fmp_client import get_fmp_client, API_KEY
-from app.services.analyst_estimates import fetch_estimates, derive_consensus_growth
+from app.services.analyst_estimates import (
+    derive_consensus_growth,
+    estimates_to_usd,
+    fetch_estimates,
+)
 from app.services.edgar_identity import (
     build_entity_trust,
     is_contradicted,
@@ -36,6 +49,15 @@ from app.services.edgar_identity import (
     resolve_fund_ticker,
     resolve_ticker_cik,
 )
+from app.services.fx import (
+    get_fx_history,
+    get_fx_per_usd,
+    rate_on,
+    rows_to_usd,
+    to_usd,
+    usd_rate,
+)
+from app.services.valuation_check import check_against_quarters
 
 
 def _fmt(value: Optional[float], decimals: int = 2) -> Optional[float]:
@@ -67,7 +89,9 @@ def _sum_quarters(quarters: List[dict], field: str) -> Optional[float]:
 
 
 def _trailing_pe_by_quarter(
-    income_quarters: List[dict], price_rows: List[dict]
+    income_quarters: List[dict],
+    price_rows: List[dict],
+    fx_history: Optional[Dict[str, float]] = None,
 ) -> List[Tuple[Optional[float], Optional[str]]]:
     """Trailing P/E at each quarter end: close on/before period_end ÷ TTM diluted EPS.
 
@@ -75,8 +99,14 @@ def _trailing_pe_by_quarter(
     EPS and inflate the multiple. Returns (pe, status) per quarter; when pe is
     None, status says why so the UI can tell the user instead of a bare dash:
     "negative_earnings" when TTM EPS <= 0 (meaningless multiple), "no_data"
-    when the price or a full EPS window is unavailable.
+    when the price, a full EPS window or an exchange rate is unavailable.
     Expects income_quarters newest-first (FMP default).
+
+    `income_quarters` are in the reporting currency and the closes are dollars,
+    so for a foreign filer `fx_history` (units per dollar by date) converts each
+    TTM EPS at its own quarter-end rate — today's rate would misstate every
+    historical multiple by however far the currency has moved since. None means
+    the EPS is already in dollars.
     """
     closes: Dict[str, float] = {}
     for row in price_rows:
@@ -101,10 +131,11 @@ def _trailing_pe_by_quarter(
                     day -= timedelta(days=1)
             except (ValueError, TypeError):
                 price = None
+            rate = 1.0 if fx_history is None else rate_on(fx_history, period_end)
             if ttm_eps <= 0:
                 status = "negative_earnings"
-            elif price is not None:
-                pe = round(price / ttm_eps, 1)
+            elif price is not None and rate is not None:
+                pe = round(price / (ttm_eps / rate), 1)
                 status = None
         pes.append((pe, status))
     return pes
@@ -179,6 +210,22 @@ _ENTITY_SCOPED_KEYS = (
     "quarterly_trend",
     "dcf_suggestions",
     "growth_profile",
+    "reported_currency",
+    "usd_conversion",
+)
+
+# Price multiples in `ratios` that come off the one ratios-ttm row valuation_check
+# tests. When its P/E fails, the row was computed on the wrong basis and these share
+# it, so all are withheld together — the screener stores NULL for the same rows.
+# EV/Sales stays: it is key-metrics-ttm's, computed consistently in the reporting
+# currency.
+_CHECKED_MULTIPLE_KEYS = (
+    "pe_ratio",
+    "peg_ratio",
+    "ps_ratio",
+    "pb_ratio",
+    "price_to_fcf",
+    "ev_to_ebitda",
 )
 
 
@@ -236,6 +283,9 @@ async def get_company_financials(
     # file — and knowing a symbol is a fund is what keeps the vendor-vs-vendor
     # fallback from hard-blocking an ETF page.
     fund_task = resolve_fund_ticker(ticker)
+    # Exchange rates for the valuation cross-check. Cached for hours, so this is
+    # normally an in-memory read, not a request.
+    fx_task = get_fx_per_usd()
     # Daily closes covering the 12-quarter window (+ fiscal-calendar margin),
     # used to compute trailing P/E at each quarter end
     now_utc = datetime.now(timezone.utc)
@@ -256,6 +306,7 @@ async def get_company_financials(
         estimates,
         edgar_entity,
         edgar_fund,
+        fx,
     ) = await asyncio.gather(
         income_quarterly_task,
         balance_task,
@@ -267,6 +318,7 @@ async def get_company_financials(
         estimates_task,
         identity_task,
         fund_task,
+        fx_task,
     )
 
     # ── Normalise to lists (FMP returns arrays directly) ──────────────
@@ -315,6 +367,29 @@ async def get_company_financials(
     entity_trust = await resolve_contradiction(entity_trust)
     if is_contradicted(entity_trust):
         print(f"BLOCKED {ticker}: {entity_trust['message']}")
+
+    # ── US-dollar conversion ──────────────────────────────────────────
+    # Statements, key metrics and estimates are in the reporting currency; every
+    # price and market cap is in dollars. Convert once, here, before anything is
+    # derived, so no consumer can mix the two. Today's rate for every period keeps
+    # growth and margins exactly as reported. The raw income rows are kept for the
+    # quarterly P/E, which converts at each quarter-end's own rate instead.
+    reported_currency = next(
+        (
+            str(r["reportedCurrency"]).upper()
+            for r in income_quarters[:1] + balance_list[:1] + cashflow_quarters[:1]
+            if isinstance(r, dict) and r.get("reportedCurrency")
+        ),
+        None,
+    )
+    rate = usd_rate(reported_currency, fx)
+    converted = reported_currency not in (None, "USD")
+    income_raw = income_quarters
+    income_quarters = rows_to_usd(income_quarters, fx)
+    balance_list = rows_to_usd(balance_list, fx)
+    cashflow_quarters = rows_to_usd(cashflow_quarters, fx)
+    estimate_rows = estimates_to_usd({"rows": estimate_rows}, rate)["rows"]
+    fx_history = await get_fx_history(reported_currency) if converted else None
 
     # Debug: log what came back from FMP
     print(f"📊 Financials for {ticker}: income={len(income_quarters)}Q, balance={len(balance_list)}, cashflow={len(cashflow_quarters)}Q, ratios={len(ratios_list)}, metrics={len(key_metrics_list)}, profile={len(profile_list)}")
@@ -430,8 +505,10 @@ async def get_company_financials(
     ratios_summary = {
         "date": latest_q.get("date"),
         "price": None,  # not directly available from these endpoints
-        "market_cap": key_metrics.get("marketCap"),
-        "enterprise_value": key_metrics.get("enterpriseValueTTM"),
+        # key-metrics-ttm is in the reporting currency (Toyota's market cap reads
+        # 36 trillion — yen). Profile's market cap is already dollars; EV converts.
+        "market_cap": profile.get("marketCap") or to_usd(key_metrics.get("marketCap"), rate),
+        "enterprise_value": to_usd(key_metrics.get("enterpriseValueTTM"), rate),
         "pe_ratio": _fmt(ratios.get("priceToEarningsRatioTTM")),
         "peg_ratio": _fmt(peg_ttm),
         "ps_ratio": _fmt(ratios.get("priceToSalesRatioTTM")),
@@ -449,8 +526,21 @@ async def get_company_financials(
         "fcf": fcf_ttm,
     }
 
+    # ── Valuation cross-check ─────────────────────────────────────────
+    # The screener's rule (services/valuation_check) on the same ratios-ttm row,
+    # so a P/E the screener refuses is not shown here, in the DCF or in RelVal.
+    # Market cap is profile's, which is in dollars; key-metrics-ttm's is in the
+    # reporting currency for foreign filers and would fail every correct row.
+    pe_check = check_against_quarters(
+        ratios.get("priceToEarningsRatioTTM"), profile.get("marketCap"), income_quarters, fx,
+    )
+    if pe_check != "ok":
+        for key in _CHECKED_MULTIPLE_KEYS:
+            ratios_summary[key] = None
+    ratios_summary["valuation_check"] = pe_check
+
     # ── Quarterly revenue trend (for YoY growth) ──────────────────────
-    quarter_pes = _trailing_pe_by_quarter(income_quarters, price_rows)
+    quarter_pes = _trailing_pe_by_quarter(income_raw, price_rows, fx_history)
     quarterly_trend = []
     for i, q in enumerate(income_quarters):
         quarterly_trend.append({
@@ -498,6 +588,12 @@ async def get_company_financials(
         "quarterly_trend": quarterly_trend,
         "dcf_suggestions": dcf_suggestions,
         "growth_profile": growth_profile,
+        # Every money figure above is in dollars. `reported_currency` is what the
+        # company files in; `usd_conversion` is set when that isn't dollars, and
+        # its rate (units per dollar) is None when no rate was available — the
+        # money figures are then blank, never left unconverted.
+        "reported_currency": reported_currency,
+        "usd_conversion": {"from": reported_currency, "rate": rate} if converted else None,
         "entity_trust": entity_trust,
     }
 

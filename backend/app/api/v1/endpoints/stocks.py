@@ -11,7 +11,8 @@ import asyncio
 from app.api.dependencies import get_current_user
 from app.services.market_data import market_data_service, evaluate_dividend
 from app.services.fmp_client import get_fmp_client, API_KEY
-from app.services.analyst_estimates import fetch_estimates
+from app.services.analyst_estimates import estimates_to_usd, fetch_estimates
+from app.services.fx import get_fx_per_usd, get_reporting_currency, usd_rate
 from app.services.sec_filings import detect_bankruptcy, is_new_issuer
 from app.services.edgar_identity import resolve_fund_ticker
 from app.db.session import get_db
@@ -1538,15 +1539,25 @@ async def get_analyst_estimates(ticker: str):
 
         # analyst-estimates goes through services/analyst_estimates, which owns the
         # FMP schema and the forward-row selection for every consumer.
-        estimates, targets_resp = await asyncio.gather(
+        estimates, targets_resp, reporting_ccy, fx = await asyncio.gather(
             fetch_estimates(sym),
             client.get("price-target-consensus", params={"symbol": sym, "apikey": API_KEY}),
+            get_reporting_currency(sym),
+            get_fx_per_usd(),
             return_exceptions=True,
         )
 
         # ── Analyst EPS estimates ───────────────────────────────────────────
         if isinstance(estimates, BaseException) or not isinstance(estimates, dict):
             estimates = {}
+        # Estimates are in the company's reporting currency (Toyota's forward EPS
+        # is yen); everything on the page is dollars. Price targets are on the
+        # US-listed share, so already dollars.
+        if isinstance(reporting_ccy, BaseException):
+            reporting_ccy = None
+        if isinstance(fx, BaseException):
+            fx = {"USD": 1.0}
+        estimates = estimates_to_usd(estimates, usd_rate(reporting_ccy, fx))
         forward_eps = estimates.get("forward_eps")
         forward_eps_high = estimates.get("forward_eps_high")
         forward_eps_low = estimates.get("forward_eps_low")

@@ -290,6 +290,8 @@ def _facts(financials: Dict[str, Any]) -> Dict[str, Any]:
 
     f: Dict[str, Any] = {}
     f["mode"] = "full" if full else "limited"
+    # Set when financials_service converted from a foreign reporting currency.
+    f["converted_from"] = (financials.get("usd_conversion") or {}).get("from")
     f["quarters_income"] = n_inc
     f["quarters_balance"] = len(bal)
     f["quarters_cashflow"] = len(cf)
@@ -547,6 +549,16 @@ def _render(ticker: str, company_name: str, f: Dict[str, Any]) -> tuple[str, set
         f"{f['quarters_balance']} quarters balance sheet available."
     )
     b.header("All percentages are percentage points.")
+    # financials_service converts every figure to dollars at today's rate, so the
+    # trends here are the company's own; say so, or a reader of Toyota's yen
+    # filings would think the numbers were invented.
+    if f.get("converted_from"):
+        b.header(
+            f"All money figures are in US dollars, converted from {f['converted_from']} "
+            "(the company's reporting currency) at today's exchange rate."
+        )
+    else:
+        b.header("All money figures are in US dollars.")
     if limited:
         b.header(
             f"Limited history: {f['quarters_income']} quarters. Trend comparisons "

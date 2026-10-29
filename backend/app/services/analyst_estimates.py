@@ -153,6 +153,39 @@ async def fetch_estimates(ticker: str, limit: int = 4) -> Dict[str, Any]:
     return out
 
 
+# Money in an estimates payload: per-row fields and the nearest-forward aggregates.
+# Analyst counts and years are not money.
+_ROW_MONEY_KEYS = (
+    "revenue_avg", "revenue_low", "revenue_high", "eps_avg", "eps_low", "eps_high",
+    "ebitda_avg", "ebitda_low", "ebitda_high",
+)
+_AGGREGATE_MONEY_KEYS = (
+    "forward_eps", "forward_eps_low", "forward_eps_high", "forward_revenue", "forward_ebitda",
+)
+
+
+def estimates_to_usd(estimates: Dict[str, Any], rate: Optional[float]) -> Dict[str, Any]:
+    """A copy of a `fetch_estimates` payload (or any dict with its keys) in dollars.
+
+    Analysts estimate in the company's reporting currency — Toyota's forward EPS is
+    yen — and the payload says nothing about which, so the caller supplies the rate
+    (units per dollar, see services/fx.usd_rate) for the company's reporting currency.
+    A None rate blanks the money rather than leaving it unconverted.
+    """
+    from app.services.fx import to_usd
+
+    out = dict(estimates or {})
+    for k in _AGGREGATE_MONEY_KEYS:
+        if k in out:
+            out[k] = to_usd(out[k], rate)
+    if isinstance(out.get("rows"), list):
+        out["rows"] = [
+            {k: (to_usd(v, rate) if k in _ROW_MONEY_KEYS else v) for k, v in row.items()}
+            for row in out["rows"] if isinstance(row, dict)
+        ]
+    return out
+
+
 def derive_consensus_growth(
     rows: List[Dict[str, Any]],
     revenue_ttm: Optional[float] = None,

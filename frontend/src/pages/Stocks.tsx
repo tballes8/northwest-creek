@@ -5,8 +5,9 @@ import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import { authAPI, stocksAPI, watchlistAPI, screenerAPI } from '../services/api';
+import { authAPI, stocksAPI, watchlistAPI, screenerAPI, EntityTrust, isEntityContradicted } from '../services/api';
 import ScreenerChartPanel from '../components/ScreenerChartPanel';
+import EntityTrustBlock from '../components/EntityTrustBlock';
 import { SECTOR_COLORS } from '../utils/sectorMap';
 import axios from 'axios';
 
@@ -639,6 +640,10 @@ const Stocks: React.FC = () => {
   const [ownershipData, setOwnershipData] = useState<OwnershipData | null>(null);
   const [ownershipLoading, setOwnershipLoading] = useState(false);
   const [peRatio, setPeRatio] = useState<number | null>(null);
+  // Identity verdict from the /financials payload. Gates the Dividend card, and
+  // the card waits on it rather than rendering first and vanishing after.
+  const [entityTrust, setEntityTrust] = useState<EntityTrust | null>(null);
+  const [entityTrustLoading, setEntityTrustLoading] = useState(false);
   const [analystEstimates, setAnalystEstimates] = useState<AnalystEstimates | null>(null);
   const [nwcForecast, setNwcForecast] = useState<{
     bear: number; base: number; bull: number;
@@ -824,6 +829,8 @@ const Stocks: React.FC = () => {
       setEtfHoldingsTotal(0);
     setOwnershipData(null);
     setPeRatio(null);
+    setEntityTrust(null);
+    setEntityTrustLoading(false);
     setAnalystEstimates(null);
     setNwcForecast(null);
     setForecastLoading(false);
@@ -936,7 +943,11 @@ const Stocks: React.FC = () => {
     setLoading(true);
     setError('');
     setTicker(symbol.toUpperCase());
-    
+    // Hold the Dividend card from the start: the previous ticker's verdict must
+    // not gate (or un-gate) this one's dividends while the new one is in flight.
+    setEntityTrust(null);
+    setEntityTrustLoading(true);
+
     const isWarrantHint = detectWarrantHint(symbol);
     setIsWarrant(isWarrantHint);
     if (isWarrantHint) {
@@ -1034,10 +1045,13 @@ const Stocks: React.FC = () => {
       // PE ratio comes from company financials, which funds/ETFs don't have
       // (the /financials endpoint 404s for them), and a PE is meaningless for a
       // fund anyway — skip the call for fund types to avoid console 404 noise.
+      // A fund never blocks on identity (cannot_resolve), so there is no
+      // verdict to wait for either.
       if (isFundType(apiType)) {
         setPeRatio(null);
+        setEntityTrustLoading(false);
       } else {
-        loadPeRatio(symbol);
+        loadFinancialsSummary(symbol);
       }
       loadAnalystEstimates(symbol);
       loadOwnership(symbol);
@@ -1190,14 +1204,20 @@ const Stocks: React.FC = () => {
     }
   };
 
-  const loadPeRatio = async (symbol: string) => {
+  // P/E and the entity-identity verdict, off the one /financials payload. A
+  // failed fetch leaves no verdict, which — like cannot_resolve — never blocks.
+  const loadFinancialsSummary = async (symbol: string) => {
     try {
       const { financialsAPI } = await import('../services/api');
       const response = await financialsAPI.get(symbol);
       const pe = response.data?.ratios?.pe_ratio;
       setPeRatio(typeof pe === 'number' ? pe : null);
+      setEntityTrust(response.data?.entity_trust ?? null);
     } catch {
       setPeRatio(null);
+      setEntityTrust(null);
+    } finally {
+      setEntityTrustLoading(false);
     }
   };
 
@@ -2876,11 +2896,20 @@ const Stocks: React.FC = () => {
               <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Dividend Information</h3>
 
-                {dividendLoading ? (
+                {dividendLoading || entityTrustLoading ? (
                   <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm py-4">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600"></div>
                     Loading dividend data...
                   </div>
+                ) : isEntityContradicted(entityTrust) ? (
+                  /* FMP keys dividends on the symbol, not the CIK, so when this
+                     ticker's filings belong to a different company its payout
+                     history may too. Replaces the whole card body — including
+                     "No dividends distributed", which is also a claim. */
+                  <EntityTrustBlock
+                    trust={entityTrust}
+                    note={<>Dividend history is withheld too: the vendor keys it on the ticker, so it may be the other company's payouts.</>}
+                  />
                 ) : dividendInfo && dividendInfo.has_dividends && dividendInfo.dividends.length > 0 ? (
                   <div className="space-y-3">
                     {/* Green yield only for a dividend still in effect. A lapsed one gets

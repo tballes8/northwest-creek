@@ -28,8 +28,10 @@ from app.db.models import User, FeatureUsage
 from app.services.market_data import market_data_service
 from app.services.financials_service import get_company_financials, compute_peer_fundamentals
 from app.services.edgar_identity import is_contradicted
-from app.services.analyst_estimates import fetch_estimates
+from app.services.analyst_estimates import estimates_to_usd, fetch_estimates
 from app.services.fmp_client import get_fmp_client, API_KEY
+from app.services.fx import get_fx_per_usd, get_reporting_currency, usd_rate
+from app.services.valuation_check import check_against_quarters
 from app.core.tier_limits import get_tier_limit, get_review_period, get_upgrade_tier
 
 
@@ -170,6 +172,13 @@ async def get_relval_inputs(
             fin = {}
         if isinstance(estimates, BaseException):
             estimates = {}
+
+        # Analyst estimates are in the company's reporting currency (Toyota's
+        # forward EPS is yen) and get multiplied by dollar peer multiples below,
+        # so convert them like the financials. On a contradiction the payload's
+        # currency is withheld with the rest, hence the lookup fallback.
+        ccy = fin.get("reported_currency") or await get_reporting_currency(sym)
+        estimates = estimates_to_usd(estimates, usd_rate(ccy, await get_fx_per_usd()))
 
         current_price = None
         try:
@@ -315,11 +324,16 @@ class PeerRatiosBody(BaseModel):
     tickers: List[str] = Field(..., min_length=1, max_length=30)
 
 
-async def _fetch_peer_ratio(sym: str) -> Dict[str, Any]:
+async def _fetch_peer_ratio(sym: str, fx: Dict[str, float]) -> Dict[str, Any]:
     """Fetch one peer's TTM P/E, P/S, EV/EBITDA plus name/sector/industry.
 
     Uses the same FMP fields the Financials page reads. Missing multiples are
     returned as None so the UI can render "—" and the median can skip them.
+
+    The three multiples pass services/valuation_check, the rule the screener and
+    the Financials page apply. A peer whose P/E disagrees with its own earnings
+    (Biogen at 1.7 against a true 106) would drag the median it feeds, so all
+    three are withheld like any missing multiple.
     """
     row: Dict[str, Any] = {
         "ticker": sym,
@@ -334,7 +348,13 @@ async def _fetch_peer_ratio(sym: str) -> Dict[str, Any]:
         # Fundamental context — helps the user judge comparability before cutting.
         "revenue_growth_yoy": None,
         "gross_margin": None,
+        "valuation_check": None,
     }
+    # Kept outside the try so the check below runs even when a later fetch fails:
+    # an early return from the except must not hand back unchecked multiples.
+    ratios: Dict[str, Any] = {}
+    profile: Dict[str, Any] = {}
+    quarters: List[dict] = []
     try:
         client = get_fmp_client()
         ratios_resp, profile_resp, income_resp = await asyncio.gather(
@@ -348,30 +368,37 @@ async def _fetch_peer_ratio(sym: str) -> Dict[str, Any]:
             ratios_resp.raise_for_status()
             rd = ratios_resp.json()
             if isinstance(rd, list) and rd:
-                r = rd[0]
-                row["pe"] = r.get("priceToEarningsRatioTTM")
-                row["ps"] = r.get("priceToSalesRatioTTM")
-                row["ev_ebitda"] = r.get("enterpriseValueMultipleTTM") or r.get("evToEBITDATTM")
+                ratios = rd[0]
+                row["pe"] = ratios.get("priceToEarningsRatioTTM")
+                row["ps"] = ratios.get("priceToSalesRatioTTM")
+                row["ev_ebitda"] = ratios.get("enterpriseValueMultipleTTM") or ratios.get("evToEBITDATTM")
 
         if not isinstance(profile_resp, BaseException):
             profile_resp.raise_for_status()
             pd = profile_resp.json()
             if isinstance(pd, list) and pd:
-                p = pd[0]
-                row["name"] = p.get("companyName")
-                row["description"] = p.get("description")
-                row["sector"] = p.get("sector")
-                row["industry"] = p.get("industry")
-                row["market_cap"] = p.get("marketCap") or p.get("mktCap")
+                profile = pd[0]
+                row["name"] = profile.get("companyName")
+                row["description"] = profile.get("description")
+                row["sector"] = profile.get("sector")
+                row["industry"] = profile.get("industry")
+                row["market_cap"] = profile.get("marketCap") or profile.get("mktCap")
 
         if not isinstance(income_resp, BaseException):
             income_resp.raise_for_status()
             iq = income_resp.json()
-            fundamentals = compute_peer_fundamentals(iq if isinstance(iq, list) else [])
+            quarters = iq if isinstance(iq, list) else []
+            fundamentals = compute_peer_fundamentals(quarters)
             row["revenue_growth_yoy"] = fundamentals["revenue_growth_yoy_pct"]
             row["gross_margin"] = fundamentals["gross_margin_pct"]
     except Exception as e:
         print(f"⚠️ Peer ratio fetch failed for {sym}: {_safe_error(e)}")
+
+    row["valuation_check"] = check_against_quarters(
+        ratios.get("priceToEarningsRatioTTM"), row["market_cap"], quarters, fx,
+    )
+    if row["valuation_check"] != "ok":
+        row["pe"] = row["ps"] = row["ev_ebitda"] = None
     return row
 
 
@@ -398,7 +425,8 @@ async def get_peer_ratios(
     if not syms:
         raise HTTPException(status_code=400, detail="No valid tickers provided.")
 
-    peers = await asyncio.gather(*(_fetch_peer_ratio(s) for s in syms))
+    fx = await get_fx_per_usd()
+    peers = await asyncio.gather(*(_fetch_peer_ratio(s, fx) for s in syms))
     return {"peers": list(peers)}
 
 

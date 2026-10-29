@@ -7,6 +7,7 @@ import BackToTop from '../components/BackToTop';
 import UpgradeRequired from '../components/UpgradeRequired';
 import EntityTrustBlock from '../components/EntityTrustBlock';
 import AtrRiskModal, { AtrRisk } from '../components/AtrRiskLevels';
+import { formatUsd } from '../utils/currency';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -744,15 +745,9 @@ const TechnicalAnalysis: React.FC = () => {
   };
 
   // ── Financials helpers ───────────────────────────────────────────
-  const fmtB = (val: number | null | undefined): string => {
-    if (val == null) return '—';
-    const abs = Math.abs(val);
-    if (abs >= 1e12) return `${(val / 1e12).toFixed(2)}T`;
-    if (abs >= 1e9) return `${(val / 1e9).toFixed(2)}B`;
-    if (abs >= 1e6) return `${(val / 1e6).toFixed(1)}M`;
-    if (abs >= 1e3) return `${(val / 1e3).toFixed(1)}K`;
-    return val.toFixed(2);
-  };
+  // Every money figure in the payload is dollars; the backend converts foreign
+  // filers (see `usd_conversion`).
+  const fmtB = (val: number | null | undefined): string => formatUsd(val);
 
   const fmtPct = (val: number | null | undefined): string => {
     if (val == null) return '—';
@@ -1627,6 +1622,17 @@ const TechnicalAnalysis: React.FC = () => {
                 {!isEntityContradicted(financialsData?.entity_trust) && (
                   <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
                     SEC filings via Financial Modeling Prep • Data updates daily
+                    {/* Figures are dollars; for a foreign filer say they were
+                        converted, or they won't match the company's own filings. */}
+                    {financialsData?.usd_conversion && (
+                      financialsData.usd_conversion.rate != null ? (
+                        <> • Converted from {financialsData.usd_conversion.from} to US dollars at
+                          today's rate ({financialsData.usd_conversion.rate.toLocaleString('en-US', { maximumFractionDigits: 4 })} {financialsData.usd_conversion.from} per USD)</>
+                      ) : (
+                        <> • Reported in {financialsData.usd_conversion.from}; figures withheld until a
+                          US dollar exchange rate is available</>
+                      )
+                    )}
                   </p>
                 )}
 
@@ -1827,7 +1833,7 @@ const TechnicalAnalysis: React.FC = () => {
                                   <td className="py-2 pr-4 text-right">{fmtB(q.net_income)}</td>
                                   <td className="py-2 pr-4 text-right">{fmtPct(q.gross_margin_pct)}</td>
                                   <td className="py-2 pr-4 text-right">{fmtPct(q.operating_margin_pct)}</td>
-                                  <td className="py-2 pr-4 text-right">{fmtNum(q.eps_diluted)}</td>
+                                  <td className="py-2 pr-4 text-right">{formatUsd(q.eps_diluted, { compact: false })}</td>
                                   <td className="py-2 text-right whitespace-nowrap">
                                     {q.pe_ratio != null ? `${fmtNum(q.pe_ratio, 1)}x` : (
                                       <span
@@ -1906,7 +1912,7 @@ const TechnicalAnalysis: React.FC = () => {
                         <span>Dividend Yield: <strong className="text-gray-700 dark:text-gray-300">{(financialsData.ratios.dividend_yield * 100).toFixed(2)}%</strong></span>
                       )}
                       {financialsData.ratios?.eps && (
-                        <span>EPS (TTM): <strong className="text-gray-700 dark:text-gray-300">${fmtNum(financialsData.ratios.eps)}</strong></span>
+                        <span>EPS (TTM): <strong className="text-gray-700 dark:text-gray-300">{formatUsd(financialsData.ratios.eps, { compact: false })}</strong></span>
                       )}
                     </div>
                   </div>
