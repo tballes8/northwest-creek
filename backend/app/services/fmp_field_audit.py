@@ -89,6 +89,7 @@ def build_sample_params() -> dict[str, dict]:
         "etf/holdings": {"symbol": "SPY"},
         "treasury-rates": {"from": _iso(today - timedelta(days=7)), "to": _iso(today)},
         "batch-commodity-quotes": {},
+        "batch-forex-quotes": {},
         "batch-crypto-quotes": {},
         "batch-index-quotes": {},
         "technical-indicators/sma": {"symbol": "AAPL", "timeframe": "1day", "periodLength": 20},

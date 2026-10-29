@@ -685,7 +685,7 @@ _PRESETS = [
     },
     {
         "id": "classic_value",
-        "name": "Classic Value",
+        "name": "Value Stocks",
         "universe": "stocks",
         "description": (
             "Cheap on all three multiples: P/E under 15, P/B under 1.5 and EV/EBITDA under 10, "

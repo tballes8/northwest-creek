@@ -82,6 +82,16 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
      "key_fields": ["priceToEarningsRatioTTM", "priceToSalesRatioTTM", "priceToBookRatioTTM",
                     "priceToFreeCashFlowRatioTTM", "enterpriseValueMultipleTTM",
                     "debtToEquityRatioTTM", "currentRatioTTM", "quickRatioTTM", "dividendYieldTTM"]},
+    {"path": "income-statement-ttm", "description": "Trailing-twelve-month income statement",
+     # The independent half of the screener's valuation cross-check: netIncome in
+     # reportedCurrency, against market cap at the day's rate (refresh_stock_snapshots
+     # _valuation_check). A rename of either field makes every row "unverifiable" and
+     # silently blanks the screener's P/E, P/B and EV/EBITDA columns.
+     "used_by": ["tasks/refresh_stock_snapshots.py:_update_valuations (valuation cross-check)"],
+     "key_fields": ["date", "reportedCurrency", "netIncome"]},
+    {"path": "batch-forex-quotes", "description": "Every forex pair's latest quote",
+     "used_by": ["tasks/refresh_stock_snapshots.py:_update_valuations (USD rates for the cross-check)"],
+     "key_fields": ["symbol", "price"]},
     {"path": "key-metrics-ttm", "description": "Trailing-twelve-month key metrics",
      "used_by": ["services/financials_service.py:84"],
      "key_fields": ["marketCap", "enterpriseValueTTM", "evToEBITDATTM", "evToSalesTTM",
