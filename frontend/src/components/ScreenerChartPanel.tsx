@@ -4,6 +4,7 @@ import {
   Tooltip, Legend, ResponsiveContainer, Customized, ReferenceLine,
 } from 'recharts';
 import { intradayAPI } from '../services/api';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface IntradaySnapshot {
   ticker: string;
@@ -116,6 +117,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
   onClose,
   displayMode = 'panel',
 }) => {
+  const { theme } = useTheme();
   const [snapshot, setSnapshot] = useState<IntradaySnapshot | null>(null);
   const [barsData, setBarsData] = useState<BarsResponse | null>(null);
   const [liveTicks, setLiveTicks] = useState<ChartPoint[]>([]);
@@ -334,20 +336,30 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
     return firstBarOpen;
   }, [barsData, snapshot?.session?.open]);
 
-  // Where the open sits within the price line's own bounding box (0 = top, 1 = bottom).
-  // The stroke gradient uses objectBoundingBox, which is the curve's min→max price
-  // span (monotone interpolation never overshoots), so the color flips exactly at
-  // the open. null = flat line (zero-height bbox can't take a gradient) or no open.
-  const openSplitOffset = useMemo<number | null>(() => {
-    if (dayOpen == null) return null;
+  // Where the open sits within each gradient's bounding box (0 = top, 1 = bottom).
+  // Both gradients use objectBoundingBox (monotone interpolation never overshoots):
+  //  - stroke: the line's own min→max price span, so the color flips exactly at the open
+  //  - fill: the area is filled down/up to the open (baseValue), so its box also
+  //    stretches to include the open
+  // null = zero-height box (can't take a gradient) or no open.
+  const { openSplitOffset, fillSplitOffset } = useMemo<{
+    openSplitOffset: number | null;
+    fillSplitOffset: number | null;
+  }>(() => {
+    const none = { openSplitOffset: null, fillSplitOffset: null };
+    if (dayOpen == null) return none;
     const prices = visibleChartData
       .map(d => d.price)
       .filter((v): v is number => v != null && Number.isFinite(v));
-    if (!prices.length) return null;
+    if (!prices.length) return none;
     const hi = Math.max(...prices);
     const lo = Math.min(...prices);
-    if (hi === lo) return null;
-    return Math.max(0, Math.min(1, (hi - dayOpen) / (hi - lo)));
+    const top = Math.max(hi, dayOpen);
+    const bottom = Math.min(lo, dayOpen);
+    return {
+      openSplitOffset: hi === lo ? null : Math.max(0, Math.min(1, (hi - dayOpen) / (hi - lo))),
+      fillSplitOffset: top === bottom ? null : (top - dayOpen) / (top - bottom),
+    };
   }, [visibleChartData, dayOpen]);
 
   // ─── Coordinate helpers (data ↔ SVG-%) ────────────────────────────────────
@@ -419,6 +431,14 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
   const priceStroke = openSplitOffset == null
     ? colorVsOpen(visibleChartData[visibleChartData.length - 1]?.price)
     : 'url(#scpOpenSplit)';
+
+  // With an open the area is a baseline fill between price and open (nothing to
+  // fill if the line sits on the open); without one it fades to the axis floor.
+  const priceFill = dayOpen == null
+    ? 'url(#scpPriceFill)'
+    : fillSplitOffset == null ? 'none' : 'url(#scpOpenFill)';
+
+  const openLineColor = theme === 'dark' ? '#ffffff' : '#374151';
 
   const changeColorCls = (v: number | null | undefined) =>
     v == null ? 'text-gray-400' : v >= 0 ? 'text-green-400' : 'text-red-400';
@@ -736,14 +756,23 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                     >
                       <defs>
                         <linearGradient id="scpPriceFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%"  stopColor="rgb(59,130,246)" stopOpacity={0.6} />
-                          <stop offset="95%" stopColor="rgb(59,130,246)" stopOpacity={0.03} />
+                          <stop offset="5%"  stopColor={priceColor()} stopOpacity={0.6} />
+                          <stop offset="95%" stopColor={priceColor()} stopOpacity={0.03} />
                         </linearGradient>
                         {/* Hard stop at the open: green above, red below */}
                         {openSplitOffset != null && (
                           <linearGradient id="scpOpenSplit" x1="0" y1="0" x2="0" y2="1">
                             <stop offset={openSplitOffset} stopColor="#10b981" />
                             <stop offset={openSplitOffset} stopColor="#ef4444" />
+                          </linearGradient>
+                        )}
+                        {/* Fill: same split, each side fading toward the open line */}
+                        {fillSplitOffset != null && (
+                          <linearGradient id="scpOpenFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset={0}               stopColor="#10b981" stopOpacity={0.5} />
+                            <stop offset={fillSplitOffset} stopColor="#10b981" stopOpacity={0.1} />
+                            <stop offset={fillSplitOffset} stopColor="#ef4444" stopOpacity={0.1} />
+                            <stop offset={1}               stopColor="#ef4444" stopOpacity={0.5} />
                           </linearGradient>
                         )}
                       </defs>
@@ -772,13 +801,13 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                       {dayOpen != null && (
                         <ReferenceLine
                           y={dayOpen}
-                          stroke="#ffffff"
+                          stroke={openLineColor}
                           strokeDasharray="4 4"
                           strokeWidth={1}
                           label={{
                             value: `Open $${fmt2(dayOpen)}`,
                             position: 'insideTopLeft',
-                            fill: '#ffffff',
+                            fill: openLineColor,
                             fontSize: 10,
                           }}
                         />
@@ -788,9 +817,10 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                       <Area
                         type="monotone"
                         dataKey="price"
+                        baseValue={dayOpen ?? undefined}
                         stroke={priceStroke}
                         strokeWidth={2}
-                        fill="url(#scpPriceFill)"
+                        fill={priceFill}
                         dot={renderDot}
                         activeDot={{ r: 5, strokeWidth: 0 }}
                         name="Price"
