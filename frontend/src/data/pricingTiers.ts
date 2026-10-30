@@ -36,6 +36,7 @@ export const PRICING_TIERS: PricingTier[] = [
       '5 stock reviews per week',
       '5 DCF valuations per week',
       '5 technical analyses per week',
+      'Email price alerts',
       'Real-time WebSocket prices',
     ],
     ctaLabel: 'Start Free Trial',
@@ -81,7 +82,7 @@ export const PRICING_TIERS: PricingTier[] = [
       '20 price alerts',
       '20 stock reviews per day',
       '20 DCF valuations per day',
-      '20 technical analyses per day',
+      '10 technical analyses per day',
       '5 smart technical alerts (RSI, MACD, MA cross…)',
       'Email price alerts',
       'Save your screens',
@@ -106,7 +107,7 @@ export const PRICING_TIERS: PricingTier[] = [
       '50 price alerts',
       '40 stock reviews per day',
       '40 DCF valuations per day',
-      '40 technical analyses per day',
+      '20 technical analyses per day',
       '20 smart technical alerts (RSI, MACD, MA cross…)',
       'Email price alerts',
       'Save your screens',
@@ -118,3 +119,19 @@ export const PRICING_TIERS: PricingTier[] = [
 
 export const getTierBySlug = (slug: TierSlug): PricingTier =>
   PRICING_TIERS.find((t) => t.slug === slug) ?? PRICING_TIERS[0];
+
+/**
+ * Price label and full feature list for compact tier cards (upgrade prompts,
+ * account page). Those screens used to keep their own copies, and every copy
+ * drifted from the backend's tier_limits.py — this file is the one to update.
+ */
+export const getTierSummary = (slug: TierSlug): { price: string; features: string[] } => {
+  const t = getTierBySlug(slug);
+  return {
+    price: `${t.price}/mo`,
+    features: [
+      ...(t.highlightedBullet ? [t.highlightedBullet.replace(/^✦\s*/, '')] : []),
+      ...t.bullets,
+    ],
+  };
+};

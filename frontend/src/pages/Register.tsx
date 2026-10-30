@@ -268,19 +268,19 @@ const Register: React.FC = () => {
                 <div className="w-full border-t border-gray-300 dark:border-gray-600" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white dark:bg-gray-700 text-gray-500 dark:text-gray-400">Start with Free tier</span>
+                <span className="px-2 bg-white dark:bg-gray-700 text-gray-500 dark:text-gray-400">Beginner — $10/mo, 14-day free trial</span>
               </div>
             </div>
 
             <div className="mt-6 grid grid-cols-3 gap-3">
               <div className="text-center">
-                <p className="text-xs text-gray-500 dark:text-gray-400">✓ 5 stocks reviews</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">✓ 5 stock reviews/week</p>
               </div>
               <div className="text-center">
-                <p className="text-xs text-gray-500 dark:text-gray-400">✓ 5 watchlist entries</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">✓ 10 watchlist stocks</p>
               </div>
               <div className="text-center">
-                <p className="text-xs text-gray-500 dark:text-gray-400">✓ 5 portfolio entries</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">✓ 10 portfolio entries</p>
               </div>
             </div>
           </div>

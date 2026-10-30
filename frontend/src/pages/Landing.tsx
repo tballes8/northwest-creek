@@ -129,7 +129,7 @@ const Landing: React.FC = () => {
                 to="/register"
                 className="px-6 py-3 rounded-lg font-semibold bg-primary-600 hover:bg-primary-700 text-white transition-colors shadow-lg shadow-primary-500/30"
               >
-                Start Free →
+                Start Free Trial →
               </Link>
               <button
                 onClick={scrollToPricing}
@@ -164,7 +164,7 @@ const Landing: React.FC = () => {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto">
             {[
-              { n: '1', title: 'Sign Up Free', desc: '14-day trial on paid tiers, no card required to browse.' },
+              { n: '1', title: 'Start a Free Trial', desc: '14 days free on the Beginner and Casual plans.' },
               { n: '2', title: 'Search Any Ticker', desc: 'US stocks, ETFs, and indexes — all in one place.' },
               { n: '3', title: 'Get Institutional-Grade Analysis', desc: 'Charts, indicators, DCF, and AI commentary in seconds.' },
             ].map((s) => (

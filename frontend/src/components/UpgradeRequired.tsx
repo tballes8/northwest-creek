@@ -4,7 +4,7 @@
  * Usage:
  *   <UpgradeRequired
  *     feature="Technical Analysis"
- *     currentTier="free"
+ *     currentTier="beginner"
  *     limitReached={true}
  *     currentUsage={5}
  *     maxUsage={5}
@@ -12,6 +12,7 @@
  */
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { getTierSummary } from '../data/pricingTiers';
 
 interface UpgradeRequiredProps {
   feature: string;                // e.g. "Technical Analysis", "DCF Valuation", "Portfolio"
@@ -29,67 +30,15 @@ const TIER_INFO: Record<string, {
   bgColor: string;
   features: string[];
 }> = {
-  free: {
-    name: 'Free',
-    price: '$0',
-    color: 'text-gray-400',
-    bgColor: 'bg-gray-500',
-    features: [
-      '5 watchlist stocks',
-      '5 portfolio entries',
-      '5 stock reviews (total)',
-      '5 technical analyses (total)',
-      '5 DCF valuations (total)',
-    ],
-  },
-  casual: {
-    name: 'Casual Retail Investor',
-    price: '$20/mo',
-    color: 'text-teal-400',
-    bgColor: 'bg-teal-500',
-    features: [
-      '20 watchlist stocks',
-      '20 portfolio entries',
-      '5 stock reviews per week',
-      '5 technical analyses per week',
-      '5 DCF valuations per week',
-      '5 price alerts',
-
-    ],
-  },
-  active: {
-    name: 'Active Retail Investor',
-    price: '$40/mo',
-    color: 'text-blue-400',
-    bgColor: 'bg-blue-500',
-    features: [
-      '45 watchlist stocks',
-      '45 portfolio entries',
-      '5 stock reviews per day',
-      '5 technical analyses per day',
-      '5 DCF valuations per day',
-      '20 price alerts',
-
-    ],
-  },
-  professional: {
-    name: 'Professional Investor',
-    price: '$50/mo',
-    color: 'text-purple-400',
-    bgColor: 'bg-purple-500',
-    features: [
-      '75 watchlist stocks',
-      '75 portfolio entries',
-      '20 stock reviews per day',
-      '20 technical analyses per day',
-      '20 DCF valuations per day',
-      '50 price alerts',
-    ],
-  },
+  // Price and features come from data/pricingTiers.ts; only naming and colors live here
+  beginner: { name: 'Beginner', color: 'text-gray-400', bgColor: 'bg-gray-500', ...getTierSummary('beginner') },
+  casual: { name: 'Casual Retail Investor', color: 'text-teal-400', bgColor: 'bg-teal-500', ...getTierSummary('casual') },
+  active: { name: 'Active Retail Investor', color: 'text-blue-400', bgColor: 'bg-blue-500', ...getTierSummary('active') },
+  professional: { name: 'Professional Investor', color: 'text-purple-400', bgColor: 'bg-purple-500', ...getTierSummary('professional') },
 };
 
 const UPGRADE_PATH: Record<string, string> = {
-  free: 'casual',
+  beginner: 'casual',
   casual: 'active',
   active: 'professional',
 };
@@ -103,7 +52,7 @@ const UpgradeRequired: React.FC<UpgradeRequiredProps> = ({
   onBack,
 }) => {
   const navigate = useNavigate();
-  const currentInfo = TIER_INFO[currentTier] || TIER_INFO.free;
+  const currentInfo = TIER_INFO[currentTier] || TIER_INFO.beginner;
   const nextTierKey = UPGRADE_PATH[currentTier];
   const nextInfo = nextTierKey ? TIER_INFO[nextTierKey] : null;
 

@@ -9,6 +9,7 @@ import { User } from '../types';
 import NavBar from '../components/NavBar';
 import { getTierBadge } from '../components/NavBar';
 import axios from 'axios';
+import { getTierSummary } from '../data/pricingTiers';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -21,31 +22,27 @@ const TIER_DETAILS: Record<string, {
 }> = {
   beginner: {
     name: 'Beginner',
-    price: '$10/mo',
     color: 'text-gray-400',
     bgClass: 'bg-gray-600',
-    features: ['10 watchlist stocks', '10 portfolio entries', '5 reviews/week', '5 TA/week', '5 DCF/week', '5 alerts', '14-day free trial'],
+    ...getTierSummary('beginner'),
   },
   casual: {
     name: 'Casual Retail Investor',
-    price: '$20/mo',
     color: 'text-teal-400',
     bgClass: 'bg-teal-500',
-    features: ['20 watchlist stocks', '20 portfolio entries', '15 reviews/week', '15 TA/week', '15 DCF/week', '10 alerts', 'Email alerts', '14-day free trial'],
+    ...getTierSummary('casual'),
   },
   active: {
     name: 'Active Retail Investor',
-    price: '$40/mo',
     color: 'text-blue-400',
     bgClass: 'bg-blue-500',
-    features: ['45 watchlist stocks', '45 portfolio entries', '10 reviews/day', '10 TA/day', '10 DCF/day', '20 alerts', 'Email alerts'],
+    ...getTierSummary('active'),
   },
   professional: {
     name: 'Professional Investor',
-    price: '$50/mo',
     color: 'text-purple-400',
     bgClass: 'bg-purple-500',
-    features: ['75 watchlist stocks', '75 portfolio entries', '20 reviews/day', '20 TA/day', '20 DCF/day', '50 alerts', 'Email & indicator alerts'],
+    ...getTierSummary('professional'),
   },
 };
 

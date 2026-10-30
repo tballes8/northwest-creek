@@ -18,6 +18,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import { getTierBadge } from '../components/NavBar';
 import { User } from '../types';
+import { getTierSummary } from '../data/pricingTiers';
 
 // ── Tier metadata ──────────────────────────────────────────────
 
@@ -32,79 +33,41 @@ interface TierMeta {
   badgeBg: string;
   badgeText: string;
   gradient: string;       // for the CTA button
-  features: string[];     // what's NEW at this tier (not cumulative)
+  features: string[];     // full list — from data/pricingTiers.ts via getTierSummary
 }
 
 const TIERS: Record<TierKey, TierMeta> = {
   beginner: {
     label: 'Beginner',
-    price: '$10/mo',
     color: 'text-gray-400',
     badgeBg: 'bg-gray-100 dark:bg-gray-600',
     badgeText: 'text-gray-800 dark:text-gray-200',
     gradient: 'from-gray-500 to-gray-600',
-    features: [
-      '10 watchlist stocks',
-      '10 portfolio entries',
-      '5 price alerts',
-      '5 stock reviews/week',
-      '5 technical analyses/week',
-      '5 DCF valuations/week',
-      'Real-time market data',
-      '14-day free trial',
-    ],
+    ...getTierSummary('beginner'),
   },
   casual: {
     label: 'Casual Investor',
-    price: '$20/mo',
     color: 'text-teal-400',
     badgeBg: 'bg-primary-100 dark:bg-primary-900/50',
     badgeText: 'text-primary-800 dark:text-primary-200',
     gradient: 'from-teal-600 to-teal-500',
-    features: [
-      '20 watchlist stocks',
-      '20 portfolio entries',
-      '10 price alerts',
-      '15 stock reviews/week',
-      '15 technical analyses/week',
-      '15 DCF valuations/week',
-      'Email alerts',
-      '14-day free trial',
-    ],
+    ...getTierSummary('casual'),
   },
   active: {
     label: 'Active Investor',
-    price: '$40/mo',
     color: 'text-blue-400',
     badgeBg: 'bg-blue-100 dark:bg-blue-900/50',
     badgeText: 'text-blue-800 dark:text-blue-200',
     gradient: 'from-blue-600 to-blue-500',
-    features: [
-      '45 watchlist stocks',
-      '45 portfolio entries',
-      '20 price alerts',
-      '10 stock reviews/day',
-      '10 technical analyses/day',
-      '10 DCF valuations/day',
-      'Email alerts',
-    ],
+    ...getTierSummary('active'),
   },
   professional: {
     label: 'Professional Investor',
-    price: '$50/mo',
     color: 'text-purple-400',
     badgeBg: 'bg-purple-100 dark:bg-purple-900/50',
     badgeText: 'text-purple-800 dark:text-purple-200',
     gradient: 'from-purple-600 to-purple-500',
-    features: [
-      '75 watchlist stocks',
-      '75 portfolio entries',
-      '50 price alerts',
-      '20 stock reviews/day',
-      '20 technical analyses/day',
-      '20 DCF valuations/day',
-      'Email & indicator alerts',
-    ],
+    ...getTierSummary('professional'),
   },
 };
 
@@ -307,7 +270,7 @@ const COMPARISON_ROWS: ComparisonRow[] = [
   },
   {
     label: 'Stock Reviews',
-    values: { beginner: '5/week', casual: '15/week', active: '10/day', professional: '20/day' },
+    values: { beginner: '5/week', casual: '15/week', active: '20/day', professional: '40/day' },
   },
   {
     label: 'Technical Analysis',
@@ -315,7 +278,7 @@ const COMPARISON_ROWS: ComparisonRow[] = [
   },
   {
     label: 'DCF Valuations',
-    values: { beginner: '5/week', casual: '15/week', active: '10/day', professional: '20/day' },
+    values: { beginner: '5/week', casual: '15/week', active: '20/day', professional: '40/day' },
   },
   {
     label: 'Price Alerts',
@@ -323,11 +286,11 @@ const COMPARISON_ROWS: ComparisonRow[] = [
   },
   {
     label: 'Email Alerts',
-    values: { beginner: false, casual: true, active: true, professional: true },
+    values: { beginner: true, casual: true, active: true, professional: true },
   },
   {
     label: 'Indicator Alerts',
-    values: { beginner: false, casual: false, active: false, professional: true },
+    values: { beginner: false, casual: false, active: '5', professional: '20' },
   },
   {
     label: 'Options Calculator',

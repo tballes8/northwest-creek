@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import ThemeToggle from '../components/ThemeToggle';
 import BackToTop from '../components/BackToTop';
+import { PRICING_TIERS } from '../data/pricingTiers';
 
 const FAQ: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<string>('general');
@@ -14,15 +15,16 @@ const FAQ: React.FC = () => {
       },
       {
         question: "How do I get started?",
-        answer: "Simply create a free account and start exploring our beginner-friendly tools. You can upgrade to a paid tier anytime to access advanced features like real-time alerts, unlimited watchlists, and premium indicators."
+        answer: "Create an account and choose a plan. Beginner and Casual both start with a 14-day free trial. You can upgrade anytime for higher limits and advanced features like AI analysis, smart technical alerts, and saved screens."
       },
       {
         question: "What subscription tiers are available?",
-        answer: "We offer four tiers: Beginner (free), Casual ($9.99/month), Active ($19.99/month), and Professional ($39.99/month). Each tier provides progressively more features and higher usage limits."
+        // Prices come from data/pricingTiers.ts so this answer can't drift from what Stripe charges
+        answer: `We offer four tiers: ${PRICING_TIERS.map((t) => `${t.shortName} (${t.price}/month)`).join(', ')}. Each tier provides progressively more features and higher usage limits.`
       },
       {
         question: "Is there a free trial?",
-        answer: "Yes! All users start with our Beginner tier which includes basic features. You can explore most functionality before deciding to upgrade."
+        answer: "Yes. Beginner and Casual include a 14-day free trial. Active and Professional are billed from the start."
       }
     ],
     subscription: [
@@ -76,7 +78,7 @@ const FAQ: React.FC = () => {
       },
       {
         question: "Are tutorials included in all subscription tiers?",
-        answer: "Yes! All tutorials are available to users of all subscription tiers, including our free Beginner tier. No subscription required to access educational content."
+        answer: "Yes! All tutorials are free for everyone. No subscription required to access educational content."
       },
       {
         question: "Can I suggest new tutorial topics?",
