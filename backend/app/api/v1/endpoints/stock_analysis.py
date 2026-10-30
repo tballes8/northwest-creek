@@ -109,7 +109,8 @@ async def stock_ai_analysis(
         try:
             advanced = technical_indicators.calculate_all_advanced(highs, lows, prices, volumes)
         except Exception:
-            pass
+            # Our own calc, not a vendor call — a failure here is a bug; keep the traceback
+            logger.exception("Advanced indicators failed for %s", ticker)
 
         # ── Build summary (same logic as /technical-analysis/analyze) ─────
         # Compute last-period values for MACD/BB from raw data for generate_summary
@@ -338,7 +339,8 @@ async def stock_price_forecast(
         try:
             advanced = technical_indicators.calculate_all_advanced(highs, lows, prices, volumes)
         except Exception:
-            pass
+            # Our own calc, not a vendor call — a failure here is a bug; keep the traceback
+            logger.exception("Advanced indicators failed for %s", sym)
 
         # ── Compute summary indicators (support/resistance + score) ───────
         # Minimal history arrays needed for generate_summary

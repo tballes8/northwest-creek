@@ -87,18 +87,23 @@ async def analyze_user_portfolio(
     tickers = [p.ticker for p in db_positions]
     quotes = await market_data_service.get_batch_quotes(tickers)
 
-    # Fetch dividend data for all tickers concurrently (best-effort)
+    # Fetch dividend data for all tickers concurrently (best-effort). A failed
+    # fetch is "unknown", not "no dividend" — reported separately so the AI
+    # never tells the user a payer pays nothing.
     dividend_data: dict = {}
-    try:
-        div_results = await asyncio.gather(
-            *[market_data_service.get_dividends(t) for t in tickers],
-            return_exceptions=True,
-        )
-        for ticker, result in zip(tickers, div_results):
-            if not isinstance(result, Exception):
-                dividend_data[ticker.upper()] = result
-    except Exception:
-        pass
+    dividend_unknown: list = []
+    div_results = await asyncio.gather(
+        *[market_data_service.get_dividends(t) for t in tickers],
+        return_exceptions=True,
+    )
+    for ticker, result in zip(tickers, div_results):
+        if isinstance(result, Exception):
+            print(f"Portfolio analysis: dividend fetch raised for {ticker}: {result}")
+            dividend_unknown.append(ticker.upper())
+        elif result.get("fetch_failed"):
+            dividend_unknown.append(ticker.upper())
+        else:
+            dividend_data[ticker.upper()] = result
 
     positions = []
     total_value = 0.0
@@ -150,8 +155,8 @@ async def analyze_user_portfolio(
         # return index symbols, and its field was read under the wrong name, so
         # market context was silently empty on every analysis.
         index_quotes = {i["symbol"]: i for i in (await get_index_quotes())["indexes"]}
-        # S&P 500 and Dow come through ETF proxies (see INDEX_MAP in stocks.py)
-        name_map = {"SPY": "S&P 500 (SPY)", "^IXIC": "NASDAQ", "DIA": "Dow Jones (DIA)"}
+        # No S&P 500 / Dow: not licensed through FMP (see INDEX_MAP in stocks.py)
+        name_map = {"^IXIC": "NASDAQ"}
         for symbol, label in name_map.items():
             q = index_quotes.get(symbol, {})
             if q.get("changePercent") is not None:
@@ -159,8 +164,9 @@ async def analyze_user_portfolio(
                     "name": label,
                     "changePercent": float(q["changePercent"]),
                 })
-    except Exception:
-        pass
+    except Exception as e:
+        # The prompt already says "Market data unavailable"; just make it visible
+        print(f"Portfolio analysis: market context unavailable: {e}")
 
     summary = await analyze_portfolio(
         positions=positions,
@@ -170,6 +176,7 @@ async def analyze_user_portfolio(
             "total_profit_loss_percent": total_pl_pct,
         },
         market_context={"indexes": index_context},
+        dividend_unknown=dividend_unknown,
     )
 
     # Record usage after a successful call

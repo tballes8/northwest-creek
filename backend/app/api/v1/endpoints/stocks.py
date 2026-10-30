@@ -503,8 +503,9 @@ async def get_commodity_quotes():
                     items = r.json()
                     if isinstance(items, list) and items:
                         return items[0]
-                except Exception:
-                    pass
+                    print(f"Commodity quote fallback: no data for {sym}")
+                except Exception as e:
+                    print(f"Commodity quote fallback failed for {sym}: {_safe_error(e)}")
                 return None
 
             fallback_results = await asyncio.gather(
@@ -599,8 +600,9 @@ async def get_crypto_quotes():
                     items = r.json()
                     if isinstance(items, list) and items:
                         return items[0]
-                except Exception:
-                    pass
+                    print(f"Crypto quote fallback: no data for {sym}")
+                except Exception as e:
+                    print(f"Crypto quote fallback failed for {sym}: {_safe_error(e)}")
                 return None
 
             fallback_results = await asyncio.gather(
@@ -644,7 +646,7 @@ async def get_crypto_quotes():
 @router.get("/index-quotes")
 async def get_index_quotes():
     """
-    Get quotes for 10 key market indexes.
+    Get quotes for 8 key market indexes.
 
     Calls FMP batch-index-quotes, filters to our curated list,
     and returns name/price/change data for the dashboard card + modal.
@@ -653,13 +655,12 @@ async def get_index_quotes():
     """
     # Symbol → (display name, is_points) mapping
     # is_points=True means display raw value (no $ prefix)
-    # S&P 500 and Dow are ETF proxies: ^GSPC/^DJI belong to S&P Dow Jones Indices,
-    # which FMP isn't licensed to redistribute — every /stable endpoint returns 402
-    # for them on any plan (confirmed by FMP support 2026-10-30). The ETF price is
-    # a dollar price, not index points, so the label names the ETF.
+    # No S&P 500 or Dow: ^GSPC/^DJI belong to S&P Dow Jones Indices, which FMP
+    # isn't licensed to redistribute — every /stable endpoint returns 402 for them
+    # on any plan (confirmed by FMP support 2026-10-30). Yahoo and FRED carry the
+    # same S&P DJI restriction, and SPY/DIA proxies were tried and read as the
+    # index, so they're omitted until there's a licensed source.
     INDEX_MAP = {
-        "SPY": ("S&P 500 (SPY)", False),
-        "DIA": ("Dow Jones (DIA)", False),
         "^IXIC": ("NASDAQ Composite", True),
         "^NDX": ("NASDAQ 100", True),
         "^RUT": ("Russell 2000", True),
@@ -700,6 +701,7 @@ async def get_index_quotes():
                     items = r.json()
                     if isinstance(items, list) and items:
                         return items[0]
+                    print(f"Index quote fallback: no data for {sym}")
                 except Exception as e:
                     # Surface it: a swallowed 402 is how ^GSPC/^DJI vanished unnoticed
                     print(f"Index quote fallback failed for {sym}: {_safe_error(e)}")
@@ -713,7 +715,7 @@ async def get_index_quotes():
                     lookup[sym] = result
 
         indexes = []
-        for symbol, (display_name, is_points) in INDEX_MAP.items():
+        for symbol, (display_name, _) in INDEX_MAP.items():
             item = lookup.get(symbol)
             if not item:
                 continue
@@ -730,7 +732,6 @@ async def get_index_quotes():
                 "name": display_name,
                 "symbol": symbol,
                 "value": price,
-                "is_points": is_points,
                 "change": change,
                 "changePercent": change_pct,
             })

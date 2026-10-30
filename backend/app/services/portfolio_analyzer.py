@@ -15,6 +15,7 @@ async def analyze_portfolio(
     positions: List[Dict[str, Any]],
     portfolio_totals: Dict[str, Any],
     market_context: Dict[str, Any],
+    dividend_unknown: List[str] | None = None,
 ) -> str:
     """
     Generate a plain-language AI summary of the user's portfolio.
@@ -23,6 +24,7 @@ async def analyze_portfolio(
                total_value, profit_loss, profit_loss_percent
     portfolio_totals: dict with total_value, total_profit_loss, total_profit_loss_percent
     market_context: dict with index data (name, changePercent)
+    dividend_unknown: tickers whose dividend fetch failed — income unknown, not zero
     """
     settings = get_settings()
 
@@ -72,6 +74,10 @@ async def analyze_portfolio(
         reverse=True,
     )
     total_annual_income = sum(p.get("annual_income") or 0 for p in positions)
+    unknown_line = (
+        f"  - Dividend data unavailable for: {', '.join(dividend_unknown)} (income unknown, not included)"
+        if dividend_unknown else ""
+    )
 
     if income_positions:
         income_lines = "\n".join(
@@ -83,7 +89,11 @@ async def analyze_portfolio(
             f"Income profile:\n"
             f"  - Estimated total annual portfolio income: ~${total_annual_income:,.2f}\n"
             f"{income_lines}"
+            + (f"\n{unknown_line}" if unknown_line else "")
         )
+    elif unknown_line:
+        # A failed fetch is not "no dividends" — don't let the AI report none
+        income_section = f"Income profile:\n{unknown_line}"
     else:
         income_section = "Income profile:\n  - No dividend-paying positions detected"
 

@@ -94,7 +94,6 @@ interface MarketDataItem {
   value: number | null;
   change?: number | null;
   changePercent?: number | null;
-  isPoints?: boolean; // indexes only: false = ETF proxy, shown as a dollar price
 }
 
 const Dashboard: React.FC = () => {
@@ -609,7 +608,6 @@ const Dashboard: React.FC = () => {
           value: i.value,
           change: i.change,
           changePercent: i.changePercent,
-          isPoints: i.is_points !== false,
         })));
       } catch (err) {
         console.warn('Could not fetch index quotes:', err);
@@ -1100,7 +1098,7 @@ return (
               {indexes.slice(0, 3).map((item) => (
                 <div key={item.name} className="flex items-center justify-between">
                   <span className="text-[0.65rem] text-gray-500 dark:text-gray-400">{item.name}</span>
-                  <span className="text-xs font-semibold text-gray-900 dark:text-white">{item.value != null ? `${item.isPoints === false ? '$' : ''}${item.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</span>
+                  <span className="text-xs font-semibold text-gray-900 dark:text-white">{item.value != null ? item.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</span>
                 </div>
               ))}
             </div>
@@ -1565,7 +1563,7 @@ return (
                             {item.value != null
                               ? isTreasury
                                 ? `${item.value.toFixed(2)}%`
-                                : isIndex && item.isPoints !== false
+                                : isIndex
                                 ? item.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                                 : `$${item.value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                               : '—'}
