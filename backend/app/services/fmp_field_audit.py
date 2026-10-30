@@ -78,7 +78,6 @@ def build_sample_params() -> dict[str, dict]:
         "exchange-market-hours": {"exchange": "NASDAQ"},
         "holidays-by-exchange": {"exchange": "NASDAQ"},
         "ipos-calendar": {"from": _iso(today - timedelta(days=35)), "to": _iso(today + timedelta(days=30))},
-        "earnings-calendar": {"from": _iso(today), "to": _iso(today + timedelta(days=30))},
         "search-name": {"query": "apple", "limit": 5},
         "search-symbol": {"query": "AAPL", "limit": 5},
         "company-screener": {"marketCapMoreThan": 1_000_000_000, "limit": 5},

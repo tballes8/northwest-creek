@@ -189,9 +189,6 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
      "used_by": ["api/v1/endpoints/stocks.py (GET /stocks/ipos: _parse_ipo_response, _build_ipo_item)"],
      "key_fields": ["symbol", "date", "company", "priceRange", "exchange", "actions",
                     "shares", "dealSize"]},
-    {"path": "earnings-calendar", "description": "Earnings report calendar with date range",
-     "used_by": ["api/v1/endpoints/stocks.py:1029"],
-     "key_fields": ["symbol", "date", "epsEstimated", "epsActual", "revenueEstimated", "revenueActual"]},
 
     # ── Search & screener & lists ────────────────────────────────────
     {"path": "search-name", "description": "Search companies by name",
