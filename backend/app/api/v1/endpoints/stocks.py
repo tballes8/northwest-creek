@@ -32,9 +32,10 @@ from app.schemas.stock import (
 def _safe_error(e: Exception) -> str:
     """Strip API keys and sensitive params from error messages before sending to client."""
     msg = str(e)
-    msg = re.sub(r'apiKey=[^&\s\'"]+', 'apiKey=***', msg)
-    msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
-    msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg)
+    # Case-insensitive: FMP calls pass `apikey=`, and httpx errors quote the full URL
+    msg = re.sub(r'apikey=[^&\s\'"]+', 'apikey=***', msg, flags=re.IGNORECASE)
+    msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg, flags=re.IGNORECASE)
+    msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg, flags=re.IGNORECASE)
     return msg
 
 
@@ -652,9 +653,13 @@ async def get_index_quotes():
     """
     # Symbol → (display name, is_points) mapping
     # is_points=True means display raw value (no $ prefix)
+    # S&P 500 and Dow are ETF proxies: ^GSPC/^DJI belong to S&P Dow Jones Indices,
+    # which FMP isn't licensed to redistribute — every /stable endpoint returns 402
+    # for them on any plan (confirmed by FMP support 2026-10-30). The ETF price is
+    # a dollar price, not index points, so the label names the ETF.
     INDEX_MAP = {
-        "^GSPC": ("S&P 500", True),
-        "^DJI": ("Dow Jones", True),
+        "SPY": ("S&P 500 (SPY)", False),
+        "DIA": ("Dow Jones (DIA)", False),
         "^IXIC": ("NASDAQ Composite", True),
         "^NDX": ("NASDAQ 100", True),
         "^RUT": ("Russell 2000", True),
@@ -695,8 +700,9 @@ async def get_index_quotes():
                     items = r.json()
                     if isinstance(items, list) and items:
                         return items[0]
-                except Exception:
-                    pass
+                except Exception as e:
+                    # Surface it: a swallowed 402 is how ^GSPC/^DJI vanished unnoticed
+                    print(f"Index quote fallback failed for {sym}: {_safe_error(e)}")
                 return None
 
             fallback_results = await asyncio.gather(
@@ -707,7 +713,7 @@ async def get_index_quotes():
                     lookup[sym] = result
 
         indexes = []
-        for symbol, (display_name, _) in INDEX_MAP.items():
+        for symbol, (display_name, is_points) in INDEX_MAP.items():
             item = lookup.get(symbol)
             if not item:
                 continue
@@ -724,6 +730,7 @@ async def get_index_quotes():
                 "name": display_name,
                 "symbol": symbol,
                 "value": price,
+                "is_points": is_points,
                 "change": change,
                 "changePercent": change_pct,
             })

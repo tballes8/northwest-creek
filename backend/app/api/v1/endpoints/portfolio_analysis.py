@@ -150,7 +150,8 @@ async def analyze_user_portfolio(
         # return index symbols, and its field was read under the wrong name, so
         # market context was silently empty on every analysis.
         index_quotes = {i["symbol"]: i for i in (await get_index_quotes())["indexes"]}
-        name_map = {"^GSPC": "S&P 500", "^IXIC": "NASDAQ", "^DJI": "Dow Jones"}
+        # S&P 500 and Dow come through ETF proxies (see INDEX_MAP in stocks.py)
+        name_map = {"SPY": "S&P 500 (SPY)", "^IXIC": "NASDAQ", "DIA": "Dow Jones (DIA)"}
         for symbol, label in name_map.items():
             q = index_quotes.get(symbol, {})
             if q.get("changePercent") is not None:

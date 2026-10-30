@@ -24,6 +24,7 @@ def _safe_error(e: Exception) -> str:
     """Strip API keys and sensitive params from error messages."""
     msg = str(e)
     msg = re.sub(r'apiKey=[^&\s\'"]+', 'apiKey=***', msg)
+    msg = re.sub(r'apikey=[^&\s\'"]+', 'apikey=***', msg)
     msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
     msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg)
     return msg

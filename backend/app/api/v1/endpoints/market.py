@@ -16,6 +16,7 @@ from app.utils.cache import SimpleCache
 def _safe_error(e: Exception) -> str:
     msg = str(e)
     msg = re.sub(r'apiKey=[^&\s\'"]+', 'apiKey=***', msg)
+    msg = re.sub(r'apikey=[^&\s\'"]+', 'apikey=***', msg)
     msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
     return msg
 
