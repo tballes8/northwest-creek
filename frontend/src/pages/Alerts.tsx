@@ -25,7 +25,6 @@ interface TechnicalAlert {
   alert_type_display: string;
   last_state?: Record<string, any>;
   is_active: boolean;
-  sms_enabled: boolean;
   triggered_at?: string;
   trigger_details?: Record<string, any>;
   notes?: string;
@@ -435,7 +434,7 @@ const Alerts: React.FC = () => {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-800">
       {/* SEO — React 19 hoists to <head> */}
       <title>Price Alerts — NWC-Analytics</title>
-      <meta name="description" content="Manage your price and technical alerts with email and SMS notifications." />
+      <meta name="description" content="Manage your price and technical alerts with email notifications." />
       <link rel="canonical" href="https://nwc-analytics.com/alerts" />
       <NavBar currentPage="alerts" user={user} onLogout={handleLogout} />
 

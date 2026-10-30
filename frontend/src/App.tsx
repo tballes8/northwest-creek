@@ -33,12 +33,24 @@ import Billing from './pages/Billing';
 
 const Payment = React.lazy(() => import('./pages/Payment'));
 
+// One-time credentials (reset / verify ?token=) must never reach analytics or ad pixels
+const withoutToken = (search: string) => {
+  const params = new URLSearchParams(search);
+  params.delete('token');
+  const rest = params.toString();
+  return rest ? `?${rest}` : '';
+};
+
 const PageviewTracker: React.FC = () => {
   const location = useLocation();
   useEffect(() => {
     const gtag = (window as any).gtag;
     if (typeof gtag === 'function') {
-      gtag('config', 'G-69YY52Z36D', { page_path: location.pathname + location.search });
+      const safePath = location.pathname + withoutToken(location.search);
+      gtag('config', 'G-69YY52Z36D', {
+        page_path: safePath,
+        page_location: window.location.origin + safePath,  // GA4 would otherwise send the full URL
+      });
     }
   }, [location]);
   return null;

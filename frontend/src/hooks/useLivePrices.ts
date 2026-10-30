@@ -24,6 +24,9 @@ const WS_URL = process.env.REACT_APP_API_URL
   ? `${process.env.REACT_APP_API_URL.replace('http', 'ws')}/api/v1/live-prices/ws`
   : 'ws://localhost:8000/api/v1/live-prices/ws';
 
+// Server close code for an unauthenticated socket — reconnecting won't help
+const WS_NOT_AUTHENTICATED = 1008;
+
 export function useLivePrices(): UseLivePricesReturn {
   const [prices, setPrices] = useState<Map<string, LivePrice>>(new Map());
   const [isConnected, setIsConnected] = useState(false);
@@ -36,17 +39,25 @@ export function useLivePrices(): UseLivePricesReturn {
   const maxReconnectAttempts = 5;
 
   const connect = useCallback(() => {
+    // Live prices are for logged-in users only; the server rejects anonymous sockets
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    const existing = wsRef.current;
+    if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) return;
+
     try {
       console.log('🔌 Connecting to live prices WebSocket...');
-      
+
       const ws = new WebSocket(WS_URL);
-      
+
       ws.onopen = () => {
         console.log('✅ WebSocket connected');
+        // Authenticate first — sent as a message so the token stays out of server URL logs
+        ws.send(JSON.stringify({ action: 'auth', token }));
         setIsConnected(true);
         setError(null);
         reconnectAttemptsRef.current = 0;
-        
+
         // Resubscribe to all tracked tickers on (re)connect
         if (subscribedTickersRef.current.size > 0) {
           const tickers = Array.from(subscribedTickersRef.current);
@@ -97,7 +108,13 @@ export function useLivePrices(): UseLivePricesReturn {
       ws.onclose = (event) => {
         console.log('🔌 WebSocket disconnected:', event.code, event.reason);
         setIsConnected(false);
-        
+
+        if (event.code === WS_NOT_AUTHENTICATED) {
+          // Logged out or token expired — the next subscribe after login reconnects
+          setError('Live prices require you to be logged in');
+          return;
+        }
+
         // Attempt to reconnect
         if (reconnectAttemptsRef.current < maxReconnectAttempts) {
           reconnectAttemptsRef.current += 1;
@@ -134,10 +151,15 @@ export function useLivePrices(): UseLivePricesReturn {
         action: 'subscribe',
         tickers: upperTickers
       }));
+    } else if (!wsRef.current || wsRef.current.readyState === WebSocket.CLOSED) {
+      // Not connected yet (e.g. logged in after the app loaded): connect now.
+      // onopen authenticates, then resubscribes everything tracked.
+      reconnectAttemptsRef.current = 0;
+      connect();
     }
-    
+
     console.log('📊 Subscribed to:', upperTickers);
-  }, []);
+  }, [connect]);
 
   const unsubscribe = useCallback((tickers: string[]) => {
     const upperTickers = tickers.map(t => t.toUpperCase());

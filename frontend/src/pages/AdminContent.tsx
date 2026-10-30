@@ -87,7 +87,7 @@ const AdminContent: React.FC = () => {
   // Vendors NWC has a code-level dependency registry for → grounded review.
   // Anything else (Railway, Cloudflare, custom) gets a best-effort generic review.
   // Must match the VENDORS keys in backend services/vendor_registries.py.
-  const GROUNDED_VENDORS = ['FMP', 'Stripe', 'Anthropic', 'Twilio', 'Postmark'];
+  const GROUNDED_VENDORS = ['FMP', 'Stripe', 'Anthropic', 'Postmark'];
   const VENDOR_OPTIONS = [...GROUNDED_VENDORS, 'Railway', 'Cloudflare', 'Other'];
   const effectiveVendor = vendor === 'Other' ? customVendor.trim() : vendor;
   const isGrounded = GROUNDED_VENDORS.includes(effectiveVendor);
@@ -790,7 +790,7 @@ const AdminContent: React.FC = () => {
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                 Pick the vendor, then paste their changelog (e.g. from an update email). Claude reviews it and
                 returns a markdown report flagging anything that may need a code change — download it and hand it
-                to Claude Code. For FMP, Stripe, Anthropic, Twilio, and Postmark it checks against NWC's actual
+                to Claude Code. For FMP, Stripe, Anthropic, and Postmark it checks against NWC's actual
                 code dependencies; for any other vendor it does a best-effort review against NWC's stack.
               </p>
 

@@ -232,13 +232,13 @@ export const alertsAPI = {
   getAll: () =>
     axiosInstance.get('/alerts/'),
   
-  create: (data: { ticker: string; condition: 'above' | 'below'; target_price: number; notes?: string; sms_enabled?: boolean }) =>
+  create: (data: { ticker: string; condition: 'above' | 'below'; target_price: number; notes?: string }) =>
     axiosInstance.post('/alerts/', data),
   
   delete: (id: string) =>
     axiosInstance.delete(`/alerts/${id}`),
   
-  update: (id: string, data: { is_active?: boolean; notes?: string; sms_enabled?: boolean }) =>
+  update: (id: string, data: { is_active?: boolean; notes?: string }) =>
     axiosInstance.patch(`/alerts/${id}`, data),
 };
 
@@ -252,30 +252,14 @@ export const technicalAlertsAPI = {
     alert_type: string;
     config: Record<string, any>;
     notes?: string;
-    sms_enabled?: boolean;
   }) =>
     axiosInstance.post('/technical-alerts/', data),
 
   delete: (id: string) =>
     axiosInstance.delete(`/technical-alerts/${id}`),
 
-  update: (id: string, data: { is_active?: boolean; notes?: string; sms_enabled?: boolean }) =>
+  update: (id: string, data: { is_active?: boolean; notes?: string }) =>
     axiosInstance.patch(`/technical-alerts/${id}`, data),
-};
-
-// Phone / SMS Verification API
-export const phoneAPI = {
-  getStatus: () =>
-    axiosInstance.get('/phone/status'),
-
-  submitPhone: (data: { phone_number: string }) =>
-    axiosInstance.post('/phone/submit', data),
-
-  verifyCode: (data: { code: string }) =>
-    axiosInstance.post('/phone/verify', data),
-
-  removePhone: () =>
-    axiosInstance.delete('/phone/'),
 };
 
 // Stocks API
