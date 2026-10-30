@@ -43,6 +43,9 @@ const FAQ: React.FC = () => {
             <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">
               Your subscription will remain active until the end of your current billing period. You'll continue to have access to premium features until then.
             </p>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+              Cancelling during a free trial works differently: the trial and your access end right away, and you won't be charged. Your data is kept if you resubscribe, but billing starts immediately because the free trial is one per customer.
+            </p>
           </div>
         )
       },
@@ -52,7 +55,7 @@ const FAQ: React.FC = () => {
       },
       {
         question: "What payment methods do you accept?",
-        answer: "We accept all major credit cards (Visa, MasterCard, American Express) and PayPal through our secure Stripe payment processor."
+        answer: "We accept all major credit and debit cards (Visa, Mastercard, American Express), processed securely by Stripe."
       },
       {
         question: "Do you offer refunds?",

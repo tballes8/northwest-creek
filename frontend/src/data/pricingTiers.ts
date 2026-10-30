@@ -1,5 +1,29 @@
 export type TierSlug = 'beginner' | 'casual' | 'active' | 'professional';
 
+/**
+ * What a plan allows. Mirrors TIER_LIMITS in backend core/tier_limits.py, which is
+ * what's enforced: change both together. The card bullets, the AI highlight and the
+ * comparison tables are all generated from these numbers, so no screen can show a
+ * limit of its own.
+ */
+export interface PlanLimits {
+  watchlist: number;
+  portfolio: number;
+  priceAlerts: number;
+  /** review_period: stock reviews, DCF valuations, TA and AI reset per this */
+  period: 'week' | 'day';
+  stockReviews: number;
+  dcf: number;
+  technicalAnalysis: number;
+  /** 0 = not included */
+  aiAnalysis: number;
+  /** indicator_alerts: a total that can be active at once, not per period; 0 = not included */
+  smartAlerts: number;
+  /** 0 = not included */
+  savedScreens: number;
+  optionsCalculator: boolean;
+}
+
 export interface PricingTier {
   slug: TierSlug;
   name: string;
@@ -7,17 +31,22 @@ export interface PricingTier {
   price: string;
   period: string;
   monthlyPriceNum: number;
-  annualPriceNum: number;
   hasTrial: boolean;
   trialBadge?: string;
   popular?: boolean;
+  limits: PlanLimits;
   highlightedBullet?: string;
   bullets: string[];
   ctaLabel: string;
   description: string;
 }
 
-export const PRICING_TIERS: PricingTier[] = [
+type TierDefinition = Omit<PricingTier, 'highlightedBullet' | 'bullets'> & {
+  /** Card lines that aren't limits, listed after the generated ones */
+  extraBullets?: string[];
+};
+
+const TIER_DEFINITIONS: TierDefinition[] = [
   {
     slug: 'beginner',
     name: 'Beginner',
@@ -25,20 +54,15 @@ export const PRICING_TIERS: PricingTier[] = [
     price: '$10',
     period: '/month',
     monthlyPriceNum: 10,
-    annualPriceNum: 96,
     hasTrial: true,
     trialBadge: '14-day free trial',
     description: 'Perfect for getting started — 14-day free trial',
-    bullets: [
-      '10 watchlist stocks',
-      '10 portfolio entries',
-      '5 price alerts',
-      '5 stock reviews per week',
-      '5 DCF valuations per week',
-      '5 technical analyses per week',
-      'Email price alerts',
-      'Real-time WebSocket prices',
-    ],
+    limits: {
+      watchlist: 10, portfolio: 10, priceAlerts: 5, period: 'week',
+      stockReviews: 5, dcf: 5, technicalAnalysis: 5, aiAnalysis: 0,
+      smartAlerts: 0, savedScreens: 0, optionsCalculator: false,
+    },
+    extraBullets: ['Real-time WebSocket prices'],
     ctaLabel: 'Start Free Trial',
   },
   {
@@ -48,20 +72,14 @@ export const PRICING_TIERS: PricingTier[] = [
     price: '$20',
     period: '/month',
     monthlyPriceNum: 20,
-    annualPriceNum: 192,
     hasTrial: true,
     trialBadge: '14-day free trial',
     description: 'For investors tracking a moderate portfolio — 14-day free trial',
-    highlightedBullet: '✦ AI Stock & Portfolio Analysis — 5/week',
-    bullets: [
-      '20 watchlist stocks',
-      '20 portfolio entries',
-      '10 price alerts',
-      '15 stock reviews per week',
-      '15 DCF valuations per week',
-      '15 technical analyses per week',
-      'Email price alerts',
-    ],
+    limits: {
+      watchlist: 20, portfolio: 20, priceAlerts: 10, period: 'week',
+      stockReviews: 15, dcf: 15, technicalAnalysis: 15, aiAnalysis: 5,
+      smartAlerts: 0, savedScreens: 0, optionsCalculator: false,
+    },
     ctaLabel: 'Start Free Trial',
   },
   {
@@ -71,23 +89,14 @@ export const PRICING_TIERS: PricingTier[] = [
     price: '$40',
     period: '/month',
     monthlyPriceNum: 40,
-    annualPriceNum: 384,
     hasTrial: false,
     popular: true,
     description: 'For active traders with larger portfolios',
-    highlightedBullet: '✦ AI Stock & Portfolio Analysis — 10/day',
-    bullets: [
-      '45 watchlist stocks',
-      '45 portfolio entries',
-      '20 price alerts',
-      '20 stock reviews per day',
-      '20 DCF valuations per day',
-      '10 technical analyses per day',
-      '5 smart technical alerts (RSI, MACD, MA cross…)',
-      'Email price alerts',
-      'Save your screens',
-      'Options Calculator',
-    ],
+    limits: {
+      watchlist: 45, portfolio: 45, priceAlerts: 20, period: 'day',
+      stockReviews: 20, dcf: 20, technicalAnalysis: 10, aiAnalysis: 10,
+      smartAlerts: 5, savedScreens: 15, optionsCalculator: true,
+    },
     ctaLabel: 'Get Active',
   },
   {
@@ -97,25 +106,37 @@ export const PRICING_TIERS: PricingTier[] = [
     price: '$50',
     period: '/month',
     monthlyPriceNum: 50,
-    annualPriceNum: 480,
     hasTrial: false,
     description: 'Ultimate tools for professional traders',
-    highlightedBullet: '✦ AI Stock & Portfolio Analysis — 25/day',
-    bullets: [
-      '75 watchlist stocks',
-      '75 portfolio entries',
-      '50 price alerts',
-      '40 stock reviews per day',
-      '40 DCF valuations per day',
-      '20 technical analyses per day',
-      '20 smart technical alerts (RSI, MACD, MA cross…)',
-      'Email price alerts',
-      'Save your screens',
-      'Options Calculator',
-    ],
+    limits: {
+      watchlist: 75, portfolio: 75, priceAlerts: 50, period: 'day',
+      stockReviews: 40, dcf: 40, technicalAnalysis: 20, aiAnalysis: 25,
+      smartAlerts: 20, savedScreens: 50, optionsCalculator: true,
+    },
     ctaLabel: 'Go Professional',
   },
 ];
+
+const limitBullets = (l: PlanLimits): string[] => [
+  `${l.watchlist} watchlist stocks`,
+  `${l.portfolio} portfolio entries`,
+  `${l.priceAlerts} price alerts`,
+  `${l.stockReviews} stock reviews per ${l.period}`,
+  `${l.dcf} DCF valuations per ${l.period}`,
+  `${l.technicalAnalysis} technical analyses per ${l.period}`,
+  ...(l.smartAlerts ? [`${l.smartAlerts} smart technical alerts (RSI, MACD, MA cross…)`] : []),
+  'Email price alerts',
+  ...(l.savedScreens ? ['Save your screens'] : []),
+  ...(l.optionsCalculator ? ['Options Calculator'] : []),
+];
+
+export const PRICING_TIERS: PricingTier[] = TIER_DEFINITIONS.map(({ extraBullets, ...tier }) => ({
+  ...tier,
+  highlightedBullet: tier.limits.aiAnalysis
+    ? `✦ AI Stock & Portfolio Analysis — ${tier.limits.aiAnalysis}/${tier.limits.period}`
+    : undefined,
+  bullets: [...limitBullets(tier.limits), ...(extraBullets ?? [])],
+}));
 
 export const getTierBySlug = (slug: TierSlug): PricingTier =>
   PRICING_TIERS.find((t) => t.slug === slug) ?? PRICING_TIERS[0];
@@ -140,3 +161,32 @@ export const getTierSummary = (slug: TierSlug): { price: string; features: strin
     ],
   };
 };
+
+/** One row of a plan comparison table: true = ✓, false = not included. */
+export interface ComparisonRow {
+  label: string;
+  values: Record<TierSlug, string | boolean>;
+}
+
+const comparisonRow = (label: string, value: (t: PricingTier) => string | boolean): ComparisonRow => ({
+  label,
+  values: Object.fromEntries(PRICING_TIERS.map((t) => [t.slug, value(t)])) as Record<TierSlug, string | boolean>,
+});
+
+const perPeriod = (n: number, t: PricingTier) => `${n}/${t.limits.period}`;
+
+/** The plan comparison, for the Pricing page and the Upgrade Required page. */
+export const COMPARISON_ROWS: ComparisonRow[] = [
+  comparisonRow('Watchlist Stocks', (t) => String(t.limits.watchlist)),
+  comparisonRow('Portfolio Entries', (t) => String(t.limits.portfolio)),
+  comparisonRow('Price Alerts', (t) => String(t.limits.priceAlerts)),
+  comparisonRow('Stock Reviews', (t) => perPeriod(t.limits.stockReviews, t)),
+  comparisonRow('DCF Valuations', (t) => perPeriod(t.limits.dcf, t)),
+  comparisonRow('Technical Analysis', (t) => perPeriod(t.limits.technicalAnalysis, t)),
+  comparisonRow('AI Stock & Portfolio Analysis', (t) => (t.limits.aiAnalysis ? perPeriod(t.limits.aiAnalysis, t) : false)),
+  comparisonRow('Smart Technical Alerts', (t) => (t.limits.smartAlerts ? String(t.limits.smartAlerts) : false)),
+  comparisonRow('Saved Screens', (t) => (t.limits.savedScreens ? String(t.limits.savedScreens) : false)),
+  comparisonRow('Options Calculator', (t) => t.limits.optionsCalculator),
+  comparisonRow('Email Alerts', () => true),
+  comparisonRow('14-Day Free Trial', (t) => t.hasTrial),
+];

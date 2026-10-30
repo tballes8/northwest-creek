@@ -9,6 +9,7 @@ import MarketStatusBadge from '../components/MarketStatusBadge';
 import SectorPieChart from '../components/SectorPieChart';
 import { computeSectorBreakdown, useSectors, SECTOR_COLORS, SectorBreakdown } from '../utils/sectorMap';
 import { summarizePositions } from '../utils/portfolioTotals';
+import { getTierBySlug, getTierSummary } from '../data/pricingTiers';
 import '../styles/livePrice.css';
 import axios from 'axios';
 
@@ -89,6 +90,10 @@ interface DashboardPosition {
   profit_loss?: number;
   profit_loss_percent?: number;
 }
+
+// Beginner upgrade banner copy, from the one plan source
+const CASUAL = getTierBySlug('casual');
+const CASUAL_SUMMARY = getTierSummary('casual');
 
 // Portfolio card figures from summarizePositions, the rule Portfolio.tsx uses
 const portfolioStats = (rows: DashboardPosition[]) => {
@@ -1430,14 +1435,17 @@ return (
       {user?.subscription_tier === 'beginner' && (
         <div className="mt-8 bg-gradient-to-r from-primary-600 to-primary-700 dark:from-primary-700 dark:to-primary-800 rounded-lg shadow-lg p-8 text-center">
           <h3 className="text-2xl font-bold text-white mb-2">
-            Upgrade to Casual Investor to unlock more features
+            Upgrade to {CASUAL.name} to unlock more features
           </h3>
           <p className="text-primary-100 dark:text-primary-200 mb-6">
-            Track 20 stocks, 20 positions, AI analysis, and 15 reviews per week. Only $20/month.
+            {CASUAL_SUMMARY.features.slice(0, 4).join(' · ')}. Only {CASUAL_SUMMARY.price}.
           </p>
-          <button className="bg-white text-primary-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors">
-            Upgrade to Casual Investor
-          </button>
+          <Link
+            to="/payment?tier=casual"
+            className="inline-block bg-white text-primary-600 px-8 py-3 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
+          >
+            Upgrade to {CASUAL.name}
+          </Link>
         </div>
       )}
 

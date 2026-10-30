@@ -4,7 +4,7 @@ import { authAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import BackToTop from '../components/BackToTop';
-import { PRICING_TIERS, TRIAL_PLAN_NAMES } from '../data/pricingTiers';
+import { PRICING_TIERS, TRIAL_PLAN_NAMES, COMPARISON_ROWS } from '../data/pricingTiers';
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -246,53 +246,33 @@ const Pricing: React.FC = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Feature
                   </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Beginner
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Casual
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Active
-                  </th>
-                  <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Professional
-                  </th>
+                  {PRICING_TIERS.map((tier) => (
+                    <th key={tier.slug} className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      {tier.shortName}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-700 divide-y divide-gray-200 dark:divide-gray-600">
-                {[
-                  { label: 'Watchlist Stocks',         values: ['10', '20', '45', '75'] },
-                  { label: 'Portfolio Entries',        values: ['10', '20', '45', '75'] },
-                  { label: 'Price Alerts',             values: ['5', '10', '20', '50'] },
-                  { label: 'Stock Reviews',            values: ['5/week', '15/week', '20/day', '40/day'] },
-                  { label: 'DCF Valuations',           values: ['5/week', '15/week', '20/day', '40/day'] },
-                  { label: 'Technical Analysis',       values: ['5/week', '15/week', '20/day', '40/day'] },
-                  { label: 'AI Stock & Portfolio Analysis', values: ['—', '5/week', '10/day', '25/day'] },
-                  { label: 'Smart Technical Alerts',   values: ['—', '—', '5/day', '20/day'] },
-                  { label: 'Saved Screens',            values: ['—', '—', '15', '50'] },
-                  { label: 'Options Calculator',       values: ['—', '—', '✓', '✓'] },
-                  { label: 'Email Alerts',             values: ['✓', '✓', '✓', '✓'] },
-                  { label: '14-Day Free Trial',        values: ['✓', '✓', '—', '—'] },
-                ].map((row, rowIdx) => (
+                {/* Generated from the plan limits in pricingTiers.ts */}
+                {COMPARISON_ROWS.map((row, rowIdx) => (
                   <tr key={row.label} className={rowIdx % 2 === 1 ? 'bg-gray-50 dark:bg-gray-800' : ''}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white font-medium">
                       {row.label}
                     </td>
-                    {row.values.map((value, colIdx) => {
-                      const isLast = colIdx === row.values.length - 1;
-                      const isDash = value === '—';
-                      const isCheck = value === '✓';
-                      const cls = isDash
+                    {PRICING_TIERS.map((tier, colIdx) => {
+                      const value = row.values[tier.slug];
+                      const isLast = colIdx === PRICING_TIERS.length - 1;
+                      const cls = value === false
                         ? 'text-gray-400'
-                        : isCheck
+                        : value === true
                         ? 'text-green-500'
                         : isLast
                         ? 'text-green-600 dark:text-green-400 font-semibold'
                         : 'text-gray-600 dark:text-gray-400';
                       return (
-                        <td key={colIdx} className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                          <span className={cls}>{value}</span>
+                        <td key={tier.slug} className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                          <span className={cls}>{value === true ? '✓' : value === false ? '—' : value}</span>
                         </td>
                       );
                     })}
@@ -334,15 +314,6 @@ const Pricing: React.FC = () => {
             </h3>
             <p className="text-gray-600 dark:text-gray-400">
               You'll receive a notification when you're approaching your plan limits. You can upgrade anytime to increase your limits.
-            </p>
-          </div>
-
-          <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-              Do you offer annual subscriptions?
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400">
-              Yes! Save 20% when you choose annual billing. Contact us at <a href="mailto:sales@nwc-analytics.com" className="text-primary-600 dark:text-primary-400 hover:underline">sales@nwc-analytics.com</a> for details.
             </p>
           </div>
         </div>

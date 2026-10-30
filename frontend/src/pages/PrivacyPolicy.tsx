@@ -3,13 +3,29 @@ import { Link } from 'react-router-dom';
 import ThemeToggle from '../components/ThemeToggle';
 import BackToTop from '../components/BackToTop';
 
+// Every statement here must match what the code actually does. Before adding a
+// tracker, ad pixel, AI feature or data processor, update the matching section
+// (and lastUpdated) in the same change.
+const h2 = 'text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500';
+const h3 = 'text-base font-semibold text-gray-900 dark:text-white mt-6 mb-2';
+const p = 'text-gray-700 dark:text-gray-300 leading-relaxed';
+const ul = 'list-disc pl-6 space-y-2 text-gray-700 dark:text-gray-300 leading-relaxed';
+const strong = 'text-gray-900 dark:text-white';
+const a = 'text-primary-600 dark:text-primary-400 hover:underline';
+
+const Ext: React.FC<{ href: string; children: React.ReactNode }> = ({ href, children }) => (
+  <a href={href} target="_blank" rel="noopener noreferrer" className={a}>{children}</a>
+);
+
+const SUPPORT_EMAIL = 'support@nwc-analytics.com';
+
 const PrivacyPolicy: React.FC = () => {
-  const lastUpdated = 'February 25, 2026';
+  const lastUpdated = 'October 30, 2026';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       <title>Privacy Policy — NWC-Analytics</title>
-      <meta name="description" content="Privacy Policy for NWC-Analytics LLC. Learn how we collect, use, and protect your personal information." />
+      <meta name="description" content="How NWC-Analytics collects, uses, shares and protects your personal information, and the choices you have." />
       <link rel="canonical" href="https://nwc-analytics.com/privacy" />
 
       {/* Nav */}
@@ -52,118 +68,244 @@ const PrivacyPolicy: React.FC = () => {
 
           {/* Introduction */}
           <section>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              NWC-Analytics, LLC ("NWC-Analytics," "we," "us," or "our") operates the website located at <strong className="text-gray-900 dark:text-white">nwc-analytics.com</strong> and related services. This Privacy Policy describes how we collect, use, store, and protect your personal information when you use our website, applications, and services (collectively, the "Service").
+            <p className={p}>
+              NWC-Analytics, LLC ("NWC-Analytics," "we," "us," or "our") runs the website and app at <strong className={strong}>nwc-analytics.com</strong> (the "Service"). This policy explains what personal information we collect, why we collect it, who we share it with, how long we keep it, and the choices you have.
             </p>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed mt-4">
-              By accessing or using the Service, you agree to the collection and use of information in accordance with this policy. If you do not agree with this policy, please do not use our Service.
-            </p>
+          </section>
+
+          {/* Summary */}
+          <section className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border border-gray-200 dark:border-gray-700">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-3">The short version</h2>
+            <ul className={ul}>
+              <li>We collect what we need to run your account: your name and email, the portfolio, watchlists and alerts you enter, and your subscription status.</li>
+              <li>Your card details go straight to Stripe, our payment processor. They never touch our servers.</li>
+              <li>We use Google Analytics, Microsoft Clarity and Cloudflare Web Analytics to understand how the site is used. Clarity records clicks and scrolling with all text masked.</li>
+              <li>When you ask for an AI portfolio analysis, your holdings (not your name or email) are sent to Anthropic to write it.</li>
+              <li>We don't sell your personal information, and we don't use advertising trackers.</li>
+              <li>To see, correct or delete your data, email <a href={`mailto:${SUPPORT_EMAIL}`} className={a}>{SUPPORT_EMAIL}</a>.</li>
+            </ul>
           </section>
 
           {/* Information We Collect */}
           <section>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">Information We Collect</h2>
+            <h2 className={h2}>Information We Collect</h2>
 
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white mt-6 mb-2">Account Information</h3>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              When you create an account, we collect your name, email address, and password. If you subscribe to a paid plan or begin a free trial, we collect billing information through our payment processor, Stripe. During a free trial, your payment method is securely stored by Stripe to enable automatic billing at the end of the trial period if you do not cancel. We do not store your full credit card number on our servers.
+            <h3 className={h3}>Information you give us</h3>
+            <ul className={ul}>
+              <li><strong className={strong}>Account:</strong> your name, email address and password. We store the password only as a one-way bcrypt hash, so we can't read it.</li>
+              <li><strong className={strong}>What you enter in the app:</strong> portfolio positions and transactions (tickers, share quantities, prices, dates and any notes), watchlists, price and technical alerts, and saved screener settings.</li>
+              <li><strong className={strong}>Waitlist:</strong> if you join our waitlist, your email address, how you reached us (the referring link or campaign tag) and your IP address, which we keep to prevent abuse.</li>
+              <li><strong className={strong}>Support:</strong> anything you send us when you email us.</li>
+            </ul>
+
+            <h3 className={h3}>Payment information</h3>
+            <p className={p}>
+              Payments are handled by Stripe. When you start a trial or subscribe, you enter your card details into a form that Stripe hosts, and they go directly to Stripe. We never receive or store your full card number. From Stripe we receive and keep your Stripe customer ID, your plan, and your subscription status and billing dates.
             </p>
 
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white mt-6 mb-2">Usage Data</h3>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              We automatically collect certain information when you use the Service, including your IP address, browser type, device information, pages visited, and timestamps. This data is used to maintain and improve the Service and is not sold to third parties.
-            </p>
-
-            <h3 className="text-base font-semibold text-gray-900 dark:text-white mt-6 mb-2">Cookies</h3>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              We use cookies and similar technologies to maintain your session, remember your preferences (such as dark mode), and understand how the Service is used. You can control cookie settings through your browser, though disabling cookies may affect the functionality of the Service.
+            <h3 className={h3}>Information collected automatically</h3>
+            <p className={p}>
+              When you use the Service, our servers and the analytics tools described below receive your IP address, browser and device type, the pages you visit, the site that referred you, and the time of each request. We also count your use of features that have plan limits (for example, AI analyses per day).
             </p>
           </section>
-
 
           {/* How We Use Your Information */}
           <section>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">How We Use Your Information</h2>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              We use the information we collect to provide, maintain, and improve the Service; process transactions and manage your subscription (including free trial periods and automatic conversion to paid plans); deliver email notifications for stock price alerts you have configured; send transactional communications related to your account (such as password resets, billing confirmations, and trial expiration reminders); respond to your inquiries and support requests; monitor and analyze usage patterns to improve the user experience; and protect against unauthorized access, fraud, and abuse.
+            <h2 className={h2}>How We Use Your Information</h2>
+            <ul className={ul}>
+              <li><strong className={strong}>To run the Service:</strong> create and secure your account, show your portfolio, watchlists and alerts, and apply your plan's limits.</li>
+              <li><strong className={strong}>For billing:</strong> start trials, charge subscriptions, and handle failed payments, through Stripe.</li>
+              <li><strong className={strong}>To email you:</strong> email verification, password resets, billing and trial notices, and the price and technical alerts you set up. These are service emails. We don't send marketing email today; if we start, every marketing email will include a way to unsubscribe.</li>
+              <li><strong className={strong}>For AI features:</strong> to generate the analyses you request (see "AI Features" below).</li>
+              <li><strong className={strong}>To improve the site:</strong> to see which pages and features are used and where people run into trouble.</li>
+              <li><strong className={strong}>For security:</strong> to limit repeated sign-in and sign-up attempts and to prevent fraud and abuse.</li>
+              <li><strong className={strong}>To meet legal obligations:</strong> such as tax and accounting records.</li>
+            </ul>
+          </section>
+
+          {/* Service Providers */}
+          <section>
+            <h2 className={h2}>Who We Share It With</h2>
+            <p className={p}>
+              We don't sell your personal information. We share it only with the service providers below, so they can run parts of the Service for us. Each one receives only what its job needs.
+            </p>
+            <ul className={`${ul} mt-4`}>
+              <li><strong className={strong}>Stripe</strong> (payments and subscriptions): your name, email address, card and billing details, and our internal ID for your account. On the payment page, Stripe's script also collects device and browser information to prevent fraud. <Ext href="https://stripe.com/privacy">Stripe Privacy Policy</Ext></li>
+              <li><strong className={strong}>Railway</strong> (hosting): runs our servers and database in the United States, so it stores everything we store.</li>
+              <li><strong className={strong}>Cloudflare</strong> (network and security): every request to the site passes through Cloudflare, which processes your IP address and request details to deliver the site and block attacks. <Ext href="https://www.cloudflare.com/privacypolicy/">Cloudflare Privacy Policy</Ext></li>
+              <li><strong className={strong}>Postmark</strong> (email delivery): your name, email address and the content of the emails we send you, including your alert details. <Ext href="https://postmarkapp.com/privacy-policy">Postmark Privacy Policy</Ext></li>
+              <li><strong className={strong}>Anthropic</strong> (AI analysis): the data described under "AI Features." <Ext href="https://www.anthropic.com/legal/commercial-terms">Anthropic Commercial Terms</Ext></li>
+              <li><strong className={strong}>Google Analytics, Microsoft Clarity and Cloudflare Web Analytics</strong> (site analytics): see "Analytics and Session Recording."</li>
+              <li><strong className={strong}>Google Fonts:</strong> the site loads a font from Google's servers, which receive your IP address and browser information. <Ext href="https://policies.google.com/privacy">Google Privacy Policy</Ext></li>
+            </ul>
+            <p className={`${p} mt-4`}>
+              Market data comes from Financial Modeling Prep and the SEC. Our servers request public data from them about the tickers you look up, without your name, email or any other information about you.
+            </p>
+            <p className={`${p} mt-4`}>
+              We may also disclose information if the law requires it, in response to valid legal process, or to protect the rights, property or safety of NWC-Analytics, our users or others. If NWC-Analytics is sold or merged, your information may transfer to the new owner, who must honor this policy for it.
             </p>
           </section>
 
-          {/* Data Sharing */}
+          {/* AI Features */}
           <section>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">How We Share Your Information</h2>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed mb-4">
-              We do not sell your personal information to third parties. We may share your information with the following categories of service providers, solely to operate the Service:
+            <h2 className={h2}>AI Features</h2>
+            <p className={p}>
+              Some features use Anthropic's Claude models to write analysis. When you request a <strong className={strong}>portfolio analysis</strong>, we send Anthropic your positions (ticker, number of shares, buy price, current price, value, and gain or loss), your portfolio totals, dividend data for your holdings, and general market data. We don't send your name, email address or account details.
             </p>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              <strong className="text-gray-900 dark:text-white">Payment Processing:</strong> Stripe processes your payment information and securely stores your payment method for recurring billing and free trial conversions. Stripe's use of your data is governed by their privacy policy.
-              <br className="mb-2" />
-              <strong className="text-gray-900 dark:text-white">Hosting & Infrastructure:</strong> Our application is hosted on Railway. Your data may be processed on their infrastructure.
+            <p className={`${p} mt-4`}>
+              The AI analyses on stock and company pages send Anthropic only public company and market data, nothing about you.
             </p>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed mt-4">
-              We may also disclose your information if required to do so by law, in response to a valid legal process, or to protect the rights, property, or safety of NWC-Analytics, our users, or the public.
+            <p className={`${p} mt-4`}>
+              Anthropic processes this data to return the analysis to us. Under its commercial terms, Anthropic doesn't use data sent through its API to train its models.
             </p>
           </section>
 
-          {/* Data Security */}
+          {/* Cookies */}
           <section>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">Data Security</h2>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              We take reasonable administrative, technical, and physical measures to protect your personal information from unauthorized access, alteration, disclosure, or destruction. This includes encryption of data in transit (TLS/SSL), hashed passwords, and secure access controls. However, no method of electronic storage or transmission is 100% secure, and we cannot guarantee absolute security.
+            <h2 className={h2}>Cookies and Browser Storage</h2>
+            <p className={p}>
+              We don't set cookies of our own. We keep two things in your browser's local storage: your sign-in token, which expires after 90 minutes and is removed when you sign out, and your light or dark theme choice. While a tab is open, we also keep some page data in session storage so pages load faster, including your latest AI portfolio summary. The browser clears session storage when you close the tab.
+            </p>
+            <p className={`${p} mt-4`}>
+              Third-party services set their own cookies:
+            </p>
+            <ul className={`${ul} mt-2`}>
+              <li><strong className={strong}>Google Analytics</strong> sets cookies (such as <code>_ga</code>) that tell visits apart.</li>
+              <li><strong className={strong}>Microsoft Clarity</strong> sets cookies (such as <code>_clck</code> and <code>_clsk</code>) that link the pages of one visit, and Microsoft may set its own cookies.</li>
+              <li><strong className={strong}>Stripe</strong> sets cookies on the payment page to prevent fraud.</li>
+              <li><strong className={strong}>Cloudflare</strong> may set a cookie that's needed to protect the site from bots.</li>
+            </ul>
+            <p className={`${p} mt-4`}>
+              You can block or delete cookies in your browser's settings. The site still works without analytics cookies. Blocking Stripe's cookies may stop the payment form from working.
+            </p>
+          </section>
+
+          {/* Analytics */}
+          <section>
+            <h2 className={h2}>Analytics and Session Recording</h2>
+
+            <h3 className={h3}>Google Analytics</h3>
+            <p className={p}>
+              Records the pages you view, how you arrived, your device and browser, and your approximate location (derived from your IP address). <Ext href="https://policies.google.com/technologies/partner-sites">How Google uses this data</Ext> · <Ext href="https://tools.google.com/dlpage/gaoptout">Google Analytics opt-out add-on</Ext>
+            </p>
+
+            <h3 className={h3}>Microsoft Clarity</h3>
+            <p className={p}>
+              We partner with Microsoft Clarity to capture how you use and interact with our website through behavioral metrics, heatmaps and session replay, to improve the Service. Clarity records mouse movements, clicks, scrolling and the layout of each page. We set Clarity to mask all text, so recordings don't show what's on screen, such as your portfolio values, or what you type. Card details are entered in Stripe's own form, which Clarity can't see. Usage data is captured using first- and third-party cookies and other tracking technologies. For how Microsoft collects and uses your data, see the <Ext href="https://privacy.microsoft.com/privacystatement">Microsoft Privacy Statement</Ext>.
+            </p>
+
+            <h3 className={h3}>Cloudflare Web Analytics</h3>
+            <p className={p}>
+              Counts page views and records the referring site, browser and country, without cookies.
+            </p>
+
+            <p className={`${p} mt-4`}>
+              We don't send your name or email address to any of these tools. Links in our verification and password-reset emails carry a one-time code. We keep it out of analytics: Google Analytics receives the page address with the code removed, and Clarity and Cloudflare Web Analytics don't load on those pages.
+            </p>
+          </section>
+
+          {/* Advertising, DNT */}
+          <section>
+            <h2 className={h2}>Advertising, Do Not Track and Cross-Site Tracking</h2>
+            <p className={p}>
+              We don't currently use advertising cookies or ad-tracking pixels. We don't sell your personal information or share it for cross-context behavioral advertising. If we start measuring ads (for example, which ads lead to sign-ups), we'll update this policy before that tracking goes live, list the companies involved and how to opt out, and treat a Global Privacy Control signal from your browser as an opt-out.
+            </p>
+            <p className={`${p} mt-4`}>
+              There's no common standard for browser "Do Not Track" signals, and the Service doesn't respond to them. Google Analytics and Microsoft Clarity can collect information about your online activity over time and across different websites that also use them. You can limit this with the opt-outs above, by blocking third-party cookies, or with your browser's tracking protection.
             </p>
           </section>
 
           {/* Data Retention */}
           <section>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">Data Retention</h2>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              We retain your account information for as long as your account is active or as needed to provide the Service. If you delete your account, we will delete or anonymize your personal information within a reasonable timeframe, except where retention is required by law or for legitimate business purposes (such as resolving disputes or enforcing agreements).
-            </p>
-          </section>
-
-          {/* Children's Privacy */}
-          <section>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">Children's Privacy</h2>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              The Service is not directed to individuals under the age of 18. We do not knowingly collect personal information from children. If we become aware that we have collected personal information from a child under 18, we will take steps to delete that information promptly.
-            </p>
-          </section>
-
-          {/* Third-Party Links */}
-          <section>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">Third-Party Links</h2>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              The Service may contain links to third-party websites or services. We are not responsible for the privacy practices or content of those third parties. We encourage you to review the privacy policies of any third-party services you access through our Service.
+            <h2 className={h2}>How Long We Keep It</h2>
+            <ul className={ul}>
+              <li><strong className={strong}>Your account and what you've entered:</strong> for as long as your account exists, including after a subscription ends, so that if you resubscribe your portfolio, watchlists and alerts are as you left them. When you ask us to delete your account, we delete it (see below).</li>
+              <li><strong className={strong}>Waitlist sign-ups:</strong> until you ask us to remove yours.</li>
+              <li><strong className={strong}>Server logs</strong> (including IP addresses): for a short period set by our hosting provider, then deleted automatically.</li>
+              <li><strong className={strong}>Billing records:</strong> Stripe keeps payment records, and we keep invoices, for as long as tax and accounting rules require.</li>
+              <li><strong className={strong}>Analytics data:</strong> kept by Google, Microsoft and Cloudflare under their own retention settings.</li>
+            </ul>
+            <p className={`${p} mt-4`}>
+              Deleted data may remain in backups for a limited time until they are overwritten.
             </p>
           </section>
 
           {/* Your Rights */}
           <section>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">Your Rights</h2>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              Depending on your jurisdiction, you may have certain rights regarding your personal information, including the right to access the personal data we hold about you; request correction of inaccurate information; request deletion of your personal data; and withdraw consent for data processing where consent is the legal basis. To exercise any of these rights, please contact us at the email address below.
+            <h2 className={h2}>Your Choices and Rights</h2>
+            <p className={p}>
+              Wherever you live, you can ask us to:
+            </p>
+            <ul className={`${ul} mt-2`}>
+              <li><strong className={strong}>See</strong> the personal information we hold about you, and get a copy of it.</li>
+              <li><strong className={strong}>Correct</strong> anything that's wrong.</li>
+              <li><strong className={strong}>Delete</strong> your account and personal information.</li>
+            </ul>
+            <p className={`${p} mt-4`}>
+              Email <a href={`mailto:${SUPPORT_EMAIL}`} className={a}>{SUPPORT_EMAIL}</a> from the address on your account, so we know the request is yours. We'll respond within 30 days.
+            </p>
+            <p className={`${p} mt-4`}>
+              <strong className={strong}>Deleting your account</strong> removes your account and everything stored with it (portfolio positions and transactions, watchlists, alerts, saved screens and usage records) within 30 days. It also ends any subscription immediately. As our Terms explain, fees already paid aren't refunded. We'll also ask Stripe to delete your customer record, though Stripe keeps the payment records the law requires it to keep.
+            </p>
+            <p className={`${p} mt-4`}>
+              Service emails (security, billing and trial notices) are part of having an account. You control alert emails by turning the alerts off in the app.
+            </p>
+            <p className={`${p} mt-4`}>
+              If we turn down a request, we'll explain why, and you can reply to ask us to reconsider. We won't treat you differently for exercising any of these rights.
+            </p>
+          </section>
+
+          {/* Data Security */}
+          <section>
+            <h2 className={h2}>Data Security</h2>
+            <p className={p}>
+              We protect your information with encryption in transit (TLS), one-way hashing of passwords, sign-in tokens that expire, limits on repeated sign-in attempts, and access controls on our systems. Card details are handled only by Stripe. No method of storing or transmitting data is completely secure, so we can't guarantee absolute security. If a breach affects your personal information, we'll notify you as the law requires.
+            </p>
+          </section>
+
+          {/* Location */}
+          <section>
+            <h2 className={h2}>Where Your Information Is Processed</h2>
+            <p className={p}>
+              NWC-Analytics is based in the United States, and your information is stored and processed in the United States. If you use the Service from another country, your information will be transferred to the United States.
+            </p>
+          </section>
+
+          {/* Children's Privacy */}
+          <section>
+            <h2 className={h2}>Children's Privacy</h2>
+            <p className={p}>
+              The Service is not intended for anyone under 18, and we don't knowingly collect personal information from children. If we learn that we have, we'll delete it promptly.
+            </p>
+          </section>
+
+          {/* Third-Party Links */}
+          <section>
+            <h2 className={h2}>Third-Party Links</h2>
+            <p className={p}>
+              The Service links to other websites, such as news articles and company filings. Their privacy practices are their own, so please review their policies.
             </p>
           </section>
 
           {/* Changes */}
           <section>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">Changes to This Policy</h2>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              We may update this Privacy Policy from time to time. If we make material changes, we will notify you by posting the updated policy on the Service with a revised "Last updated" date. Your continued use of the Service after any changes constitutes your acceptance of the updated policy.
+            <h2 className={h2}>Changes to This Policy</h2>
+            <p className={p}>
+              When we change this policy, we'll post the new version here with a new "Last updated" date. For a material change, such as a new kind of data or a new way of sharing it, we'll also email account holders before the change takes effect.
             </p>
           </section>
 
           {/* Contact */}
           <section>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4 pl-4 border-l-4 border-primary-500">Contact Us</h2>
-            <p className="text-gray-700 dark:text-gray-300 leading-relaxed">
-              If you have questions about this Privacy Policy or your personal information, please contact us at:
+            <h2 className={h2}>Contact Us</h2>
+            <p className={p}>
+              Questions about this policy or your personal information:
             </p>
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border border-gray-200 dark:border-gray-700 mt-4">
               <p className="text-gray-900 dark:text-white font-semibold">NWC-Analytics, LLC</p>
               <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">Post Falls, Idaho</p>
               <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">
-                Email: <a href="mailto:support@nwc-analytics.com" className="text-primary-600 dark:text-primary-400 hover:underline">support@nwc-analytics.com</a>
+                Email: <a href={`mailto:${SUPPORT_EMAIL}`} className={a}>{SUPPORT_EMAIL}</a>
               </p>
             </div>
           </section>

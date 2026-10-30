@@ -133,7 +133,7 @@ const WaitlistLanding: React.FC = () => {
             { num: '15+', label: 'Technical Indicators' },
             { num: 'Live', label: 'WebSocket Market Data' },
             { num: 'DCF', label: 'Valuation Models' },
-            { num: '24/7', label: 'Price Alerts' },
+            { num: 'Email', label: 'Price & Technical Alerts' },
           ].map(h => (
             <div key={h.label}>
               <div className="text-3xl font-extrabold text-primary-400">{h.num}</div>

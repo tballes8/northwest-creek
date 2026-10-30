@@ -18,7 +18,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import { getTierBadge } from '../components/NavBar';
 import { User } from '../types';
-import { getTierSummary } from '../data/pricingTiers';
+import { getTierSummary, COMPARISON_ROWS } from '../data/pricingTiers';
 
 // ── Tier metadata ──────────────────────────────────────────────
 
@@ -251,55 +251,5 @@ const UpgradeRequired: React.FC<UpgradeRequiredProps> = ({
     </div>
   );
 };
-
-// ── Comparison table data ────────────────────────────────────
-
-interface ComparisonRow {
-  label: string;
-  values: Record<TierKey, string | boolean>;
-}
-
-const COMPARISON_ROWS: ComparisonRow[] = [
-  {
-    label: 'Watchlist Stocks',
-    values: { beginner: '10', casual: '20', active: '45', professional: '75' },
-  },
-  {
-    label: 'Portfolio Entries',
-    values: { beginner: '10', casual: '20', active: '45', professional: '75' },
-  },
-  {
-    label: 'Stock Reviews',
-    values: { beginner: '5/week', casual: '15/week', active: '20/day', professional: '40/day' },
-  },
-  {
-    label: 'Technical Analysis',
-    values: { beginner: '5/week', casual: '15/week', active: '10/day', professional: '20/day' },
-  },
-  {
-    label: 'DCF Valuations',
-    values: { beginner: '5/week', casual: '15/week', active: '20/day', professional: '40/day' },
-  },
-  {
-    label: 'Price Alerts',
-    values: { beginner: '5', casual: '10', active: '20', professional: '50' },
-  },
-  {
-    label: 'Email Alerts',
-    values: { beginner: true, casual: true, active: true, professional: true },
-  },
-  {
-    label: 'Indicator Alerts',
-    values: { beginner: false, casual: false, active: '5', professional: '20' },
-  },
-  {
-    label: 'Options Calculator',
-    values: { beginner: false, casual: false, active: true, professional: true },
-  },
-  {
-    label: '14-Day Free Trial',
-    values: { beginner: true, casual: true, active: false, professional: false },
-  },
-];
 
 export default UpgradeRequired;

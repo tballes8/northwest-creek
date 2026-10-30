@@ -69,7 +69,9 @@
       }
     </script>
     <!-- End Cloudflare Web Analytics -->
-    <!-- Clarity tracking code for https://nwc-analytics.com/ (session replay records full URLs) -->
+    <!-- Clarity tracking code for https://nwc-analytics.com/ (session replay records full URLs).
+         Masking is set to Strict in the Clarity dashboard, and the Privacy Policy says all
+         text is masked. Don't relax it there without updating PrivacyPolicy.tsx. -->
     <script>
       if (!window.__nwcUrlHasToken) {
         (function(c,l,a,r,i,t,y){

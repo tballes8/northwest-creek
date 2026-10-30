@@ -368,7 +368,7 @@ const Landing: React.FC = () => {
               </>
             }
             bullets={[
-              'Price alerts: above / below thresholds, 24/7 monitoring',
+              'Price alerts: above / below thresholds, monitored during market hours',
               'Technical alerts: RSI extreme, MA crossover, MACD cross',
               'Technical alerts: Bollinger breach, sentiment shift, Rule of 40',
               'Email delivery on every plan',
