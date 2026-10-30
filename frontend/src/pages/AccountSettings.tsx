@@ -4,7 +4,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { authAPI } from '../services/api';
+import { authAPI, stripeAPI } from '../services/api';
 import { User } from '../types';
 import NavBar from '../components/NavBar';
 import { getTierBadge } from '../components/NavBar';
@@ -55,6 +55,8 @@ const AccountSettings: React.FC = () => {
   const [cancelSuccess, setCancelSuccess] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [trialEnd, setTrialEnd] = useState<number | null>(null);
+  const [billingBusy, setBillingBusy] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
 
   // Change password state
   const [passwordData, setPasswordData] = useState({
@@ -139,6 +141,19 @@ const AccountSettings: React.FC = () => {
       setCancelError(err.response?.data?.detail || 'Failed to cancel subscription. Please try again.');
     } finally {
       setCancelling(false);
+    }
+  };
+
+  // Stripe Customer Portal: update the card, download invoices
+  const handleManageBilling = async () => {
+    setBillingBusy(true);
+    setBillingError(null);
+    try {
+      const res = await stripeAPI.openBillingPortal('account');
+      window.location.href = res.data.url;
+    } catch (err: any) {
+      setBillingError(err.response?.data?.detail || 'Could not open billing management. Please try again.');
+      setBillingBusy(false);
     }
   };
 
@@ -390,6 +405,21 @@ const AccountSettings: React.FC = () => {
                   </button>
                 )}
               </>
+            )}
+          </div>
+
+          {/* Billing — Stripe Customer Portal */}
+          <div className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+            Update your card or download invoices:{' '}
+            <button
+              onClick={handleManageBilling}
+              disabled={billingBusy}
+              className="text-teal-600 dark:text-teal-400 hover:underline font-medium disabled:opacity-50"
+            >
+              {billingBusy ? 'Opening…' : 'Manage billing'}
+            </button>
+            {billingError && (
+              <span className="block mt-1 text-red-600 dark:text-red-400">{billingError}</span>
             )}
           </div>
         </div>

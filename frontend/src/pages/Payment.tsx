@@ -11,6 +11,7 @@ import {
 } from '@stripe/react-stripe-js';
 import axios from 'axios';
 import { PRICING_TIERS, TierSlug } from '../data/pricingTiers';
+import { stripeAPI } from '../services/api';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -62,7 +63,7 @@ const CARD_ELEMENT_OPTIONS = {
 
 // Tiers that start with a 14-day free trial
 const TRIAL_TIERS: Tier[] = ['beginner', 'casual'];
-const CheckoutForm: React.FC<{ tier: Tier; onSuccess: (isTrial: boolean) => void }> = ({ tier, onSuccess }) => {
+const CheckoutForm: React.FC<{ tier: Tier; trialOffered: boolean; onSuccess: (isTrial: boolean) => void }> = ({ tier, trialOffered, onSuccess }) => {
   const stripe = useStripe();
   const elements = useElements();
   const [loading, setLoading] = useState(false);
@@ -70,7 +71,7 @@ const CheckoutForm: React.FC<{ tier: Tier; onSuccess: (isTrial: boolean) => void
   const [cardComplete, setCardComplete] = useState({ number: false, expiry: false, cvc: false });
 
   const tierInfo = TIER_INFO[tier];
-  const isTrial = TRIAL_TIERS.includes(tier);
+  const isTrial = trialOffered;
   const allComplete = cardComplete.number && cardComplete.expiry && cardComplete.cvc;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -253,6 +254,9 @@ const Payment: React.FC = () => {
   const [loadError, setLoadError] = useState('');
   const [success, setSuccess] = useState(false);
   const [trialStarted, setTrialStarted] = useState(false);
+  // False for a returning customer who already had a trial, and for a plan change
+  // on a live subscription — the backend grants neither a trial.
+  const [trialEligible, setTrialEligible] = useState(true);
 
   useEffect(() => {
     // Check if user is logged in
@@ -279,9 +283,25 @@ const Payment: React.FC = () => {
     };
 
     loadStripeKey();
+
+    stripeAPI.getSubscriptionStatus()
+      .then((res) => {
+        const { subscription_status, trial_eligible } = res.data;
+        if (subscription_status === 'past_due' || subscription_status === 'unpaid') {
+          // Fix the failed payment; a new subscription would bill alongside it
+          navigate('/billing', { replace: true });
+          return;
+        }
+        const changingPlan = subscription_status === 'active' || subscription_status === 'trialing';
+        setTrialEligible(trial_eligible !== false && !changingPlan);
+      })
+      .catch(() => {
+        // Non-fatal: the backend still decides whether a trial applies
+      });
   }, [navigate]);
 
   const tierInfo = TIER_INFO[tier];
+  const showTrial = TRIAL_TIERS.includes(tier) && trialEligible;
 
   // Success state
   if (success) {
@@ -332,10 +352,10 @@ const Payment: React.FC = () => {
             <span className="text-xl font-bold text-primary-400 dark:text-primary-400" style={{ fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1rem', fontStyle: 'italic' }}>NWC-Analytics</span>
           </Link>
           <h1 className="text-3xl font-bold text-white">
-            {TRIAL_TIERS.includes(tier) ? 'Start Your Free Trial' : 'Complete Your Subscription'}
+            {showTrial ? 'Start Your Free Trial' : 'Complete Your Subscription'}
           </h1>
           <p className="mt-2 text-gray-400">
-            {TRIAL_TIERS.includes(tier) 
+            {showTrial
               ? 'Enter your card to start your 14-day free trial. You won\'t be charged today.'
               : 'Secure payment powered by Stripe'}
           </p>
@@ -348,7 +368,7 @@ const Payment: React.FC = () => {
               <p className="text-sm text-gray-400">Selected Plan</p>
               <div className="flex items-center gap-2">
                 <p className="text-lg font-bold text-white">{tierInfo.name}</p>
-                {TRIAL_TIERS.includes(tier) && (
+                {showTrial && (
                   <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-green-900/40 text-green-400 border border-green-700/50">
                     14-day free trial
                   </span>
@@ -360,7 +380,7 @@ const Payment: React.FC = () => {
                 {tierInfo.price}
                 <span className="text-base font-normal text-gray-400">{tierInfo.period}</span>
               </p>
-              {TRIAL_TIERS.includes(tier) && (
+              {showTrial && (
                 <p className="text-xs text-gray-500">billed after trial</p>
               )}
             </div>
@@ -414,6 +434,7 @@ const Payment: React.FC = () => {
             <Elements stripe={stripePromise}>
               <CheckoutForm
                 tier={tier}
+                trialOffered={showTrial}
                 onSuccess={(isTrial: boolean) => {
                   setTrialStarted(isTrial);
                   setSuccess(true);

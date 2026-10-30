@@ -596,7 +596,7 @@ class EmailService:
         """Notify user that their payment failed and action is needed"""
         self._ensure_initialized()
         settings = _get_settings()
-        account_url = f"{settings.FRONTEND_URL}/account"
+        billing_url = f"{settings.FRONTEND_URL}/billing"
 
         logger.info("Sending payment failed email to %s", to_email)
 
@@ -623,9 +623,9 @@ class EmailService:
                     <p>We were unable to process your payment for the <strong>{plan_name}</strong> plan. This usually happens when a card expires or has insufficient funds.</p>
                     <p>To keep your subscription active, please update your payment method:</p>
                     <div style="text-align: center;">
-                        <a href="{account_url}" class="button">Update Payment Method →</a>
+                        <a href="{billing_url}" class="button">Update Payment Method →</a>
                     </div>
-                    <p style="font-size: 14px; color: #6b7280;">If your payment isn't resolved within a few days, your account will be downgraded to the Beginner plan. Your data (watchlist, portfolio, alerts) will be preserved.</p>
+                    <p style="font-size: 14px; color: #6b7280;">We'll retry the charge automatically. If it still can't be collected, your subscription will end and your account will be paused until you resubscribe. Your data (watchlist, portfolio, alerts) will be preserved.</p>
                     <p style="font-size: 14px; color: #6b7280;">Questions? Contact us at <a href="mailto:support@nwc-analytics.com" style="color: #0d9488;">support@nwc-analytics.com</a></p>
                 </div>
                 <div class="footer">
@@ -648,7 +648,7 @@ class EmailService:
         """Warn user their trial is ending soon"""
         self._ensure_initialized()
         settings = _get_settings()
-        account_url = f"{settings.FRONTEND_URL}/account"
+        billing_url = f"{settings.FRONTEND_URL}/billing"
 
         logger.info("Sending trial ending email to %s (%s days left)", to_email, days_remaining)
 
@@ -675,7 +675,7 @@ class EmailService:
                     <p>Your free trial of the <strong>{plan_name}</strong> plan ends in <strong>{days_remaining} days</strong>.</p>
                     <p>If you have a payment method on file, your subscription will continue automatically — no action needed. If not, please add one to keep your access:</p>
                     <div style="text-align: center;">
-                        <a href="{account_url}" class="button">Manage Subscription →</a>
+                        <a href="{billing_url}" class="button">Manage Billing →</a>
                     </div>
                     <p style="font-size: 14px; color: #6b7280;">If you'd rather not continue, you can cancel anytime from your account settings before the trial ends — you won't be charged.</p>
                     <p style="font-size: 14px; color: #6b7280;">Questions? <a href="mailto:support@nwc-analytics.com" style="color: #0d9488;">support@nwc-analytics.com</a></p>

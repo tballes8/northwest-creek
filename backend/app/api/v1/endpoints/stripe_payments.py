@@ -15,7 +15,7 @@ import stripe
 from typing import Optional
 
 from app.db.models import User
-from app.api.dependencies import get_current_user
+from app.api.dependencies import get_current_user, get_current_user_allow_inactive
 from app.db.session import get_db
 from app.config import settings
 from app.services.email_service import email_service
@@ -119,12 +119,28 @@ def price_gets_trial(price_id: str) -> bool:
     return get_tier_for_price(price_id) in TRIAL_TIERS
 
 
+# Subscription states, grouped by what the app should do with them
+_ACCESS_STATUSES = ('active', 'trialing')        # in the app
+_FIX_PAYMENT_STATUSES = ('past_due', 'unpaid')   # a payment failed — fix it on /billing
+_LIVE_STATUSES = _ACCESS_STATUSES + _FIX_PAYMENT_STATUSES
+
+
+def _all_subscriptions(customer_id: str) -> list:
+    """Every subscription the customer has had, any status, newest first."""
+    return list(stripe.Subscription.list(customer=customer_id, status='all', limit=100).data)
+
+
+def _has_had_trial(subscriptions: list) -> bool:
+    """One trial per customer (Terms): any past or current trial counts."""
+    return any(s.get('trial_start') for s in subscriptions)
+
+
 # ---- Endpoints ----
 
 @router.post("/create-subscription")
 async def create_subscription(
     request: SubscriptionRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user_allow_inactive),  # a locked account resubscribes here
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -160,23 +176,23 @@ async def create_subscription(
             current_user.stripe_customer_id = customer.id
             await db.commit()
 
-        # ── Step 2: Check for existing active subscription ────
-        existing_subs = stripe.Subscription.list(
-            customer=customer.id,
-            status='active',
-            limit=10,
-        )
+        # ── Step 2: Check for existing subscriptions ──────────
+        all_subs = _all_subscriptions(customer.id)
 
-        # Also check for subscriptions scheduled to cancel (cancel_at_period_end)
-        # — the user may have cancelled but still has an active sub until period end
-        if not existing_subs.data:
-            existing_subs = stripe.Subscription.list(
-                customer=customer.id,
-                status='trialing',
-                limit=10,
+        # A failed payment is fixed, never replaced: a second subscription would
+        # bill alongside the one Stripe is still retrying.
+        if any(s['status'] in _FIX_PAYMENT_STATUSES for s in all_subs):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Your last payment didn't go through. Update your payment method on the Billing page instead of starting a new subscription."
             )
 
-        active_sub = existing_subs.data[0] if existing_subs.data else None
+        # Active first, then trialing. Includes subs scheduled to cancel
+        # (cancel_at_period_end) — the user still has them until period end.
+        active_sub = (
+            next((s for s in all_subs if s['status'] == 'active'), None)
+            or next((s for s in all_subs if s['status'] == 'trialing'), None)
+        )
 
         if active_sub:
             # ── UPGRADE PATH: Modify existing subscription ────
@@ -255,7 +271,9 @@ async def create_subscription(
         else:
             # ── NEW SUBSCRIPTION PATH ─────────────────────────
             tier = get_tier_for_price(new_price_id)
-            is_trial = tier_gets_trial(tier)
+            # A returning customer who already had a trial pays from day one —
+            # otherwise cancel-and-resubscribe would be an endless free trial.
+            is_trial = tier_gets_trial(tier) and not _has_had_trial(all_subs)
 
             if is_trial:
                 # Trial subscription: $0 first invoice, collect card via SetupIntent
@@ -276,8 +294,10 @@ async def create_subscription(
                 setup_intent = subscription.pending_setup_intent
                 client_secret = setup_intent.client_secret if setup_intent else None
 
-                # Trial starts immediately — upgrade user now
+                # Trial starts immediately — upgrade user now, and unlock a
+                # returning account now rather than waiting on a webhook
                 current_user.subscription_tier = tier
+                current_user.is_active = True
                 await db.commit()
                 print(f"✅ User {current_user.email} started {TRIAL_DAYS}-day trial on {tier}")
 
@@ -590,6 +610,18 @@ async def handle_subscription_deleted(subscription, db: AsyncSession):
     if not user_id:
         return
 
+    # Don't lock a customer who still has another live subscription — e.g. they
+    # resubscribed and this is the old subscription's late or retried event.
+    customer_id = subscription.get('customer')
+    if customer_id:
+        others = [
+            s for s in _all_subscriptions(customer_id)
+            if s['id'] != subscription['id'] and s['status'] in _LIVE_STATUSES
+        ]
+        if others:
+            logger.info(f"Subscription {subscription['id']} ended but customer {customer_id} still has {others[0]['id']} ({others[0]['status']}) — not locking")
+            return
+
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
 
@@ -755,7 +787,8 @@ async def cancel_subscription_immediate(
 ):
     """
     Immediately cancel subscription and lock account.
-    Used for trial cancellations — user is not charged, account is deactivated.
+    Used for trial cancellations (user is not charged) and from /billing, where a
+    user with a failed payment can stop the subscription instead of paying it.
     """
     try:
         customers = stripe.Customer.list(email=current_user.email, limit=1)
@@ -767,9 +800,9 @@ async def cancel_subscription_immediate(
         
         customer = customers.data[0]
 
-        # Search both active and trialing subscriptions
+        # Every live subscription, including one stuck on a failed payment
         cancelled_ids = []
-        for sub_status in ('active', 'trialing'):
+        for sub_status in _LIVE_STATUSES:
             subscriptions = stripe.Subscription.list(
                 customer=customer.id,
                 status=sub_status,
@@ -785,11 +818,11 @@ async def cancel_subscription_immediate(
         current_user.is_active = False
         await db.commit()
 
-        logger.info(f"User {current_user.email} trial cancelled immediately: was {old_tier}, account locked")
+        logger.info(f"User {current_user.email} subscription cancelled immediately: was {old_tier}, account locked")
 
         return {
             "status": "cancelled",
-            "message": "Your trial has been cancelled. Your data is preserved — resubscribe anytime to regain access.",
+            "message": "Your subscription has been cancelled. Your data is preserved — resubscribe anytime to regain access.",
             "account_locked": True,
         }
         
@@ -812,9 +845,16 @@ async def cancel_subscription_immediate(
 
 @router.get("/subscription-status")
 async def get_subscription_status(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_allow_inactive),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Get current user's subscription status including trial info and period end date."""
+    """Get current user's subscription status including trial info and period end date.
+
+    Works for locked accounts — the route guard reads it to decide where to send them.
+    subscription_status: 'active' / 'trialing' (in the app), 'past_due' / 'unpaid'
+    (fix payment on /billing; open_invoice_url pays it), or None (no live
+    subscription — resubscribe on /payment; trial_eligible says whether a trial applies).
+    """
     # Demo account bypass for tutorial recordings
     DEMO_EMAILS = {"john.smith@nwc-analytics.com"}
     if current_user.email in DEMO_EMAILS:
@@ -831,28 +871,39 @@ async def get_subscription_status(
     subscription_status = None
     cancel_at_period_end = False
     current_period_end = None
+    open_invoice_url = None
+    trial_eligible = True
 
     try:
         customers = stripe.Customer.list(email=current_user.email, limit=1)
         if customers.data:
-            customer = customers.data[0]
-            # Check trialing first, then active
-            for sub_status in ('trialing', 'active'):
-                subs = stripe.Subscription.list(
-                    customer=customer.id,
-                    status=sub_status,
-                    limit=1,
-                )
-                if subs.data:
-                    sub = subs.data[0]
-                    subscription_status = sub['status']
-                    cancel_at_period_end = sub.get('cancel_at_period_end', False)
-                    current_period_end = sub.get('current_period_end')  # Unix timestamp
-                    if sub.get('trial_end'):
-                        trial_end = sub['trial_end']  # Unix timestamp
-                    break
+            all_subs = _all_subscriptions(customers.data[0].id)
+            trial_eligible = not _has_had_trial(all_subs)
+            # Access wins; otherwise surface a failed payment to fix
+            sub = (
+                next((s for s in all_subs if s['status'] in _ACCESS_STATUSES), None)
+                or next((s for s in all_subs if s['status'] in _FIX_PAYMENT_STATUSES), None)
+            )
+            if sub:
+                subscription_status = sub['status']
+                cancel_at_period_end = sub.get('cancel_at_period_end', False)
+                current_period_end = sub.get('current_period_end')  # Unix timestamp
+                if sub.get('trial_end'):
+                    trial_end = sub['trial_end']  # Unix timestamp
+                if subscription_status in _FIX_PAYMENT_STATUSES and sub.get('latest_invoice'):
+                    invoice = stripe.Invoice.retrieve(sub['latest_invoice'])
+                    if invoice.get('status') == 'open':
+                        open_invoice_url = invoice.get('hosted_invoice_url')
     except Exception as e:
         logger.warning(f"Error fetching Stripe subscription status for {current_user.email}: {e}")
+
+    # Stripe decides access. A live subscription on a locked account means the
+    # user just resubscribed and the webhook hasn't landed (or was lost) —
+    # unlock now so they aren't bounced between the guard and a 403.
+    if subscription_status in _ACCESS_STATUSES and not current_user.is_active:
+        current_user.is_active = True
+        await db.commit()
+        logger.info(f"User {current_user.email} unlocked: Stripe shows a {subscription_status} subscription")
 
     return {
         "subscription_tier": current_user.subscription_tier,
@@ -861,7 +912,47 @@ async def get_subscription_status(
         "trial_end": trial_end,
         "cancel_at_period_end": cancel_at_period_end,
         "current_period_end": current_period_end,
+        "open_invoice_url": open_invoice_url,
+        "trial_eligible": trial_eligible,
     }
+
+
+class BillingPortalRequest(BaseModel):
+    return_to: str = "account"  # 'account' or 'billing'
+
+
+@router.post("/billing-portal")
+async def create_billing_portal_session(
+    request: BillingPortalRequest,
+    current_user: User = Depends(get_current_user_allow_inactive),
+):
+    """Open the Stripe Customer Portal: update the card, pay or download invoices.
+
+    Plan changes and cancellation stay in-app — turn those off in the portal's
+    Dashboard settings so they don't bypass create-subscription and the cancel flow.
+    """
+    return_path = "/billing" if request.return_to == "billing" else "/account"
+    try:
+        customers = stripe.Customer.list(email=current_user.email, limit=1)
+        if not customers.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No billing account found. Choose a plan to get started."
+            )
+        session = stripe.billing_portal.Session.create(
+            customer=customers.data[0].id,
+            return_url=f"{settings.FRONTEND_URL}{return_path}",
+        )
+        return {"url": session.url}
+    except HTTPException:
+        raise
+    except stripe.error.StripeError as e:
+        # Usually: the Customer Portal hasn't been activated in the Stripe Dashboard
+        logger.error(f"Billing portal session failed for {current_user.email}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Billing management is temporarily unavailable. Please contact support@nwc-analytics.com."
+        )
 
 
 @router.get("/config")

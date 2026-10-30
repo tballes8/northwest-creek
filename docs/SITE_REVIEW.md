@@ -5,7 +5,7 @@ Started 2026-10-30, ahead of paid ads on Reddit, Google and Bing. **Feature free
 ## How to read this
 
 - **Severity:** `blocker` (fix before ads run) · `high` · `medium` · `low`
-- **Status:** `open` · `fixed` · `won't fix` (with reason)
+- **Status:** the area tables list **open items only**. When an item is done, its row moves to **Completed** at the bottom (with the date and what changed), and it's ticked in the launch-blockers list.
 - **Verified:** `code` means checked against the source by Claude. `runtime` means it only shows up by using the live site (see section 6).
 
 Findings come from five read-only reviews (areas 1–5). Each finding was re-checked against the code before going on this list.
@@ -13,6 +13,8 @@ Findings come from five read-only reviews (areas 1–5). Each finding was re-che
 ## Launch blockers
 
 The review produced **16 blockers**, and **about 50 high** findings across the five areas. Counts by area: claims 32, money path 35, dead code 37, data 34, security 26. Many duplicate each other across areas; the IDs cross-reference them.
+
+**Progress: 6 of 16 blockers done.**
 
 **Do this weekend (time-sensitive):**
 - **N11:** in the Railway dashboard, change `check-technical-alerts` from `30 20` to `30 21 * * 1-5` UTC before Mon Nov 2 (daylight saving ends Nov 1), and check `compute_squeeze`'s schedule.
@@ -24,11 +26,11 @@ The review produced **16 blockers**, and **about 50 high** findings across the f
 - **S4:** keep reset and verify tokens out of analytics and pixels.
 
 **The money path (the biggest piece of work; these are linked):**
-- **M1:** locked accounts can't come back.
-- **M2:** past-due users are pushed into a second subscription.
-- **M3:** there's no way to update a card.
+- ✅ ~~**M1:** locked accounts can't come back.~~
+- ✅ ~~**M2:** past-due users are pushed into a second subscription.~~
+- ✅ ~~**M3:** there's no way to update a card.~~
 
-These, together with M4–M8 (webhook retries, trial-before-card, upgrades, server-side subscription enforcement), share one root cause: subscription state lives in Stripe calls and the browser, not on the User row. **Fix them as one design change**: store the Stripe status on User from webhooks, enforce it server-side, add a Billing Portal, stop using `is_active` for lapsed subscriptions.
+Still open from this group: M4–M8 (webhook retries, trial-before-card, upgrades, server-side subscription enforcement), share one root cause: subscription state lives in Stripe calls and the browser, not on the User row. **Fix them as one design change**: store the Stripe status on User from webhooks, enforce it server-side, add a Billing Portal, stop using `is_active` for lapsed subscriptions.
 
 **Wrong numbers:**
 - **N1:** unpriced positions shown as a total loss.
@@ -36,9 +38,9 @@ These, together with M4–M8 (webhook retries, trial-before-card, upgrades, serv
 - **N3:** unconverted foreign estimates.
 
 **Claims and legal:**
-- **C1:** "every plan has a trial, no card".
-- **C2:** the refund policy contradicts itself.
-- **C3:** the verification email promises a trial to every sign-up.
+- ✅ ~~**C1:** "every plan has a trial, no card".~~
+- ✅ ~~**C2:** the refund policy contradicts itself.~~
+- ✅ ~~**C3:** the verification email promises a trial to every sign-up.~~
 - **S5:** the Privacy Policy.
 - Carried over: the **FMP commercial license**.
 
@@ -48,12 +50,8 @@ These, together with M4–M8 (webhook retries, trial-before-card, upgrades, serv
 
 | ID | Sev | Finding | Location | Fix | Verified | Status |
 |---|---|---|---|---|---|---|
-| C1 | blocker | The landing pricing block says "Every plan starts with a 14-day free trial — no credit card required". Only Beginner and Casual have a trial, and the trial collects a card. `Pricing.tsx:136` has the same unqualified trial line. | `components/landing/PricingTiers.tsx:23` | "14-day free trial on Beginner and Casual, card required, cancel before day 14" | code | fixed 2026-10-30: header text built from `TRIAL_PLAN_NAMES` in pricingTiers.ts (landing + /pricing) |
-| C2 | blocker | The FAQ offers a "30-day money-back guarantee"; the Terms say no refunds for partial periods; no refund code exists. | `FAQ.tsx:59` vs `TermsConditions.tsx:102` | Pick one policy and use it in both places | code | fixed 2026-10-30: **policy is no refunds**; FAQ rewritten, Terms tightened to "all fees non-refundable" |
-| C3 | blocker | The verification email tells **every** registrant "You will not be charged if you cancel before your 14-day free trial ends", including Active and Pro sign-ups, who are charged at once. | `email_service.py:313` | Make the line conditional on `selected_tier` | code | fixed 2026-10-30: trial line conditional on `get_trial_days(selected_tier)` |
 | C4 | high | "24/7 monitoring" for price alerts. The price poller (which drives alerts) only runs 9:30–16:00 ET on weekdays. | `Landing.tsx:371`, waitlist pages; `websocket_service.py:50-64,109-111` | Say "monitored during market hours" | code | open |
 | C5 | high | The pricing page comparison table (a sixth copy of the plan data, missed in today's fix) shows TA 20/40 a day (real: 10/20) and Smart Technical Alerts "5/day, 20/day" (real: a total of 5 and 20). | `Pricing.tsx:270,272` | Fix the values; better, build the table from `pricingTiers.ts` | code | open |
-| C6 | high | The payment-failed email says the account will be "downgraded to Beginner", but the code locks it (`is_active=False`). Its "Update Payment Method" button goes to `/account`, which has no payment-method or billing-portal control. The trial-ending email has the same dead link. | `email_service.py:618-620,668-670`; `stripe_payments.py:582-600` | Correct the wording; add a Stripe Billing Portal link | code | open |
 | C7 | high | The Terms say a cancelled trial keeps access until the trial ends; the code cancels immediately and locks the account. | `TermsConditions.tsx:99`, `FAQ.tsx:44` vs `AccountSettings.tsx:117`, `stripe_payments.py:751+` | Align the Terms, or cancel at period end | code | open |
 | C8 | high | The Dashboard "Upgrade to Casual Investor" button has no handler, so it does nothing. Every Beginner user sees it. | `Dashboard.tsx:1458` | Link it to `/payment?tier=casual` | code | open |
 | C9 | high | The Pricing FAQ offers "Save 20% with annual billing", but no annual prices exist, and `get_tier_for_price()` maps any unknown price to `beginner`. | `Pricing.tsx:345`; `stripe_payments.py:94-105` | Remove the FAQ entry; make unknown prices fail loudly | code | open |
@@ -61,14 +59,12 @@ These, together with M4–M8 (webhook retries, trial-before-card, upgrades, serv
 | C10 | medium | Upgrading during a trial keeps the trial (no `trial_end='now'`), so a Beginner trial can become Professional for free, while the email says "Payment Successful, $50/month". | `stripe_payments.py:164-210` | Pass `trial_end='now'` for non-trial tiers | likely (Stripe behaviour) | open |
 | C11 | medium | The FAQ says downgrades apply next cycle; the code and Pricing page apply them immediately with proration. | `FAQ.tsx:51` | Fix the FAQ wording | code | open |
 | C12 | medium | The FAQ lists PayPal; checkout is card-only. | `FAQ.tsx:55` | Drop PayPal | code | open |
-| C13 | medium | The Terms promise one trial per user per plan; nothing enforces it, so a user can re-trial after cancelling. | `TermsConditions.tsx:99`; `stripe_payments.py:160-176` | Check trial history before granting a trial | code | open |
 | C14 | medium | The stale pre-launch `/waitlist` page and `public/waitlist.html` are still reachable. They say "we'll notify you when we go live", promise a no-card trial on every plan and priority support, show a "Free $0" tier and old limits, and use fake waitlist avatars. | `WaitlistLanding.tsx`, `public/waitlist.html` | Delete both; redirect `/waitlist` to `/` | code | open |
 | C16 | medium | DCF "AI suggestions" are rule-based (no Claude call), and the "20% haircut" applies only to the trailing-growth fallback. | `Landing.tsx:315`, `DCFValuation.tsx:837,887` | Call them "data-derived suggestions" | code (agent) | open |
 | C17 | medium | "No hallucinated tickers or made-up financials" is an absolute guarantee about LLM output. | `Landing.tsx:242` | Say "grounded in reported financials" | code (agent) | open |
 | C18 | medium | Landing features are gated above the Beginner trial without saying so: AI analysis (hero), RelVal, drawing tools, watchlist batch analysis. | `Landing.tsx:124,269,277-355` | Add tier notes | code (agent) | open |
 | C19 | medium | The verification email tells Beginner users their limits are "total" (lifetime); they are per week. | `email_service.py:163-178` | Use `get_review_period()` | code | open |
 | C20 | medium | FMP vendor data is labelled "From SEC filings", and that grid includes market multiples. | `DCFValuation.tsx:903,937,1202,1338` | Say "from reported financials" | code (agent) | open |
-| C21 | medium | Logged-in users switching plans see "Start Free Trial / won't be charged today", but the backend prorates with no new trial. | `Pricing.tsx:77-82`, `Payment.tsx:335-353` | Show trial copy only to users with no subscription | code (agent) | open |
 | C30 | medium | Casual users who hit the TA limit get no upgrade prompt: 10/day is compared with 15/week as raw numbers. | `technical_analysis.py:74` | Compare `weekly_equivalent()` | code | open |
 | C33 | high | **Screener preset descriptions imply outcomes**, and paid ads will point straight at them. "In Squeeze" says "A breakout often follows"; "Squeeze Fired (3d)" says "potential breakout underway". Milder: Gap Down "potential reversals or continued selling". Ad reviewers and skeptical Reddit users read the landing page (see S14). | `screener.py:708,721` (and the other `_PRESETS` descriptions) | e.g. "Bollinger Bands are inside the Keltner Channels, a condition traders watch for volatility expansion"; call it a *volatility* squeeze everywhere | code | open |
 | C28 | low | Several FAQ claims don't hold: blog search; a newsletter and social links; tutorial links inside tools. **My 2026-10-30 edit says tutorials are "free for everyone", but they require a login** (`Tutorials.tsx`, `content.py:60`). | `FAQ.tsx:74,81,101,112` | Fix the answers ("tutorials are included with every plan") | code | open |
@@ -82,15 +78,11 @@ Overall: email verification is enforced. **The subscription itself is not enforc
 
 | ID | Sev | Finding | Location | Fix | Verified | Status |
 |---|---|---|---|---|---|---|
-| M1 | blocker | **A locked account can never come back.** Cancel, trial-cancel and exhausted retries set `is_active=False`. The "Inactive user" 403 is raised inside a `try` whose `except Exception` turns it into a 401. Login checks `is_verified`, not `is_active`. So the user logs in and every call (including `/stripe/create-subscription`) returns 401: a login loop, with "you can resubscribe anytime" on screen. | `api/dependencies.py:47-58`; `stripe_payments.py:598,785` | Don't touch `is_active` on cancel; gate features on subscription status; let lapsed users reach `/payment` and `/stripe/*` | code | open |
-| M2 | blocker | **past_due, unpaid, incomplete and paused subscriptions are invisible.** Every `Subscription.list` asks only for `active`/`trialing`. The guard sees no status and sends the user to `/payment`, which creates a **second** subscription (a fresh trial on Beginner/Casual) while the old one keeps retrying, risking double billing. A past_due user can't cancel either (404). | `stripe_payments.py:164-179,699-717,840-853`; `App.tsx:63-66` | List `status='all'`; send past_due users to a fix-payment flow; allow cancelling past_due | code (runtime for Stripe retry settings) | open |
-| M3 | blocker | **Users can't update their card.** No Billing Portal or update-card endpoint exists, but the payment-failed and trial-ending emails tell users to do it at `/account`, which is behind the guard and has no such control. | `email_service.py:618,668`; `AccountSettings.tsx` | Stripe Customer Portal endpoint + link; let past_due users through the guard to it | code | open |
 | M4 | high | Webhook dedup records the event id **before** handling it. A handler that fails returns 500, and Stripe's retry is then skipped as a duplicate, so the event (e.g. `invoice.paid`) is lost. The dedup store is also in memory. | `stripe_payments.py:32-45,421-457` | Mark processed only after success; persist it | code | open |
 | M5 | high | The trial and its tier are granted **before** the card is confirmed (no `payment_behavior='default_incomplete'`). A declined or abandoned card form still leaves a working 14-day trial with no card on file. | `stripe_payments.py:260-289`; `Payment.tsx:114-125` | `default_incomplete`; grant the tier from the webhook | code (runtime: whether `pending_setup_intent` can be null) | open |
 | M6 | high | Upgrades use `create_prorations`, so nothing is charged now but the higher tier is granted at once, with a "payment successful" email. Upgrading and then cancelling gets the higher tier for the old price. | `stripe_payments.py:201-253` | `always_invoice` + `pending_if_incomplete`; set the tier from the webhook | likely | open |
 | M7 | high | Swapping a trialing Beginner/Casual subscription to Active/Pro keeps the free trial (same as C10). | `stripe_payments.py:201-213` | `trial_end='now'` when the target has no trial | likely | open |
 | M8 | high | **No server-side subscription enforcement.** The backend checks only `is_active`, so a verified user who never paid uses every API at Beginner limits. The client guard fails open on any error. | `App.tsx:69-71`; `api/dependencies.py` | Store the subscription status on User from webhooks; enforce it in a dependency | code | open |
-| M9 | high | Any `subscription.deleted` locks the user, even when another live subscription exists (e.g. the duplicate from M2). | `stripe_payments.py:582-600` | Check for remaining live subscriptions before locking | code (agent) | open |
 | M10 | high | Synchronous Stripe and Postmark calls run inside `async def` handlers on every guarded page load (Dashboard makes six). Under ad traffic this stalls all requests, the price stream and the alert checker. | `stripe_payments.py:835-853` + webhook email calls | Cache the status on User; `asyncio.to_thread`/async Stripe | code (agent); impact needs load test | open |
 | M11 | high | The alert checkers ignore account status and tier, so locked or churned users keep getting email **and SMS (Twilio cost)**, and downgraded users keep SMS and indicator alerts. | `alert_checker.py:108-116,193`; `technical_alert_checker.py:99-106` | Filter on the user's status; re-check the tier at send time | code | open |
 | M21 | high | The AI price forecast (a Claude call) has no tier gate: Beginner (`ai_analysis=0`) gets it on every stock lookup. | `stock_analysis.py:295-317` | Tier-check and meter it | code | open |
@@ -263,6 +255,27 @@ Code review can't confirm these. Do them on the live site, on desktop **and** a 
 - [ ] Footer links (Privacy, Terms, FAQ, contact emails) all work.
 - [ ] Lighthouse (mobile) on the landing page: note performance and accessibility scores.
 - [ ] Verification and trial-ending emails render properly in Gmail and Outlook.
+
+## Completed
+
+| ID | Done | What changed | Files |
+|---|---|---|---|
+| C1 | 2026-10-30 | The landing pricing header and the `/pricing` intro now say "Beginner and Casual start with a 14-day free trial. Card required…". The plan names come from `TRIAL_PLAN_NAMES` (the same `hasTrial` flag behind the card badges). | `pricingTiers.ts`, `components/landing/PricingTiers.tsx`, `pages/Pricing.tsx` |
+| C2 | 2026-10-30 | **Policy: no refunds.** The FAQ says fees are non-refundable, you can cancel anytime and keep access to period end, and billing errors go to support. The Terms say "All subscription fees are non-refundable, including for partial billing periods." | `pages/FAQ.tsx`, `pages/TermsConditions.tsx` |
+| C3 | 2026-10-30 | The verification email's "not charged before your trial ends" line shows only when `get_trial_days(selected_tier)` > 0; Active and Pro get "billed when you complete payment". Rendered and checked for all four tiers. | `services/email_service.py` |
+| M1 | 2026-10-30 | Locked accounts can resubscribe. New `get_current_user_allow_inactive` dependency for `/auth/me`, `subscription-status`, `create-subscription` and `billing-portal`. `get_current_user` returns **403** for a locked account (the swallowed 403-as-401 caused the login loop). `subscription-status` unlocks an account when Stripe shows a live subscription (covers the webhook race and lost webhooks). | `api/dependencies.py`, `endpoints/auth.py`, `endpoints/stripe_payments.py` |
+| M2 | 2026-10-30 | past_due/unpaid are visible: every lookup uses `status='all'`. `create-subscription` returns 409 instead of starting a second subscription. The guard sends past_due/unpaid to the new **`/billing`** page: pay the open invoice (hosted invoice URL), update the card (portal), or cancel instead (`cancel-subscription-immediate` now covers past_due/unpaid). `/payment` redirects past_due users to `/billing`. | `stripe_payments.py`, `App.tsx`, `pages/Billing.tsx` (new), `pages/Payment.tsx` |
+| M3 | 2026-10-30 | `POST /stripe/billing-portal` (Stripe Customer Portal, `return_to` whitelisted). "Manage billing" on the Account page; `/billing` uses it. **Requires the portal to be activated in the Stripe Dashboard** (see below). | `stripe_payments.py`, `services/api.ts`, `AccountSettings.tsx`, `Billing.tsx` |
+| C6 | 2026-10-30 | The payment-failed and trial-ending emails link to `/billing`. The false "downgraded to the Beginner plan" now says the subscription will end and the account pauses until they resubscribe. | `services/email_service.py` |
+| C13 | 2026-10-30 | One trial per customer is enforced: no trial if any past subscription had one (needed once M1 allowed resubscribing; otherwise cancel-and-resubscribe = endless free trial). | `stripe_payments.py` (`_has_had_trial`) |
+| C21 | 2026-10-30 | The Payment page shows trial wording only when `subscription-status.trial_eligible` is true and the user isn't changing plan on a live subscription. | `pages/Payment.tsx` |
+| M9 | 2026-10-30 | `subscription.deleted` doesn't lock a customer who still has another live subscription (protects resubscribed users from an old subscription's late event). | `stripe_payments.py` |
+
+**Stripe Dashboard setup needed for M1–M3 (live mode):**
+1. **Settings → Billing → Customer portal:** activate it; allow *update payment methods* and *invoice history*; **turn off** *cancel subscriptions* and *switch plans* (those stay in-app). Without this, "Manage billing" returns "temporarily unavailable".
+2. **Settings → Billing → Subscriptions and emails → Manage failed payments:** pick what happens after retries. "Cancel" → account locks → user resubscribes via `/payment`. "Mark unpaid" → `/billing`. Both are handled.
+
+Verified offline: 21 mocked-Stripe checks (scratchpad `test_billing_flow.py`). Still needs the section-6 click-through on the live site.
 
 ## Fixed earlier on 2026-10-30 (before the review started)
 

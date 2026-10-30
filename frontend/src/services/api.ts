@@ -468,6 +468,10 @@ export const stripeAPI = {
   
   cancelSubscriptionImmediate: () =>
     axiosInstance.post('/stripe/cancel-subscription-immediate'),
+
+  // Stripe Customer Portal (update card, pay/download invoices) — returns { url }
+  openBillingPortal: (returnTo: 'account' | 'billing') =>
+    axiosInstance.post('/stripe/billing-portal', { return_to: returnTo }),
 };
 
 export default axiosInstance;

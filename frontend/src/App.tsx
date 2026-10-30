@@ -28,6 +28,7 @@ import TermsConditions from './pages/TermsConditions';
 import FAQ from './pages/FAQ';
 import OptionsCalculator from './pages/OptionsCalculator';
 import SectorHeatmap from './pages/SectorHeatmap';
+import Billing from './pages/Billing';
 
 
 const Payment = React.lazy(() => import('./pages/Payment'));
@@ -61,10 +62,14 @@ const SubscriptionGuard: React.FC<{ children: React.ReactNode }> = ({ children }
       headers: { Authorization: `Bearer ${token}` }
     }).then(res => {
       const { subscription_status, subscription_tier } = res.data;
-      if (!subscription_status) {
-        navigate(`/payment?tier=${subscription_tier || 'beginner'}`, { replace: true });
-      } else {
+      if (subscription_status === 'active' || subscription_status === 'trialing') {
         setReady(true);
+      } else if (subscription_status === 'past_due' || subscription_status === 'unpaid') {
+        // A payment failed: fix it, never start a second subscription
+        navigate('/billing', { replace: true });
+      } else {
+        // No live subscription (new, cancelled or lapsed): (re)subscribe
+        navigate(`/payment?tier=${subscription_tier || 'beginner'}`, { replace: true });
       }
     }).catch(() => {
       setReady(true); // fail open — don't block on API error
@@ -111,6 +116,7 @@ function App() {
             <Route path="/admin" element={<AdminContent />} />
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/payment" element={<Payment />} />
+            <Route path="/billing" element={<Billing />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsConditions />} />
             <Route path="/faq" element={<FAQ />} />
