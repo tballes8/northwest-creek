@@ -57,6 +57,8 @@ class PortfolioResponse(BaseModel):
     total_current_value: float
     total_profit_loss: float
     total_profit_loss_percent: float
+    # Positions with no current price; excluded from the three totals above
+    unpriced_count: int = 0
     # Realized figures, summed from the transaction ledger. Defaulted so the
     # frontend and backend can ship in either order.
     total_realized_pl: float = 0.0

@@ -89,13 +89,17 @@ def fx_per_usd(quotes) -> dict[str, float]:
 
 
 def usd_rate(currency, fx: dict[str, float]) -> float | None:
-    """Units of `currency` per dollar, or None when it is foreign and unpriced.
+    """Units of `currency` per dollar, or None when it is unknown or unpriced.
 
-    No currency at all is treated as dollars: FMP omits it only on rows with no
-    statement behind them.
+    No currency is unknown, not dollars. Analyst estimates carry no currency of
+    their own, so when the reporting-currency lookup failed, defaulting to dollars
+    showed Toyota's yen forward EPS as dollars (a 0.1x forward P/E). Statement rows
+    are the one exception, in rows_to_usd.
     """
     ccy = (currency or "").upper()
-    if not ccy or ccy == "USD":
+    if not ccy:
+        return None
+    if ccy == "USD":
         return 1.0
     return fx.get(ccy)
 
@@ -121,7 +125,9 @@ def rows_to_usd(rows, fx: dict[str, float]) -> list[dict]:
     for row in rows if isinstance(rows, list) else []:
         if not isinstance(row, dict):
             continue
-        rate = usd_rate(row.get("reportedCurrency"), fx)
+        # FMP omits reportedCurrency only on rows with no statement behind them,
+        # so here, and only here, a missing currency is taken as dollars.
+        rate = usd_rate(row.get("reportedCurrency") or "USD", fx)
         converted = {
             k: v if k in _NON_MONEY_FIELDS else to_usd(v, rate)
             for k, v in row.items()
@@ -249,8 +255,9 @@ def _selftest() -> None:
     assert fx_per_usd(None) == {"USD": 1.0}
 
     # usd_rate / to_usd
-    assert usd_rate("USD", fx) == 1.0 and usd_rate(None, fx) == 1.0 and usd_rate("jpy", fx) == 157.9
+    assert usd_rate("USD", fx) == 1.0 and usd_rate("jpy", fx) == 157.9
     assert usd_rate("ZZZ", fx) is None
+    assert usd_rate(None, fx) is None and usd_rate("", fx) is None, "unknown is not dollars"
     assert to_usd(157.9e9, 157.9) == 1e9
     assert to_usd(None, 157.9) is None and to_usd(5, None) is None
     assert to_usd("2025", 157.9) == "2025" and to_usd(True, 157.9) is True
@@ -276,6 +283,8 @@ def _selftest() -> None:
     assert blank["revenue"] is None and blank["epsDiluted"] is None
     assert blank["weightedAverageShsOutDil"] == 1_303_327_400 and blank["date"] == "2026-09-30"
     assert rows_to_usd(None, fx) == [] and rows_to_usd(["junk", tm[0]], fx)[0]["reportedCurrency"] == "USD"
+    # A statement row with no currency is the one place that defaults to dollars.
+    assert rows_to_usd([{"revenue": 5.0}], fx)[0] == {"revenue": 5.0}
 
     # rate_on: exact day, walk back over a weekend, give up past the window
     hist = {"2023-09-29": 149.322, "2023-10-02": 149.853}

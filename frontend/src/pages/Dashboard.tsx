@@ -8,6 +8,7 @@ import { useLivePriceContext } from '../contexts/LivePriceContext';
 import MarketStatusBadge from '../components/MarketStatusBadge';
 import SectorPieChart from '../components/SectorPieChart';
 import { computeSectorBreakdown, useSectors, SECTOR_COLORS, SectorBreakdown } from '../utils/sectorMap';
+import { summarizePositions } from '../utils/portfolioTotals';
 import '../styles/livePrice.css';
 import axios from 'axios';
 
@@ -89,6 +90,12 @@ interface DashboardPosition {
   profit_loss_percent?: number;
 }
 
+// Portfolio card figures from summarizePositions, the rule Portfolio.tsx uses
+const portfolioStats = (rows: DashboardPosition[]) => {
+  const t = summarizePositions(rows);
+  return { portfolioValue: t.value, portfolioPL: t.pl, portfolioPLPercent: t.plPercent, portfolioUnpriced: t.unpriced };
+};
+
 interface MarketDataItem {
   name: string;
   value: number | null;
@@ -111,6 +118,7 @@ const Dashboard: React.FC = () => {
     portfolioValue: 0,
     portfolioPL: 0,
     portfolioPLPercent: 0,
+    portfolioUnpriced: 0,
   });
 
   // Live price context
@@ -327,11 +335,7 @@ const Dashboard: React.FC = () => {
       });
 
       if (hasChange) {
-        // Recalculate dashboard totals
-        const totalValue = updatedPositions.reduce((sum, p) => sum + (p.total_value || 0), 0);
-        const totalCost = updatedPositions.reduce((sum, p) => sum + (p.buy_price * p.quantity), 0);
-        const totalPL = totalValue - totalCost;
-        const totalPLPercent = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
+        const totals = portfolioStats(updatedPositions);
 
         // // Flash animation on the portfolio value card
         // const prevTotalValue = prevPortfolioValueRef.current;
@@ -341,12 +345,7 @@ const Dashboard: React.FC = () => {
         // }
         // prevPortfolioValueRef.current = totalValue;
 
-        setStats(prev => ({
-          ...prev,
-          portfolioValue: totalValue,
-          portfolioPL: totalPL,
-          portfolioPLPercent: totalPLPercent,
-        }));
+        setStats(prev => ({ ...prev, ...totals }));
 
         return updatedPositions;
       }
@@ -377,35 +376,23 @@ const Dashboard: React.FC = () => {
         }
 
         setPositions(prev => {
-          let totalValue = 0;
-          let totalCost = 0;
           const updated = prev.map(pos => {
             const freshPrice = freshPrices[pos.ticker];
-            const price = freshPrice || pos.current_price || pos.buy_price;
-            const tv = price * pos.quantity;
+            if (!freshPrice || freshPrice === pos.current_price) return pos;
+            const tv = freshPrice * pos.quantity;
             const cost = pos.buy_price * pos.quantity;
-            totalValue += tv;
-            totalCost += cost;
-            if (freshPrice && freshPrice !== pos.current_price) {
-              return {
-                ...pos,
-                current_price: freshPrice,
-                total_value: tv,
-                profit_loss: tv - cost,
-                profit_loss_percent: cost > 0 ? ((tv - cost) / cost) * 100 : 0,
-              };
-            }
-            return pos;
+            return {
+              ...pos,
+              current_price: freshPrice,
+              total_value: tv,
+              profit_loss: tv - cost,
+              profit_loss_percent: cost > 0 ? ((tv - cost) / cost) * 100 : 0,
+            };
           });
 
-          const totalPL = totalValue - totalCost;
-          setStats(s => ({
-            ...s,
-            portfolioValue: totalValue,
-            portfolioPL: totalPL,
-            portfolioPLPercent: totalCost > 0 ? (totalPL / totalCost) * 100 : 0,
-          }));
-          prevPortfolioValueRef.current = totalValue;
+          const totals = portfolioStats(updated);
+          setStats(s => ({ ...s, ...totals }));
+          prevPortfolioValueRef.current = totals.portfolioValue;
 
           return updated;
         });
@@ -460,9 +447,6 @@ const Dashboard: React.FC = () => {
 
       // Fetch fresh intraday prices (same as Portfolio.tsx) to override stale prev-day close
       let finalPositions = portfolioPositions;
-      let portfolioValue = portfolioData.total_current_value || 0;
-      let portfolioPL = portfolioData.total_profit_loss || 0;
-      let portfolioPLPercent = portfolioData.total_profit_loss_percent || 0;
 
       if (portfolioPositions.length > 0) {
         try {
@@ -482,45 +466,33 @@ const Dashboard: React.FC = () => {
             });
           }
 
-          // Recalculate with fresh prices
-          let totalValue = 0;
-          let totalCost = 0;
+          // Override with fresh prices; a position with neither price stays unpriced
           finalPositions = portfolioPositions.map(pos => {
             const freshPrice = freshPrices[pos.ticker];
-            const price = freshPrice || pos.current_price || pos.buy_price;
-            const tv = price * pos.quantity;
+            if (!freshPrice) return pos;
+            const tv = freshPrice * pos.quantity;
             const cost = pos.buy_price * pos.quantity;
-            totalValue += tv;
-            totalCost += cost;
-            if (freshPrice) {
-              return {
-                ...pos,
-                current_price: freshPrice,
-                total_value: tv,
-                profit_loss: tv - cost,
-                profit_loss_percent: cost > 0 ? ((tv - cost) / cost) * 100 : 0,
-              };
-            }
-            return pos;
+            return {
+              ...pos,
+              current_price: freshPrice,
+              total_value: tv,
+              profit_loss: tv - cost,
+              profit_loss_percent: cost > 0 ? ((tv - cost) / cost) * 100 : 0,
+            };
           });
-
-          portfolioValue = totalValue;
-          portfolioPL = totalValue - totalCost;
-          portfolioPLPercent = totalCost > 0 ? (portfolioPL / totalCost) * 100 : 0;
         } catch (priceErr) {
           console.warn('⚠️ Could not fetch fresh intraday prices for dashboard, using cached:', priceErr);
         }
       }
 
+      const totals = portfolioStats(finalPositions);
       setPositions(finalPositions);
-      prevPortfolioValueRef.current = portfolioValue;
+      prevPortfolioValueRef.current = totals.portfolioValue;
       setStats({
         watchlistCount,
         portfolioCount,
         alertsCount,
-        portfolioValue,
-        portfolioPL,
-        portfolioPLPercent,
+        ...totals,
       });
 
       // IPO is non-critical — load without blocking render
@@ -880,6 +852,14 @@ return (
               <p className={`text-xs font-medium mt-0.5 ${stats.portfolioPL >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                 {stats.portfolioPL >= 0 ? '+' : ''}{stats.portfolioPL.toFixed(2)} ({stats.portfolioPLPercent >= 0 ? '+' : ''}{stats.portfolioPLPercent.toFixed(2)}%)
               </p>
+              {stats.portfolioUnpriced > 0 && (
+                <p
+                  className="text-xs mt-0.5 text-amber-600 dark:text-amber-400"
+                  title="No current price for these positions, so they are left out of the value and P&L"
+                >
+                  {stats.portfolioUnpriced} unpriced
+                </p>
+              )}
             </div>
             <div className="bg-green-100 dark:bg-green-900/30 rounded-lg p-2 ml-2 flex-shrink-0">
               <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">

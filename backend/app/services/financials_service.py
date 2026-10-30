@@ -88,6 +88,37 @@ def _sum_quarters(quarters: List[dict], field: str) -> Optional[float]:
     return sum(vals)
 
 
+def _yoy_revenue_growth(quarter: dict, quarters: List[dict]) -> Optional[float]:
+    """Revenue growth (%) of `quarter` over the quarter in `quarters` that ended
+    closest to a year before it (within 46 days), unrounded; None if there is none.
+
+    The one YoY rule for the DCF suggestion, RelVal peers and the Rule of 40.
+    Matched by period-end date, never by array position: FMP's quarter arrays
+    have gaps (Broadridge's seasonal swing once read as growth), and the Rule of
+    40 used to compare with the quarter 3 positions back, i.e. 9 months earlier.
+    """
+    def _end(q: dict) -> Optional[datetime]:
+        try:
+            return datetime.strptime(q["date"], "%Y-%m-%d")
+        except (KeyError, ValueError, TypeError):
+            return None
+
+    rev = quarter.get("revenue")
+    end = _end(quarter)
+    if not rev or end is None:
+        return None
+    target = end - timedelta(days=365)
+    prior, best_gap = None, timedelta(days=46)
+    for q in quarters:
+        q_end = _end(q)
+        if q_end is not None and abs(q_end - target) <= best_gap:
+            prior, best_gap = q, abs(q_end - target)
+    prior_rev = prior.get("revenue") if prior else None
+    if not prior_rev or prior_rev <= 0:
+        return None
+    return (rev - prior_rev) / prior_rev * 100
+
+
 def _trailing_pe_by_quarter(
     income_quarters: List[dict],
     price_rows: List[dict],
@@ -159,25 +190,10 @@ def compute_peer_fundamentals(income_quarters: List[dict]) -> Dict[str, Optional
     # ── YoY revenue growth — date-based matching (tolerant to quarter gaps) ─
     revenue_growth_yoy = None
     dated = [q for q in income_quarters if q.get("date") and q.get("revenue")]
-    if len(dated) >= 2:
-        dated_sorted = sorted(dated, key=lambda q: q["date"], reverse=True)
-        recent = dated_sorted[0]
-        recent_rev = recent.get("revenue")
-        try:
-            recent_date = datetime.strptime(recent["date"], "%Y-%m-%d")
-            target_date = recent_date - timedelta(days=365)
-            tolerance = timedelta(days=46)
-            yoy_quarter = next(
-                (q for q in dated_sorted[1:]
-                 if abs(datetime.strptime(q["date"], "%Y-%m-%d") - target_date) <= tolerance),
-                None,
-            )
-            if yoy_quarter:
-                yoy_rev = yoy_quarter.get("revenue")
-                if recent_rev and yoy_rev and yoy_rev > 0:
-                    revenue_growth_yoy = round(((recent_rev - yoy_rev) / yoy_rev) * 100, 2)
-        except (ValueError, TypeError):
-            pass
+    if dated:
+        growth = _yoy_revenue_growth(max(dated, key=lambda q: q["date"]), dated)
+        if growth is not None:
+            revenue_growth_yoy = round(growth, 2)
 
     return {
         "revenue_growth_yoy_pct": revenue_growth_yoy,
@@ -645,25 +661,10 @@ def _derive_dcf_suggestions(
     # to be mistaken for YoY growth when a quarter is missing from the array).
     revenue_growth_yoy = None
     dated = [q for q in income_quarters if q.get("date") and q.get("revenue")]
-    if len(dated) >= 2:
-        dated_sorted = sorted(dated, key=lambda q: q["date"], reverse=True)
-        recent = dated_sorted[0]
-        recent_rev = recent.get("revenue")
-        try:
-            recent_date = datetime.strptime(recent["date"], "%Y-%m-%d")
-            target_date = recent_date - timedelta(days=365)
-            tolerance = timedelta(days=46)
-            yoy_quarter = next(
-                (q for q in dated_sorted[1:]
-                 if abs(datetime.strptime(q["date"], "%Y-%m-%d") - target_date) <= tolerance),
-                None
-            )
-            if yoy_quarter:
-                yoy_rev = yoy_quarter.get("revenue")
-                if recent_rev and yoy_rev and yoy_rev > 0:
-                    revenue_growth_yoy = round(((recent_rev - yoy_rev) / yoy_rev) * 100, 2)
-        except (ValueError, TypeError):
-            pass
+    if dated:
+        growth = _yoy_revenue_growth(max(dated, key=lambda q: q["date"]), dated)
+        if growth is not None:
+            revenue_growth_yoy = round(growth, 2)
 
     # ── Suggested growth rate ─────────────────────────────────────────
     # Preferred: analyst consensus, which is an actual forward estimate and so is
@@ -811,15 +812,12 @@ def _build_growth_profile(
             "value": qfcf,
         })
 
-    # ── YoY revenue growth per quarter (needs 4Q lookback) ────────────
+    # ── YoY revenue growth per quarter (date-matched year-ago quarter) ─
     revenue_growth_trend = []
-    for i, q in enumerate(inc_oldest_first):
-        yoy_growth = None
-        if i >= 4:
-            current_rev = q.get("revenue")
-            prior_rev = inc_oldest_first[i - 4].get("revenue")
-            if current_rev and prior_rev and prior_rev > 0:
-                yoy_growth = round(((current_rev - prior_rev) / prior_rev) * 100, 2)
+    for q in inc_oldest_first:
+        yoy_growth = _yoy_revenue_growth(q, inc_oldest_first)
+        if yoy_growth is not None:
+            yoy_growth = round(yoy_growth, 2)
         revenue_growth_trend.append({
             "period": _q_label(q),
             "period_end": q.get("date"),
@@ -831,11 +829,10 @@ def _build_growth_profile(
     latest_yoy_growth = None
     fcf_margin = None
 
-    if len(income_quarters) >= 4:
-        recent_rev = income_quarters[0].get("revenue")
-        prior_rev = income_quarters[3].get("revenue")
-        if recent_rev and prior_rev and prior_rev > 0:
-            latest_yoy_growth = round(((recent_rev - prior_rev) / prior_rev) * 100, 1)
+    if income_quarters:
+        growth = _yoy_revenue_growth(income_quarters[0], income_quarters)
+        if growth is not None:
+            latest_yoy_growth = round(growth, 1)
 
     if fcf_ttm is not None and revenue_ttm is not None and revenue_ttm > 0:
         fcf_margin = round((fcf_ttm / revenue_ttm) * 100, 1)
@@ -851,7 +848,7 @@ def _build_growth_profile(
         period = entry["period"]
         yoy_growth = entry["value"]
 
-        # Need YoY growth (requires i>=4) and 4Q window for TTM (requires i>=3)
+        # Need a YoY growth (a year-ago quarter exists) and 4Q window for TTM (requires i>=3)
         if yoy_growth is None or i < 3:
             rule_of_40_trend.append({
                 "period": period,

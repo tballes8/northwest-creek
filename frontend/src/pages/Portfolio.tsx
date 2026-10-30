@@ -12,6 +12,7 @@ import MarketStatusBadge from '../components/MarketStatusBadge';
 import '../styles/livePrice.css';
 import { useSectors, SECTOR_COLORS } from '../utils/sectorMap';
 import { downloadCSV } from '../utils/csv';
+import { summarizePositions } from '../utils/portfolioTotals';
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -403,10 +404,9 @@ const Portfolio: React.FC = () => {
   );
 
   const calculateTotals = () => {
-    const totalValue = portfolio.reduce((sum, pos) => sum + (rowValues(pos).total_value || 0), 0);
-    const totalCost = portfolio.reduce((sum, pos) => sum + (pos.buy_price * pos.quantity), 0);
-    const totalPL = totalValue - totalCost;
-    const totalPLPercent = totalCost > 0 ? (totalPL / totalCost) * 100 : 0;
+    const {
+      value: totalValue, cost: totalCost, pl: totalPL, plPercent: totalPLPercent, unpriced,
+    } = summarizePositions(portfolio.map(pos => ({ ...pos, total_value: rowValues(pos).total_value })));
 
     // Day-change baseline = Σ(previous close × qty). When a position has no
     // previous close (FMP gap / illiquid ticker), fall back to its cost basis so
@@ -421,17 +421,19 @@ const Portfolio: React.FC = () => {
     const dayChangePercent = totalPrevClose > 0 ? (dayChange / totalPrevClose) * 100 : 0;
 
     // Every position with a live annualized figure counts, however high the rate.
-    // Only a suspended dividend (annual_dividend null) drops out.
-    const totalAnnualDividends = portfolio.reduce((sum, pos) => {
-      const divInfo = dividendMap[pos.ticker];
-      if (divInfo?.annual_dividend) {
-        return sum + (divInfo.annual_dividend * pos.quantity);
-      }
-      return sum;
-    }, 0);
-    const portfolioDividendYield = totalValue > 0 ? (totalAnnualDividends / totalValue) * 100 : 0;
+    // Only a suspended dividend (annual_dividend null) drops out. The yield's
+    // numerator takes priced positions only, to match its denominator.
+    let totalAnnualDividends = 0;
+    let pricedAnnualDividends = 0;
+    for (const pos of portfolio) {
+      const annual = dividendMap[pos.ticker]?.annual_dividend;
+      if (!annual) continue;
+      totalAnnualDividends += annual * pos.quantity;
+      if (rowValues(pos).total_value != null) pricedAnnualDividends += annual * pos.quantity;
+    }
+    const portfolioDividendYield = totalValue > 0 ? (pricedAnnualDividends / totalValue) * 100 : 0;
 
-    return { totalValue, totalCost, totalPL, totalPLPercent, dayChange, dayChangePercent, totalAnnualDividends, portfolioDividendYield };
+    return { totalValue, totalCost, totalPL, totalPLPercent, unpriced, dayChange, dayChangePercent, totalAnnualDividends, portfolioDividendYield };
   };
 
   const handleAddPosition = async (e: React.FormEvent) => {
@@ -717,6 +719,14 @@ const Portfolio: React.FC = () => {
           <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
             <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Value</div>
             <div className="text-2xl font-bold text-gray-900 dark:text-white">${totals.totalValue.toFixed(2)}</div>
+            {totals.unpriced > 0 && (
+              <div
+                className="text-xs mt-0.5 text-amber-600 dark:text-amber-400"
+                title="No current price for these positions, so they are left out of Total Value and Unrealized P&L"
+              >
+                {totals.unpriced} unpriced
+              </div>
+            )}
           </div>
           <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-6 border dark:border-gray-500">
             {/* Relabelled from "Total P&L": once a realized figure sits beside
@@ -732,6 +742,9 @@ const Portfolio: React.FC = () => {
               totals.totalPLPercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
             }`}>
               {totals.totalPLPercent >= 0 ? '+' : ''}{totals.totalPLPercent.toFixed(2)}%
+              {totals.unpriced > 0 && (
+                <span className="text-amber-600 dark:text-amber-400"> · {totals.unpriced} unpriced</span>
+              )}
             </div>
           </div>
           <div

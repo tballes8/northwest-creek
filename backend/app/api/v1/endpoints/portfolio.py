@@ -98,15 +98,19 @@ async def get_portfolio(
     # Enrich positions with current prices
     enriched_positions = await enrich_portfolio_with_prices(positions)  # Use your existing function
     
-    # Calculate totals from enriched data
+    # Calculate totals from enriched data. A position with no price is left out
+    # of value AND cost: counting its cost against a value of zero showed it as
+    # a total loss, so a quote outage read as -100%. unpriced_count says so.
     total_current_value = 0.0
     total_cost_basis = 0.0
-    
+    unpriced_count = 0
+
     for position in enriched_positions:
-        if position.total_value is not None:
-            total_current_value += position.total_value
-        cost_basis = position.quantity * position.buy_price
-        total_cost_basis += cost_basis
+        if position.total_value is None:
+            unpriced_count += 1
+            continue
+        total_current_value += position.total_value
+        total_cost_basis += position.quantity * position.buy_price
     
     # Calculate profit/loss (unrealized — open positions only)
     total_profit_loss = total_current_value - total_cost_basis
@@ -127,6 +131,7 @@ async def get_portfolio(
         total_current_value=total_current_value,
         total_profit_loss=total_profit_loss,
         total_profit_loss_percent=total_profit_loss_percent,
+        unpriced_count=unpriced_count,
         total_realized_pl=float(realized_pl),
         total_realized_pl_percent=realized_pl_percent,
         total_realized_cost_basis=float(realized_basis)
