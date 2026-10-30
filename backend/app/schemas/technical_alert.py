@@ -148,7 +148,6 @@ class TechnicalAlertCreate(BaseModel):
     alert_type: str = Field(..., description="Type of technical alert")
     config: dict = Field(..., description="Alert-type-specific configuration")
     notes: Optional[str] = Field(None, max_length=500)
-    sms_enabled: bool = Field(False, description="Send SMS text when this alert triggers")
 
     @model_validator(mode="after")
     def validate_alert_config(self):
@@ -161,7 +160,6 @@ class TechnicalAlertCreate(BaseModel):
 class TechnicalAlertUpdate(BaseModel):
     """Update a technical alert (config is immutable — delete and recreate)"""
     is_active: Optional[bool] = None
-    sms_enabled: Optional[bool] = None
     notes: Optional[str] = Field(None, max_length=500)
 
 
@@ -173,7 +171,6 @@ class TechnicalAlertResponse(BaseModel):
     config: dict
     last_state: Optional[dict] = None
     is_active: bool
-    sms_enabled: bool = False
     triggered_at: Optional[datetime] = None
     trigger_details: Optional[dict] = None
     notes: Optional[str] = None

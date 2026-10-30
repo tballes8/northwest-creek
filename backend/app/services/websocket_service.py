@@ -9,6 +9,7 @@ can evaluate active alerts without blocking the price stream.
 """
 import asyncio
 import json
+import re
 from typing import Set, Dict, Optional, Callable, Awaitable
 from datetime import datetime, time as dt_time
 import pytz
@@ -20,6 +21,26 @@ POLL_INTERVAL = 20
 # doesn't need sub-minute granularity, and this is what keeps the poller
 # from burning FMP calls all day for nobody.
 IDLE_POLL_INTERVAL = 60
+
+# Client-supplied tickers must be plain symbols. A non-string ticker once
+# reached ",".join() in the poller and stopped every price update — and the
+# price alerts they drive — for all users.
+_TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-]{0,11}$")
+MAX_TICKERS_PER_CLIENT = 200
+FMP_BATCH_SIZE = 100  # symbols per batch-quote request
+
+
+def _clean_tickers(raw) -> Set[str]:
+    """Valid ticker symbols from a client message; anything else is dropped."""
+    if not isinstance(raw, list):
+        return set()
+    cleaned = set()
+    for t in raw[:MAX_TICKERS_PER_CLIENT]:
+        if isinstance(t, str):
+            t = t.strip().upper()
+            if _TICKER_RE.match(t):
+                cleaned.add(t)
+    return cleaned
 
 
 class LivePriceService:
@@ -34,6 +55,9 @@ class LivePriceService:
         self.clients: Set = set()
         self.price_cache: Dict[str, Dict] = {}  # Cache latest prices
         self.running = False
+        # Sprint 9: alert checker callback (main.py sets it at startup)
+        # Signature: async def callback(ticker: str, price: float)
+        self.on_price_update: Optional[Callable[[str, float], Awaitable[None]]] = None
 
     @property
     def subscribed_tickers(self) -> Set[str]:
@@ -42,10 +66,6 @@ class LivePriceService:
         for subs in self.client_subscriptions.values():
             tickers |= subs
         return tickers
-
-        # Sprint 9: alert checker callback
-        # Signature: async def callback(ticker: str, price: float)
-        self.on_price_update: Optional[Callable[[str, float], Awaitable[None]]] = None
 
     def is_market_hours(self) -> bool:
         """Check if current time is within market hours (9:30 AM - 4:00 PM ET)"""
@@ -111,17 +131,21 @@ class LivePriceService:
                     await asyncio.sleep(30)  # Check less frequently outside hours
                     continue
 
-                symbols = ",".join(tickers)
-
+                # Chunked so a large union of subscriptions can't exceed the URL limit
+                symbols = sorted(tickers)
                 client = get_fmp_client()
-                response = await client.get(
-                    "batch-quote",
-                    params={"symbols": symbols, "apikey": API_KEY},
-                )
-                response.raise_for_status()
-                data = response.json()
+                data = []
+                for i in range(0, len(symbols), FMP_BATCH_SIZE):
+                    response = await client.get(
+                        "batch-quote",
+                        params={"symbols": ",".join(symbols[i:i + FMP_BATCH_SIZE]), "apikey": API_KEY},
+                    )
+                    response.raise_for_status()
+                    chunk = response.json()
+                    if isinstance(chunk, list):
+                        data.extend(chunk)
 
-                if not data or not isinstance(data, list):
+                if not data:
                     await asyncio.sleep(interval)
                     continue
 
@@ -215,12 +239,15 @@ class LivePriceService:
             action = data.get("action")
 
             if action == "subscribe":
-                tickers = set(data.get("tickers", []))
+                tickers = _clean_tickers(data.get("tickers"))
+                current = self.client_subscriptions.get(websocket, set())
+                room = max(MAX_TICKERS_PER_CLIENT - len(current), 0)
+                tickers = set(sorted(tickers - current)[:room])
                 if tickers:
                     await self.subscribe_to_tickers(tickers, client=websocket)
 
             elif action == "unsubscribe":
-                tickers = set(data.get("tickers", []))
+                tickers = _clean_tickers(data.get("tickers"))
                 if tickers:
                     await self.unsubscribe_from_tickers(tickers, client=websocket)
 

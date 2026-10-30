@@ -49,10 +49,6 @@ class Settings(BaseSettings):
     # Recipient for the weekly FMP field-audit alert. Falls back to SUPPORT_EMAIL.
     AUDIT_ALERT_EMAIL: str = Field(default="", env="AUDIT_ALERT_EMAIL")
     
-    # Twilio SMS Settings
-    TWILIO_ACCOUNT_SID: str = Field(default="", env="TWILIO_ACCOUNT_SID")
-    TWILIO_AUTH_TOKEN: str = Field(default="", env="TWILIO_AUTH_TOKEN")
-    TWILIO_FROM_NUMBER: str = Field(default="", env="TWILIO_FROM_NUMBER")
 
     # Anthropic AI
     ANTHROPIC_API_KEY: str = Field(default="", env="ANTHROPIC_API_KEY")
@@ -110,8 +106,6 @@ def get_settings() -> Settings:
         print(f"   STRIPE_CASUAL_PRICE_ID = {settings.STRIPE_CASUAL_PRICE_ID or '❌ NOT SET'}")
         print(f"   STRIPE_ACTIVE_PRICE_ID = {settings.STRIPE_ACTIVE_PRICE_ID or '❌ NOT SET'}")
         print(f"   STRIPE_PROFESSIONAL_PRICE_ID = {settings.STRIPE_PROFESSIONAL_PRICE_ID or '❌ NOT SET'}")
-        print(f"   TWILIO_ACCOUNT_SID = {'✅ SET' if settings.TWILIO_ACCOUNT_SID else '❌ NOT SET'}")
-        print(f"   TWILIO_FROM_NUMBER = {settings.TWILIO_FROM_NUMBER or '❌ NOT SET'}")
         print(f"   DATABASE_URL = {'✅ SET' if settings.DATABASE_URL else '❌ NOT SET'}")
         print(f"   FMP_API_KEY = {'✅ SET' if settings.FMP_API_KEY else '❌ NOT SET'}")
     return settings

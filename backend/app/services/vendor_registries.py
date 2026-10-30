@@ -37,7 +37,7 @@ NWC-Analytics is a stock-analytics SaaS. Architecture:
   layer; no other CDN is enabled in front of either service.
 - Container/build: Docker + docker-compose for local dev only.
 - Third-party APIs NWC calls from code: Financial Modeling Prep (market data),
-  Stripe (billing), Anthropic (AI), Twilio (SMS), Postmark (email).
+  Stripe (billing), Anthropic (AI), Postmark (email).
 - Hosting/infra dependencies: Railway (deploy, runtime, cron, managed Postgres)
   + Cloudflare at the edge.
 
@@ -167,20 +167,6 @@ A MODEL BUMP IS NOT ALWAYS A ONE-LINE CHANGE. Two things travel with it:
    Fable 5 (where thinking cannot be turned off at all).
 Config: ANTHROPIC_API_KEY."""
 
-TWILIO_REGISTRY = """\
-SDK: `twilio` Python SDK (`from twilio.rest import Client`), lazy-loaded.
-- Auth: `Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)`
-- Only call NWC makes: `client.messages.create(body=, from_=TWILIO_FROM_NUMBER, to=<E.164>)`
-- `from_` is a single E.164 number (`TWILIO_FROM_NUMBER`), not a messaging service SID.
-
-Files: `services/sms_service.py` — used for (1) phone-verification OTP codes and
-(2) price/technical alert SMS notifications.
-Config: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER.
-
-Watch items: changes to `messages.create` params or `Client` auth, A2P 10DLC /
-regulatory registration requirements that could block sends from an unregistered
-number, and sender-number / messaging-service policy changes."""
-
 POSTMARK_REGISTRY = """\
 API: Postmark REST (no SDK) — `requests.post` to `https://api.postmarkapp.com/email`
 with header `X-Postmark-Server-Token` (the *Server* token, not the Account token).
@@ -228,12 +214,6 @@ VENDORS: dict[str, dict] = {
         "summary": "AI — price targets, company/portfolio/cycle analysis.",
         "registry": ANTHROPIC_REGISTRY,
         "aliases": ["claude"],
-    },
-    "Twilio": {
-        "display": "Twilio",
-        "summary": "SMS — OTP verification and alert texts.",
-        "registry": TWILIO_REGISTRY,
-        "aliases": [],
     },
     "Postmark": {
         "display": "Postmark",

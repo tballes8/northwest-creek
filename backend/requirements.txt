@@ -41,4 +41,3 @@ python-dateutil==2.9.0
 pytz==2024.2
 email-validator==2.3.0
 greenlet
-twilio

@@ -16,7 +16,6 @@ from app.db.models import TechnicalAlert, User
 from app.services.email_service import email_service
 from app.services.market_data import market_data_service
 from app.services.technical_indicators import technical_indicators, generate_summary
-from app.services.sms_service import send_alert_sms, build_technical_alert_message
 from app.services.financials_service import get_company_financials
 from app.services.edgar_identity import is_contradicted
 
@@ -431,7 +430,7 @@ class TechnicalAlertChecker:
 
             # Wrong entity: refuse to evaluate at all. Returning None makes
             # every fundamental-based evaluator bail, which is the only safe
-            # outcome — these alerts send email and SMS, so a rating shift
+            # outcome — these alerts send email, so a rating shift
             # computed from another company's filings is a notification the
             # user cannot tell is wrong. One guard here rather than one per
             # evaluator: `_eval_dcf_valuation` was firing on this data while
@@ -623,7 +622,7 @@ class TechnicalAlertChecker:
 
     async def _trigger_alert(self, db: AsyncSession, alert: TechnicalAlert, trigger_details: dict) -> bool:
         """
-        Send SMS/Email/WebSocket notifications, then mark the alert triggered.
+        Send email/WebSocket notifications, then mark the alert triggered.
 
         Returns True if the alert was consumed (the user was reached, or there was
         no channel to reach them on). Returns False if every channel failed — the
@@ -647,27 +646,6 @@ class TechnicalAlertChecker:
         # actually reached the user, and only consume it if one did.
         attempted = False
         notified = False
-
-        # SMS
-        if alert.sms_enabled and user.phone_verified and user.phone_number:
-            attempted = True
-            try:
-                message = build_technical_alert_message(
-                    ticker=ticker,
-                    alert_type=alert.alert_type,
-                    trigger_summary=trigger_summary,
-                )
-                # Twilio call is synchronous — offload so we don't block the loop
-                await asyncio.to_thread(
-                    send_alert_sms,
-                    phone_e164=user.phone_number,
-                    ticker=ticker,
-                    message=message,
-                )
-                notified = True
-                print(f"   📱 SMS sent to •••-{user.phone_number[-4:]}")
-            except Exception as e:
-                print(f"   ❌ SMS failed: {e}")
 
         # Email
         if EMAIL_ON_TRIGGER:

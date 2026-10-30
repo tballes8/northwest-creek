@@ -6,6 +6,7 @@ verification, password reset, payment, price alerts, technical alerts — goes
 through EmailService.send_email(), so there is exactly one place to configure
 the provider, the sender identity, and error handling.
 """
+import html
 import logging
 
 import requests
@@ -140,11 +141,13 @@ class EmailService:
     
     def send_verification_email(self, to_email: str, verification_token: str, user_name: str, selected_tier: str = "beginner") -> bool:
         """Send account verification email with tier-specific features"""
+        user_name = html.escape(user_name or "")  # user-supplied: never raw HTML in our emails
         self._ensure_initialized()
         settings = _get_settings()
         
         # Embed selected tier in the verification URL so frontend can redirect to Stripe after verification
-        tier_param = f"&tier={selected_tier}" if selected_tier else "&tier=beginner"
+        selected_tier = selected_tier if selected_tier in TIER_LIMITS else "beginner"
+        tier_param = f"&tier={selected_tier}"
         verification_url = f"{settings.FRONTEND_URL}/verify-email?token={verification_token}{tier_param}"
         
         # Never log verification_url — it embeds the token, which is a bearer
@@ -356,6 +359,7 @@ class EmailService:
     
     def send_payment_success_email(self, to_email: str, user_name: str, plan_name: str, tier: str) -> bool:
         """Send subscription confirmation email after successful payment"""
+        user_name = html.escape(user_name or "")  # user-supplied: never raw HTML in our emails
         self._ensure_initialized()
         settings = _get_settings()
         dashboard_url = f"{settings.FRONTEND_URL}/dashboard"
@@ -496,6 +500,7 @@ class EmailService:
         The link points to /reset-password?token=<token> on the frontend.
         Token expires in 1 hour (enforced server-side).
         """
+        user_name = html.escape(user_name or "")  # user-supplied: never raw HTML in our emails
         self._ensure_initialized()
         settings = _get_settings()
         reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
@@ -594,6 +599,7 @@ class EmailService:
 
     def send_payment_failed_email(self, to_email: str, user_name: str, plan_name: str) -> bool:
         """Notify user that their payment failed and action is needed"""
+        user_name = html.escape(user_name or "")  # user-supplied: never raw HTML in our emails
         self._ensure_initialized()
         settings = _get_settings()
         billing_url = f"{settings.FRONTEND_URL}/billing"
@@ -646,6 +652,7 @@ class EmailService:
 
     def send_trial_ending_email(self, to_email: str, user_name: str, plan_name: str, days_remaining: int) -> bool:
         """Warn user their trial is ending soon"""
+        user_name = html.escape(user_name or "")  # user-supplied: never raw HTML in our emails
         self._ensure_initialized()
         settings = _get_settings()
         billing_url = f"{settings.FRONTEND_URL}/billing"

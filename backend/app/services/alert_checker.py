@@ -3,13 +3,12 @@ Alert Checker Service — Background price alert monitoring
 
 Hooks into the LivePriceService's price stream to check active alerts
 against real-time prices. When an alert triggers:
-  1. Sends SMS via Twilio (if sms_enabled + phone verified)
-  2. Sends email notification via EmailService
-  3. Sets triggered_at + is_active=False — but ONLY if a notification
+  1. Sends email notification via EmailService
+  2. Sets triggered_at + is_active=False — but ONLY if the notification
      actually reached the user. Alerts are one-shot, so consuming one
      whose notification failed would destroy it permanently; instead it
      stays armed and retries after NOTIFY_RETRY_SECONDS.
-  4. Broadcasts a trigger event over the WebSocket to the user's browser
+  3. Broadcasts a trigger event over the WebSocket to the user's browser
 
 Throttled to one check per ticker per THROTTLE_SECONDS to avoid
 hammering the database on every single trade tick.
@@ -26,6 +25,7 @@ Usage (in main.py startup):
         await live_price_service.start()
 """
 import asyncio
+import html
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Callable, Dict, Optional, Set
@@ -38,7 +38,6 @@ from app.config import get_settings
 from app.db.session import async_session as AsyncSessionLocal
 from app.db.models import User, PriceAlert
 from app.services.email_service import email_service
-from app.services.sms_service import send_alert_sms, build_price_alert_message
 
 settings = get_settings()
 
@@ -189,28 +188,6 @@ class AlertChecker:
         attempted = False
         notified = False
 
-        # SMS
-        if alert.sms_enabled and user.phone_verified and user.phone_number:
-            attempted = True
-            try:
-                message = build_price_alert_message(
-                    ticker=ticker,
-                    current_price=current_price,
-                    target_price=target_price,
-                    condition=condition,
-                )
-                # Twilio call is synchronous — offload so we don't stall the price stream
-                await asyncio.to_thread(
-                    send_alert_sms,
-                    phone_e164=user.phone_number,
-                    ticker=ticker,
-                    message=message,
-                )
-                notified = True
-                print(f"   📱 SMS sent to •••-{user.phone_number[-4:]}")
-            except Exception as e:
-                print(f"   ❌ SMS failed: {e}")
-
         # Email
         if EMAIL_ON_TRIGGER:
             attempted = True
@@ -283,6 +260,7 @@ class AlertChecker:
         if the provider accepted the message — the caller relies on this to
         decide whether the alert may be consumed.
         """
+        full_name = html.escape(full_name or "")  # user-supplied
         direction = "rose above" if condition == "above" else "dropped below"
         direction_emoji = "📈" if condition == "above" else "📉"
         time_str = triggered_at.strftime("%B %d, %Y at %I:%M %p UTC")

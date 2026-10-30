@@ -20,7 +20,6 @@ from app.db.session import get_db
 from app.services.market_data import market_data_service
 from app.services.technical_alert_checker import technical_alert_checker
 from app.core.tier_limits import (
-    can_use_sms_alerts,
     get_tier_limit,
     get_upgrade_tier,
 )
@@ -37,7 +36,6 @@ def _build_response(alert: TechnicalAlert) -> TechnicalAlertResponse:
         config=alert.config,
         last_state=alert.last_state,
         is_active=alert.is_active,
-        sms_enabled=alert.sms_enabled,
         triggered_at=alert.triggered_at,
         trigger_details=alert.trigger_details,
         notes=alert.notes,
@@ -118,20 +116,6 @@ async def create_technical_alert(
             detail=f"Ticker '{alert.ticker.upper()}' not found",
         )
 
-    # ── Validate SMS permissions ──────────────────────────────────────
-    sms_enabled = alert.sms_enabled
-    if sms_enabled:
-        if not can_use_sms_alerts(tier):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="SMS text alerts require a Casual or higher subscription.",
-            )
-        if not current_user.phone_verified:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Phone verification required for text alerts. Please verify your phone first.",
-            )
-
     # ── Seed initial state ────────────────────────────────────────────
     try:
         initial_state = await technical_alert_checker.seed_initial_state(
@@ -150,7 +134,6 @@ async def create_technical_alert(
         alert_type=alert.alert_type,
         config=alert.config,
         last_state=initial_state,
-        sms_enabled=sms_enabled,
         notes=alert.notes,
     )
     db.add(tech_alert)
@@ -196,7 +179,7 @@ async def update_technical_alert(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update a technical alert (toggle active, SMS, notes)."""
+    """Update a technical alert (toggle active, notes)."""
     result = await db.execute(
         select(TechnicalAlert).where(
             TechnicalAlert.id == alert_id,
@@ -211,19 +194,6 @@ async def update_technical_alert(
         alert.is_active = update_data.is_active
     if update_data.notes is not None:
         alert.notes = update_data.notes
-    if update_data.sms_enabled is not None:
-        if update_data.sms_enabled:
-            if not can_use_sms_alerts(current_user.subscription_tier):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="SMS text alerts require a Casual or higher subscription.",
-                )
-            if not current_user.phone_verified:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Phone verification required for text alerts.",
-                )
-        alert.sms_enabled = update_data.sms_enabled
 
     await db.commit()
     await db.refresh(alert)

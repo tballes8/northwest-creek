@@ -1,8 +1,8 @@
 """
 Tier limits and validation
-Updated: Free → Beginner ($10/mo, 14-day trial), Casual gets SMS + 14-day trial
+Updated: Free → Beginner ($10/mo, 14-day trial), Casual gets a 14-day trial
 All tiers now use "beginner" as the base tier (no free tier)
-Sprint 8: added sms_alerts and indicator_alerts limits
+Sprint 8: added indicator_alerts limits (SMS alerts removed 2026-10-30)
 """
 
 TIER_LIMITS = {
@@ -10,7 +10,6 @@ TIER_LIMITS = {
         "watchlist_stocks": 10,
         "portfolio_entries": 10,
         "alerts": 5,
-        "sms_alerts": False,
         "indicator_alerts": 0,
         "saved_screens": 0,
         "stock_reviews": 5,           # per week
@@ -27,7 +26,6 @@ TIER_LIMITS = {
         "watchlist_stocks": 20,
         "portfolio_entries": 20,
         "alerts": 10,
-        "sms_alerts": True,
         "indicator_alerts": 0,
         "saved_screens": 0,
         "stock_reviews": 15,          # per week
@@ -44,7 +42,6 @@ TIER_LIMITS = {
         "watchlist_stocks": 45,
         "portfolio_entries": 45,
         "alerts": 20,
-        "sms_alerts": True,
         "indicator_alerts": 5,
         "saved_screens": 15,
         "stock_reviews": 20,          # per day
@@ -60,7 +57,6 @@ TIER_LIMITS = {
         "watchlist_stocks": 75,
         "portfolio_entries": 75,
         "alerts": 50,
-        "sms_alerts": True,
         "indicator_alerts": 20,
         "saved_screens": 50,
         "stock_reviews": 40,          # per day
@@ -112,9 +108,6 @@ def can_add_alert_entry(tier: str, current_count: int) -> bool:
     return current_count < limit
 
 
-def can_use_sms_alerts(tier: str) -> bool:
-    """Check if user's tier allows SMS text alerts"""
-    return bool(get_tier_limit(tier, "sms_alerts"))
 
 
 def can_use_feature(tier: str, feature: str, current_count: int) -> bool:
@@ -162,7 +155,7 @@ def get_tier_display_name(tier: str) -> str:
 
 TIER_ORDER = ["beginner", "casual", "active", "professional"]
 
-# Counted features only — booleans (sms_alerts, ad_free) and caps that are not
+# Counted features only — booleans (ad_free) and caps that are not
 # per-period (watchlist_stocks, portfolio_entries, alerts, saved_screens,
 # indicator_alerts) are not rate limits and are excluded.
 _METERED = ["stock_reviews", "dcf_valuations", "relval_valuations",

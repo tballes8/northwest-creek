@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timedelta, timezone
 import asyncio
@@ -23,6 +24,8 @@ from app.core.security import (
 )
 from app.db.session import get_db
 from app.api.dependencies import get_current_user_allow_inactive
+from app.core.rate_limit import check_rate_limit, client_ip
+from app.core.tier_limits import TIER_LIMITS
 from app.services.email_service import email_service
 
 logger = logging.getLogger(__name__)
@@ -34,16 +37,54 @@ security = HTTPBearer()
 RESEND_COOLDOWN_SECONDS = 60
 _last_resend_at: dict[str, datetime] = {}
 
+# A name is printed in our emails ("Hi {name}"); mail clients auto-link URLs in
+# plain text, so a "name" carrying a link turns our sender into a phishing relay.
+_NAME_MAX_LENGTH = 100
+_NAME_FORBIDDEN = ("://", "www.", "<", ">")
+
+
+def _normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def _user_by_email(email: str):
+    """Case-insensitive lookup: 'Tyrone@…' and 'tyrone@…' are one account.
+    Oldest first, in case legacy rows already hold case-variant duplicates."""
+    return (
+        select(User)
+        .where(func.lower(User.email) == _normalize_email(email))
+        .order_by(User.created_at)
+        .limit(1)
+    )
+
+
+def _valid_tier(tier: str) -> str:
+    """selected_tier is a raw query param that lands in the verification link."""
+    return tier if tier in TIER_LIMITS else "beginner"
+
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(
     user_data: UserCreate,
+    http_request: Request,
     db: AsyncSession = Depends(get_db),
     selected_tier: str = Query(default="beginner", description="Selected subscription tier")
 ):
     """Register a new user and send verification email"""
+    email = _normalize_email(user_data.email)
+    check_rate_limit(f"register:ip:{client_ip(http_request)}", limit=5, window_seconds=3600)
+    check_rate_limit(f"register:email:{email}", limit=3, window_seconds=3600)
+    selected_tier = _valid_tier(selected_tier)
+
+    full_name = (user_data.full_name or "").strip() or None
+    if full_name and (len(full_name) > _NAME_MAX_LENGTH or any(s in full_name.lower() for s in _NAME_FORBIDDEN)):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Please enter just your name (no links or < >, up to {_NAME_MAX_LENGTH} characters)."
+        )
+
     # Check if email exists
-    result = await db.execute(select(User).where(User.email == user_data.email))
+    result = await db.execute(_user_by_email(email))
     if result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -56,9 +97,9 @@ async def register(
     
     # Create user (not verified yet — starts as beginner, upgraded after Stripe payment)
     user = User(
-        email=user_data.email,
+        email=email,
         password_hash=get_password_hash(user_data.password),
-        full_name=user_data.full_name,
+        full_name=full_name,
         is_verified=False,
         is_active=True,
         verification_token=verification_token,
@@ -66,9 +107,17 @@ async def register(
     )
     
     db.add(user)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Lost a race with another sign-up for the same address (unique lower(email) index)
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
     await db.refresh(user)
-    
+
     # Send verification email (pass selected tier so it's embedded in the verification URL).
     # send_verification_email is synchronous; offload so we don't block the event loop.
     email_sent = await asyncio.to_thread(
@@ -147,6 +196,7 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
 @router.post("/resend-verification")
 async def resend_verification(
     request: ResendVerificationRequest,
+    http_request: Request,
     db: AsyncSession = Depends(get_db),
     selected_tier: str = Query(default="beginner", description="Selected subscription tier")
 ):
@@ -157,10 +207,12 @@ async def resend_verification(
     never arrived — without it they cannot log in (403), cannot re-register
     (400 "Email already registered"), and password reset does not verify them.
     """
-    email = request.email
+    email = _normalize_email(request.email)
+    check_rate_limit(f"resend:ip:{client_ip(http_request)}", limit=10, window_seconds=3600)
+    selected_tier = _valid_tier(selected_tier)
 
     # Find user
-    result = await db.execute(select(User).where(User.email == email))
+    result = await db.execute(_user_by_email(email))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -219,10 +271,14 @@ async def resend_verification(
 
 
 @router.post("/login", response_model=Token)
-async def login(credentials: UserLogin, db: AsyncSession = Depends(get_db)):
+async def login(credentials: UserLogin, http_request: Request, db: AsyncSession = Depends(get_db)):
     """Login and get access token"""
+    # Before the password check: limits credential stuffing and the bcrypt work it costs
+    check_rate_limit(f"login:ip:{client_ip(http_request)}", limit=20, window_seconds=600)
+    check_rate_limit(f"login:email:{_normalize_email(credentials.email)}", limit=10, window_seconds=600)
+
     # Find user
-    result = await db.execute(select(User).where(User.email == credentials.email))
+    result = await db.execute(_user_by_email(credentials.email))
     user = result.scalar_one_or_none()
     
     if not user or not verify_password(credentials.password, user.password_hash):
@@ -263,13 +319,17 @@ async def read_current_user(
 @router.post("/forgot-password")
 async def forgot_password(
     request: ForgotPasswordRequest,
+    http_request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """
     Request a password reset link.
     Returns an error if the email is not registered.
     """
-    result = await db.execute(select(User).where(User.email == request.email))
+    check_rate_limit(f"forgot:ip:{client_ip(http_request)}", limit=5, window_seconds=3600)
+    check_rate_limit(f"forgot:email:{_normalize_email(request.email)}", limit=3, window_seconds=3600)
+
+    result = await db.execute(_user_by_email(request.email))
     user = result.scalar_one_or_none()
 
     if not user:

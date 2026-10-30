@@ -33,7 +33,7 @@ API docs: `http://localhost:8000/api/v1/docs`
 
 ## Architecture
 
-**Stack:** React 19 + TypeScript → FastAPI (async) → PostgreSQL (asyncpg). External: FMP (market data), Stripe (payments), Postmark (email), Twilio (SMS), Anthropic (AI).
+**Stack:** React 19 + TypeScript → FastAPI (async) → PostgreSQL (asyncpg). External: FMP (market data), Stripe (payments), Postmark (email), Anthropic (AI). No SMS: Twilio and the phone/OTP flow were removed 2026-10-30.
 
 ### Backend (`backend/app/`)
 
@@ -46,24 +46,23 @@ API docs: `http://localhost:8000/api/v1/docs`
 | `stocks.py` | `/stocks` | quotes, historical, news, daily-snapshot, AI analysis |
 | `watchlist.py` | `/watchlist` | CRUD, tier-gated count |
 | `portfolio.py` | `/portfolio` | CRUD |
-| `alerts.py` | `/alerts` | price alerts, SMS support |
+| `alerts.py` | `/alerts` | price alerts (email) |
 | `technical_alerts.py` | `/technical-alerts` | JSONB config per alert type |
 | `technical_analysis.py` | `/technical-analysis` | indicator calculations, ATR risk levels |
 | `dcf_valuation.py` | `/dcf` | `/suggestions/{ticker}` + `/calculate/{ticker}` |
 | `financials.py` | `/financials` | full company financials payload |
 | `stripe_payments.py` | `/stripe` | subscription create/cancel/status |
 | `intraday.py` | `/intraday` | bars + MA overlay |
-| `phone.py` | `/phone` | OTP verification for SMS alerts |
 
 **Auth** (`core/security.py`): HS256 JWT, 90-min expiry. `get_current_user()` FastAPI dependency validates token and returns `User`. Dependency used as `Depends(get_current_user)` in protected routes.
 
-**Tier gating** (`core/tier_limits.py`): Four tiers — `beginner`, `casual`, `active`, `professional`. Limits defined per-tier for watchlist size, alert count, weekly DCF/analysis usage, SMS access. Usage tracked in `FeatureUsage` table (resets daily or weekly). Check with `can_use_feature()` / `can_add_watchlist_stock()` before mutating.
+**Tier gating** (`core/tier_limits.py`): Four tiers — `beginner`, `casual`, `active`, `professional`. Limits defined per-tier for watchlist size, alert count, weekly DCF/analysis usage. Usage tracked in `FeatureUsage` table (resets daily or weekly). Check with `can_use_feature()` / `can_add_watchlist_stock()` before mutating.
 
 **Database** (`db/`): All models use UUID PKs and `TIMESTAMPTZ`. Session via `get_db()` dependency (async). Alembic migrations auto-run at startup through `migration_runner.py` — `alembic upgrade head` waits for DB availability first.
 
 **Key models** (`db/models.py`):
-- `User` — tier, stripe_customer_id, phone verification fields
-- `PriceAlert` — condition (above|below), sms_enabled, triggered_at
+- `User` — tier, stripe_customer_id, is_active (False = subscription lapsed; billing routes still reach it via `get_current_user_allow_inactive`)
+- `PriceAlert` — condition (above|below), triggered_at
 - `TechnicalAlert` — config JSONB, last_state JSONB
 - `FeatureUsage` — per-user/per-feature daily or weekly counter
 - `DailyStockSnapshot` — ticker, open/close/change_pct, snapshot_date, asset_type (CS|ETF)
@@ -73,7 +72,7 @@ API docs: `http://localhost:8000/api/v1/docs`
 - `market_data.py` — `_fmp_get()` is the one FMP request path for everything except the universe build and the daily-snapshot cron. It retries a 429 three times with backoff (honouring `Retry-After`), then raises. **A failed fetch is skipped, never stored**: `get_dividends` flags one with `fetch_failed` so the screener's dividend pass leaves the row untouched rather than writing "none" (a 2026-10-25 throttling burst had rewritten 2,186 payers as non-payers that way). Pass summaries print skipped/throttled counts.
 - `financials_service.py` — assembles the full financials payload; derives DCF suggestions including YoY revenue growth (date-based matching, not index-based) and a 20% conservative haircut on the suggested growth rate.
 - `email_service.py` — **the single outbound email path.** Every email (verification, password reset, payment, alerts) goes through `EmailService.send_email()`, which posts to Postmark and returns `bool`. It is synchronous by design: async callers wrap it in `asyncio.to_thread`. Never construct a provider client elsewhere — route new email through here so there stays one place to swap providers.
-- `alert_checker.py` — subscribes to the WebSocket price stream; on each tick, checks `PriceAlert` rows and triggers email + SMS when crossed. **Alerts are one-shot**, so `triggered_at`/`is_active=False` is only set once a notification actually reached the user; if every channel fails the alert stays armed and retries after `NOTIFY_RETRY_SECONDS`. `technical_alert_checker.py` does the same by holding `last_state` at its pre-transition value.
+- `alert_checker.py` — subscribes to the WebSocket price stream; on each tick, checks `PriceAlert` rows and triggers an email when crossed. **Alerts are one-shot**, so `triggered_at`/`is_active=False` is only set once a notification actually reached the user; if every channel fails the alert stays armed and retries after `NOTIFY_RETRY_SECONDS`. `technical_alert_checker.py` does the same by holding `last_state` at its pre-transition value.
 - `websocket_service.py` — manages per-ticker subscriber lists; broadcasts price ticks to connected frontend clients.
 - `technical_indicators.py` — hand-rolled pandas/numpy calculations (RSI, MACD, Bollinger Bands, etc.). **No TA-Lib** — there is no such dependency; don't reach for it. CPU-bound; called via `/technical-analysis/analyze/{ticker}`.
   `calculate_atr_risk_levels` is the chandelier exit (22-bar high − 3×ATR, and the short mirror) backing the ATR stop calculator. It is **entry-independent by design**: everything that depends on a user-supplied entry price (fixed stop, R-multiples, share count) lives in `components/AtrRiskLevels.tsx` so it recomputes on keystroke without a refetch and the formula exists in exactly one language. Don't add a server-side entry price. `lookback` is never shrunk to fit a short series — too few bars returns `None` and the UI says why.
@@ -132,7 +131,6 @@ FROM_NAME=NWC-Analytics
 AUDIT_ALERT_EMAIL=         # weekly FMP field-audit recipient; falls back to SUPPORT_EMAIL
 SEC_USER_AGENT=            # SEC requires app name + real contact email, else 403.
                            # Defaults to "NWC-Analytics/1.0 (support@nwc-analytics.com)"
-TWILIO_ACCOUNT_SID= / AUTH_TOKEN / FROM_NUMBER
 FRONTEND_URL=https://nwc-analytics.com   # no trailing slash; override locally if running a dev frontend
 ACCESS_TOKEN_EXPIRE_MINUTES=90
 ```

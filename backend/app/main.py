@@ -6,7 +6,7 @@ from app.config import get_settings
 from app.api.v1.endpoints import (
     alerts, auth, dcf_valuation, indicators, portfolio,
     stocks, watchlist, technical_analysis, stripe_payments,
-    intraday, live_prices, financials, phone, technical_alerts,
+    intraday, live_prices, financials, technical_alerts,
     portfolio_analysis, stock_analysis, screener, market,
     sector_rotation, relative_valuation,
 )
@@ -174,7 +174,6 @@ app.include_router(intraday.router, prefix="/api/v1/intraday", tags=["Intraday"]
 app.include_router(live_prices.router, prefix="/api/v1/live-prices", tags=["Live Prices"])
 app.include_router(content_router, prefix="/api/v1/content", tags=["content"])
 app.include_router(financials.router, prefix="/api/v1/financials", tags=["financials"])
-app.include_router(phone.router, prefix=f"/api/{settings.API_VERSION}/phone", tags=["Phone"])
 app.include_router(waitlist_router, prefix="/api/v1/waitlist", tags=["waitlist"])
 app.include_router(technical_alerts.router, prefix="/api/v1/technical-alerts", tags=["Technical Alerts"])
 app.include_router(portfolio_analysis.router, prefix="/api/v1/portfolio", tags=["Portfolio Analysis"])

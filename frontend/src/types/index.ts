@@ -12,8 +12,6 @@ export interface User {
   created_at: string;
   updated_at: string | null;
   is_admin?: boolean;
-  phone_verified?: boolean;
-  phone_last_four?: string | null;
 }
 
 export interface WatchlistItem {
@@ -77,7 +75,6 @@ export interface Alert {
   condition: 'above' | 'below';
   target_price: number;
   is_active: boolean;
-  sms_enabled: boolean;
   triggered_at?: string;
   created_at: string;
 }
