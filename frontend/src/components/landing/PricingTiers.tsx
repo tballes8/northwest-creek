@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { PRICING_TIERS } from '../../data/pricingTiers';
+import { PRICING_TIERS, TRIAL_PLAN_NAMES } from '../../data/pricingTiers';
 
 const Check = () => (
   <svg
@@ -20,7 +20,7 @@ const PricingTiers: React.FC = () => {
         Simple, Transparent Pricing
       </h2>
       <p className="text-center text-gray-600 dark:text-gray-400 mb-16">
-        Every plan starts with a 14-day free trial — no credit card required
+        {TRIAL_PLAN_NAMES} start with a 14-day free trial. Card required; cancel before the trial ends and you won't be charged.
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-25xl mx-auto">

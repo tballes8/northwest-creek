@@ -11,7 +11,7 @@ import logging
 import requests
 
 from app.config import get_settings
-from app.core.tier_limits import TIER_LIMITS
+from app.core.tier_limits import TIER_LIMITS, get_trial_days
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +166,15 @@ class EmailService:
             "active": "per day",
             "professional": "per day"
         }.get(selected_tier, "total")
-        
+
+        # Only trial plans (Beginner, Casual) may promise "not charged" — an Active
+        # or Professional signup is billed as soon as they complete payment.
+        trial_days = get_trial_days(selected_tier)
+        if trial_days:
+            billing_note = f"You will not be charged if you cancel before your {trial_days}-day free trial ends."
+        else:
+            billing_note = f"Your {tier_display} plan is billed when you complete payment. There is no free trial on this plan."
+
         features_html = f'<li>✅ Track up to {limits["watchlist_stocks"]} stocks in your watchlist</li>\n'
         features_html += f'                            <li>✅ Monitor {limits["portfolio_entries"]} portfolio positions</li>\n'
         features_html += f'                            <li>✅ {limits["stock_reviews"]} stock reviews {review_period}</li>\n'
@@ -310,7 +318,7 @@ class EmailService:
                     
                     <div class="warning">
                         <p><strong>⏰ This link will expire in 24 hours.</strong></p>
-                        <p style="margin-top: 8px;">After verifying your email, you'll be asked to enter a payment method to activate your account. <strong>You will not be charged if you cancel before your 14-day free trial ends.</strong></p>
+                        <p style="margin-top: 8px;">After verifying your email, you'll be asked to enter a payment method to activate your account. <strong>{billing_note}</strong></p>
                     </div>
                     
                     <div class="features">

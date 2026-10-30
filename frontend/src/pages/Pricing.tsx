@@ -4,7 +4,7 @@ import { authAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import BackToTop from '../components/BackToTop';
-import { PRICING_TIERS } from '../data/pricingTiers';
+import { PRICING_TIERS, TRIAL_PLAN_NAMES } from '../data/pricingTiers';
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -133,7 +133,7 @@ const Pricing: React.FC = () => {
           Choose Your Plan
         </h1>
         <p className="text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
-          Start with a 14-day free trial and upgrade anytime as your needs grow.
+          {TRIAL_PLAN_NAMES} start with a 14-day free trial. Upgrade anytime as your needs grow.
         </p>
         {user && (
           <div className="mt-4 inline-flex items-center px-4 py-2 bg-primary-50 dark:bg-primary-900/30 rounded-lg border border-primary-200 dark:border-primary-800">

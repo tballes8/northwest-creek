@@ -120,6 +120,11 @@ export const PRICING_TIERS: PricingTier[] = [
 export const getTierBySlug = (slug: TierSlug): PricingTier =>
   PRICING_TIERS.find((t) => t.slug === slug) ?? PRICING_TIERS[0];
 
+/** "Beginner and Casual" — the plans with a free trial (backend: TRIAL_TIERS in stripe_payments.py). */
+export const TRIAL_PLAN_NAMES = PRICING_TIERS.filter((t) => t.hasTrial)
+  .map((t) => t.shortName)
+  .join(' and ');
+
 /**
  * Price label and full feature list for compact tier cards (upgrade prompts,
  * account page). Those screens used to keep their own copies, and every copy

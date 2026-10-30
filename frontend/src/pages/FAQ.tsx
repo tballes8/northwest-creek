@@ -56,7 +56,7 @@ const FAQ: React.FC = () => {
       },
       {
         question: "Do you offer refunds?",
-        answer: "We offer a 30-day money-back guarantee for all paid subscriptions. If you're not satisfied, contact our support team within 30 days of your purchase."
+        answer: "No. Subscription fees are non-refundable, including partial billing periods. You can cancel anytime from Account Settings, and your plan stays active until the end of the period you've paid for. If you believe you were charged in error, contact support@nwc-analytics.com and we'll review it."
       }
     ],
     tutorials: [
