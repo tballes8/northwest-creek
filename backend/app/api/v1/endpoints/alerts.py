@@ -17,6 +17,8 @@ from app.schemas.alert import (
 from app.api.dependencies import get_current_user
 from app.db.session import get_db
 from app.services.market_data import market_data_service
+from app.services.alert_checker import alert_checker
+from app.services.websocket_service import live_price_service
 from app.core.tier_limits import get_tier_limit, get_upgrade_tier
 
 router = APIRouter()
@@ -107,6 +109,9 @@ async def create_alert(
     db.add(price_alert)
     await db.commit()
     await db.refresh(price_alert)
+
+    # Poll this ticker from now on; the periodic refresh would take up to 5 minutes
+    await alert_checker.subscribe_new_alert_ticker(price_alert.ticker, live_price_service)
     
     # Calculate distance
     distance = alert.target_price - current_price if alert.condition == "above" else current_price - alert.target_price
@@ -308,6 +313,10 @@ async def update_alert(
     
     await db.commit()
     await db.refresh(alert)
+
+    # A resumed alert's ticker may not be on the price feed any more
+    if alert.is_active and alert.triggered_at is None:
+        await alert_checker.subscribe_new_alert_ticker(alert.ticker, live_price_service)
     
     # Get current price
     try:

@@ -125,15 +125,21 @@ def get_upgrade_tier(current_tier: str) -> str | None:
     return upgrade_path.get(current_tier)
 
 
-def get_tier_display_name(tier: str) -> str:
-    """Get human-readable tier name"""
-    names = {
-        "beginner": "Beginner",
-        "casual": "Casual Retail Investor",
-        "active": "Active Retail Investor",
-        "professional": "Professional Investor",
-    }
-    return names.get(tier, "Beginner")
+# Plan names as customers see them: the same as `name` in the frontend's
+# data/pricingTiers.ts. Every backend surface (emails, Stripe metadata, messages)
+# uses get_plan_name(); change both files together.
+PLAN_NAMES = {
+    "beginner": "Beginner",
+    "casual": "Casual Investor",
+    "active": "Active Investor",
+    "professional": "Professional",
+}
+
+
+def get_plan_name(tier: str | None) -> str:
+    """Customer-facing plan name for a tier slug. Prices are not kept here: the
+    price charged is the Stripe price's, so emails take it from the subscription."""
+    return PLAN_NAMES.get(tier, "NWC-Analytics")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -193,6 +199,7 @@ def _selftest() -> int:
     assert get_review_period("beginner") == "week" and get_review_period("active") == "day"
     assert get_upgrade_tier("professional") is None
     assert get_upgrade_tier("beginner") == "casual"
+    assert set(PLAN_NAMES) == set(TIER_LIMITS), "every tier needs a plan name"
 
     print("tier_limits selftest: OK")
     for feature in _METERED:

@@ -94,7 +94,7 @@ const PrivacyPolicy: React.FC = () => {
             <ul className={ul}>
               <li><strong className={strong}>Account:</strong> your name, email address and password. We store the password only as a one-way bcrypt hash, so we can't read it.</li>
               <li><strong className={strong}>What you enter in the app:</strong> portfolio positions and transactions (tickers, share quantities, prices, dates and any notes), watchlists, price and technical alerts, and saved screener settings.</li>
-              <li><strong className={strong}>Waitlist:</strong> if you join our waitlist, your email address, how you reached us (the referring link or campaign tag) and your IP address, which we keep to prevent abuse.</li>
+              <li><strong className={strong}>Waitlist:</strong> if you joined our pre-launch waitlist (now closed), your email address, how you reached us (the referring link or campaign tag) and your IP address, which we keep to prevent abuse.</li>
               <li><strong className={strong}>Support:</strong> anything you send us when you email us.</li>
             </ul>
 

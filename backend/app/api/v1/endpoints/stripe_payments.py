@@ -29,10 +29,11 @@ from app.core.entitlements import (
     ACCESS_STATUSES, FIX_PAYMENT_STATUSES, LIVE_STATUSES, is_demo, is_exempt,
 )
 from app.core.rate_limit import within_rate_limit
+from app.core.tier_limits import get_plan_name
 from app.services.email_service import email_service
 from app.services.subscription_sync import (
     find_customer_id, has_had_trial, list_subscriptions, price_id_of,
-    stripe_call, sync_customer, sync_user,
+    stripe_call, sync_customer, sync_user, tier_for_price,
 )
 
 logger = logging.getLogger(__name__)
@@ -97,16 +98,20 @@ def get_price_id_for_tier(tier: str) -> str:
 
 
 def get_plan_name_for_price(price_id: Optional[str]) -> str:
-    """Get plan name from price ID"""
-    if price_id == getattr(settings, 'STRIPE_BEGINNER_PRICE_ID', None):
-        return "Beginner"
-    elif price_id == settings.STRIPE_CASUAL_PRICE_ID:
-        return "Casual Retail Investor"
-    elif price_id == settings.STRIPE_ACTIVE_PRICE_ID:
-        return "Active Retail Investor"
-    elif price_id == settings.STRIPE_PROFESSIONAL_PRICE_ID:
-        return "Professional Investor"
-    return "Unknown"
+    """Plan name for one of the four plan prices (core/tier_limits.PLAN_NAMES)."""
+    return get_plan_name(tier_for_price(price_id))
+
+
+def _price_label(sub) -> Optional[str]:
+    """'$40/month' from the subscription's own Stripe price: what is actually
+    charged. None if the subscription or its amount isn't there, or not in USD."""
+    items = ((sub or {}).get('items') or {}).get('data') or []
+    price = items[0].get('price') if items else None
+    if not price or price.get('unit_amount') is None or (price.get('currency') or 'usd') != 'usd':
+        return None
+    dollars = f"${price['unit_amount'] / 100:,.2f}".removesuffix(".00")
+    interval = (price.get('recurring') or {}).get('interval') or 'month'
+    return f"{dollars}/{interval}"
 
 
 # Tiers that get a 14-day free trial
@@ -522,8 +527,8 @@ async def _on_invoice_paid(invoice, result) -> None:
         email_service.send_payment_success_email,
         to_email=user.email,
         user_name=user.full_name or user.email,
-        plan_name=get_plan_name_for_price(price_id_of(sub) if sub else None),
         tier=user.subscription_tier,
+        price_label=_price_label(sub),
     )
 
 

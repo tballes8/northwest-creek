@@ -12,7 +12,7 @@ import logging
 import requests
 
 from app.config import get_settings
-from app.core.tier_limits import TIER_LIMITS, get_review_period, get_trial_days
+from app.core.tier_limits import TIER_LIMITS, get_plan_name, get_review_period, get_trial_days
 
 logger = logging.getLogger(__name__)
 
@@ -156,12 +156,7 @@ class EmailService:
         
         # Build dynamic features list from TIER_LIMITS
         limits = TIER_LIMITS.get(selected_tier, TIER_LIMITS.get("beginner", {}))
-        tier_display = {
-            "beginner": "Beginner",
-            "casual": "Casual Investor",
-            "active": "Active Investor",
-            "professional": "Professional"
-        }.get(selected_tier, "Beginner")
+        tier_display = get_plan_name(selected_tier)
         
         review_period = f"per {get_review_period(selected_tier)}"
 
@@ -351,12 +346,17 @@ class EmailService:
 
     # ---- Payment Success / Subscription Confirmation Email ----
     
-    def send_payment_success_email(self, to_email: str, user_name: str, plan_name: str, tier: str) -> bool:
-        """Send subscription confirmation email after successful payment"""
+    def send_payment_success_email(self, to_email: str, user_name: str, tier: str, price_label: str | None = None) -> bool:
+        """Send subscription confirmation email after successful payment.
+
+        price_label ("$40/month") comes from the Stripe subscription's own price,
+        so the email states what is actually charged; without it the amount is left out.
+        """
         user_name = html.escape(user_name or "")  # user-supplied: never raw HTML in our emails
         self._ensure_initialized()
         settings = _get_settings()
         dashboard_url = f"{settings.FRONTEND_URL}/dashboard"
+        plan_name = get_plan_name(tier)
         
         logger.info("Sending payment success email to %s (plan=%s)", to_email, plan_name)
         
@@ -364,7 +364,11 @@ class EmailService:
         limits = TIER_LIMITS.get(tier, TIER_LIMITS.get("casual", {}))
         review_period = f"per {get_review_period(tier)}"
         
-        price = {"beginner": "$10", "casual": "$20", "active": "$40", "professional": "$50"}.get(tier, "")
+        price_note = f" ({price_label})" if price_label else ""
+        amount_html = (
+            f'<p style="margin: 4px 0; font-size: 14px;"><strong>Amount:</strong> {price_label}</p>'
+            if price_label else ""
+        )
         
         features_html = f'<li>✅ Track up to {limits.get("watchlist_stocks", 20)} stocks in your watchlist</li>\n'
         features_html += f'                            <li>✅ Monitor {limits.get("portfolio_entries", 20)} portfolio positions</li>\n'
@@ -438,7 +442,7 @@ class EmailService:
                         <p style="margin-top: 8px;">You've been upgraded to the <span class="plan-badge">{plan_name}</span> plan.</p>
                     </div>
                     
-                    <p>Thank you for subscribing to NWC-Analytics! Your {plan_name} subscription ({price}/month) is now active and all premium features have been unlocked.</p>
+                    <p>Thank you for subscribing to NWC-Analytics! Your {plan_name} subscription{price_note} is now active and all premium features have been unlocked.</p>
                     
                     <div class="features">
                         <p><strong>Your {plan_name} plan includes:</strong></p>
@@ -454,7 +458,7 @@ class EmailService:
                     <div class="details-box">
                         <p style="margin: 0 0 8px 0; font-weight: 600; color: #1f2937;">Subscription Details</p>
                         <p style="margin: 4px 0; font-size: 14px;"><strong>Plan:</strong> {plan_name}</p>
-                        <p style="margin: 4px 0; font-size: 14px;"><strong>Amount:</strong> {price}/month</p>
+                        {amount_html}
                         <p style="margin: 4px 0; font-size: 14px;"><strong>Billing:</strong> Monthly, auto-renewal</p>
                         <p style="margin: 8px 0 0 0; font-size: 13px; color: #6b7280;">
                             You can manage your subscription anytime from your account settings. Cancel anytime — no questions asked.

@@ -21,8 +21,10 @@ Usage (in main.py startup):
     async def startup():
         alert_checker.set_broadcast_fn(live_price_service.broadcast_to_clients)
         live_price_service.on_price_update = alert_checker.on_price_update
-        await alert_checker.load_alert_tickers(live_price_service)
+        await alert_checker.refresh_alert_tickers(live_price_service)
         await live_price_service.start()
+
+    and refresh_alert_tickers again every few minutes (main.py's scheduler).
 """
 import asyncio
 import html
@@ -55,7 +57,8 @@ class AlertChecker:
 
     Integration points:
     - on_price_update(ticker, price)  — called by websocket_service on each trade
-    - load_alert_tickers(service)     — subscribes the WS to all alert tickers at startup
+    - refresh_alert_tickers(service)  — sets the feed's alert tickers from the DB (startup + every 5 min)
+    - subscribe_new_alert_ticker(...) — polls a just-created or resumed alert's ticker at once
     - set_broadcast_fn(fn)            — sets the callback for WebSocket push notifications
     """
 
@@ -337,12 +340,16 @@ class AlertChecker:
             html_content=html_body,
         )
 
-    # ── Startup: subscribe to alert tickers ──────────────────
+    # ── The price feed's alert tickers, from the database ────
 
-    async def load_alert_tickers(self, price_service):
+    async def refresh_alert_tickers(self, price_service):
         """
-        At app startup, query all active alert tickers and subscribe
-        the WebSocket to them so we get price updates.
+        Make the price feed's alert tickers exactly the tickers of armed alerts
+        whose owners have access to the app. The database is the truth: this runs
+        at startup and every 5 minutes (main.py), so the feed picks up anything a
+        request didn't tell it about (a returning subscriber's alerts, an alert
+        created on another instance) and stops polling tickers that no armed
+        alert needs any more.
         """
         try:
             async with AsyncSessionLocal() as db:
@@ -357,22 +364,25 @@ class AlertChecker:
                     .distinct()
                 )
                 tickers = {row[0] for row in result.all()}
-
-            if tickers:
-                print(f"🔔 AlertChecker: subscribing to {len(tickers)} alert tickers: {', '.join(sorted(tickers))}")
-                await price_service.subscribe_to_tickers(tickers)
-            else:
-                print("🔔 AlertChecker: no active alerts — no tickers to subscribe")
-
         except Exception as e:
-            print(f"❌ AlertChecker startup error: {e}")
+            print(f"❌ AlertChecker: could not load alert tickers: {e}")
+            return
 
-    # ── On-demand: subscribe when a new alert is created ─────
+        current = set(price_service.persistent_tickers)
+        added, removed = tickers - current, current - tickers
+        if added:
+            await price_service.subscribe_to_tickers(added)
+        if removed:
+            await price_service.unsubscribe_from_tickers(removed)
+        if added or removed:
+            print(f"🔔 AlertChecker: {len(tickers)} alert tickers (+{len(added)}, -{len(removed)})")
+
+    # ── On-demand: a new or resumed alert ────────────────────
 
     async def subscribe_new_alert_ticker(self, ticker: str, price_service):
         """
-        Called when a user creates a new alert for a ticker we're not
-        already watching. Adds it to the WebSocket subscription.
+        Called when a user creates or resumes an alert, so its ticker is polled
+        now rather than at the next refresh_alert_tickers.
         """
         if ticker not in price_service.persistent_tickers:
             await price_service.subscribe_to_tickers({ticker})

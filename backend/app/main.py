@@ -11,7 +11,6 @@ from app.api.v1.endpoints import (
     sector_rotation, relative_valuation,
 )
 from app.api.v1.endpoints.content import router as content_router
-from app.api.v1.endpoints.waitlist import router as waitlist_router
 from app.api.v1.endpoints.sitemap import router as sitemap_router
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -48,7 +47,7 @@ async def lifespan(app: FastAPI):
     # Wire alert checker into price stream
     alert_checker.set_broadcast_fn(live_price_service.broadcast_to_clients)
     live_price_service.on_price_update = alert_checker.on_price_update
-    await alert_checker.load_alert_tickers(live_price_service)
+    await alert_checker.refresh_alert_tickers(live_price_service)
     await live_price_service.start()
 
     # Stock screener: refresh snapshots every 15 min (job self-throttles off-hours)
@@ -85,6 +84,20 @@ async def lifespan(app: FastAPI):
         append_today_closes,
         CronTrigger(hour=6, minute=0, timezone=timezone.utc),
         id="sector_rotation_append",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
+    # Price-alert tickers on the live price feed, re-read from the database so the
+    # feed follows resumed alerts, returning subscribers and finished alerts
+    # without a restart. Creating or resuming an alert also subscribes at once.
+    _scheduler.add_job(
+        alert_checker.refresh_alert_tickers,
+        "interval",
+        minutes=5,
+        args=[live_price_service],
+        id="alert_ticker_refresh",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
@@ -188,7 +201,6 @@ app.include_router(intraday.router, prefix="/api/v1/intraday", tags=["Intraday"]
 app.include_router(live_prices.router, prefix="/api/v1/live-prices", tags=["Live Prices"])
 app.include_router(content_router, prefix="/api/v1/content", tags=["content"])
 app.include_router(financials.router, prefix="/api/v1/financials", tags=["financials"])
-app.include_router(waitlist_router, prefix="/api/v1/waitlist", tags=["waitlist"])
 app.include_router(technical_alerts.router, prefix="/api/v1/technical-alerts", tags=["Technical Alerts"])
 app.include_router(portfolio_analysis.router, prefix="/api/v1/portfolio", tags=["Portfolio Analysis"])
 app.include_router(stock_analysis.router, prefix="/api/v1", tags=["Stock Analysis"])

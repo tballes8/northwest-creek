@@ -22,13 +22,13 @@ import BlogList from './pages/BlogList';
 import BlogPost from './pages/BlogPost';
 import AdminContent from './pages/AdminContent';
 import ResetPassword from './pages/ResetPassword';
-import WaitlistLanding from './pages/WaitlistLanding';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsConditions from './pages/TermsConditions';
 import FAQ from './pages/FAQ';
 import OptionsCalculator from './pages/OptionsCalculator';
 import SectorHeatmap from './pages/SectorHeatmap';
 import Billing from './pages/Billing';
+import NotFound from './pages/NotFound';
 
 
 const Payment = React.lazy(() => import('./pages/Payment'));
@@ -110,7 +110,6 @@ function App() {
         <Suspense fallback={<div className="min-h-screen bg-gray-900 flex items-center justify-center"><div className="text-gray-400">Loading...</div></div>}>
           <Routes>
             <Route path="/" element={<Landing />} />
-            <Route path="/waitlist" element={<WaitlistLanding />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/pricing" element={<Pricing />} />
@@ -137,6 +136,8 @@ function App() {
             <Route path="/faq" element={<FAQ />} />
             <Route path="/options-calculator" element={<SubscriptionGuard><OptionsCalculator /></SubscriptionGuard>} />
             <Route path="/sector-heatmap" element={<SubscriptionGuard><SectorHeatmap /></SubscriptionGuard>} />
+            {/* Last: any other URL. Retired URLs still linked from outside are 301s in server.js. */}
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
       </LivePriceProvider>
