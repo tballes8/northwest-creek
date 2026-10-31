@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { intradayAPI } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { formatDateOnly } from '../utils/dates';
 
 interface IntradaySnapshot {
   ticker: string;
@@ -90,7 +91,7 @@ const fmtNow = () =>
   new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
 const fmtDate = (d: string) => {
-  try { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+  try { return formatDateOnly(d); }
   catch { return d; }
 };
 

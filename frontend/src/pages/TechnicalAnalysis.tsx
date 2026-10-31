@@ -23,6 +23,7 @@ import {
 } from 'chart.js';
 import { Line, Chart } from 'react-chartjs-2';
 import { AreaChart, Area, Line as RLine, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend as RLegend, ResponsiveContainer } from 'recharts';
+import { formatDateOnly } from '../utils/dates';
 
 
 // Register Chart.js components
@@ -214,7 +215,7 @@ const TrueVwapModal: React.FC<{ ticker: string; onClose: () => void }> = ({ tick
   const fmt2 = (v: number | null) => v == null ? 'N/A' : `$${v.toFixed(2)}`;
 
   const dateLabel = barsData?.data_date
-    ? new Date(barsData.data_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    ? formatDateOnly(barsData.data_date)
     : '';
 
   return (

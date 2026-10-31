@@ -24,6 +24,13 @@ const SCREEN_PRESETS: { id: WatchlistScreenPreset; label: string; hint: string }
   { id: 'reversal-candidates', label: 'Reversal Candidates', hint: 'RSI below 30 with MACD turning bullish' },
 ];
 
+// "vs target" is derived from the price the row displays, so it has to move
+// with the live price rather than keep the value the page loaded with.
+const vsTarget = (target: number | null | undefined, price: number) =>
+  target && target > 0
+    ? { price_vs_target: price - target, price_vs_target_percent: ((price - target) / target) * 100 }
+    : {};
+
 const Watchlist: React.FC = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
@@ -111,13 +118,14 @@ const Watchlist: React.FC = () => {
               ...item,
               price: livePrice.price,
               change: change,
-              change_percent: changePercent
+              change_percent: changePercent,
+              ...vsTarget(item.target_price, livePrice.price),
             };
           }
 
           // No previous close available — update the price but keep the last
           // known day change rather than overwriting it with a bad value.
-          return { ...item, price: livePrice.price };
+          return { ...item, price: livePrice.price, ...vsTarget(item.target_price, livePrice.price) };
         }
 
         return item;
@@ -163,6 +171,7 @@ const Watchlist: React.FC = () => {
             change: fresh.change ?? item.change,
             change_percent: fresh.change_percent ?? item.change_percent,
             previous_close: fresh.previous_close ?? item.previous_close,
+            ...(freshPrice ? vsTarget(item.target_price, freshPrice) : {}),
           };
         }));
       } catch (err) {
@@ -213,6 +222,7 @@ const Watchlist: React.FC = () => {
                 change: fresh.change ?? item.change,
                 change_percent: fresh.change_percent ?? item.change_percent,
                 previous_close: fresh.previous_close ?? item.previous_close,
+                ...vsTarget(item.target_price, fresh.price),
               };
             }
             return item;

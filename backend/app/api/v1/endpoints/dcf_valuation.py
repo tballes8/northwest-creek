@@ -98,9 +98,16 @@ def _financials_unavailable(ticker: str) -> HTTPException:
     )
 
 
-def _manual_fcf_response(ticker, company_name, security_type, current_price, entity_trust) -> Dict[str, Any]:
-    """No valuation without a cash flow from the filings or the user. Returned (not
-    raised) so the page can open the manual FCF input; no DCF usage is recorded."""
+def _manual_fcf_response(
+    ticker, company_name, security_type, current_price, entity_trust, negative_fcf=None,
+) -> Dict[str, Any]:
+    """No valuation without a usable cash flow from the filings or the user. Returned
+    (not raised) so the page can open the manual FCF input; no DCF usage is recorded.
+
+    `negative_fcf` is the current FCF when it is <= 0: a DCF on a negative cash flow
+    projects a negative business and says nothing about value (it used to read as a
+    Strong Sell). Then `unavailable_reason` is "negative_fcf" and the page shows why
+    instead of asking for an input; requires_manual_fcf stays False."""
     return {
         "ticker": ticker,
         "company_name": company_name,
@@ -114,7 +121,9 @@ def _manual_fcf_response(ticker, company_name, security_type, current_price, ent
         "reverse_dcf": None,
         "fmp_benchmark": None,
         "entity_trust": entity_trust,
-        "requires_manual_fcf": True,
+        "requires_manual_fcf": negative_fcf is None,
+        "unavailable_reason": None if negative_fcf is None else "negative_fcf",
+        "current_fcf": negative_fcf,
     }
 
 
@@ -762,6 +771,14 @@ async def calculate_dcf(
         if shares_override is not None:
             shares_outstanding = shares_override
             shares_source = "user_supplied"
+
+        # A DCF on a cash flow at or below zero is not a valuation, from filings or
+        # typed in. Same rule as the DCF alert (_compute_dcf_rating).
+        if current_fcf <= 0:
+            return _manual_fcf_response(
+                ticker, company_name, security_type, current_price, entity_trust,
+                negative_fcf=current_fcf,
+            )
 
         # ── Equity bridge: Enterprise Value + Cash - Debt ─────────────
         net_debt_adjustment = 0

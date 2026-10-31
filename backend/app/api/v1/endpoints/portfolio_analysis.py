@@ -108,6 +108,10 @@ async def analyze_user_portfolio(
     positions = []
     total_value = 0.0
     total_cost = 0.0
+    # No current quote is "unpriced", not "unchanged": valuing it at the buy price
+    # would tell the AI it is break-even and skew the totals. Left out of value,
+    # cost and P&L, and named to the AI (same rule as GET /portfolio unpriced_count).
+    price_unknown: list = []
 
     for p in db_positions:
         quote = quotes.get(p.ticker.upper(), {})
@@ -115,7 +119,10 @@ async def analyze_user_portfolio(
         quantity = float(p.quantity)
         cost = buy_price * quantity
 
-        current_price = float(quote.get("price") or buy_price)
+        if not quote.get("price"):
+            price_unknown.append(p.ticker.upper())
+            continue
+        current_price = float(quote["price"])
         tv = current_price * quantity
         pl = tv - cost
         pl_pct = (pl / cost * 100) if cost > 0 else 0.0
@@ -148,6 +155,12 @@ async def analyze_user_portfolio(
     total_pl = total_value - total_cost
     total_pl_pct = (total_pl / total_cost * 100) if total_cost > 0 else 0.0
 
+    if not positions:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="prices_unavailable",
+        )
+
     # Fetch index quotes for market context (best-effort)
     index_context: list = []
     try:
@@ -177,6 +190,7 @@ async def analyze_user_portfolio(
         },
         market_context={"indexes": index_context},
         dividend_unknown=dividend_unknown,
+        price_unknown=price_unknown,
     )
 
     # Record usage after a successful call

@@ -9,6 +9,7 @@ import MarketStatusBadge from '../components/MarketStatusBadge';
 import SectorPieChart from '../components/SectorPieChart';
 import { computeSectorBreakdown, useSectors, SECTOR_COLORS, SectorBreakdown } from '../utils/sectorMap';
 import { summarizePositions } from '../utils/portfolioTotals';
+import { formatDateOnly } from '../utils/dates';
 import { getTierBySlug, getTierSummary } from '../data/pricingTiers';
 import '../styles/livePrice.css';
 import axios from 'axios';
@@ -232,6 +233,7 @@ const Dashboard: React.FC = () => {
 
   // Market overview cards
   const [treasuryRates, setTreasuryRates] = useState<MarketDataItem[]>([]);
+  const [treasuryDate, setTreasuryDate] = useState<string | null>(null);
   const [commodities, setCommodities] = useState<MarketDataItem[]>([]);
   const [indexes, setIndexes] = useState<MarketDataItem[]>([]);
   const [crypto, setCrypto] = useState<MarketDataItem[]>([]);
@@ -552,6 +554,7 @@ const Dashboard: React.FC = () => {
       try {
         const treasuryResp = await axios.get(`${API_URL}/api/v1/stocks/treasury-rates`, { headers });
         const rates = treasuryResp.data?.rates || [];
+        setTreasuryDate(treasuryResp.data?.date ?? null);
         setTreasuryRates(rates.map((r: any) => ({
           name: r.name,
           value: r.value,
@@ -1018,6 +1021,9 @@ return (
                   </div>
                 </div>
               ))}
+              {treasuryDate && (
+                <p className="text-[0.6rem] text-gray-400 dark:text-gray-500 pt-0.5">Close of {formatDateOnly(treasuryDate, { month: 'short', day: 'numeric' })}</p>
+              )}
             </div>
           ) : (
             <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">Click to view</p>

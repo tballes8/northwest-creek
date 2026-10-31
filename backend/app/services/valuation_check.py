@@ -18,6 +18,7 @@ Exchange rates come from services/fx. Pure logic, importable with no config:
 from __future__ import annotations
 
 import math
+from decimal import Decimal
 
 # ratios-ttm is used only when its P/E agrees within this factor with one computed
 # independently: market cap (USD) over TTM net income (in the reporting currency)
@@ -41,6 +42,25 @@ _FAR_FX = 2.0
 # within this factor of the price either way: past it the basis is wrong far more
 # often than the valuation is that extreme.
 _VENDOR_PER_SHARE_BAND = 4.0
+
+# Anything at or past this is a vendor artefact, not a multiple (a P/E of a billion means
+# earnings rounded to ~0). Dropped so it costs that field rather than overflowing the
+# Numeric(14, 4) column and failing the whole batch UPDATE.
+_MULTIPLE_CEILING = 1e9
+# Floors, applied in clean_multiple: below these a multiple is a data artifact, not a
+# bargain, and is withheld like a negative one. Measured on the 2026-10-25 local
+# rebuild (4,642 stocks):
+# - P/E < 1 (33 rows) was SPAC trust interest against a $10 share, a one-time gain
+#   (Sabre's unit sale, Aimco's asset sales) or a CVR. Earning more than the whole
+#   market cap in twelve months is an event, not a valuation.
+# - P/B < 0.1 (97 rows) was FMP's book value mis-scaled: Atlantic Union Bankshares at
+#   0.001, Alpha and Omega Semiconductor at 0.001, Cable One at 0.084. A bank trades
+#   at 0.3x book in a crisis, never 0.001x. 0.1 keeps the distressed REITs and BDCs.
+# - EV/EBITDA < 1 (107 rows) was almost entirely negative EV over negative EBITDA,
+#   two minus signs cancelling into a "cheap" positive on cash-rich biotechs.
+PE_FLOOR = 1.0
+PB_FLOOR = 0.1
+EV_EBITDA_FLOOR = 1.0
 
 
 def vendor_per_share_ok(value, price, reporting_currency) -> bool:
@@ -127,6 +147,32 @@ def check_against_quarters(fmp_pe, market_cap, quarters, fx: dict[str, float]) -
     )
 
 
+def clean_multiple(raw, floor: float = 0.0) -> Decimal | None:
+    """A valuation multiple as shown or stored, or None. The one rule for every surface.
+
+    None for anything non-positive: a negative P/E, P/B or EV/EBITDA means negative
+    earnings, book value or EBITDA, which is "not meaningful", not "cheap". Kept as a
+    number it would pass every "at most N" screen, and read "Trading at -24x trailing
+    earnings" on a company page. None also below `floor` (PE_FLOOR and friends: a P/E
+    of 0.03 is an artifact, and it would otherwise lead every ascending sort or drag a
+    peer median) and for garbage: non-numeric, NaN, infinite, or at/past
+    _MULTIPLE_CEILING.
+    """
+    try:
+        val = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if val != val or val <= 0 or val < floor or val >= _MULTIPLE_CEILING:  # val != val catches NaN
+        return None
+    return Decimal(str(round(val, 4)))
+
+
+def multiple_or_none(raw, floor: float = 0.0) -> float | None:
+    """clean_multiple as a float, for JSON payloads (the screener stores the Decimal)."""
+    val = clean_multiple(raw, floor)
+    return None if val is None else float(val)
+
+
 def _selftest() -> None:
     from app.services.fx import fx_per_usd
 
@@ -173,6 +219,19 @@ def _selftest() -> None:
     assert check_against_quarters(1.67, 37.0e9, [{"netIncome": 347.989e6 / 4, "reportedCurrency": "USD"}] * 4, fx) == "mismatch"  # BIIB
     assert check_against_quarters(25, 5e9, None, fx) == "unverifiable"
     assert check_against_quarters(25, 5e9, "garbage", fx) == "unverifiable"
+    # clean_multiple: sign, floor, ceiling, garbage
+    assert clean_multiple(39.74) == Decimal("39.74")
+    assert clean_multiple(-5) is None and clean_multiple(0) is None
+    for junk in (None, "", "n/a", float("nan"), float("inf"), 1e9, 5e12):
+        assert clean_multiple(junk) is None, junk
+    assert clean_multiple(0.39, PE_FLOOR) is None               # SPAC trust interest
+    assert clean_multiple(1.0, PE_FLOOR) == Decimal("1.0")      # floor is inclusive
+    assert clean_multiple(2.78, PE_FLOOR) == Decimal("2.78")
+    assert clean_multiple(0.001, PB_FLOOR) is None              # mis-scaled book value
+    assert clean_multiple(0.25, PB_FLOOR) == Decimal("0.25")    # distressed, kept
+    assert clean_multiple(0.26, EV_EBITDA_FLOOR) is None
+    assert multiple_or_none(-24.3, PE_FLOOR) is None            # "-24x trailing earnings"
+    assert multiple_or_none("18.456", PE_FLOOR) == 18.456 and multiple_or_none(None) is None
     print("valuation_check selftest OK")
 
 

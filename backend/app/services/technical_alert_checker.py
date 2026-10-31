@@ -511,6 +511,10 @@ class TechnicalAlertChecker:
             current_fcf = cash_flow_data.get("operating_cash_flow")
         if current_fcf is None:
             return None, 0.0, 0.0
+        # A DCF on a negative cash flow says nothing about value (it read as Strong
+        # Sell): no rating, so the alert skips. Same rule as the /dcf/calculate page.
+        if current_fcf <= 0:
+            return None, 0.0, 0.0
 
         income_data = fin.get("income_statement") or {}
         shares = income_data.get("diluted_shares_outstanding")

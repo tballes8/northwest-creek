@@ -30,7 +30,7 @@ from app.services.financials_service import get_company_financials, compute_peer
 from app.services.edgar_identity import is_contradicted
 from app.services.analyst_estimates import estimates_to_usd, fetch_estimates
 from app.services.fx import get_fx_per_usd, get_reporting_currency, usd_rate
-from app.services.valuation_check import check_against_quarters
+from app.services.valuation_check import check_against_quarters, multiple_or_none, PE_FLOOR, EV_EBITDA_FLOOR
 from app.core.tier_limits import get_tier_limit, get_review_period, get_upgrade_tier
 
 
@@ -377,9 +377,10 @@ async def _fetch_peer_ratio(sym: str, fx: Dict[str, float]) -> Dict[str, Any]:
         if not isinstance(rd, BaseException):
             if isinstance(rd, list) and rd:
                 ratios = rd[0]
-                row["pe"] = ratios.get("priceToEarningsRatioTTM")
+                row["pe"] = multiple_or_none(ratios.get("priceToEarningsRatioTTM"), PE_FLOOR)
                 row["ps"] = ratios.get("priceToSalesRatioTTM")
-                row["ev_ebitda"] = ratios.get("enterpriseValueMultipleTTM") or ratios.get("evToEBITDATTM")
+                row["ev_ebitda"] = multiple_or_none(
+                    ratios.get("enterpriseValueMultipleTTM") or ratios.get("evToEBITDATTM"), EV_EBITDA_FLOOR)
 
         if not isinstance(pd, BaseException):
             if isinstance(pd, list) and pd:

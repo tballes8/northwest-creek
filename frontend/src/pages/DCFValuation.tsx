@@ -173,6 +173,8 @@ const SectorDefaultBadge: React.FC<{ show?: boolean }> = ({ show }) =>
     </span>
   ) : null;
 
+const DEFAULT_ASSUMPTIONS = { growthRate: 5, terminalGrowth: 2.5, discountRate: 10, projectionYears: 5 };
+
 interface DCFSuggestions {
   ticker: string;
   company_name: string;
@@ -259,6 +261,9 @@ interface DCFData {
   ticker: string;
   entity_trust?: EntityTrust | null;
   requires_manual_fcf?: boolean;
+  // Set when the backend declines to value the company (no valuation returned)
+  unavailable_reason?: 'negative_fcf' | null;
+  current_fcf?: number | null;
   company_name: string;
   security_type?: string;  // CS, WARRANT, ETF, etc. from Polygon
   current_price: number;
@@ -334,10 +339,10 @@ const DCFValuation: React.FC = () => {
   const [user, setUser] = useState<User | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [ticker, setTicker] = useState(urlTicker);
-  const [growthRate, setGrowthRate] = useState(5);
-  const [terminalGrowth, setTerminalGrowth] = useState(2.5);
-  const [discountRate, setDiscountRate] = useState(10);
-  const [projectionYears, setProjectionYears] = useState(5);
+  const [growthRate, setGrowthRate] = useState(DEFAULT_ASSUMPTIONS.growthRate);
+  const [terminalGrowth, setTerminalGrowth] = useState(DEFAULT_ASSUMPTIONS.terminalGrowth);
+  const [discountRate, setDiscountRate] = useState(DEFAULT_ASSUMPTIONS.discountRate);
+  const [projectionYears, setProjectionYears] = useState(DEFAULT_ASSUMPTIONS.projectionYears);
   const [activeTab, setActiveTab] = useState<'dcf' | 'relval'>('dcf');
   const [loading, setLoading] = useState(false);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -428,11 +433,25 @@ const DCFValuation: React.FC = () => {
   const sharesOverrideValid =
     parsedSharesOverride != null && isFinite(parsedSharesOverride) && parsedSharesOverride > 0;
 
+  // Assumptions belong to one company. A new ticker never inherits the previous
+  // one's growth / discount rate — back to the page defaults until that
+  // ticker's own suggestions arrive (and stay there if they fail or are withheld).
+  const resetAssumptions = useCallback(() => {
+    setGrowthRate(DEFAULT_ASSUMPTIONS.growthRate);
+    setTerminalGrowth(DEFAULT_ASSUMPTIONS.terminalGrowth);
+    setDiscountRate(DEFAULT_ASSUMPTIONS.discountRate);
+    setProjectionYears(DEFAULT_ASSUMPTIONS.projectionYears);
+  }, []);
+
   const loadSuggestions = useCallback(async (symbol: string, skipParamOverride: boolean = false) => {
     if (!symbol.trim()) return;
 
     setLoadingSuggestions(true);
     setError('');
+    if (!skipParamOverride) {
+      setSuggestions(null);
+      resetAssumptions();
+    }
     setFcfOverride('');
     setSharesOverride('');
 
@@ -477,7 +496,7 @@ const DCFValuation: React.FC = () => {
     } finally {
       setLoadingSuggestions(false);
     }
-  }, []);
+  }, [resetAssumptions]);
 
   useEffect(() => {
     loadUser();
@@ -603,6 +622,16 @@ const DCFValuation: React.FC = () => {
   };
 	
   const handleTickerChange = (value: string) => {
+    if (value !== ticker) {
+      // Different company: nothing from the previous one carries over.
+      resetAssumptions();
+      setSuggestions(null);
+      setShowSuggestions(false);
+      setDcfData(null);
+      setError('');
+      setFcfOverride('');
+      setSharesOverride('');
+    }
     setTicker(value);
     setPrefilledFromTA(null);
     
@@ -1408,6 +1437,12 @@ const DCFValuation: React.FC = () => {
             null, so this guard also keeps the reads below from throwing, and
             the reason is not repeated here — the block above the parameter form
             already states it. */}
+        {dcfData?.unavailable_reason === 'negative_fcf' && (
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 rounded-lg px-4 py-3 text-sm mb-6">
+            Trailing free cash flow is negative, so a DCF can't value this company: projecting a loss forward
+            gives no meaningful intrinsic value. Try Relative Valuation instead.
+          </div>
+        )}
         {dcfData && dcfData.valuation && dcfData.recommendation && dcfData.assumptions && (
           <div className="space-y-6">
             {/* A valuation produced despite a contradicted verdict: the figures

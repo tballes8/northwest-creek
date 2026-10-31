@@ -16,6 +16,7 @@ async def analyze_portfolio(
     portfolio_totals: Dict[str, Any],
     market_context: Dict[str, Any],
     dividend_unknown: List[str] | None = None,
+    price_unknown: List[str] | None = None,
 ) -> str:
     """
     Generate a plain-language AI summary of the user's portfolio.
@@ -25,6 +26,7 @@ async def analyze_portfolio(
     portfolio_totals: dict with total_value, total_profit_loss, total_profit_loss_percent
     market_context: dict with index data (name, changePercent)
     dividend_unknown: tickers whose dividend fetch failed — income unknown, not zero
+    price_unknown: tickers with no current quote — excluded from every figure above
     """
     settings = get_settings()
 
@@ -97,10 +99,16 @@ async def analyze_portfolio(
     else:
         income_section = "Income profile:\n  - No dividend-paying positions detected"
 
+    price_line = (
+        f"\n- No current price for: {', '.join(price_unknown)} "
+        f"(excluded from the value, P&L and every figure here; do not treat as unchanged)"
+        if price_unknown else ""
+    )
+
     prompt = f"""Portfolio snapshot:
 - Total value: ${total_value:,.2f}
 - Total P&L: {"+" if total_pl >= 0 else ""}${total_pl:,.2f} ({"+" if total_pl_pct >= 0 else ""}{total_pl_pct:.2f}%)
-- Positions held: {len(positions)}
+- Positions priced: {len(positions)}{price_line}
 
 Top gainers:
 {gainer_lines}

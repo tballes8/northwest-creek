@@ -43,7 +43,10 @@ from app.services.edgar_identity import (
 )
 from app.services.market_data import evaluate_dividend, market_data_service
 from app.services.fx import fx_per_usd
-from app.services.valuation_check import valuation_check
+from app.services.valuation_check import (
+    valuation_check, clean_multiple, PE_FLOOR as _PE_FLOOR, PB_FLOOR as _PB_FLOOR,
+    EV_EBITDA_FLOOR as _EV_EBITDA_FLOOR, _MULTIPLE_CEILING,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -87,24 +90,8 @@ DIVIDEND_CONCURRENCY = 8
 # concurrency as the profile pass, which it runs after.
 VALUATION_CONCURRENCY = 8
 
-# Anything at or past this is a vendor artefact, not a multiple (a P/E of a billion means
-# earnings rounded to ~0). Dropped so it costs that field rather than overflowing the
-# Numeric(14, 4) column and failing the whole batch UPDATE.
-_MULTIPLE_CEILING = 1e9
-# Floors, applied in clean_multiple: below these a multiple is a data artifact, not a
-# bargain, and is stored as NULL like a negative one. Measured on the 2026-10-25 local
-# rebuild (4,642 stocks):
-# - P/E < 1 (33 rows) was SPAC trust interest against a $10 share, a one-time gain
-#   (Sabre's unit sale, Aimco's asset sales) or a CVR. Earning more than the whole
-#   market cap in twelve months is an event, not a valuation.
-# - P/B < 0.1 (97 rows) was FMP's book value mis-scaled: Atlantic Union Bankshares at
-#   0.001, Alpha and Omega Semiconductor at 0.001, Cable One at 0.084. A bank trades
-#   at 0.3x book in a crisis, never 0.001x. 0.1 keeps the distressed REITs and BDCs.
-# - EV/EBITDA < 1 (107 rows) was almost entirely negative EV over negative EBITDA,
-#   two minus signs cancelling into a "cheap" positive on cash-rich biotechs.
-_PE_FLOOR = 1.0
-_PB_FLOOR = 0.1
-_EV_EBITDA_FLOOR = 1.0
+# Floors and clean_multiple live in services/valuation_check: the same rule is
+# applied to every multiple the app serves, not just the screener's.
 # On top of the floors, every row passes services/valuation_check, the cross-check of
 # FMP's P/E against the company's own earnings. It lives there, not here, because
 # financials_service applies the same rule to what it serves.
@@ -1090,25 +1077,6 @@ async def _update_dividends() -> int | None:
     except Exception as e:
         logger.warning(f"Failed to update dividends: {e}")
         return None
-
-
-def clean_multiple(raw, floor: float = 0.0) -> Decimal | None:
-    """A valuation multiple as stored, or None.
-
-    None for anything non-positive: a negative P/E, P/B or EV/EBITDA means negative
-    earnings, book value or EBITDA, which is "not meaningful", not "cheap". Kept as a
-    number it would pass every "at most N" screen. None also below `floor` (see
-    _PE_FLOOR and friends: a P/E of 0.03 is an artifact, and it would otherwise lead
-    every ascending sort) and for garbage: non-numeric, NaN, infinite, or at/past
-    _MULTIPLE_CEILING.
-    """
-    try:
-        val = float(raw)
-    except (TypeError, ValueError):
-        return None
-    if val != val or val <= 0 or val < floor or val >= _MULTIPLE_CEILING:  # val != val catches NaN
-        return None
-    return Decimal(str(round(val, 4)))
 
 
 async def _identity_verdict(symbol: str, fmp_cik: int | None) -> str:

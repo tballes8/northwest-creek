@@ -57,7 +57,9 @@ from app.services.fx import (
     to_usd,
     usd_rate,
 )
-from app.services.valuation_check import check_against_quarters
+from app.services.valuation_check import (
+    check_against_quarters, multiple_or_none, PE_FLOOR, PB_FLOOR, EV_EBITDA_FLOOR,
+)
 
 
 def _fmt(value: Optional[float], decimals: int = 2) -> Optional[float]:
@@ -537,15 +539,18 @@ async def get_company_financials(
         # 36 trillion — yen). Profile's market cap is already dollars; EV converts.
         "market_cap": profile.get("marketCap") or to_usd(key_metrics.get("marketCap"), rate),
         "enterprise_value": to_usd(key_metrics.get("enterpriseValueTTM"), rate),
-        "pe_ratio": _fmt(ratios.get("priceToEarningsRatioTTM")),
+        # P/E, P/B and EV/EBITDA go through the screener's floors (valuation_check.
+        # clean_multiple): a loss-maker has no multiple, not "-24x".
+        "pe_ratio": _fmt(multiple_or_none(ratios.get("priceToEarningsRatioTTM"), PE_FLOOR)),
         "peg_ratio": _fmt(peg_ttm),
         "ps_ratio": _fmt(ratios.get("priceToSalesRatioTTM")),
-        "pb_ratio": _fmt(ratios.get("priceToBookRatioTTM")),
+        "pb_ratio": _fmt(multiple_or_none(ratios.get("priceToBookRatioTTM"), PB_FLOOR)),
         "price_to_fcf": _fmt(ratios.get("priceToFreeCashFlowRatioTTM")),
-        "ev_to_ebitda": _fmt(ratios.get("enterpriseValueMultipleTTM") or key_metrics.get("evToEBITDATTM")),
+        "ev_to_ebitda": _fmt(multiple_or_none(
+            ratios.get("enterpriseValueMultipleTTM") or key_metrics.get("evToEBITDATTM"), EV_EBITDA_FLOOR)),
         "ev_to_sales": _fmt(key_metrics.get("evToSalesTTM")),
-        "roe": _fmt(key_metrics.get("returnOnEquityTTM")),
-        "roa": _fmt(key_metrics.get("returnOnAssetsTTM")),
+        "roe": _fmt(key_metrics.get("returnOnEquityTTM"), 4),   # a ratio: 2 places is whole percents
+        "roa": _fmt(key_metrics.get("returnOnAssetsTTM"), 4),
         "debt_to_equity": _fmt(ratios.get("debtToEquityRatioTTM")),
         "current_ratio": _fmt(ratios.get("currentRatioTTM")),
         "quick_ratio": _fmt(ratios.get("quickRatioTTM")),

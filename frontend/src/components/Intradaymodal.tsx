@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { intradayAPI } from '../services/api';
+import { formatDateOnly } from '../utils/dates';
 
 
 interface IntradayData {
@@ -183,8 +184,7 @@ const IntradayModal: React.FC<IntradayModalProps> = ({ ticker, isOpen, onClose }
 
   const formatDate = (dateString: string): string => {
     try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      return formatDateOnly(dateString);
     } catch {
       return dateString;
     }

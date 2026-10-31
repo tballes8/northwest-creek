@@ -11,6 +11,7 @@ import EntityTrustBlock from '../components/EntityTrustBlock';
 import { SECTOR_COLORS } from '../utils/sectorMap';
 import { getTierBySlug } from '../data/pricingTiers';
 import axios from 'axios';
+import { formatDateOnly, parseLocalDate } from '../utils/dates';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 // Register Chart.js components
@@ -1426,7 +1427,7 @@ const Stocks: React.FC = () => {
   const formatDividendDate = (dateStr: string | null): string => {
     if (!dateStr) return '—';
     try {
-      return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      return formatDateOnly(dateStr);
     } catch {
       return dateStr;
     }
@@ -1444,7 +1445,7 @@ const Stocks: React.FC = () => {
   const sma200 = calcSMA(closes, 200);
 
   const chartData = {
-    labels: historical.map((h) => new Date(h.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
+    labels: historical.map((h) => parseLocalDate(h.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
     datasets: [
       {
         label: `${ticker} Price`,
@@ -2366,7 +2367,7 @@ const Stocks: React.FC = () => {
                       ⚠ Bankruptcy/receivership filing on record — valuation estimates hidden (see Company Details)
                     </div>
                   )}
-                  {!isFundType(company.type) && !isWarrant && !inBankruptcy && (() => {
+                  {!isFundType(company.type) && !isWarrant && !inBankruptcy && !isEntityContradicted(entityTrust) && (() => {
                     const forwardEps = analystEstimates?.forward_eps;
                     const forwardPE = forwardEps && forwardEps > 0 ? quote.price / forwardEps : null;
                     const target = analystEstimates?.price_target_consensus;
@@ -3941,7 +3942,7 @@ const Stocks: React.FC = () => {
                     <div className="text-sm text-gray-500 dark:text-gray-400">
                       <span className="font-medium text-gray-900 dark:text-white">{screenerTotal.toLocaleString()}</span> results
                       {screenerDataAsOf && (
-                        <span className="ml-2 text-xs">· data as of {new Date(screenerDataAsOf).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        <span className="ml-2 text-xs">· data as of {new Date(screenerDataAsOf).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} ET</span>
                       )}
                     </div>
                   </div>

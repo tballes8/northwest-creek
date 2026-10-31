@@ -9,10 +9,10 @@ from datetime import datetime
 
 # Calendar days of history behind every indicator reading: the Technical Analysis
 # page, the watchlist screens, the AI reads and the indicator alerts all fetch this
-# window (~170 bars), so they read the same numbers. Wilder RSI and the MACD EMAs
+# window (~275 bars), so they read the same numbers. Wilder RSI and the MACD EMAs
 # remember where their series starts, so a different window gives a different
-# value for the same close. Too short for a 200-day SMA (site review N18).
-INDICATOR_HISTORY_DAYS = 250
+# value for the same close. Long enough for a 200-day SMA plus warmup (site review N18).
+INDICATOR_HISTORY_DAYS = 400
 
 
 class TechnicalIndicators:

@@ -180,14 +180,14 @@ def _strip_history(indicator_data):
 @router.get("/analyze/{ticker}")
 async def analyze_stock(
     ticker: str,
-    days: int = Query(INDICATOR_HISTORY_DAYS, ge=30, le=365),
+    days: int = Query(INDICATOR_HISTORY_DAYS, ge=30, le=730),
     current_user: User = Depends(require_valid_tier),  # ← Changed
     db: AsyncSession = Depends(get_db)
 ):
     """
     Get complete technical analysis for a stock
     """
-    # Quota first: this route burns a ~170-bar FMP fetch and ~20 indicator
+    # Quota first: this route burns a ~275-bar FMP fetch and ~20 indicator
     # computations, so the check happens before any upstream call.
     await check_analysis_limit(current_user, db)
 
