@@ -41,7 +41,7 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
      "used_by": ["api/v1/endpoints/intraday.py:65"], "key_fields": ["symbol", "price", "timestamp"]},
 
     # ── Sector ETF closes feed the rotation heatmap (via batch-quote / historical) ──
-    # (sector_rotation uses get_batch_quotes + get_historical_prices, covered above)
+    # (sector_rotation uses get_historical_prices only, covered above)
 
     # ── Company info / profile / financials ──────────────────────────
     {"path": "profile", "description": "Company profile: name, sector, industry, website, employees, country",

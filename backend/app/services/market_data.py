@@ -20,6 +20,16 @@ FMP_429_MAX_RETRIES = 3
 FMP_429_MAX_WAIT = 15.0
 
 
+class FMPError(RuntimeError):
+    """FMP answered, but with an error instead of data (see _fmp_get)."""
+
+
+# Quotes for a list of symbols (get_quote_rows): batch-quote takes up to this many
+# symbols per request; without batch endpoints, this many /quote calls run at once.
+QUOTE_BATCH_SIZE = 100
+QUOTE_CONCURRENCY = 5
+
+
 def _retry_after_seconds(response) -> float | None:
     """A numeric Retry-After header as seconds, capped at FMP_429_MAX_WAIT; None when
     absent or in HTTP-date form (the caller then falls back to exponential backoff)."""
@@ -332,7 +342,13 @@ class MarketDataService:
             logger.debug(f"FMP 429 on /{path}, retry {attempt + 1}/{FMP_429_MAX_RETRIES} in {delay:.0f}s")
             await asyncio.sleep(delay)
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        # FMP also reports failures (an endpoint outside the plan, a bad key, a
+        # limit) as HTTP 200 with {"Error Message": ...}. That is a failed fetch,
+        # not empty data, and must reach the caller as one.
+        if isinstance(data, dict) and "Error Message" in data:
+            raise FMPError(f"FMP /{path}: {data['Error Message']}")
+        return data
 
     @staticmethod
     def _format_timestamp(ts) -> str:
@@ -384,17 +400,53 @@ class MarketDataService:
         except Exception as e:
             raise ValueError(f"Error fetching quote for {ticker}: {_safe_error(e)}")
 
+    async def get_quote_rows(self, symbols: List[str]) -> List[Dict[str, Any]]:
+        """Raw FMP quote rows for a list of symbols: the one path for quoting a list.
+
+        With batch endpoints in the plan (settings.FMP_BATCH_ENDPOINTS), batch-quote in
+        chunks of QUOTE_BATCH_SIZE; a failed chunk raises. Without them, one /quote call
+        per symbol, QUOTE_CONCURRENCY at a time (same row shape); a symbol whose call
+        fails is left out and counted in the log, so callers treat it as unpriced.
+        """
+        syms = list(dict.fromkeys(s.upper().strip() for s in symbols if s and s.strip()))
+        if not syms:
+            return []
+
+        if get_settings().FMP_BATCH_ENDPOINTS:
+            rows: List[Dict[str, Any]] = []
+            for i in range(0, len(syms), QUOTE_BATCH_SIZE):
+                data = await self._fmp_get("batch-quote", {"symbols": ",".join(syms[i:i + QUOTE_BATCH_SIZE])})
+                if isinstance(data, list):
+                    rows.extend(data)
+            return rows
+
+        sem = asyncio.Semaphore(QUOTE_CONCURRENCY)
+
+        async def one(sym: str):
+            async with sem:
+                try:
+                    data = await self._fmp_get("quote", {"symbol": sym})
+                except Exception as e:  # noqa: BLE001 - one symbol must not sink the list
+                    return None, type(e).__name__
+            return (data[0] if isinstance(data, list) and data and isinstance(data[0], dict) else None), None
+
+        results = await asyncio.gather(*(one(s) for s in syms))
+        failed = [f"{s} ({err})" for s, (_, err) in zip(syms, results) if err]
+        if failed:
+            logger.warning(f"Quote failed for {len(failed)} of {len(syms)} symbols: {', '.join(failed[:10])}")
+        return [row for row, _ in results if row]
+
     async def get_batch_quotes(self, tickers: List[str]) -> Dict[str, Dict[str, Any]]:
         """
-        Fetch quotes for multiple tickers in a single FMP API call.
-        Returns a dict keyed by ticker symbol with the same format as get_quote().
+        Fetch quotes for multiple tickers (get_quote_rows: batch-quote or one /quote
+        each, per the plan). Returns a dict keyed by ticker symbol with the same
+        format as get_quote(); a ticker that couldn't be quoted is missing.
         """
         if not tickers:
             return {}
 
-        symbols = ",".join(t.upper().strip() for t in tickers)
         try:
-            data = await self._fmp_get("batch-quote", {"symbols": symbols})
+            data = await self.get_quote_rows(tickers)
 
             if not data or not isinstance(data, list):
                 return {}
@@ -776,8 +828,13 @@ class MarketDataService:
                 else:
                     freq_int = None
 
+                # Split-adjusted amount first: it is in today's share terms, like
+                # today's price. The as-declared `dividend` of the last payment
+                # before a split is per old share, so a 10:1 split overstated the
+                # yield tenfold until the next payment.
+                adj = d.get("adjDividend")
                 dividends.append({
-                    "cash_amount": d.get("dividend") or d.get("adjDividend"),
+                    "cash_amount": adj if adj is not None and adj > 0 else d.get("dividend"),
                     "currency": "USD",
                     "declaration_date": d.get("declarationDate"),
                     "ex_dividend_date": d.get("date"),

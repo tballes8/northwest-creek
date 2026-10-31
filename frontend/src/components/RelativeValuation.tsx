@@ -17,6 +17,8 @@ interface Peer {
   ev_ebitda: number | null;
   revenue_growth_yoy: number | null;
   gross_margin: number | null;
+  // Its data couldn't be loaded: blanks here mean "unavailable", not "none"
+  fetch_failed?: boolean;
 }
 
 type SourceTag = 'estimate' | 'actual' | 'live' | 'derived' | null;
@@ -779,6 +781,12 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
                         >
                           {p.ticker}
                         </button>
+                        {p.fetch_failed && (
+                          <span
+                            className="ml-1 text-amber-500"
+                            title="Some of this peer's data couldn't be loaded, so its multiples are left out of the medians. Pull peers again to retry."
+                          >⚠</span>
+                        )}
                       </td>
                       <td className="py-2 pr-4 text-gray-700 dark:text-gray-300 max-w-[180px] truncate">{p.name || '—'}</td>
                       <td className="py-2 pr-4 text-gray-500 dark:text-gray-400 text-xs max-w-[160px] truncate">{p.industry || '—'}</td>

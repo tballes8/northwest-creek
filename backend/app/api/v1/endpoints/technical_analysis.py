@@ -16,7 +16,9 @@ from app.core.tier_limits import (
 )
 from app.db.session import get_db
 from app.services.market_data import market_data_service
-from app.services.technical_indicators import technical_indicators, generate_summary, build_signal_rows
+from app.services.technical_indicators import (
+    technical_indicators, generate_summary, build_signal_rows, INDICATOR_HISTORY_DAYS,
+)
 
 
 def _safe_error(e: Exception) -> str:
@@ -29,6 +31,11 @@ def _safe_error(e: Exception) -> str:
     return msg
 
 router = APIRouter()
+
+# The watchlist screens use the page's window (technical_indicators.INDICATOR_HISTORY_DAYS):
+# their old 60 days (~41 bars) read a different RSI than the page for the same close,
+# and never had the 50 bars SMA-50 needs, so the above-SMA-50 filter and the
+# strong-uptrend preset could not match anything.
 
 def require_valid_tier(current_user: User = Depends(get_current_user)):
     """Validate user has a recognized subscription tier for Technical Analysis access.
@@ -164,18 +171,6 @@ class ScreenerResult:
         self.match_reason = match_reason
 
 
-def _determine_bb_position(price: float, upper: float | None, lower: float | None) -> str:
-    """Determine if price is above, below, or within Bollinger Bands"""
-    if upper is None or lower is None:
-        return "neutral"
-    
-    if price > upper:
-        return "above_upper"
-    elif price < lower:
-        return "below_lower"
-    else:
-        return "within_bands"        
-
 def _strip_history(indicator_data):
     """Remove large history arrays from indicator summary (history is in chart_data)."""
     if indicator_data is None:
@@ -185,7 +180,7 @@ def _strip_history(indicator_data):
 @router.get("/analyze/{ticker}")
 async def analyze_stock(
     ticker: str,
-    days: int = Query(250, ge=30, le=365),
+    days: int = Query(INDICATOR_HISTORY_DAYS, ge=30, le=365),
     current_user: User = Depends(require_valid_tier),  # ← Changed
     db: AsyncSession = Depends(get_db)
 ):
@@ -224,145 +219,42 @@ async def analyze_stock(
         volumes = [float(day["volume"]) for day in historical]
         current_price = prices[-1]
         
-        # Calculate indicators
+        # Calculate indicators — the same calls the alert checker and the
+        # watchlist screens make, so all three read one RSI/MACD/SMA/BB. The
+        # chart histories below are the series these are the last bar of, so
+        # the chart's final point is the headline number too.
         try:
             rsi = technical_indicators.calculate_rsi(prices)
         except Exception as e:
             print(f"RSI calculation error: {e}")
             rsi = None
-        
+
         try:
             macd_data = technical_indicators.calculate_macd(prices)
         except Exception as e:
             print(f"MACD calculation error: {e}")
             macd_data = None
-        
+
         try:
             ma_data = technical_indicators.calculate_moving_averages(prices)
         except Exception as e:
             print(f"MA calculation error: {e}")
             ma_data = {"sma_20": None, "sma_50": None, "sma_200": None}
-        
+
         try:
             bb_data = technical_indicators.calculate_bollinger_bands(prices)
         except Exception as e:
             print(f"BB calculation error: {e}")
             bb_data = None
-        
-        # Calculate historical moving averages for charting
-        sma_20_history = []
-        sma_50_history = []
-        sma_200_history = []
-        bb_upper_history = []
-        bb_lower_history = []
-        bb_middle_history = []
-        rsi_history = []
-        macd_history = []
-        macd_signal_history = []
-        macd_histogram_history = []
 
-        for i in range(len(prices)):
-            # SMA 20
-            if i >= 19:
-                sma_20_history.append(sum(prices[i-19:i+1]) / 20)
-            else:
-                sma_20_history.append(None)
-            
-            # SMA 50
-            if i >= 49:
-                sma_50_history.append(sum(prices[i-49:i+1]) / 50)
-            else:
-                sma_50_history.append(None)
-            
-            # SMA 200
-            if i >= 199:
-                sma_200_history.append(sum(prices[i-199:i+1]) / 200)
-            else:
-                sma_200_history.append(None)
-            
-            # Bollinger Bands
-            if i >= 19:
-                period_prices = prices[i-19:i+1]
-                sma = sum(period_prices) / 20
-                variance = sum((p - sma) ** 2 for p in period_prices) / 20
-                std_dev = variance ** 0.5
-                bb_middle_history.append(sma)
-                bb_upper_history.append(sma + (2 * std_dev))
-                bb_lower_history.append(sma - (2 * std_dev))
-            else:
-                bb_middle_history.append(None)
-                bb_upper_history.append(None)
-                bb_lower_history.append(None)
+        # Chart histories
+        sma_20_history = technical_indicators.calculate_sma_series(prices, 20)
+        sma_50_history = technical_indicators.calculate_sma_series(prices, 50)
+        sma_200_history = technical_indicators.calculate_sma_series(prices, 200)
+        bb_history = technical_indicators.calculate_bollinger_series(prices)
+        rsi_history = technical_indicators.calculate_rsi_series(prices)
+        macd_history = technical_indicators.calculate_macd_series(prices)
 
-            # RSI (14-period)
-            if i >= 14:
-                period_prices = prices[i-14:i+1]
-                gains = []
-                losses = []
-                
-                for j in range(1, len(period_prices)):
-                    change = period_prices[j] - period_prices[j-1]
-                    if change > 0:
-                        gains.append(change)
-                        losses.append(0)
-                    else:
-                        gains.append(0)
-                        losses.append(abs(change))
-                
-                avg_gain = sum(gains) / len(gains)
-                avg_loss = sum(losses) / len(losses)
-                
-                if avg_loss == 0:
-                    rsi_value = 100
-                else:
-                    rs = avg_gain / avg_loss
-                    rsi_value = 100 - (100 / (1 + rs))
-                
-                rsi_history.append(rsi_value)
-            else:
-                rsi_history.append(None)
-
-            # MACD (12, 26, 9)
-            if i >= 33:  # Need at least 26 + 9 - 1 = 34 periods
-                # Calculate 12-period EMA
-                ema_12_values = prices[max(0, i-11):i+1]
-                multiplier_12 = 2 / (12 + 1)
-                ema_12 = ema_12_values[0]
-                for price in ema_12_values[1:]:
-                    ema_12 = (price - ema_12) * multiplier_12 + ema_12
-                
-                # Calculate 26-period EMA
-                ema_26_values = prices[max(0, i-25):i+1]
-                multiplier_26 = 2 / (26 + 1)
-                ema_26 = ema_26_values[0]
-                for price in ema_26_values[1:]:
-                    ema_26 = (price - ema_26) * multiplier_26 + ema_26
-                
-                # MACD line
-                macd_line = ema_12 - ema_26
-                
-                # Signal line (9-period EMA of MACD)
-                if len(macd_history) >= 8:  # Need 9 MACD values for signal
-                    recent_macd = [m for m in macd_history[-8:] if m is not None] + [macd_line]
-                    multiplier_9 = 2 / (9 + 1)
-                    signal_line = recent_macd[0]
-                    for macd_val in recent_macd[1:]:
-                        signal_line = (macd_val - signal_line) * multiplier_9 + signal_line
-                    
-                    histogram = macd_line - signal_line
-                    
-                    macd_history.append(macd_line)
-                    macd_signal_history.append(signal_line)
-                    macd_histogram_history.append(histogram)
-                else:
-                    macd_history.append(macd_line)
-                    macd_signal_history.append(None)
-                    macd_histogram_history.append(None)
-            else:
-                macd_history.append(None)
-                macd_signal_history.append(None)
-                macd_histogram_history.append(None)                    
-        
         # ── Calculate all advanced indicators ──────────────────────────────
         try:
             advanced = technical_indicators.calculate_all_advanced(highs, lows, prices, volumes)
@@ -370,35 +262,9 @@ async def analyze_stock(
             print(f"Advanced indicators error: {e}")
             advanced = {}
 
-        # ── Build the scoring inputs once, then derive both the per-indicator
-        #    signal rows and the weighted outlook from the SAME inputs so the
-        #    rows always reconcile with the outlook's "X of N" count.
-        summary_rsi = rsi_history[-1] if rsi_history[-1] is not None else None
-        summary_macd = (
-            {
-                "trend": "bullish" if macd_histogram_history[-1] and macd_histogram_history[-1] > 0
-                         else "bearish" if macd_histogram_history[-1] and macd_histogram_history[-1] < 0
-                         else "neutral",
-                "histogram": macd_histogram_history[-1],
-            }
-            if macd_histogram_history[-1] is not None else None
-        )
-        summary_ma = {
-            "sma_20": sma_20_history[-1],
-            "sma_50": sma_50_history[-1],
-            "sma_200": sma_200_history[-1],
-        }
-        summary_bb = (
-            {
-                "upper_band": bb_upper_history[-1],
-                "middle_band": bb_middle_history[-1],
-                "lower_band": bb_lower_history[-1],
-                "position": _determine_bb_position(current_price, bb_upper_history[-1], bb_lower_history[-1]),
-            }
-            if bb_upper_history[-1] is not None else None
-        )
-
-        signals = build_signal_rows(summary_rsi, summary_macd, summary_ma, summary_bb, current_price, advanced)
+        # The signal rows and the weighted outlook take the SAME inputs, so the
+        # rows always reconcile with the outlook's "X of N" count.
+        signals = build_signal_rows(rsi, macd_data, ma_data, bb_data, current_price, advanced)
 
         # Enrich historical data with indicators (existing + advanced)
         n = len(historical)
@@ -409,13 +275,13 @@ async def analyze_stock(
                 "sma_20": sma_20_history[i],
                 "sma_50": sma_50_history[i],
                 "sma_200": sma_200_history[i],
-                "bb_upper": bb_upper_history[i],
-                "bb_middle": bb_middle_history[i],
-                "bb_lower": bb_lower_history[i],
+                "bb_upper": bb_history["upper"][i],
+                "bb_middle": bb_history["middle"][i],
+                "bb_lower": bb_history["lower"][i],
                 "rsi": rsi_history[i],
-                "macd_line": macd_history[i],
-                "macd_signal": macd_signal_history[i],
-                "macd_histogram": macd_histogram_history[i],
+                "macd_line": macd_history["macd"][i],
+                "macd_signal": macd_history["signal"][i],
+                "macd_histogram": macd_history["histogram"][i],
             }
             # Add advanced indicator histories (safely index each)
             def safe_idx(data, key, idx):
@@ -462,34 +328,34 @@ async def analyze_stock(
             "analysis_date": historical[-1]["date"],
             "indicators": {
                 "rsi": {
-                    "value": round(rsi_history[-1], 2) if rsi_history[-1] is not None else None,  # ← Use last RSI from history
-                    "signal": "oversold" if rsi_history[-1] and rsi_history[-1] < 30 else "overbought" if rsi_history[-1] and rsi_history[-1] > 70 else "neutral",
+                    "value": round(rsi, 2) if rsi is not None else None,
+                    "signal": "oversold" if rsi is not None and rsi < 30 else "overbought" if rsi is not None and rsi > 70 else "neutral",
                     "description": "RSI measures momentum. Below 30 = oversold (buy signal), Above 70 = overbought (sell signal)"
                 },
                 "macd": {
-                    "macd_line": round(macd_history[-1], 4) if macd_history[-1] is not None else None,  # ← Use last MACD from history
-                    "signal_line": round(macd_signal_history[-1], 4) if macd_signal_history[-1] is not None else None,
-                    "histogram": round(macd_histogram_history[-1], 4) if macd_histogram_history[-1] is not None else None,
-                    "trend": "bullish" if macd_histogram_history[-1] and macd_histogram_history[-1] > 0 else "bearish" if macd_histogram_history[-1] and macd_histogram_history[-1] < 0 else "neutral",
+                    "macd_line": round(macd_data["macd"], 4) if macd_data else None,
+                    "signal_line": round(macd_data["signal"], 4) if macd_data else None,
+                    "histogram": round(macd_data["histogram"], 4) if macd_data else None,
+                    "trend": macd_data["trend"] if macd_data else "neutral",
                     "description": "MACD shows trend direction. Bullish = upward momentum, Bearish = downward momentum"
                 },
                 "moving_averages": {
-                    "sma_20": round(sma_20_history[-1], 2) if sma_20_history[-1] is not None else None,  # ← Use last SMA20 from history
-                    "sma_50": round(sma_50_history[-1], 2) if sma_50_history[-1] is not None else None,  # ← Use last SMA50 from history
-                    "sma_200": round(sma_200_history[-1], 2) if sma_200_history[-1] is not None else None,  # ← Use last SMA200 from history
-                    "above_sma_20": current_price > sma_20_history[-1] if sma_20_history[-1] else None,
-                    "above_sma_50": current_price > sma_50_history[-1] if sma_50_history[-1] else None,
+                    "sma_20": round(ma_data["sma_20"], 2) if ma_data["sma_20"] is not None else None,
+                    "sma_50": round(ma_data["sma_50"], 2) if ma_data["sma_50"] is not None else None,
+                    "sma_200": round(ma_data["sma_200"], 2) if ma_data["sma_200"] is not None else None,
+                    "above_sma_20": current_price > ma_data["sma_20"] if ma_data["sma_20"] else None,
+                    "above_sma_50": current_price > ma_data["sma_50"] if ma_data["sma_50"] else None,
                     "description": "Price above MA = uptrend, Price below MA = downtrend"
                 },
                 "bollinger_bands": {
-                    "upper_band": round(bb_upper_history[-1], 2) if bb_upper_history[-1] is not None else None,
-                    "middle_band": round(bb_middle_history[-1], 2) if bb_middle_history[-1] is not None else None,
-                    "lower_band": round(bb_lower_history[-1], 2) if bb_lower_history[-1] is not None else None,
-                    "position": _determine_bb_position(current_price, bb_upper_history[-1], bb_lower_history[-1]),
+                    "upper_band": round(bb_data["upper"], 2) if bb_data else None,
+                    "middle_band": round(bb_data["middle"], 2) if bb_data else None,
+                    "lower_band": round(bb_data["lower"], 2) if bb_data else None,
+                    "position": bb_data["position"] if bb_data else "neutral",
                     "description": "Bands show volatility. Price at edges = potential reversal opportunity"
                 },
                 "squeeze": technical_indicators.compute_squeeze_state(
-                    bb_upper_history, bb_lower_history,
+                    bb_history["upper"], bb_history["lower"],
                     (advanced.get("keltner") or {}).get("upper_history"),
                     (advanced.get("keltner") or {}).get("lower_history"),
                 ) if advanced.get("keltner") else None,
@@ -511,7 +377,7 @@ async def analyze_stock(
             },
             "signals": signals,
             "chart_data": enriched_chart_data,
-            "summary": generate_summary(summary_rsi, summary_macd, summary_ma, summary_bb, current_price, advanced)
+            "summary": generate_summary(rsi, macd_data, ma_data, bb_data, current_price, advanced)
         }    
     except HTTPException:
         raise
@@ -592,7 +458,7 @@ async def screen_watchlist(
     tickers = [item.ticker for item in watchlist_items]
     company_quotes, *price_results = await asyncio.gather(
         market_data_service.get_batch_quotes(tickers),
-        *(_get_price_history(item.ticker, 60) for item in watchlist_items),
+        *(_get_price_history(item.ticker) for item in watchlist_items),
         return_exceptions=True,
     )
 
@@ -808,7 +674,7 @@ async def screen_reversal_candidates(
 
 
 # Helper functions
-async def _get_price_history(ticker: str, days: int = 60):
+async def _get_price_history(ticker: str, days: int = INDICATOR_HISTORY_DAYS):
     """Get price history and current price"""
     historical = await market_data_service.get_historical_prices(ticker, days)
     if not historical:

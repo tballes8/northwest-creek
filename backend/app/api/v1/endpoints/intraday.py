@@ -10,7 +10,9 @@ from datetime import datetime, date, time as dt_time, timedelta, timezone
 import pytz
 import httpx
 from app.api.dependencies import get_current_user
+from app.config import get_settings
 from app.services.fmp_client import get_fmp_client, API_KEY
+from app.services.market_data import market_data_service
 
 # Every route needs a live subscription (licensed FMP data; shared FMP quota)
 router = APIRouter(dependencies=[Depends(get_current_user)])
@@ -69,6 +71,11 @@ async def _get_extended_hours_quotes(
     Returns dict keyed by symbol:
         { "early": {price, change, change_percent}, "late": {…} }
     """
+    # Only in a batch call: one aftermarket request per ticker on every page poll
+    # would double the calls for a nice-to-have. Without batch endpoints the
+    # pre/after-hours fields stay empty.
+    if not get_settings().FMP_BATCH_ENDPOINTS:
+        return {}
     try:
         data = await _fmp_get("batch-aftermarket-trade", {"symbols": symbols})
         if not data or not isinstance(data, list):
@@ -190,10 +197,10 @@ async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
                 detail=f"At most {MAX_BATCH_TICKERS} tickers per request"
             )
 
-        # FMP /stable/batch-quote accepts comma-separated symbols
         symbols = ",".join(ticker_list)
 
-        data = await _fmp_get("batch-quote", {"symbols": symbols})
+        # batch-quote, or one /quote per ticker when the plan has no batch endpoints
+        data = await market_data_service.get_quote_rows(ticker_list)
         market_status = await _get_market_status()
 
         # Build lookup of regular-session previousClose for change calc

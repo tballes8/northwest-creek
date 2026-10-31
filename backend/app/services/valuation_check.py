@@ -34,6 +34,28 @@ _VALUATION_CHECK_TOLERANCE = 2.0
 # there is at most ~40% off. Beyond it (BRL, CNY, JPY, KRW, INR, ARS) a multiple that
 # could not be checked is not used: an unconverted one would be 5x to 1,500x off.
 _FAR_FX = 2.0
+# FMP's own DCF value and its analyst price-target consensus are per-share figures
+# FMP does not convert, and their basis varies by company: Toyota's read as dollars,
+# Sabesp's sit ~5x its price (unconverted reais or a stale pre-split basis). They
+# can't be rescaled safely, so they are shown only for dollar reporters, and only
+# within this factor of the price either way: past it the basis is wrong far more
+# often than the valuation is that extreme.
+_VENDOR_PER_SHARE_BAND = 4.0
+
+
+def vendor_per_share_ok(value, price, reporting_currency) -> bool:
+    """Whether a vendor per-share valuation (FMP's DCF, the analyst price-target
+    consensus) may be shown beside the price or given to the AI target. An unknown
+    reporting currency is not dollars. Suppress, don't caveat."""
+    try:
+        v, p = float(value), float(price)
+    except (TypeError, ValueError):
+        return False
+    if not (math.isfinite(v) and math.isfinite(p)) or v <= 0 or p <= 0:
+        return False
+    if (reporting_currency or "").upper() != "USD":
+        return False
+    return 1 / _VENDOR_PER_SHARE_BAND <= v / p <= _VENDOR_PER_SHARE_BAND
 
 
 def valuation_check(fmp_pe, market_cap, net_income, currency, fx: dict[str, float]) -> str:
@@ -134,6 +156,14 @@ def _selftest() -> None:
     usd_only = fx_per_usd([])
     assert valuation_check(39.74, 5.075e12, 1.2771e11, "USD", usd_only) == "ok"
     assert valuation_check(8.84, 233e9, 233e9 * 157.9 / 8.84, "JPY", usd_only) == "unverifiable"
+    # vendor_per_share_ok: dollar reporters within 4x of the price only
+    assert vendor_per_share_ok(250.0, 230.0, "USD")                 # an ordinary target
+    assert not vendor_per_share_ok(1150.0, 230.0, "USD")            # 5x: wrong basis
+    assert not vendor_per_share_ok(50.0, 230.0, "USD")              # under 1/4
+    assert not vendor_per_share_ok(110.0, 22.0, "BRL")              # SBS: never for a foreign reporter
+    assert not vendor_per_share_ok(250.0, 230.0, None)              # unknown currency is not dollars
+    assert not vendor_per_share_ok(-5.0, 230.0, "USD")              # a negative DCF
+    assert not vendor_per_share_ok(None, 230.0, "USD") and not vendor_per_share_ok(250.0, 0, "USD")
     # check_against_quarters: four quarters summed, latest currency, fewer is unverifiable
     q = [{"netIncome": 1.2771e11 / 4, "reportedCurrency": "USD"}] * 4
     assert check_against_quarters(39.74, 5.075e12, q, fx) == "ok"                          # AAPL

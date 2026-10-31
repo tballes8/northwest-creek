@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     
     # Alpha Vantage API
     FMP_API_KEY: str = Field(..., env="FMP_API_KEY")
+    # Whether the FMP plan includes batch endpoints (batch-quote, batch-*-quotes,
+    # batch-aftermarket-trade). Off since the 2026-10-31 downgrade: small symbol
+    # lists are fetched one /quote at a time, and the whole-market jobs (screener
+    # refresh, daily snapshot cron) skip. Set true when the plan is upgraded.
+    FMP_BATCH_ENDPOINTS: bool = Field(default=False, env="FMP_BATCH_ENDPOINTS")
     
     # CORS
     CORS_ORIGINS: List[str] = Field(default=["http://localhost:3000"], env="CORS_ORIGINS")
@@ -108,4 +113,5 @@ def get_settings() -> Settings:
         print(f"   STRIPE_PROFESSIONAL_PRICE_ID = {settings.STRIPE_PROFESSIONAL_PRICE_ID or '❌ NOT SET'}")
         print(f"   DATABASE_URL = {'✅ SET' if settings.DATABASE_URL else '❌ NOT SET'}")
         print(f"   FMP_API_KEY = {'✅ SET' if settings.FMP_API_KEY else '❌ NOT SET'}")
+        print(f"   FMP_BATCH_ENDPOINTS = {settings.FMP_BATCH_ENDPOINTS}")
     return settings

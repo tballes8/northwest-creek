@@ -17,8 +17,9 @@ from app.core.tier_limits import get_tier_limit
 from app.db.models import TechnicalAlert, User
 from app.services.email_service import email_service
 from app.services.market_data import market_data_service
-from app.services.technical_indicators import technical_indicators, generate_summary
+from app.services.technical_indicators import technical_indicators, generate_summary, INDICATOR_HISTORY_DAYS
 from app.services.financials_service import get_company_financials
+from app.services.dcf_service import compute_dcf
 from app.services.edgar_identity import is_contradicted
 
 settings = get_settings()
@@ -183,7 +184,7 @@ class TechnicalAlertChecker:
     async def _compute_indicators(self, ticker: str) -> Optional[Dict[str, Any]]:
         """Fetch prices and compute all indicators needed by any alert type."""
         try:
-            historical = await market_data_service.get_historical_prices(ticker, days=260)
+            historical = await market_data_service.get_historical_prices(ticker, days=INDICATOR_HISTORY_DAYS)
         except Exception as e:
             print(f"   ⚠️  Could not fetch history for {ticker}: {e}")
             return None
@@ -435,8 +436,12 @@ class TechnicalAlertChecker:
             )
             if isinstance(quote, BaseException) or isinstance(company, BaseException):
                 return None
-            if isinstance(financials, BaseException):
-                financials = None
+            # Statements that failed to load: skip rather than evaluate on the
+            # gap (a DCF without debt, a Rule of 40 without revenue). The alert
+            # stays armed and is checked again on the next run.
+            if isinstance(financials, BaseException) or financials.get("unavailable"):
+                print(f"   Skipping fundamental alerts for {ticker}: financials unavailable this run")
+                return None
 
             # Wrong entity: refuse to evaluate at all. Returning None makes
             # every fundamental-based evaluator bail, which is the only safe
@@ -498,42 +503,44 @@ class TechnicalAlertChecker:
         growth_rate = max(0.01, min(0.30, growth_rate + g_adj))
         discount_rate = max(0.06, min(0.20, discount_rate + d_adj))
 
-        # Extract FCF
+        # Filed figures only, or no rating. The alert emails, so a guessed cash
+        # flow or a missing balance sheet must skip, never decide.
         cash_flow_data = fin.get("cash_flow") or {}
         current_fcf = cash_flow_data.get("free_cash_flow")
         if current_fcf is None:
             current_fcf = cash_flow_data.get("operating_cash_flow")
         if current_fcf is None:
-            current_fcf = (market_cap * 0.05) if market_cap else (current_price * 1_000_000)
+            return None, 0.0, 0.0
 
-        # Extract shares outstanding
         income_data = fin.get("income_statement") or {}
         shares = income_data.get("diluted_shares_outstanding")
         if not shares or shares <= 0:
-            shares = (market_cap / current_price) if (market_cap and current_price > 0) else 1_000_000
+            shares = (market_cap / current_price) if (market_cap and current_price > 0) else None
+        if not shares:
+            return None, 0.0, 0.0
 
-        # Project cash flows
-        pv_sum = 0
-        last_year_fcf = current_fcf
-        for year in range(1, projection_years + 1):
-            fcf = current_fcf * ((1 + growth_rate) ** year)
-            pv = fcf / ((1 + discount_rate) ** year)
-            pv_sum += pv
-            last_year_fcf = fcf
+        balance_sheet = fin.get("balance_sheet") or {}
+        cash = balance_sheet.get("cash_and_equivalents")
+        if cash is None:
+            cash = balance_sheet.get("cash")
+        debt = balance_sheet.get("total_debt")
+        if debt is None:
+            debt = balance_sheet.get("long_term_debt")
+        if cash is None or debt is None:
+            return None, 0.0, 0.0
 
-        # Terminal value
         if discount_rate <= terminal_growth:
             return None, 0.0, 0.0
-        terminal_value = (last_year_fcf * (1 + terminal_growth)) / (discount_rate - terminal_growth)
-        terminal_pv = terminal_value / ((1 + discount_rate) ** projection_years)
-
-        # Equity value (with net cash adjustment)
-        balance_sheet = fin.get("balance_sheet") or {}
-        cash = balance_sheet.get("cash_and_equivalents") or balance_sheet.get("cash") or 0
-        debt = balance_sheet.get("total_debt") or balance_sheet.get("long_term_debt") or 0
-        enterprise_value = pv_sum + terminal_pv
-        equity_value = enterprise_value + (cash - debt)
-        intrinsic_value = equity_value / shares
+        # The same engine as the DCF page, so the alert and the page agree
+        intrinsic_value = compute_dcf(
+            current_fcf=current_fcf,
+            growth_rate=growth_rate,
+            discount_rate=discount_rate,
+            terminal_growth=terminal_growth,
+            projection_years=projection_years,
+            shares_outstanding=shares,
+            net_debt_adjustment=cash - debt,
+        )["intrinsic_value_per_share"]
 
         # Margin of safety & rating
         margin_of_safety = ((intrinsic_value - current_price) / current_price) * 100

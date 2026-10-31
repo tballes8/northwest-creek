@@ -46,6 +46,15 @@ _FX_HISTORY_DAYS = 1300
 _FX_HISTORY_TTL_SECONDS = 12 * 3600
 # A company's reporting currency changes essentially never.
 _CURRENCY_TTL_SECONDS = 24 * 3600
+# Pairs quoted one at a time when the plan has no batch endpoints (no
+# batch-forex-quotes): the reporting currencies of companies NWC shows. A currency
+# missing here has no rate, so its figures go blank, never unconverted.
+_FX_PAIRS = (
+    "EURUSD", "GBPUSD", "AUDUSD", "NZDUSD", "USDJPY", "USDCNY", "USDTWD", "USDKRW",
+    "USDINR", "USDBRL", "USDCAD", "USDCHF", "USDHKD", "USDMXN", "USDSEK", "USDNOK",
+    "USDDKK", "USDSGD", "USDZAR", "USDILS", "USDCLP", "USDARS", "USDCOP", "USDPEN",
+    "USDIDR", "USDPHP", "USDTHB", "USDTRY", "USDPLN", "USDMYR",
+)
 # Calendar days to walk back from a date to the last day a rate printed (weekends,
 # holidays) — the same window financials_service uses for closing prices.
 _WALK_BACK_DAYS = 7
@@ -168,10 +177,15 @@ async def get_fx_per_usd() -> dict[str, float]:
         ttl = _FX_TTL_SECONDS if _fx_ok else _FX_RETRY_SECONDS
         if time.time() - _fx_fetched_at < ttl:
             return _fx_cache
+        from app.config import get_settings
         try:
-            rates = fx_per_usd(await market_data_service._fmp_get("batch-forex-quotes"))
+            if get_settings().FMP_BATCH_ENDPOINTS:
+                rows = await market_data_service._fmp_get("batch-forex-quotes")
+            else:
+                rows = await market_data_service.get_quote_rows(list(_FX_PAIRS))
+            rates = fx_per_usd(rows)
         except Exception as e:
-            print(f"WARN: batch-forex-quotes failed ({type(e).__name__}: {e})")
+            print(f"WARN: exchange rates failed ({type(e).__name__}: {e})")
             rates = {}
         _fx_fetched_at = time.time()
         _fx_ok = len(rates) > 1

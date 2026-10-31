@@ -15,7 +15,7 @@ from app.db.session import get_db
 from app.services.market_data import market_data_service
 from app.services.financials_service import get_company_financials
 from app.services.edgar_identity import is_contradicted
-from app.services.fmp_client import get_fmp_client, API_KEY
+from app.services.valuation_check import vendor_per_share_ok
 from app.services.dcf_service import compute_dcf, calculate_reverse_dcf
 from app.core.tier_limits import get_tier_limit, get_review_period, get_upgrade_tier
 
@@ -35,7 +35,8 @@ router = APIRouter()
 async def _fetch_fmp_dcf(ticker: str) -> Dict[str, Any]:
     """
     Fetch FMP's pre-calculated DCF benchmarks (simple, levered, and advanced).
-    Returns a dict with all three, or empty values on failure.
+    Each one that fails stays None. These per-share figures are shown only
+    through _fmp_benchmark, which applies valuation_check.vendor_per_share_ok.
     """
     result: Dict[str, Any] = {
         "dcf": None,
@@ -43,44 +44,78 @@ async def _fetch_fmp_dcf(ticker: str) -> Dict[str, Any]:
         "stock_price": None,
         "wacc": None,
         "equity_value_per_share": None,
-        "terminal_value": None,
-        "enterprise_value": None,
     }
-    try:
-        client = get_fmp_client()
-        params = {"symbol": ticker, "apikey": API_KEY}
+    params = {"symbol": ticker}
+    simple, levered, advanced = await asyncio.gather(
+        market_data_service._fmp_get("discounted-cash-flow", dict(params)),
+        market_data_service._fmp_get("levered-discounted-cash-flow", dict(params)),
+        market_data_service._fmp_get("custom-discounted-cash-flow", dict(params)),
+        return_exceptions=True,
+    )
 
-        # Fetch all three DCF endpoints in parallel
-        simple_resp, levered_resp, adv_resp = await asyncio.gather(
-            client.get("discounted-cash-flow", params=params),
-            client.get("levered-discounted-cash-flow", params=params),
-            client.get("custom-discounted-cash-flow", params=params),
-        )
+    def first(rows):
+        return rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
 
-        simple_resp.raise_for_status()
-        simple_data = simple_resp.json()
-        if simple_data and isinstance(simple_data, list) and len(simple_data) > 0:
-            result["dcf"] = simple_data[0].get("dcf")
-            result["stock_price"] = simple_data[0].get("Stock Price")
-
-        levered_resp.raise_for_status()
-        levered_data = levered_resp.json()
-        if levered_data and isinstance(levered_data, list) and len(levered_data) > 0:
-            result["levered_dcf"] = levered_data[0].get("dcf")
-
-        adv_resp.raise_for_status()
-        adv_data = adv_resp.json()
-        if adv_data and isinstance(adv_data, list) and len(adv_data) > 0:
-            latest = adv_data[0]  # newest projected year
-            result["wacc"] = latest.get("wacc")
-            result["equity_value_per_share"] = latest.get("equityValuePerShare")
-            result["terminal_value"] = latest.get("terminalValue")
-            result["enterprise_value"] = latest.get("enterpriseValue")
-
-    except Exception as e:
-        print(f"⚠️ FMP DCF fetch failed for {ticker}: {e}")
-
+    if (row := first(simple)) is not None:
+        result["dcf"] = row.get("dcf")
+        result["stock_price"] = row.get("Stock Price")
+    if (row := first(levered)) is not None:
+        result["levered_dcf"] = row.get("dcf")
+    if (row := first(advanced)) is not None:  # newest projected year
+        result["wacc"] = row.get("wacc")
+        result["equity_value_per_share"] = row.get("equityValuePerShare")
+    failed = [n for n, r in (("simple", simple), ("levered", levered), ("advanced", advanced)) if isinstance(r, BaseException)]
+    if failed:
+        print(f"⚠️ FMP DCF fetch failed for {ticker}: {', '.join(failed)}")
     return result
+
+
+def _fmp_benchmark(fmp_dcf: Dict[str, Any], current_price: float, fin: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """FMP's own DCF figures for the comparison table, each only if it passes
+    valuation_check.vendor_per_share_ok: FMP doesn't convert them and their basis
+    varies by company, so a foreign reporter's or an implausible one is withheld
+    (and the frontend hides the table when both values are)."""
+    ccy = (fin or {}).get("reported_currency")
+
+    def checked(value):
+        return value if vendor_per_share_ok(value, current_price, ccy) else None
+
+    return {
+        "dcf_value": checked(fmp_dcf.get("dcf")),
+        "levered_dcf_value": checked(fmp_dcf.get("levered_dcf")),
+        "equity_value_per_share": checked(fmp_dcf.get("equity_value_per_share")),
+        "wacc": fmp_dcf.get("wacc"),  # a rate: no currency
+        "source": "FMP Discounted Cash Flow model",
+    }
+
+
+def _financials_unavailable(ticker: str) -> HTTPException:
+    """A DCF needs the statements. One that failed to load is a retry, not a
+    reason to value the company on a guess or to ask the user for its cash flow."""
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=f"Financial data for {ticker} is temporarily unavailable. Please try again shortly.",
+    )
+
+
+def _manual_fcf_response(ticker, company_name, security_type, current_price, entity_trust) -> Dict[str, Any]:
+    """No valuation without a cash flow from the filings or the user. Returned (not
+    raised) so the page can open the manual FCF input; no DCF usage is recorded."""
+    return {
+        "ticker": ticker,
+        "company_name": company_name,
+        "security_type": security_type,
+        "current_price": round(current_price, 2),
+        "assumptions": None,
+        "projections": None,
+        "terminal_value": None,
+        "valuation": None,
+        "recommendation": None,
+        "reverse_dcf": None,
+        "fmp_benchmark": None,
+        "entity_trust": entity_trust,
+        "requires_manual_fcf": True,
+    }
 
 
 async def _fetch_shares_outstanding(ticker: str) -> Optional[int]:
@@ -89,19 +124,13 @@ async def _fetch_shares_outstanding(ticker: str) -> Optional[int]:
     Returns the outstandingShares count or None on failure.
     """
     try:
-        client = get_fmp_client()
-        resp = await client.get(
-            "shares-float",
-            params={"symbol": ticker.upper(), "apikey": API_KEY},
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        data = await market_data_service._fmp_get("shares-float", {"symbol": ticker.upper()})
         if data and isinstance(data, list) and len(data) > 0:
             outstanding = data[0].get("outstandingShares")
             if outstanding and outstanding > 0:
                 return int(outstanding)
     except Exception as e:
-        print(f"⚠️ Shares float fetch failed for {ticker}: {e}")
+        print(f"⚠️ Shares float fetch failed for {ticker}: {type(e).__name__}")
     return None
 
 
@@ -212,8 +241,8 @@ async def get_dcf_suggestions(
         security_type = company.get("type", "")
 
         # Normalize optional results that may have failed
-        if isinstance(fin_result, BaseException):
-            fin_result = None
+        if isinstance(fin_result, BaseException) or (fin_result or {}).get("unavailable"):
+            raise _financials_unavailable(ticker)
         if isinstance(fmp_dcf, BaseException):
             fmp_dcf = {}
         if isinstance(shares_outstanding, BaseException):
@@ -539,13 +568,12 @@ async def get_dcf_suggestions(
             "actuals": actuals,
             "growth_profile": growth_profile,
             "entity_trust": entity_trust,
-            "fmp_benchmark": {
-                "dcf_value": fmp_dcf.get("dcf"),
-                "levered_dcf_value": fmp_dcf.get("levered_dcf"),
-                "equity_value_per_share": fmp_dcf.get("equity_value_per_share"),
-                "wacc": fmp_dcf.get("wacc"),
-                "source": "FMP Discounted Cash Flow model",
-            },
+            "fmp_benchmark": _fmp_benchmark(fmp_dcf, current_price, fin_result),
+            # No cash flow in the filings: the user must supply one (see
+            # `fcf_override` on /calculate); a guessed one is never used.
+            "requires_manual_fcf": not actuals or (
+                actuals.get("fcf_ttm") is None and actuals.get("operating_cf_ttm") is None
+            ),
         }
     
     except HTTPException:
@@ -636,9 +664,10 @@ async def calculate_dcf(
             market_cap = company_r.get("market_cap")
             security_type = company_r.get("type", "")
 
-        # Normalize optional results
-        if isinstance(fin_r, BaseException):
-            fin_r = None
+        # Normalize optional results. Financials are not optional: a DCF without
+        # the statements is a guess.
+        if isinstance(fin_r, BaseException) or (fin_r or {}).get("unavailable"):
+            raise _financials_unavailable(ticker)
         if isinstance(shares_r, BaseException):
             shares_r = None
         if isinstance(fmp_dcf, BaseException):
@@ -666,21 +695,7 @@ async def calculate_dcf(
         if is_contradicted(entity_trust) and fcf_override is None:
             if entity_trust.get("edgar_company_name"):
                 company_name = entity_trust["edgar_company_name"]
-            return {
-                "ticker": ticker,
-                "company_name": company_name,
-                "security_type": security_type,
-                "current_price": round(current_price, 2),
-                "assumptions": None,
-                "projections": None,
-                "terminal_value": None,
-                "valuation": None,
-                "recommendation": None,
-                "reverse_dcf": None,
-                "fmp_benchmark": None,
-                "entity_trust": entity_trust,
-                "requires_manual_fcf": True,
-            }
+            return _manual_fcf_response(ticker, company_name, security_type, current_price, entity_trust)
 
         # ── Extract financials from pre-fetched data ──────────────────────
         current_fcf = None
@@ -718,23 +733,21 @@ async def calculate_dcf(
             shares_outstanding = shares_r
             shares_source = "fmp_shares_float"
 
-        # Priority 3: Market cap estimate (fallback when no filings exist)
-        if current_fcf is None:
-            if market_cap:
-                current_fcf = market_cap * 0.05
-                fcf_source = "estimated_market_cap"
-            else:
-                current_fcf = current_price * 1000000
-                fcf_source = "estimated_price"
+        # No cash flow in the filings: no valuation unless the user supplies one.
+        # The old fallback (market cap x 5%, or price x 1,000,000) put a Buy/Sell
+        # rating on a number that encoded the heuristic, not the company.
+        if current_fcf is None and fcf_override is None:
+            return _manual_fcf_response(ticker, company_name, security_type, current_price, entity_trust)
 
-        # Shares outstanding final fallback
-        if shares_outstanding is None:
-            if market_cap and current_price > 0:
-                shares_outstanding = market_cap / current_price
-                shares_source = "estimated_market_cap"
-            else:
-                shares_outstanding = 1000000
-                shares_source = "estimated_default"
+        # Shares: market cap over price is the share count the market prices
+        if shares_outstanding is None and market_cap and current_price > 0:
+            shares_outstanding = market_cap / current_price
+            shares_source = "estimated_market_cap"
+        if shares_outstanding is None and shares_override is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Shares outstanding for {ticker} are unavailable. Enter them under Shares Outstanding."
+            )
 
         # ── User-supplied overrides ───────────────────────────────────
         # Applied after every vendor path and fallback so they always win. This
@@ -874,15 +887,7 @@ async def calculate_dcf(
             },
             "reverse_dcf": reverse_dcf,
             "entity_trust": entity_trust,
-            "fmp_benchmark": {
-                "dcf_value": fmp_dcf.get("dcf"),
-                "levered_dcf_value": fmp_dcf.get("levered_dcf"),
-                "equity_value_per_share": fmp_dcf.get("equity_value_per_share"),
-                "wacc": fmp_dcf.get("wacc"),
-                "terminal_value": fmp_dcf.get("terminal_value"),
-                "enterprise_value": fmp_dcf.get("enterprise_value"),
-                "source": "FMP Discounted Cash Flow model",
-            },
+            "fmp_benchmark": _fmp_benchmark(fmp_dcf, current_price, fin_r),
         }
 
         # Record usage only after a successful calculation

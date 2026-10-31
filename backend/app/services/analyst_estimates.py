@@ -15,7 +15,6 @@ import math
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-from app.services.fmp_client import get_fmp_client, API_KEY
 
 # A single forward estimate row is only comparable to TTM revenue if the estimate's
 # fiscal year end is far enough past the last reported quarter to represent roughly
@@ -94,24 +93,36 @@ def normalize_estimate_row(entry: dict) -> Optional[Dict[str, Any]]:
 
 
 def forward_rows(data: Any, today: Optional[date] = None) -> List[Dict[str, Any]]:
-    """Normalized estimate rows for fiscal years >= the current year, OLDEST-FIRST.
+    """Normalized estimate rows for fiscal years ending after today, OLDEST-FIRST.
+
+    By the fiscal year's end date, not its calendar year: NVDA's year ending in
+    January, MSFT's in June and AAPL's in September end within the calendar year
+    of their label, so ">= this year" passed off a year already over (and usually
+    reported) as the forward one.
 
     FMP's ordering isn't guaranteed, so rows are sorted explicitly rather than
     trusting position.
     """
     if not isinstance(data, list):
         return []
-    current_year = (today or date.today()).year
+    today = today or date.today()
     rows = [r for r in (normalize_estimate_row(e) for e in data if isinstance(e, dict)) if r]
-    return sorted((r for r in rows if r["year"] >= current_year), key=lambda r: r["date"])
+    return sorted(
+        (r for r in rows if (_parse_date(r["date"]) or date.min) > today),
+        key=lambda r: r["date"],
+    )
 
 
-async def fetch_estimates(ticker: str, limit: int = 4) -> Dict[str, Any]:
+async def fetch_estimates(ticker: str, limit: int = 10) -> Dict[str, Any]:
     """Fetch annual consensus estimates for `ticker`.
 
     Returns `{"rows": [...forward rows, oldest-first...]}` plus the nearest-forward
-    convenience aggregates. Never raises — on failure `rows` is empty and every
-    aggregate is None, so callers degrade instead of erroring.
+    convenience aggregates. Never raises — on failure `rows` is empty, every
+    aggregate is None and `fetch_failed` is True, so callers degrade instead of
+    erroring and can tell a failure from no coverage.
+
+    `limit` covers past years too (FMP returns them alongside), so it is set well
+    above the years ahead that are used: at 4 the nearest forward year could be cut.
     """
     out: Dict[str, Any] = {
         "rows": [],
@@ -123,18 +134,18 @@ async def fetch_estimates(ticker: str, limit: int = 4) -> Dict[str, Any]:
         "estimate_year": None,
         "num_analysts_eps": None,
         "num_analysts_revenue": None,
+        "fetch_failed": False,
     }
+    from app.services.market_data import market_data_service
     try:
-        client = get_fmp_client()
-        resp = await client.get(
+        data = await market_data_service._fmp_get(
             "analyst-estimates",
-            params={"symbol": ticker.upper().strip(), "apikey": API_KEY,
-                    "period": "annual", "limit": limit},
+            {"symbol": ticker.upper().strip(), "period": "annual", "limit": limit},
         )
-        resp.raise_for_status()
-        rows = forward_rows(resp.json())
+        rows = forward_rows(data)
     except Exception as e:  # noqa: BLE001 - degrade, never break the caller
-        print(f"Analyst estimates fetch failed for {ticker}: {e}")
+        print(f"Analyst estimates fetch failed for {ticker}: {type(e).__name__}")
+        out["fetch_failed"] = True
         return out
 
     out["rows"] = rows

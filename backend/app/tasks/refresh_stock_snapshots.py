@@ -35,6 +35,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.models import StockSnapshot
+from app.config import get_settings
 from app.db.session import async_session
 from app.services.edgar_identity import (
     CANNOT_RESOLVE, CONTRADICTION, build_entity_trust, normalize_cik,
@@ -1297,6 +1298,13 @@ async def _update_valuations() -> int | None:
 
 async def refresh_stock_snapshots_job(api_key: str) -> None:
     """Entry point called by APScheduler every 15 minutes."""
+    # Quoting the whole universe needs batch-quote. Without it this job would never
+    # store quotes, so every run would look like a new day's first and re-run the
+    # daily rebuild's thousands of per-symbol calls. The screener keeps its last
+    # snapshot until settings.FMP_BATCH_ENDPOINTS is back on.
+    if not get_settings().FMP_BATCH_ENDPOINTS:
+        print("📊 Snapshot refresh skipped: FMP batch endpoints are off (FMP_BATCH_ENDPOINTS)", flush=True)
+        return
     if not _is_market_hours():
         last_ts = await _last_refresh_ts()
         # One refresh after the close captures final prices; after that,

@@ -36,7 +36,7 @@ rendered next to green "actual data" badges. See `edgar_identity`.
 import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, Optional, List, Tuple
-from app.services.fmp_client import get_fmp_client, API_KEY
+from app.services.market_data import market_data_service
 from app.services.analyst_estimates import (
     derive_consensus_growth,
     estimates_to_usd,
@@ -202,16 +202,16 @@ def compute_peer_fundamentals(income_quarters: List[dict]) -> Dict[str, Optional
 
 
 async def _fetch(path: str, params: dict) -> Any:
-    """Fetch a single FMP endpoint, return parsed JSON or empty list on failure."""
-    full_params = {"apikey": API_KEY, **params}
+    """Fetch one FMP endpoint through market_data._fmp_get (429 retries; FMP error
+    bodies raise). Returns None on failure, never [], so a failed fetch can't be
+    read as "this company has no such data"."""
     try:
-        client = get_fmp_client()
-        response = await client.get(path, params=full_params)
-        response.raise_for_status()
-        return response.json()
+        return await market_data_service._fmp_get(path, dict(params))
     except Exception as e:
-        print(f"⚠️ Financials fetch failed for {path}: {e}")
-        return []
+        # Not str(e): an HTTP error's text carries the request URL and its apikey
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        print(f"⚠️ Financials fetch failed for {path}: {type(e).__name__}{f' {status}' if status else ''}")
+        return None
 
 
 # Payload keys carrying figures that belong to a specific legal entity. On a
@@ -336,6 +336,18 @@ async def get_company_financials(
         fund_task,
         fx_task,
     )
+
+    # Statements that could not be fetched, as opposed to fetched and empty. The
+    # payload carries them as `unavailable`; consumers treat that as "can't say
+    # right now", never as "this company has none" (no "may not have SEC
+    # filings", no DCF without its balance sheet).
+    unavailable = [
+        name for name, rows in (
+            ("income_statement", income_quarters),
+            ("balance_sheet", balance_list),
+            ("cash_flow", cashflow_quarters),
+        ) if rows is None
+    ]
 
     # ── Normalise to lists (FMP returns arrays directly) ──────────────
     if not isinstance(income_quarters, list):
@@ -611,6 +623,7 @@ async def get_company_financials(
         "reported_currency": reported_currency,
         "usd_conversion": {"from": reported_currency, "rate": rate} if converted else None,
         "entity_trust": entity_trust,
+        "unavailable": unavailable,
     }
 
     if is_contradicted(entity_trust):

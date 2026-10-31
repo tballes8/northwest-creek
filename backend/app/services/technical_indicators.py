@@ -7,6 +7,13 @@ import numpy as np
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
+# Calendar days of history behind every indicator reading: the Technical Analysis
+# page, the watchlist screens, the AI reads and the indicator alerts all fetch this
+# window (~170 bars), so they read the same numbers. Wilder RSI and the MACD EMAs
+# remember where their series starts, so a different window gives a different
+# value for the same close. Too short for a 200-day SMA (site review N18).
+INDICATOR_HISTORY_DAYS = 250
+
 
 class TechnicalIndicators:
     """Calculate technical indicators for stocks"""
@@ -15,65 +22,118 @@ class TechnicalIndicators:
     # EXISTING INDICATORS (unchanged)
     # ═══════════════════════════════════════════════════════════════════════
     
+    # Each core indicator has ONE implementation: a *_series function giving a
+    # value per bar (None until warm), and a calculate_* that is by construction
+    # the last bar of it. The Technical Analysis page charts the series; the alert
+    # checker, the watchlist screens and the AI reads call calculate_*. Never
+    # recompute RSI/MACD/SMA/BB in an endpoint — the page once charted a
+    # simple-average RSI beside a Wilder one in the alerts, so it read 28 while
+    # the alert computed 34 and never fired.
+
     @staticmethod
-    def calculate_rsi(prices: List[float], period: int = 14) -> Optional[float]:
+    def calculate_rsi_series(prices: List[float], period: int = 14) -> List[Optional[float]]:
+        """RSI for every bar, Wilder-smoothed. The first value is at index `period`."""
+        out: List[Optional[float]] = [None] * len(prices)
         if len(prices) < period + 1:
-            return None
+            return out
         deltas = [prices[i] - prices[i-1] for i in range(1, len(prices))]
         gains = [d if d > 0 else 0 for d in deltas]
         losses = [-d if d < 0 else 0 for d in deltas]
+        def rsi(avg_gain, avg_loss):
+            if avg_loss == 0:
+                return 100.0
+            return round(100 - (100 / (1 + avg_gain / avg_loss)), 4)
         # Wilder's smoothing: seed with SMA, then exponential
         avg_gain = sum(gains[:period]) / period
         avg_loss = sum(losses[:period]) / period
+        out[period] = rsi(avg_gain, avg_loss)
         for i in range(period, len(deltas)):
             avg_gain = (avg_gain * (period - 1) + gains[i]) / period
             avg_loss = (avg_loss * (period - 1) + losses[i]) / period
-        if avg_loss == 0:
-            return 100.0
-        rs = avg_gain / avg_loss
-        return round(100 - (100 / (1 + rs)), 4)
-    
+            out[i + 1] = rsi(avg_gain, avg_loss)
+        return out
+
     @staticmethod
-    def calculate_macd(prices, fast_period=12, slow_period=26, signal_period=9):
-        if len(prices) < slow_period + signal_period:
-            return None
-        prices_series = pd.Series(prices)
+    def calculate_rsi(prices: List[float], period: int = 14) -> Optional[float]:
+        series = TechnicalIndicators.calculate_rsi_series(prices, period)
+        return series[-1] if series else None
+
+    @staticmethod
+    def calculate_macd_series(prices, fast_period=12, slow_period=26, signal_period=9):
+        """
+        MACD line, signal line and histogram for every bar.
+
+        EMAs run over the whole series (ewm adjust=False, seeded at the first
+        close), so each bar carries all the history before it — not an EMA
+        re-seeded from the last 12/26 closes. Bars before slow+signal-1 are None:
+        they are still mostly seed, and that is the floor calculate_macd has
+        always applied.
+        """
+        n = len(prices)
+        out = {"macd": [None] * n, "signal": [None] * n, "histogram": [None] * n}
+        if n < slow_period + signal_period:
+            return out
+        prices_series = pd.Series(prices, dtype=float)
         ema_fast = prices_series.ewm(span=fast_period, adjust=False).mean()
         ema_slow = prices_series.ewm(span=slow_period, adjust=False).mean()
         macd_line = ema_fast - ema_slow
         signal_line = macd_line.ewm(span=signal_period, adjust=False).mean()
         histogram = macd_line - signal_line
+        warmup = slow_period + signal_period - 1
+        for key, s in (("macd", macd_line), ("signal", signal_line), ("histogram", histogram)):
+            out[key] = [None] * warmup + [float(v) for v in s.tolist()[warmup:]]
+        return out
+
+    @staticmethod
+    def calculate_macd(prices, fast_period=12, slow_period=26, signal_period=9):
+        s = TechnicalIndicators.calculate_macd_series(prices, fast_period, slow_period, signal_period)
+        h = s["histogram"][-1] if s["histogram"] else None
+        if h is None:
+            return None
         return {
-            "macd": float(macd_line.iloc[-1]),
-            "signal": float(signal_line.iloc[-1]),
-            "histogram": float(histogram.iloc[-1]),
-            "trend": "bullish" if histogram.iloc[-1] > 0 else "bearish"
+            "macd": s["macd"][-1],
+            "signal": s["signal"][-1],
+            "histogram": h,
+            "trend": "bullish" if h > 0 else "bearish"
         }
-    
+
+    @staticmethod
+    def calculate_sma_series(prices, period) -> List[Optional[float]]:
+        """Simple moving average for every bar; None until `period` bars exist."""
+        return [None if i < period - 1 else sum(prices[i-period+1:i+1]) / period
+                for i in range(len(prices))]
+
     @staticmethod
     def calculate_moving_averages(prices):
-        prices_series = pd.Series(prices)
-        return {
-            "sma_20": float(prices_series.rolling(20).mean().iloc[-1]) if len(prices) >= 20 else None,
-            "sma_50": float(prices_series.rolling(50).mean().iloc[-1]) if len(prices) >= 50 else None,
-            "sma_200": float(prices_series.rolling(200).mean().iloc[-1]) if len(prices) >= 200 else None,
-        }
-    
+        def last(period):
+            return TechnicalIndicators.calculate_sma_series(prices, period)[-1] if len(prices) >= period else None
+        return {"sma_20": last(20), "sma_50": last(50), "sma_200": last(200)}
+
+    @staticmethod
+    def calculate_bollinger_series(prices, period=20, std_dev=2):
+        """Bollinger Bands for every bar: SMA ± std_dev × population std (ddof=0)."""
+        middle = TechnicalIndicators.calculate_sma_series(prices, period)
+        upper, lower = [], []
+        for i, m in enumerate(middle):
+            if m is None:
+                upper.append(None); lower.append(None)
+                continue
+            sd = (sum((p - m) ** 2 for p in prices[i-period+1:i+1]) / period) ** 0.5
+            upper.append(m + std_dev * sd)
+            lower.append(m - std_dev * sd)
+        return {"upper": upper, "middle": middle, "lower": lower}
+
     @staticmethod
     def calculate_bollinger_bands(prices, period=20, std_dev=2):
         if len(prices) < period:
             return None
-        prices_series = pd.Series(prices)
-        middle = prices_series.rolling(period).mean()
-        std = prices_series.rolling(period).std(ddof=0)
-        upper = middle + std_dev * std
-        lower = middle - std_dev * std
+        bb = TechnicalIndicators.calculate_bollinger_series(prices, period, std_dev)
+        u, m, l = bb["upper"][-1], bb["middle"][-1], bb["lower"][-1]
         cp = prices[-1]
         return {
-            "upper": float(upper.iloc[-1]), "middle": float(middle.iloc[-1]),
-            "lower": float(lower.iloc[-1]),
-            "bandwidth": float(upper.iloc[-1] - lower.iloc[-1]),
-            "position": "above_upper" if cp > upper.iloc[-1] else "below_lower" if cp < lower.iloc[-1] else "within_bands"
+            "upper": u, "middle": m, "lower": l,
+            "bandwidth": u - l,
+            "position": "above_upper" if cp > u else "below_lower" if cp < l else "within_bands"
         }
     
     @staticmethod
@@ -510,25 +570,15 @@ class TechnicalIndicators:
         from raw OHLC lists and return the squeeze state dict (same shape and
         parameters as the Technical Analysis card pill so the two always agree).
 
-        BB history matches the analyze endpoint exactly: 20-period SMA ± 2×population
-        std. KC history comes from calculate_keltner_channels (EMA 20, ATR 10, 2.0×).
+        BB history is calculate_bollinger_series, the series the analyze endpoint
+        charts. KC history comes from calculate_keltner_channels (EMA 20, ATR 10, 2.0×).
         Returns None if there is not enough history to evaluate.
         """
         if not closes or len(closes) < bb_period:
             return None
 
-        bb_upper, bb_lower = [], []
-        for i in range(len(closes)):
-            if i >= bb_period - 1:
-                window = closes[i - bb_period + 1:i + 1]
-                sma = sum(window) / bb_period
-                variance = sum((p - sma) ** 2 for p in window) / bb_period
-                sd = variance ** 0.5
-                bb_upper.append(sma + bb_std * sd)
-                bb_lower.append(sma - bb_std * sd)
-            else:
-                bb_upper.append(None)
-                bb_lower.append(None)
+        bb = TechnicalIndicators.calculate_bollinger_series(closes, bb_period, bb_std)
+        bb_upper, bb_lower = bb["upper"], bb["lower"]
 
         kc = TechnicalIndicators.calculate_keltner_channels(highs, lows, closes)
         if not kc:
@@ -717,12 +767,14 @@ def _calculate_price_range(current_price, bb_data, ma_data, advanced):
     support_levels = []
     resistance_levels = []
 
-    # Bollinger Bands
+    # Bollinger Bands — calculate_bollinger_bands' own keys. Callers once passed
+    # a reshaped "upper_band"/"lower_band" dict, and the alert checker, passing
+    # the real one, silently got a range with no bands in it.
     if bb_data and isinstance(bb_data, dict):
-        if bb_data.get("lower_band") is not None:
-            support_levels.append(bb_data["lower_band"])
-        if bb_data.get("upper_band") is not None:
-            resistance_levels.append(bb_data["upper_band"])
+        if bb_data.get("lower") is not None:
+            support_levels.append(bb_data["lower"])
+        if bb_data.get("upper") is not None:
+            resistance_levels.append(bb_data["upper"])
 
     # Keltner Channels
     keltner = advanced.get("keltner")
@@ -1209,14 +1261,67 @@ def generate_summary(rsi, macd_data, ma_data, bb_data, current_price, advanced=N
 #
 #   python -m app.services.technical_indicators --selftest
 #
-# Covers calculate_atr_risk_levels only: it is the one function here whose
-# output people size real positions against, and this repo has no test suite.
+# Covers calculate_atr_risk_levels (people size real positions against it) and
+# the core RSI/MACD/SMA/BB series (the page charts them and the alerts fire on
+# their last bar, so the two must be one number). This repo has no test suite.
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _ramp(n=40):
     """Closes 100..100+n-1 with a constant $2 true range, so ATR is exactly 2.00."""
     closes = [100.0 + i for i in range(n)]
     return [c + 1 for c in closes], [c - 1 for c in closes], closes
+
+
+def _selftest_core_series():
+    ti = TechnicalIndicators
+
+    # ── RSI: Wilder by hand ───────────────────────────────────────────
+    # Seven +2 / seven -1 deltas seed avg gain 1.0, avg loss 0.5 (RS 2). One
+    # more -7.5 makes them 13/14 and 14/14, so RSI = 100 x 13/27. A 14-bar
+    # simple average over that last window would read 45.28 instead.
+    closes = [100.0]
+    for d in [2.0, -1.0] * 7 + [-7.5]:
+        closes.append(closes[-1] + d)
+    rs = ti.calculate_rsi_series(closes)
+    assert len(rs) == len(closes) and rs[:14] == [None] * 14, rs
+    assert rs[14] == 66.6667 and rs[15] == round(1300 / 27, 4), rs[14:]
+    assert ti.calculate_rsi(closes) == rs[-1] == 48.1481
+    assert ti.calculate_rsi(closes[:14]) is None and ti.calculate_rsi_series(closes[:14]) == [None] * 14
+    assert ti.calculate_rsi([]) is None
+
+    # ── MACD: steady state on a ramp ──────────────────────────────────
+    # An EMA of a slope-1 ramp lags by (span-1)/2, so MACD -> 12.5 - 5.5 = 7
+    # and the signal follows it there. An EMA re-seeded from the trailing 12/26
+    # closes lags less and never reaches 7, which is what this guards against.
+    ramp = [100.0 + i for i in range(400)]
+    ms = ti.calculate_macd_series(ramp)
+    assert all(len(v) == 400 for v in ms.values())
+    assert ms["macd"][:34] == [None] * 34 and ms["macd"][34] is not None, "warmup = 26 + 9 - 1"
+    assert abs(ms["macd"][-1] - 7.0) < 1e-6 and abs(ms["signal"][-1] - 7.0) < 1e-6, ms["macd"][-1]
+    assert all(h == m - s for m, s, h in zip(ms["macd"][34:], ms["signal"][34:], ms["histogram"][34:]))
+    m = ti.calculate_macd(ramp)
+    assert (m["macd"], m["signal"], m["histogram"]) == (ms["macd"][-1], ms["signal"][-1], ms["histogram"][-1])
+    assert ti.calculate_macd(ramp[:34]) is None and ti.calculate_macd(ramp[:35]) is not None
+
+    # ── SMA + Bollinger: 20 consecutive integers ──────────────────────
+    # Last window is 120..139: mean 129.5, population std sqrt((20^2-1)/12).
+    _, _, c40 = _ramp(40)
+    ma = ti.calculate_moving_averages(c40)
+    assert ma == {"sma_20": 129.5, "sma_50": None, "sma_200": None}, ma
+    assert ti.calculate_sma_series(c40, 20)[-1] == ma["sma_20"]
+    sd = (399 / 12) ** 0.5
+    bs = ti.calculate_bollinger_series(c40)
+    assert bs["middle"][:19] == [None] * 19 and bs["upper"][19] is not None
+    bb = ti.calculate_bollinger_bands(c40)
+    assert abs(bb["upper"] - (129.5 + 2 * sd)) < 1e-9 and abs(bb["lower"] - (129.5 - 2 * sd)) < 1e-9, bb
+    assert (bb["upper"], bb["middle"], bb["lower"]) == (bs["upper"][-1], bs["middle"][-1], bs["lower"][-1])
+    assert bb["position"] == "within_bands"
+
+    # ── Price range reads calculate_bollinger_bands' own keys ─────────
+    pr = _calculate_price_range(100.0, {"upper": 110.0, "lower": 90.0},
+                                {"sma_20": 95.0, "sma_50": 105.0, "sma_200": None}, {})
+    assert pr == {"support": 92.5, "resistance": 107.5,
+                  "support_levels_count": 2, "resistance_levels_count": 2}, pr
 
 
 def _selftest() -> int:
@@ -1288,6 +1393,8 @@ def _selftest() -> int:
     summary = generate_summary(None, None, {"sma_20": None, "sma_50": None, "sma_200": None},
                                None, closes[-1], adv)
     assert not any(b["indicator"] == "ATR" for b in summary["breakdown"]), summary["breakdown"]
+
+    _selftest_core_series()
 
     print("technical_indicators selftest: OK")
     return 0

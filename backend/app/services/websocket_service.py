@@ -1,6 +1,7 @@
 """
 Live Price WebSocket Service
-Polls FMP /stable/batch-quote for subscribed tickers and streams updates
+Polls FMP quotes for subscribed tickers (market_data.get_quote_rows: batch-quote,
+or one /quote per ticker when the plan has no batch endpoints) and streams updates
 to connected frontend clients via WebSocket.
 
 Sprint 9 addition: on_price_update callback for alert_checker integration.
@@ -13,7 +14,7 @@ import re
 from typing import Set, Dict, Optional, Callable, Awaitable
 from datetime import datetime, time as dt_time
 import pytz
-from app.services.fmp_client import get_fmp_client, API_KEY
+from app.config import get_settings
 
 # How often to poll FMP for price updates (seconds)
 POLL_INTERVAL = 20
@@ -21,13 +22,17 @@ POLL_INTERVAL = 20
 # doesn't need sub-minute granularity, and this is what keeps the poller
 # from burning FMP calls all day for nobody.
 IDLE_POLL_INTERVAL = 60
+# Without batch endpoints every poll costs one call per ticker, so poll less often
+# (settings.FMP_BATCH_ENDPOINTS off). A ticker on a page refreshes every minute,
+# an alert-only ticker every two.
+SINGLE_QUOTE_POLL_INTERVAL = 60
+SINGLE_QUOTE_IDLE_POLL_INTERVAL = 120
 
 # Client-supplied tickers must be plain symbols. A non-string ticker once
 # reached ",".join() in the poller and stopped every price update — and the
 # price alerts they drive — for all users.
 _TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-]{0,11}$")
 MAX_TICKERS_PER_CLIENT = 200
-FMP_BATCH_SIZE = 100  # symbols per batch-quote request
 
 
 def _clean_tickers(raw) -> Set[str]:
@@ -116,10 +121,15 @@ class LivePriceService:
             print(f"📊 Unsubscribed from: {', '.join(dropped)}")
 
     async def _poll_prices(self):
-        """Poll FMP batch-quote endpoint for all subscribed tickers and broadcast changes."""
+        """Poll FMP quotes for all subscribed tickers and broadcast changes."""
+        from app.services.market_data import market_data_service
+
         while self.running:
             # No clients connected → only alert tickers matter; poll slowly.
-            interval = POLL_INTERVAL if self.clients else IDLE_POLL_INTERVAL
+            if get_settings().FMP_BATCH_ENDPOINTS:
+                interval = POLL_INTERVAL if self.clients else IDLE_POLL_INTERVAL
+            else:
+                interval = SINGLE_QUOTE_POLL_INTERVAL if self.clients else SINGLE_QUOTE_IDLE_POLL_INTERVAL
             try:
                 tickers = self.subscribed_tickers
                 if not tickers:
@@ -131,19 +141,7 @@ class LivePriceService:
                     await asyncio.sleep(30)  # Check less frequently outside hours
                     continue
 
-                # Chunked so a large union of subscriptions can't exceed the URL limit
-                symbols = sorted(tickers)
-                client = get_fmp_client()
-                data = []
-                for i in range(0, len(symbols), FMP_BATCH_SIZE):
-                    response = await client.get(
-                        "batch-quote",
-                        params={"symbols": ",".join(symbols[i:i + FMP_BATCH_SIZE]), "apikey": API_KEY},
-                    )
-                    response.raise_for_status()
-                    chunk = response.json()
-                    if isinstance(chunk, list):
-                        data.extend(chunk)
+                data = await market_data_service.get_quote_rows(sorted(tickers))
 
                 if not data:
                     await asyncio.sleep(interval)

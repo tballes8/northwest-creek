@@ -79,7 +79,9 @@ async def lifespan(app: FastAPI):
     # Sector heatmap: append each day's sector ETF closes after market close.
     # Own job (not folded into the screener refresh) so a screener change can't
     # orphan it again — this is what broke the heatmap on 2026-05-11.
-    # 06:00 UTC matches the legacy fetch_daily_snapshots cron that previously fed it.
+    # 06:00 UTC (01:00/02:00 ET) falls after every session's final close. The run
+    # time doesn't pick the date: each row carries its EOD bar's session date, so
+    # a weekend or holiday run writes nothing (see append_today_closes).
     _scheduler.add_job(
         append_today_closes,
         CronTrigger(hour=6, minute=0, timezone=timezone.utc),

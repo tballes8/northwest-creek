@@ -56,6 +56,15 @@ async def get_financials(
         if is_contradicted(result.get("entity_trust")):
             return result
 
+        # A statement that failed to load is not a statement that doesn't exist:
+        # say so, rather than "may not have SEC filings" or a partial snapshot
+        # whose derived figures are built on the missing piece.
+        if result.get("unavailable"):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Financial data for {ticker} is temporarily unavailable. Please try again shortly."
+            )
+
         # Verify we got meaningful data back
         has_income = (result.get("income_statement") or {}).get("revenue") is not None
         has_balance = (result.get("balance_sheet") or {}).get("total_assets") is not None

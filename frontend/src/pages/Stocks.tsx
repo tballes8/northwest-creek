@@ -97,8 +97,10 @@ interface DividendInfo {
   annual_dividend: number | null;
   annual_yield: number | null;
   frequency_label: string | null;
-  dividend_status: 'active' | 'suspended' | 'unknown' | 'none';
+  // 'unavailable': the fetch failed, so nothing is known (never "no dividends")
+  dividend_status: 'active' | 'suspended' | 'unknown' | 'none' | 'unavailable';
   last_ex_date: string | null;
+  fetch_failed?: boolean;
 }
 
 interface DailySnapshot {
@@ -630,6 +632,13 @@ const Stocks: React.FC = () => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestionsLoading, setSuggestionsLoading] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  // Every ticker load gets a sequence number, and each loader drops a response
+  // that arrives after the user has moved to another ticker, instead of letting
+  // it land on that one (NVDA's price or identity verdict shown on AMD).
+  const loadSeqRef = useRef(0);
+  const isStale = (seq: number) => seq !== loadSeqRef.current;
+  // Chart range changes for the same ticker: the last range clicked wins
+  const historySeqRef = useRef(0);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const [dividendInfo, setDividendInfo] = useState<DividendInfo | null>(null);
   const [dividendLoading, setDividendLoading] = useState(false);
@@ -819,6 +828,7 @@ const Stocks: React.FC = () => {
   };
 
   const resetToEmptyState = () => {
+    loadSeqRef.current++;  // drop responses still in flight for the cleared ticker
     setTicker('');
     setSearchInput('');
     setQuote(null);
@@ -942,6 +952,7 @@ const Stocks: React.FC = () => {
 
   const loadStockData = async (symbol: string) => {
     if (!symbol.trim()) return;
+    const seq = ++loadSeqRef.current;
 
     setLoading(true);
     setError('');
@@ -969,6 +980,7 @@ const Stocks: React.FC = () => {
         stocksAPI.getCompany(symbol),
         stocksAPI.getHistorical(symbol, historyDays),
       ]);
+      if (isStale(seq)) return;
 
       // Quote is essential — if it failed, show error
       if (quoteResult.status === 'rejected') {
@@ -1015,6 +1027,7 @@ const Stocks: React.FC = () => {
           `${API_URL}/api/v1/intraday/batch?tickers=${symbol.toUpperCase()}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
+        if (isStale(seq)) return;
         if (Array.isArray(intradayRes.data) && intradayRes.data.length > 0) {
           const live = intradayRes.data[0];
           if (live.price) {
@@ -1070,6 +1083,7 @@ const Stocks: React.FC = () => {
       setEtfHoldingsTotal(0);
       }
     } catch (err: any) {
+      if (isStale(seq)) return;
       console.error('Stock API Error:', err);
       setError(err.response?.data?.detail || 'Failed to load stock data. Please check the ticker symbol and try again.');
       setQuote(null);
@@ -1079,20 +1093,23 @@ const Stocks: React.FC = () => {
       setEtfHoldings([]);
       setEtfHoldingsTotal(0);
     } finally {
-      setLoading(false);
+      if (!isStale(seq)) setLoading(false);
     }
   };
 
   const loadNews = async (symbol: string) => {
+    const seq = loadSeqRef.current;
     setNewsLoading(true);
     try {
       const response = await stocksAPI.getNews(symbol, 3);
+      if (isStale(seq)) return;
       const articles: NewsArticle[] = response.data.data || [];
       setNews(articles);
 
       if (articles.length === 0) {
         try {
           const fallbackResponse = await stocksAPI.getMarketNews(20);
+          if (isStale(seq)) return;
           const pool: NewsArticle[] = fallbackResponse.data.data || [];
           const shuffled = [...pool].sort(() => Math.random() - 0.5);
           setFallbackNews(shuffled.slice(0, 3));
@@ -1104,15 +1121,17 @@ const Stocks: React.FC = () => {
         setFallbackNews([]);
       }
     } catch (err) {
+      if (isStale(seq)) return;
       console.error('Failed to load news:', err);
       setNews([]);
       setFallbackNews([]);
     } finally {
-      setNewsLoading(false);
+      if (!isStale(seq)) setNewsLoading(false);
     }
   };
 
   const loadDividends = async (symbol: string) => {
+    const seq = loadSeqRef.current;
     setDividendLoading(true);
     try {
       const token = localStorage.getItem('access_token');
@@ -1120,16 +1139,24 @@ const Stocks: React.FC = () => {
         `${API_URL}/api/v1/stocks/dividends/${encodeURIComponent(symbol.toUpperCase())}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      if (isStale(seq)) return;
       setDividendInfo(response.data);
     } catch (err) {
+      if (isStale(seq)) return;
       console.error('Failed to load dividends:', err);
-      setDividendInfo(null);
+      // A failed request is "unavailable", not "no dividends"
+      setDividendInfo({
+        ticker: symbol.toUpperCase(), has_dividends: false, dividends: [], annual_dividend: null,
+        annual_yield: null, frequency_label: null, dividend_status: 'unavailable', last_ex_date: null,
+        fetch_failed: true,
+      });
     } finally {
-      setDividendLoading(false);
+      if (!isStale(seq)) setDividendLoading(false);
     }
   };
 
   const loadEtfHoldings = async (symbol: string) => {
+    const seq = loadSeqRef.current;
     setHoldingsLoading(true);
     try {
       const token = localStorage.getItem('access_token');
@@ -1137,6 +1164,7 @@ const Stocks: React.FC = () => {
         `${API_URL}/api/v1/stocks/etf/${encodeURIComponent(symbol.toUpperCase())}/holdings?limit=10`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      if (isStale(seq)) return;
       setEtfHoldings(response.data.holdings || []);
       // 0 means "unknown" — never fall back to holdings.length, which would let
       // the caption claim "All 10 holdings" for a fund that actually has 93.
@@ -1144,11 +1172,12 @@ const Stocks: React.FC = () => {
         typeof response.data.total_count === 'number' ? response.data.total_count : 0
       );
     } catch (err) {
+      if (isStale(seq)) return;
       console.error('Failed to load ETF holdings:', err);
       setEtfHoldings([]);
       setEtfHoldingsTotal(0);
     } finally {
-      setHoldingsLoading(false);
+      if (!isStale(seq)) setHoldingsLoading(false);
     }
   };
 
@@ -1195,41 +1224,50 @@ const Stocks: React.FC = () => {
   };
 
   const loadOwnership = async (symbol: string) => {
+    const seq = loadSeqRef.current;
     setOwnershipLoading(true);
     try {
       const response = await stocksAPI.getOwnership(symbol);
+      if (isStale(seq)) return;
       setOwnershipData(response.data);
     } catch (err) {
+      if (isStale(seq)) return;
       console.error('Failed to load ownership data:', err);
       setOwnershipData(null);
     } finally {
-      setOwnershipLoading(false);
+      if (!isStale(seq)) setOwnershipLoading(false);
     }
   };
 
   // P/E and the entity-identity verdict, off the one /financials payload. A
   // failed fetch leaves no verdict, which — like cannot_resolve — never blocks.
   const loadFinancialsSummary = async (symbol: string) => {
+    const seq = loadSeqRef.current;
     try {
       const { financialsAPI } = await import('../services/api');
       const response = await financialsAPI.get(symbol);
+      if (isStale(seq)) return;
       const pe = response.data?.ratios?.pe_ratio;
       setPeRatio(typeof pe === 'number' ? pe : null);
       setEntityTrust(response.data?.entity_trust ?? null);
     } catch {
+      if (isStale(seq)) return;
       setPeRatio(null);
       setEntityTrust(null);
     } finally {
-      setEntityTrustLoading(false);
+      if (!isStale(seq)) setEntityTrustLoading(false);
     }
   };
 
   const loadAnalystEstimates = async (symbol: string) => {
+    const seq = loadSeqRef.current;
     try {
       const { financialsAPI } = await import('../services/api');
       const response = await financialsAPI.getAnalystEstimates(symbol);
+      if (isStale(seq)) return;
       setAnalystEstimates(response.data);
     } catch {
+      if (isStale(seq)) return;
       setAnalystEstimates(null);
     }
   };
@@ -1238,20 +1276,23 @@ const Stocks: React.FC = () => {
   // analysis from the plan's allowance (a cached one is free), so it must never
   // fire just because a stock page was opened.
   const loadPriceForecast = async (symbol: string) => {
+    const seq = loadSeqRef.current;
     setForecastLoading(true);
     setForecastError(null);
     try {
       const { technicalAPI } = await import('../services/api');
       const response = await technicalAPI.priceForecast(symbol);
+      if (isStale(seq)) return;
       setNwcForecast(response.data);
     } catch (err: any) {
+      if (isStale(seq)) return;
       const detail = err?.response?.data?.detail;
       setNwcForecast(null);
       setForecastError(
         (typeof detail === 'object' ? detail?.message : detail) || 'Could not generate a target right now.'
       );
     } finally {
-      setForecastLoading(false);
+      if (!isStale(seq)) setForecastLoading(false);
     }
   };
 
@@ -1328,8 +1369,11 @@ const Stocks: React.FC = () => {
   const handleHistoryDaysChange = async (days: number) => {
     setHistoryDays(days);
     if (ticker) {
+      const seq = loadSeqRef.current;
+      const historySeq = ++historySeqRef.current;
       try {
         const response = await stocksAPI.getHistorical(ticker, days);
+        if (isStale(seq) || historySeq !== historySeqRef.current) return;
         setHistorical(response.data.data);
       } catch (err) {
         console.error('Failed to load historical data:', err);
@@ -2936,6 +2980,11 @@ const Stocks: React.FC = () => {
                     trust={entityTrust}
                     note={<>Dividend history is withheld too: the vendor keys it on the ticker, so it may be the other company's payouts.</>}
                   />
+                ) : dividendInfo?.fetch_failed ? (
+                  <div className="text-center py-6 text-gray-500 dark:text-gray-400">
+                    <div className="text-3xl mb-2">—</div>
+                    <p className="text-sm">Dividend data unavailable right now</p>
+                  </div>
                 ) : dividendInfo && dividendInfo.has_dividends && dividendInfo.dividends.length > 0 ? (
                   <div className="space-y-3">
                     {/* Green yield only for a dividend still in effect. A lapsed one gets

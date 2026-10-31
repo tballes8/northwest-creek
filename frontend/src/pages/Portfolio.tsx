@@ -97,8 +97,9 @@ const Portfolio: React.FC = () => {
     frequency_label: string | null;
     has_dividends: boolean;
     dividends: any[];
-    dividend_status: 'active' | 'suspended' | 'unknown' | 'none';
+    dividend_status: 'active' | 'suspended' | 'unknown' | 'none' | 'unavailable';
     last_ex_date: string | null;
+    fetch_failed: boolean;
   }>>({});
   const [dividendsLoading, setDividendsLoading] = useState(false);
   const [showDividendModal, setShowDividendModal] = useState(false);
@@ -157,6 +158,13 @@ const Portfolio: React.FC = () => {
               dividends: d.dividends || [],
               dividend_status: d.dividend_status ?? 'none',
               last_ex_date: d.last_ex_date ?? null,
+              fetch_failed: Boolean(d.fetch_failed),
+            };
+          } else {
+            // A failed request is "unavailable", not "pays nothing"
+            newMap[ticker] = {
+              annual_dividend: null, annual_yield: null, frequency_label: null, has_dividends: false,
+              dividends: [], dividend_status: 'unavailable', last_ex_date: null, fetch_failed: true,
             };
           }
         });
@@ -432,8 +440,13 @@ const Portfolio: React.FC = () => {
       if (rowValues(pos).total_value != null) pricedAnnualDividends += annual * pos.quantity;
     }
     const portfolioDividendYield = totalValue > 0 ? (pricedAnnualDividends / totalValue) * 100 : 0;
+    // Positions whose dividend fetch failed: left out of the income figures and
+    // said so, the same way an unpriced position is left out of the value
+    const dividendUnavailable = portfolio
+      .filter(pos => dividendMap[pos.ticker]?.fetch_failed)
+      .map(pos => pos.ticker);
 
-    return { totalValue, totalCost, totalPL, totalPLPercent, unpriced, dayChange, dayChangePercent, totalAnnualDividends, portfolioDividendYield };
+    return { totalValue, totalCost, totalPL, totalPLPercent, unpriced, dayChange, dayChangePercent, totalAnnualDividends, portfolioDividendYield, dividendUnavailable };
   };
 
   const handleAddPosition = async (e: React.FormEvent) => {
@@ -773,6 +786,12 @@ const Portfolio: React.FC = () => {
             </div>
             <div className="text-xs mt-0.5 text-gray-500 dark:text-gray-400">
               Yield: {totals.portfolioDividendYield.toFixed(2)}% · <span className="text-primary-500">View details</span>
+              {totals.dividendUnavailable.length > 0 && (
+                <span
+                  className="text-amber-600 dark:text-amber-400"
+                  title={`Dividend data couldn't be loaded for ${totals.dividendUnavailable.join(', ')}, so they are left out of these figures`}
+                > · {totals.dividendUnavailable.length} unavailable</span>
+              )}
             </div>
           </div>
         </div>
@@ -1317,6 +1336,11 @@ const Portfolio: React.FC = () => {
                       Projected annual income: <span className="text-green-600 dark:text-green-400 font-semibold">${totals.totalAnnualDividends.toFixed(2)}</span>
                       {' · '}Portfolio yield: <span className="text-green-600 dark:text-green-400 font-semibold">{totals.portfolioDividendYield.toFixed(2)}%</span>
                     </p>
+                    {totals.dividendUnavailable.length > 0 && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                        Dividend data unavailable for {totals.dividendUnavailable.join(', ')}; not included above.
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <button

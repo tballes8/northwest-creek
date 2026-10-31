@@ -29,7 +29,6 @@ from app.services.market_data import market_data_service
 from app.services.financials_service import get_company_financials, compute_peer_fundamentals
 from app.services.edgar_identity import is_contradicted
 from app.services.analyst_estimates import estimates_to_usd, fetch_estimates
-from app.services.fmp_client import get_fmp_client, API_KEY
 from app.services.fx import get_fx_per_usd, get_reporting_currency, usd_rate
 from app.services.valuation_check import check_against_quarters
 from app.core.tier_limits import get_tier_limit, get_review_period, get_upgrade_tier
@@ -169,8 +168,12 @@ async def get_relval_inputs(
             quote = {}
         if isinstance(company, BaseException):
             company = {}
-        if isinstance(fin, BaseException):
-            fin = {}
+        # Statements that failed to load are a retry, not "no data, enter your own"
+        if isinstance(fin, BaseException) or fin.get("unavailable"):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"Financial data for {sym} is temporarily unavailable. Please try again shortly.",
+            )
         if isinstance(estimates, BaseException):
             estimates = {}
 
@@ -312,6 +315,8 @@ async def get_relval_inputs(
             },
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Relval inputs error for {sym}: {_safe_error(e)}")
         raise HTTPException(
@@ -350,6 +355,9 @@ async def _fetch_peer_ratio(sym: str, fx: Dict[str, float]) -> Dict[str, Any]:
         "revenue_growth_yoy": None,
         "gross_margin": None,
         "valuation_check": None,
+        # A fetch failed: multiples are withheld because they couldn't be loaded,
+        # not because the peer has none
+        "fetch_failed": False,
     }
     # Kept outside the try so the check below runs even when a later fetch fails:
     # an early return from the except must not hand back unchecked multiples.
@@ -357,26 +365,23 @@ async def _fetch_peer_ratio(sym: str, fx: Dict[str, float]) -> Dict[str, Any]:
     profile: Dict[str, Any] = {}
     quarters: List[dict] = []
     try:
-        client = get_fmp_client()
-        ratios_resp, profile_resp, income_resp = await asyncio.gather(
-            client.get("ratios-ttm", params={"symbol": sym, "apikey": API_KEY}),
-            client.get("profile", params={"symbol": sym, "apikey": API_KEY}),
-            client.get("income-statement", params={"symbol": sym, "period": "quarter", "limit": 6, "apikey": API_KEY}),
+        # Through _fmp_get: 429 retries, and FMP error bodies raise
+        rd, pd, iq = await asyncio.gather(
+            market_data_service._fmp_get("ratios-ttm", {"symbol": sym}),
+            market_data_service._fmp_get("profile", {"symbol": sym}),
+            market_data_service._fmp_get("income-statement", {"symbol": sym, "period": "quarter", "limit": 6}),
             return_exceptions=True,
         )
+        row["fetch_failed"] = any(isinstance(r, BaseException) for r in (rd, pd, iq))
 
-        if not isinstance(ratios_resp, BaseException):
-            ratios_resp.raise_for_status()
-            rd = ratios_resp.json()
+        if not isinstance(rd, BaseException):
             if isinstance(rd, list) and rd:
                 ratios = rd[0]
                 row["pe"] = ratios.get("priceToEarningsRatioTTM")
                 row["ps"] = ratios.get("priceToSalesRatioTTM")
                 row["ev_ebitda"] = ratios.get("enterpriseValueMultipleTTM") or ratios.get("evToEBITDATTM")
 
-        if not isinstance(profile_resp, BaseException):
-            profile_resp.raise_for_status()
-            pd = profile_resp.json()
+        if not isinstance(pd, BaseException):
             if isinstance(pd, list) and pd:
                 profile = pd[0]
                 row["name"] = profile.get("companyName")
@@ -385,9 +390,7 @@ async def _fetch_peer_ratio(sym: str, fx: Dict[str, float]) -> Dict[str, Any]:
                 row["industry"] = profile.get("industry")
                 row["market_cap"] = profile.get("marketCap") or profile.get("mktCap")
 
-        if not isinstance(income_resp, BaseException):
-            income_resp.raise_for_status()
-            iq = income_resp.json()
+        if not isinstance(iq, BaseException):
             quarters = iq if isinstance(iq, list) else []
             fundamentals = compute_peer_fundamentals(quarters)
             row["revenue_growth_yoy"] = fundamentals["revenue_growth_yoy_pct"]

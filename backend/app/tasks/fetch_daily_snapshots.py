@@ -65,6 +65,12 @@ async def fetch_and_store_snapshots():
     api_key = os.getenv("FMP_API_KEY")
     database_url = os.getenv("DATABASE_URL")
 
+    # The whole market in one pass needs batch-quote (see FMP_BATCH_ENDPOINTS in
+    # app/config.py). Without it, skip and leave the stored snapshot as it is.
+    if os.getenv("FMP_BATCH_ENDPOINTS", "").strip().lower() not in ("1", "true", "yes", "on"):
+        print("📊 Daily snapshot skipped: FMP batch endpoints are off (FMP_BATCH_ENDPOINTS)")
+        return
+
     if not api_key:
         print("❌ ERROR: FMP_API_KEY not set in environment")
         return

@@ -9,12 +9,14 @@ from datetime import date, datetime, timedelta
 from typing import Optional
 import asyncio
 from app.api.dependencies import get_current_user
+from app.config import get_settings
 from app.services.market_data import market_data_service, evaluate_dividend
 from app.services.fmp_client import get_fmp_client, API_KEY
 from app.services.analyst_estimates import estimates_to_usd, fetch_estimates
 from app.services.fx import get_fx_per_usd, get_reporting_currency, usd_rate
 from app.services.sec_filings import detect_bankruptcy, is_new_issuer
 from app.services.edgar_identity import resolve_fund_ticker
+from app.services.valuation_check import vendor_per_share_ok
 from app.db.session import get_db
 from app.schemas.daily_snapshot import DailySnapshotItem, DailySnapshotResponse
 from app.db.models import DailyStockSnapshot, StockSnapshot
@@ -477,12 +479,16 @@ async def get_commodity_quotes():
 
     try:
         client = get_fmp_client()
-        resp = await client.get(
-            "batch-commodity-quotes",
-            params={"apikey": API_KEY},
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        # The batch call only when the plan has batch endpoints; otherwise every
+        # symbol below is "missing" and the per-symbol /quote fallback fetches it.
+        data = []
+        if get_settings().FMP_BATCH_ENDPOINTS:
+            resp = await client.get(
+                "batch-commodity-quotes",
+                params={"apikey": API_KEY},
+            )
+            resp.raise_for_status()
+            data = resp.json()
 
         if not data or not isinstance(data, list):
             data = []
@@ -574,12 +580,16 @@ async def get_crypto_quotes():
 
     try:
         client = get_fmp_client()
-        resp = await client.get(
-            "batch-crypto-quotes",
-            params={"apikey": API_KEY},
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        # The batch call only when the plan has batch endpoints; otherwise every
+        # symbol below is "missing" and the per-symbol /quote fallback fetches it.
+        data = []
+        if get_settings().FMP_BATCH_ENDPOINTS:
+            resp = await client.get(
+                "batch-crypto-quotes",
+                params={"apikey": API_KEY},
+            )
+            resp.raise_for_status()
+            data = resp.json()
 
         if not data or not isinstance(data, list):
             data = []
@@ -675,12 +685,16 @@ async def get_index_quotes():
 
     try:
         client = get_fmp_client()
-        resp = await client.get(
-            "batch-index-quotes",
-            params={"apikey": API_KEY},
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        # The batch call only when the plan has batch endpoints; otherwise every
+        # symbol below is "missing" and the per-symbol /quote fallback fetches it.
+        data = []
+        if get_settings().FMP_BATCH_ENDPOINTS:
+            resp = await client.get(
+                "batch-index-quotes",
+                params={"apikey": API_KEY},
+            )
+            resp.raise_for_status()
+            data = resp.json()
 
         if not data or not isinstance(data, list):
             data = []
@@ -1026,7 +1040,8 @@ async def get_dividends(ticker: str):
     Get dividend information for a stock or ETF.
 
     Returns the most recent dividends plus a computed annual yield
-    when a current price is available.
+    when a current price is available. A failed fetch comes back as
+    fetch_failed with dividend_status "unavailable", never as "no dividends".
     """
     try:
         # Fetch dividends and current quote concurrently
@@ -1039,9 +1054,9 @@ async def get_dividends(ticker: str):
             return_exceptions=True,
         )
 
-        # Ensure dividends succeeded
         if isinstance(div_result, Exception):
-            div_result = {"ticker": ticker.upper(), "dividends": [], "has_dividends": False}
+            div_result = {"ticker": ticker.upper(), "dividends": [], "has_dividends": False, "fetch_failed": True}
+        fetch_failed = bool(div_result.get("fetch_failed"))
 
         price = None
         if not isinstance(quote_result, Exception) and quote_result:
@@ -1060,8 +1075,9 @@ async def get_dividends(ticker: str):
             "annual_dividend": assessment["annual_dividend"],
             "annual_yield": assessment["annual_yield"],
             "frequency_label": assessment["frequency_label"],
-            "dividend_status": assessment["dividend_status"],
+            "dividend_status": "unavailable" if fetch_failed else assessment["dividend_status"],
             "last_ex_date": assessment["last_ex_date"],
+            "fetch_failed": fetch_failed,
         }
 
     except Exception as e:
@@ -1481,15 +1497,14 @@ async def get_analyst_estimates(ticker: str):
     """
     sym = ticker.upper().strip()
     try:
-        client = get_fmp_client()
-
         # analyst-estimates goes through services/analyst_estimates, which owns the
         # FMP schema and the forward-row selection for every consumer.
-        estimates, targets_resp, reporting_ccy, fx = await asyncio.gather(
+        estimates, targets_data, reporting_ccy, fx, quote = await asyncio.gather(
             fetch_estimates(sym),
-            client.get("price-target-consensus", params={"symbol": sym, "apikey": API_KEY}),
+            market_data_service._fmp_get("price-target-consensus", {"symbol": sym}),
             get_reporting_currency(sym),
             get_fx_per_usd(),
+            market_data_service.get_quote(sym),
             return_exceptions=True,
         )
 
@@ -1497,8 +1512,7 @@ async def get_analyst_estimates(ticker: str):
         if isinstance(estimates, BaseException) or not isinstance(estimates, dict):
             estimates = {}
         # Estimates are in the company's reporting currency (Toyota's forward EPS
-        # is yen); everything on the page is dollars. Price targets are on the
-        # US-listed share, so already dollars.
+        # is yen); everything on the page is dollars.
         if isinstance(reporting_ccy, BaseException):
             reporting_ccy = None
         if isinstance(fx, BaseException):
@@ -1517,14 +1531,18 @@ async def get_analyst_estimates(ticker: str):
         price_target_low = None
         price_target_median = None
 
-        if not isinstance(targets_resp, Exception) and targets_resp.status_code == 200:
-            targets_data = targets_resp.json()
-            if isinstance(targets_data, list) and targets_data:
-                t = targets_data[0]
-                price_target_consensus = t.get("targetConsensus")
-                price_target_high = t.get("targetHigh")
-                price_target_low = t.get("targetLow")
-                price_target_median = t.get("targetMedian")
+        if isinstance(targets_data, list) and targets_data:
+            t = targets_data[0]
+            price_target_consensus = t.get("targetConsensus")
+            price_target_high = t.get("targetHigh")
+            price_target_low = t.get("targetLow")
+            price_target_median = t.get("targetMedian")
+
+        # FMP doesn't convert targets and their basis varies by company (Sabesp's
+        # sat ~5x its price): shown only when valuation_check passes the consensus.
+        price = quote.get("price") if isinstance(quote, dict) else None
+        if not vendor_per_share_ok(price_target_consensus, price, reporting_ccy):
+            price_target_consensus = price_target_high = price_target_low = price_target_median = None
 
         return {
             "ticker": sym,
