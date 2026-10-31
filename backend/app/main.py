@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.config import get_settings
 from app.api.v1.endpoints import (
-    alerts, auth, dcf_valuation, indicators, portfolio,
+    alerts, auth, dcf_valuation, portfolio,
     stocks, watchlist, technical_analysis, stripe_payments,
     intraday, live_prices, financials, technical_alerts,
     portfolio_analysis, stock_analysis, screener, market,
@@ -25,6 +25,7 @@ from app.tasks.refresh_stock_snapshots import refresh_stock_snapshots_job
 from app.tasks.fetch_macro_indicators import macro_indicators_job
 from app.tasks.audit_fmp_fields_task import fmp_field_audit_job
 from app.services.sector_rotation import append_today_closes
+from app.services.subscription_sync import reconcile_subscriptions
 
 
 settings = get_settings()
@@ -87,6 +88,20 @@ async def lifespan(app: FastAPI):
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+    )
+
+    # Stripe → users backstop (services/subscription_sync.py). Syncs every account
+    # never synced, which on the first run after migration 037 is all of them, and
+    # re-reads live subscriptions not synced in 12h in case a webhook never came.
+    _scheduler.add_job(
+        reconcile_subscriptions,
+        "interval",
+        hours=6,
+        id="subscription_reconcile",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        next_run_time=datetime.now(timezone.utc),
     )
 
     # Squeeze precompute runs as its own Railway cron service (python -m
@@ -163,7 +178,6 @@ async def health_check():
 app.include_router(auth.router, prefix=f"/api/{settings.API_VERSION}/auth", tags=["auth"])
 app.include_router(stocks.router, prefix=f"/api/{settings.API_VERSION}/stocks", tags=["stocks"])
 app.include_router(watchlist.router, prefix=f"/api/{settings.API_VERSION}/watchlist", tags=["watchlist"])
-app.include_router(indicators.router, prefix=f"/api/{settings.API_VERSION}/indicators", tags=["indicators"])
 app.include_router(portfolio.router, prefix=f"/api/{settings.API_VERSION}/portfolio", tags=["portfolio"])
 app.include_router(alerts.router, prefix=f"/api/{settings.API_VERSION}/alerts", tags=["alerts"])
 app.include_router(technical_analysis.router, prefix="/api/v1/technical-analysis", tags=["Technical Analysis"])

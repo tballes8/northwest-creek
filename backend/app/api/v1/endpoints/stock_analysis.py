@@ -302,10 +302,15 @@ async def stock_price_forecast(
     Generate a 3-month bear/base/bull price forecast by triangulating DCF intrinsic value,
     technical support/resistance range, and analyst consensus target via Claude.
 
-    Results are cached in memory per ticker for 6 hours to avoid consuming rate-limit
-    credits on every page view.
+    Metered like /ai-financials: plans without AI analysis get 403; a forecast
+    cached in the last 6 hours (per ticker, any user) is free; generating a new
+    one uses one ai_analysis from the shared allowance. The frontend asks only on
+    an explicit click.
     """
     sym = ticker.upper()
+
+    # Tier gate first, so a plan without AI can't read a forecast another user paid for
+    _require_ai_tier(current_user)
 
     # ── Serve from cache if fresh ─────────────────────────────────────────
     cached = _forecast_cache.get(sym)
@@ -314,7 +319,7 @@ async def stock_price_forecast(
         if time.time() - ts < _FORECAST_TTL:
             return payload
 
-    # No rate-limit check — the 6h per-ticker cache bounds cost sufficiently.
+    await check_ai_analysis_access(current_user, db)
 
     try:
         # ── Fetch historical prices for technical analysis ────────────────
@@ -477,6 +482,10 @@ async def stock_price_forecast(
         }
         _forecast_cache[sym] = (time.time(), result)
 
+        # Record usage (shared ai_analysis pool) only once a forecast exists
+        db.add(FeatureUsage(user_id=current_user.id, feature="ai_analysis"))
+        await db.commit()
+
         return result
 
     except HTTPException:
@@ -505,7 +514,7 @@ def _require_ai_tier(user: User) -> None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
-                f"AI financial analysis is not available on the "
+                f"AI analysis is not available on the "
                 f"{user.subscription_tier.capitalize()} plan.{upgrade}"
             ),
         )

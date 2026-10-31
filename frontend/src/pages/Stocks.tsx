@@ -9,6 +9,7 @@ import { authAPI, stocksAPI, watchlistAPI, screenerAPI, EntityTrust, isEntityCon
 import ScreenerChartPanel from '../components/ScreenerChartPanel';
 import EntityTrustBlock from '../components/EntityTrustBlock';
 import { SECTOR_COLORS } from '../utils/sectorMap';
+import { getTierBySlug } from '../data/pricingTiers';
 import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -646,10 +647,11 @@ const Stocks: React.FC = () => {
   const [entityTrustLoading, setEntityTrustLoading] = useState(false);
   const [analystEstimates, setAnalystEstimates] = useState<AnalystEstimates | null>(null);
   const [nwcForecast, setNwcForecast] = useState<{
-    bear: number; base: number; bull: number;
+    ticker: string; bear: number; base: number; bull: number;
     horizon: string; rationale: string; generated_at: string;
   } | null>(null);
   const [forecastLoading, setForecastLoading] = useState(false);
+  const [forecastError, setForecastError] = useState<string | null>(null);
   const chartRef = useRef<ChartJS<'line', (number | null)[], string> | null>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [drawTool, setDrawTool] = useState<'trendline' | 'channel' | 'fibonacci' | null>(null);
@@ -834,6 +836,7 @@ const Stocks: React.FC = () => {
     setAnalystEstimates(null);
     setNwcForecast(null);
     setForecastLoading(false);
+    setForecastError(null);
     setError('');
     setIsWarrant(false);
     setRelatedCommonStock(null);
@@ -947,6 +950,7 @@ const Stocks: React.FC = () => {
     // not gate (or un-gate) this one's dividends while the new one is in flight.
     setEntityTrust(null);
     setEntityTrustLoading(true);
+    setForecastError(null);
 
     const isWarrantHint = detectWarrantHint(symbol);
     setIsWarrant(isWarrantHint);
@@ -1055,7 +1059,6 @@ const Stocks: React.FC = () => {
       }
       loadAnalystEstimates(symbol);
       loadOwnership(symbol);
-      loadPriceForecast(symbol);
 
       // ETF holdings — non-blocking, only for fund types
       const companyType = companyResult.value.data?.type || '';
@@ -1231,14 +1234,22 @@ const Stocks: React.FC = () => {
     }
   };
 
+  // Explicit click only, like the AI financials read: a new forecast uses one AI
+  // analysis from the plan's allowance (a cached one is free), so it must never
+  // fire just because a stock page was opened.
   const loadPriceForecast = async (symbol: string) => {
     setForecastLoading(true);
+    setForecastError(null);
     try {
       const { technicalAPI } = await import('../services/api');
       const response = await technicalAPI.priceForecast(symbol);
       setNwcForecast(response.data);
-    } catch {
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
       setNwcForecast(null);
+      setForecastError(
+        (typeof detail === 'object' ? detail?.message : detail) || 'Could not generate a target right now.'
+      );
     } finally {
       setForecastLoading(false);
     }
@@ -2345,12 +2356,19 @@ const Stocks: React.FC = () => {
                             )}
                           </div>
                         )}
-                        {(forecastLoading || nwcForecast) && (
+                        {user && getTierBySlug(user.subscription_tier).limits.aiAnalysis > 0 && (
                           <div className="text-sm text-gray-500 dark:text-gray-400">
                             <span className="text-indigo-500 dark:text-indigo-400">✦ NWC AI target price:</span>{' '}
                             {forecastLoading ? (
                               <span className="text-xs italic">calculating…</span>
-                            ) : nwcForecast ? (() => {
+                            ) : forecastError ? (
+                              <span className="text-xs text-amber-600 dark:text-amber-400">
+                                {forecastError}{' '}
+                                <button onClick={() => loadPriceForecast(ticker)} className="font-medium underline">
+                                  Try again
+                                </button>
+                              </span>
+                            ) : nwcForecast?.ticker === ticker ? (() => {
                               const aiUpside = ((nwcForecast.base - quote.price) / quote.price) * 100;
                               return (
                                 <>
@@ -2365,7 +2383,15 @@ const Stocks: React.FC = () => {
                                   </span>
                                 </>
                               );
-                            })() : null}
+                            })() : (
+                              <button
+                                onClick={() => loadPriceForecast(ticker)}
+                                title="Uses one AI analysis from your plan, unless this stock's target was generated in the last 6 hours"
+                                className="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 underline"
+                              >
+                                Generate
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>

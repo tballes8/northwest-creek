@@ -441,8 +441,10 @@ export const stripeAPI = {
   getConfig: () =>
     axiosInstance.get('/stripe/config'),
   
-  getSubscriptionStatus: () =>
-    axiosInstance.get('/stripe/subscription-status'),
+  // refresh: re-read from Stripe first. Use right after a payment, so the plan
+  // change shows without waiting for Stripe's webhook.
+  getSubscriptionStatus: (refresh = false) =>
+    axiosInstance.get('/stripe/subscription-status', refresh ? { params: { refresh: true } } : undefined),
   
   createSubscription: (tier: string) =>
     axiosInstance.post('/stripe/create-subscription', { tier }),

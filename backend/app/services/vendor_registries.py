@@ -77,41 +77,44 @@ behavior, SSH/CLI access, networking, pricing/quota — NOT a response-field ren
 STRIPE_REGISTRY = """\
 SDK: `stripe` Python SDK, pinned `stripe==11.2.0` (backend); Stripe.js Elements on
 the frontend (`frontend/src/pages/Payment.tsx`). API version is whatever this SDK
-pins / the account default — watch for API-version-gated shape changes.
+pins / the account default — watch for API-version-gated shape changes. Every call
+runs in a worker thread via `subscription_sync.stripe_call()`.
 
-Server-side calls NWC makes (all in `api/v1/endpoints/stripe_payments.py`):
-- `stripe.Customer.list(email=, limit=)`, `stripe.Customer.create(email=, metadata=)` — reads `customer.id`
-- `stripe.Subscription.list(customer=, status=, ...)` — filters by status `active` and `trialing`
-- `stripe.Subscription.create(customer=, items=[{'price': price_id}], metadata=, payment_behavior=, expand=['latest_invoice.payment_intent'])`;
+Server-side calls NWC makes (`api/v1/endpoints/stripe_payments.py` and
+`services/subscription_sync.py`):
+- `stripe.Customer.list(email=, limit=)`, `stripe.Customer.create(email=, name=, metadata=)`,
+  `stripe.Customer.retrieve(id)` (reads `email`, to match a webhook's customer to a user) — reads `customer.id`
+- `stripe.Subscription.list(customer=, status='all', limit=100)` — the sync's source of truth
+- `stripe.Subscription.create(customer=, items=[{'price': price_id}], metadata=, payment_behavior='default_incomplete', expand=['latest_invoice.payment_intent'])`;
   trials: `stripe.Subscription.create(customer=, items=, trial_period_days=, default_payment_method=, metadata=, idempotency_key=)`
-- `stripe.Subscription.modify(sub_id, items=[{id, price}], proration_behavior='always_invoice', payment_behavior='pending_if_incomplete', expand=)`, `stripe.Subscription.modify(sub_id, cancel_at_period_end=)`
+- `stripe.Subscription.modify(sub_id, items=[{id, price}], proration_behavior='always_invoice', payment_behavior='pending_if_incomplete', trial_end='now' (trialing → a plan without a trial), expand=)`,
+  `stripe.Subscription.modify(sub_id, cancel_at_period_end=)`, `stripe.Subscription.cancel(sub_id)`
 - `stripe.SetupIntent.create(customer=, payment_method_types=['card'], usage='off_session', metadata=)`, `stripe.SetupIntent.retrieve(id)` — reads `status`, `customer`, `payment_method`, `metadata`, `client_secret`
-- `stripe.Subscription.retrieve(sub_id)`
-- `stripe.checkout.Session.create(...)` — reads `.url`, `.id`
+- `stripe.Subscription.retrieve(sub_id)`, `stripe.Invoice.retrieve(id)` (open invoice link for past_due)
+- `stripe.billing_portal.Session.create(customer=, return_url=)`
 - `stripe.Webhook.construct_event(payload, sig_header, secret)`
-- Error types caught: `stripe.error.StripeError`, `stripe.error.SignatureVerificationError`
+- Error types caught: `stripe.error.StripeError`, `stripe.error.SignatureVerificationError`,
+  `stripe.error.InvalidRequestError` with code `resource_missing` (deleted customer)
 
-Subscription object fields NWC reads:
-- `items.data[0].price.id` (maps price → tier)
-- `metadata.user_id` (links sub back to our User)
-- `status` (expects `active`, `trialing`)
-- `cancel_at_period_end`, `current_period_end`
+Subscription object fields NWC reads (subscription_sync.apply_subscriptions):
+- `status` (active, trialing, past_due, unpaid, canceled, incomplete, …), `created`
+- `items.data[0].price.id` (maps price → tier; an unknown price keeps the user's tier and logs an error)
+- `trial_start`, `trial_end`, `cancel_at_period_end`
+- `current_period_end`, falling back to `items.data[0].current_period_end` (where API 2025-03-31+ moved it)
+- `metadata.user_id`, `metadata.setup_intent`
 - `pending_update` (non-null = a plan change awaiting payment) and `latest_invoice.payment_intent.client_secret`
 
-Invoice fields read: `invoice.subscription` (used to retrieve the Subscription), `invoice.id`.
-NOTE: `invoice.subscription` has changed across recent Stripe API versions — flag any
-changelog item touching invoice→subscription linkage or the `latest_invoice.payment_intent`
-expand, as both are load-bearing here.
-
-Checkout Session fields read: `metadata.user_id`, `subscription`, `url`, `id`.
+Webhook payloads: only `customer` (and `metadata.user_id` as a fallback link) is read,
+to trigger a re-read of the customer's subscriptions; the payload's own state is never
+trusted. Invoice events also read `amount_paid`, `billing_reason` (emails only) and
+`attempt_count` (log). `invoice.subscription` is NOT read.
 
 Webhook event types NWC handles (anything else is logged + ignored):
-- `checkout.session.completed`  → upgrade tier, set is_active
-- `invoice.paid`                → AUTHORITATIVE tier update (must not break)
-- `customer.subscription.updated`
-- `customer.subscription.deleted`
-- `invoice.payment_failed`
-- `customer.subscription.trial_will_end`
+- `customer.subscription.created` / `.updated` / `.deleted` / `.paused` / `.resumed`
+- `customer.subscription.pending_update_applied` / `.pending_update_expired`
+- `customer.subscription.trial_will_end` (trial-ending email)
+- `invoice.paid` (confirmation email when amount_paid > 0 for subscription_create / subscription_update)
+- `invoice.payment_failed` (payment-failed email for billing_reason subscription_cycle)
 
 Config: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_{BEGINNER,CASUAL,ACTIVE,PROFESSIONAL}_PRICE_ID."""
 

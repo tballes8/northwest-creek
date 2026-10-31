@@ -35,6 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
+from app.core.entitlements import app_access_clause
 from app.db.session import async_session as AsyncSessionLocal
 from app.db.models import User, PriceAlert
 from app.services.email_service import email_service
@@ -104,14 +105,19 @@ class AlertChecker:
         """
         async with AsyncSessionLocal() as db:
             try:
-                # Fetch active, un-triggered alerts for this ticker with their user
+                # Fetch active, un-triggered alerts for this ticker with their user.
+                # Only users with access to the app: a lapsed or cancelled
+                # subscription's alerts stay armed, unchecked, and resume if they
+                # resubscribe. Checked on every pass, so it follows status changes.
                 result = await db.execute(
                     select(PriceAlert)
+                    .join(User, PriceAlert.user_id == User.id)
                     .options(selectinload(PriceAlert.user))
                     .where(
                         PriceAlert.ticker == ticker,
                         PriceAlert.is_active == True,
                         PriceAlert.triggered_at == None,
+                        app_access_clause(),
                     )
                 )
                 alerts = result.scalars().all()
@@ -342,9 +348,11 @@ class AlertChecker:
             async with AsyncSessionLocal() as db:
                 result = await db.execute(
                     select(PriceAlert.ticker)
+                    .join(User, PriceAlert.user_id == User.id)
                     .where(
                         PriceAlert.is_active == True,
                         PriceAlert.triggered_at == None,
+                        app_access_clause(),
                     )
                     .distinct()
                 )

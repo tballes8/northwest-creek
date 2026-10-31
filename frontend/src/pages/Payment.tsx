@@ -439,6 +439,9 @@ const Payment: React.FC = () => {
                 onSuccess={(isTrial: boolean) => {
                   setTrialStarted(isTrial);
                   setSuccess(true);
+                  // Store the new plan now (the server re-reads Stripe) instead of
+                  // waiting for the webhook; the dashboard then opens on it.
+                  stripeAPI.getSubscriptionStatus(true).catch(() => {});
                   setTimeout(() => navigate('/dashboard'), 5000);
                 }}
               />

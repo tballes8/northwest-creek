@@ -41,7 +41,9 @@ def _safe_error(e: Exception) -> str:
 
 
 
-router = APIRouter()
+# Every route needs a live subscription: this is licensed FMP data, served only to
+# subscribers, and an open route would let anyone spend the shared FMP quota.
+router = APIRouter(dependencies=[Depends(get_current_user)])
 @router.get("/daily-snapshot", response_model=DailySnapshotResponse)
 async def get_daily_snapshot(
     limit: int = Query(default=10, ge=1, le=50),

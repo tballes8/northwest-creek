@@ -1,6 +1,7 @@
 """
 In-memory sliding-window rate limits for the unauthenticated endpoints that send
-email or check passwords (register, login, forgot-password, resend-verification).
+email or check passwords (register, login, forgot-password, resend-verification),
+and for on-demand Stripe syncs from /stripe/subscription-status.
 
 The API runs as a single uvicorn worker, so process memory sees every request; a
 restart resets the counters, which is acceptable for abuse limits. Key limits by
@@ -30,6 +31,23 @@ def client_ip(request: Request) -> str:
 
 def check_rate_limit(key: str, limit: int, window_seconds: int) -> None:
     """Record a hit for `key`; raise 429 if it exceeds `limit` within the window."""
+    retry_after = _hit(key, limit, window_seconds)
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many attempts. Please try again in {_human(retry_after)}.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
+def within_rate_limit(key: str, limit: int, window_seconds: int) -> bool:
+    """Record a hit for `key` and say whether it is within `limit`. For callers that
+    skip optional work when over the limit instead of rejecting the request."""
+    return _hit(key, limit, window_seconds) is None
+
+
+def _hit(key: str, limit: int, window_seconds: int) -> int | None:
+    """Record a hit; return seconds until the next one is allowed, or None if allowed."""
     global _calls_since_sweep
     now = time.monotonic()
 
@@ -43,13 +61,9 @@ def check_rate_limit(key: str, limit: int, window_seconds: int) -> None:
     while hits and now - hits[0] > window_seconds:
         hits.popleft()
     if len(hits) >= limit:
-        retry_after = int(window_seconds - (now - hits[0])) + 1
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Too many attempts. Please try again in {_human(retry_after)}.",
-            headers={"Retry-After": str(retry_after)},
-        )
+        return int(window_seconds - (now - hits[0])) + 1
     hits.append(now)
+    return None
 
 
 def _human(seconds: int) -> str:

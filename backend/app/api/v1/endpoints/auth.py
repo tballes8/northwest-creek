@@ -23,7 +23,7 @@ from app.core.security import (
     decode_token
 )
 from app.db.session import get_db
-from app.api.dependencies import get_current_user_allow_inactive
+from app.api.dependencies import get_current_user_any_subscription
 from app.core.rate_limit import check_rate_limit, client_ip
 from app.core.tier_limits import TIER_LIMITS
 from app.services.email_service import email_service
@@ -302,12 +302,12 @@ async def login(credentials: UserLogin, http_request: Request, db: AsyncSession 
 
 @router.get("/me", response_model=UserResponse)
 async def read_current_user(
-    current_user: User = Depends(get_current_user_allow_inactive),
+    current_user: User = Depends(get_current_user_any_subscription),
 ):
     """Get current authenticated user.
 
-    Allows locked (lapsed) accounts so Pricing and Payment recognise a returning
-    user who needs to resubscribe, instead of treating them as logged out.
+    Works without a live subscription, so Pricing and Payment recognise a
+    returning user who needs to resubscribe instead of treating them as logged out.
     """
     return current_user
 

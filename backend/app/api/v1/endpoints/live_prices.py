@@ -3,10 +3,13 @@ Live Prices WebSocket Endpoint
 Real-time stock price streaming via WebSocket
 """
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from sqlalchemy import select
 from app.services.websocket_service import live_price_service
 from app.api.dependencies import get_current_user
+from app.core.entitlements import has_app_access
 from app.core.security import decode_token
 from app.db.models import User
+from app.db.session import async_session
 import asyncio
 import json
 
@@ -17,7 +20,8 @@ WS_POLICY_VIOLATION = 1008  # close code: not authenticated
 
 
 async def _authenticate_socket(websocket: WebSocket) -> bool:
-    """The first message must be {"action": "auth", "token": <JWT>}.
+    """The first message must be {"action": "auth", "token": <JWT>}, and the user
+    must have access to the app (a live subscription), as on every data route.
 
     Sent as a message, not a query parameter: uvicorn logs WebSocket URLs,
     which would write every user's token into the logs.
@@ -28,7 +32,12 @@ async def _authenticate_socket(websocket: WebSocket) -> bool:
         if not isinstance(msg, dict) or msg.get("action") != "auth" or not isinstance(msg.get("token"), str):
             return False
         payload = decode_token(msg["token"])
-        return bool(payload and payload.get("sub"))
+        user_id = payload.get("sub") if payload else None
+        if not user_id:
+            return False
+        async with async_session() as db:
+            user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+        return user is not None and has_app_access(user)
     except Exception:
         return False
 
@@ -36,7 +45,7 @@ async def _authenticate_socket(websocket: WebSocket) -> bool:
 @router.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """
-    WebSocket endpoint for live price streaming (logged-in users only)
+    WebSocket endpoint for live price streaming (subscribers only)
 
     Client sends first:
     {

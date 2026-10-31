@@ -58,7 +58,10 @@ const PageviewTracker: React.FC = () => {
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
-// Subscription Guard - checks auth token AND active/trialing Stripe subscription
+// Subscription Guard - routes by subscription state: active/trialing → the page,
+// past_due/unpaid → /billing, none → /payment. Navigation only: the server enforces
+// the subscription on every API call (api/dependencies.get_current_user), so
+// failing open on an error here exposes nothing.
 const SubscriptionGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const token = localStorage.getItem('access_token');
   const navigate = useNavigate();
@@ -84,7 +87,7 @@ const SubscriptionGuard: React.FC<{ children: React.ReactNode }> = ({ children }
         navigate(`/payment?tier=${subscription_tier || 'beginner'}`, { replace: true });
       }
     }).catch(() => {
-      setReady(true); // fail open — don't block on API error
+      setReady(true); // fail open — the API itself still refuses without a subscription
     });
   }, [token, navigate]);
 

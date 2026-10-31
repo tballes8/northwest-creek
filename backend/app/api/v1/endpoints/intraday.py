@@ -4,14 +4,22 @@ Includes batch quotes, single-ticker snapshots, and 15-minute bars with MAs.
 """
 import asyncio
 import re
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Dict, Any, Optional, Set
 from datetime import datetime, date, time as dt_time, timedelta, timezone
 import pytz
 import httpx
+from app.api.dependencies import get_current_user
 from app.services.fmp_client import get_fmp_client, API_KEY
 
-router = APIRouter()
+# Every route needs a live subscription (licensed FMP data; shared FMP quota)
+router = APIRouter(dependencies=[Depends(get_current_user)])
+
+# /batch takes a ticker list from the client. The live-price WebSocket's rules
+# (symbol-shaped strings, at most 200; a Professional watchlist plus portfolio is
+# 150), plus a leading ^ for index symbols.
+_TICKER_RE = re.compile(r"^\^?[A-Z0-9][A-Z0-9.\-]{0,11}$")
+MAX_BATCH_TICKERS = 200
 
 # Eastern time for display
 ET = pytz.timezone('US/Eastern')
@@ -167,12 +175,19 @@ async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
     MUST be declared before /{ticker} to avoid FastAPI treating 'batch' as a ticker
     """
     try:
-        ticker_list = [t.strip().upper() for t in tickers.split(',') if t.strip()]
+        ticker_list = list(dict.fromkeys(
+            t for t in (s.strip().upper() for s in tickers.split(',')) if _TICKER_RE.match(t)
+        ))
 
         if not ticker_list:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No valid tickers provided"
+            )
+        if len(ticker_list) > MAX_BATCH_TICKERS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"At most {MAX_BATCH_TICKERS} tickers per request"
             )
 
         # FMP /stable/batch-quote accepts comma-separated symbols

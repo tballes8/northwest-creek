@@ -12,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
+from app.core.entitlements import app_access_clause
+from app.core.tier_limits import get_tier_limit
 from app.db.models import TechnicalAlert, User
 from app.services.email_service import email_service
 from app.services.market_data import market_data_service
@@ -94,15 +96,23 @@ class TechnicalAlertChecker:
 
     async def check_all_alerts(self, db: AsyncSession):
         """Main entry point - called by the cron task."""
+        # Only users with access to the app, on a plan that includes indicator
+        # alerts (Active and Professional). Alerts of a lapsed subscription or a
+        # downgraded plan stay armed, unchecked, and resume if the user comes back.
         result = await db.execute(
             select(TechnicalAlert)
+            .join(User, TechnicalAlert.user_id == User.id)
             .options(selectinload(TechnicalAlert.user))
             .where(
                 TechnicalAlert.is_active == True,
                 TechnicalAlert.triggered_at == None,
+                app_access_clause(),
             )
         )
-        alerts = result.scalars().all()
+        alerts = [
+            a for a in result.scalars().all()
+            if get_tier_limit(a.user.subscription_tier, "indicator_alerts") > 0
+        ]
 
         if not alerts:
             print("   No active technical alerts to check")
