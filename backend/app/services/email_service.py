@@ -12,7 +12,7 @@ import logging
 import requests
 
 from app.config import get_settings
-from app.core.tier_limits import TIER_LIMITS, get_trial_days
+from app.core.tier_limits import TIER_LIMITS, get_review_period, get_trial_days
 
 logger = logging.getLogger(__name__)
 
@@ -163,12 +163,7 @@ class EmailService:
             "professional": "Professional"
         }.get(selected_tier, "Beginner")
         
-        review_period = {
-            "beginner": "total",
-            "casual": "per week",
-            "active": "per day",
-            "professional": "per day"
-        }.get(selected_tier, "total")
+        review_period = f"per {get_review_period(selected_tier)}"
 
         # Only trial plans (Beginner, Casual) may promise "not charged" — an Active
         # or Professional signup is billed as soon as they complete payment.
@@ -180,8 +175,7 @@ class EmailService:
 
         features_html = f'<li>✅ Track up to {limits["watchlist_stocks"]} stocks in your watchlist</li>\n'
         features_html += f'                            <li>✅ Monitor {limits["portfolio_entries"]} portfolio positions</li>\n'
-        features_html += f'                            <li>✅ {limits["stock_reviews"]} stock reviews {review_period}</li>\n'
-        
+
         if limits["alerts"] > 0:
             features_html += f'                            <li>✅ {limits["alerts"]} price alerts</li>\n'
         
@@ -368,15 +362,12 @@ class EmailService:
         
         # Build features list for the purchased tier
         limits = TIER_LIMITS.get(tier, TIER_LIMITS.get("casual", {}))
-        review_period = {
-            "casual": "per week", "active": "per day", "professional": "per day"
-        }.get(tier, "per week")
+        review_period = f"per {get_review_period(tier)}"
         
         price = {"beginner": "$10", "casual": "$20", "active": "$40", "professional": "$50"}.get(tier, "")
         
         features_html = f'<li>✅ Track up to {limits.get("watchlist_stocks", 20)} stocks in your watchlist</li>\n'
         features_html += f'                            <li>✅ Monitor {limits.get("portfolio_entries", 20)} portfolio positions</li>\n'
-        features_html += f'                            <li>✅ {limits.get("stock_reviews", 5)} stock reviews {review_period}</li>\n'
         if limits.get("alerts", 0) > 0:
             features_html += f'                            <li>✅ {limits["alerts"]} price alerts</li>\n'
         if limits.get("dcf_valuations", 0) > 0:

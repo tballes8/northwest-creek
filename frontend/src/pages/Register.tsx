@@ -274,7 +274,7 @@ const Register: React.FC = () => {
 
             <div className="mt-6 grid grid-cols-3 gap-3">
               <div className="text-center">
-                <p className="text-xs text-gray-500 dark:text-gray-400">✓ 5 stock reviews/week</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">✓ 5 DCF valuations/week</p>
               </div>
               <div className="text-center">
                 <p className="text-xs text-gray-500 dark:text-gray-400">✓ 10 watchlist stocks</p>

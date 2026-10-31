@@ -101,7 +101,7 @@ const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
     <nav className="bg-gray-900 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">
       {/* Market ticker tape — top strip, above the nav row. Renders on every page that uses NavBar. */}
       <TickerTape embedded />
-      {/* Screener tape: High Volume Breakout + In Squeeze quick-screens */}
+      {/* Screener tape: High Volume Breakout + Volatility Squeeze quick-screens */}
       <TickerTape source="screens" embedded />
       <div className="flex items-center h-16">
         {/* Logo — outside the constrained container */}

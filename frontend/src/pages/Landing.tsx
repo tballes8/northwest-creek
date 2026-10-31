@@ -100,7 +100,7 @@ const Landing: React.FC = () => {
 
       {/* Live ticker tape (volume-sorted most-actives) */}
       <TickerTape />
-      {/* Screener tape: High Volume Breakout + In Squeeze quick-screens */}
+      {/* Screener tape: High Volume Breakout + Volatility Squeeze quick-screens */}
       <TickerTape source="screens" />
 
       {/* Hero */}
@@ -396,7 +396,7 @@ const Landing: React.FC = () => {
               'Filter by price, market cap, volume, and sector',
               'Technical filters: golden cross, death cross, 50/200-day MA position',
               '52-week high/low proximity, gap %, volume spikes',
-              'One-click "In Squeeze" and "Squeeze Fired" presets to catch coiling breakouts',
+              'One-click "Volatility Squeeze" and "Squeeze Fired" presets (Bollinger inside Keltner)',
               'Daily snapshot covers all common stocks and ETFs',
               'Save your screens (Active and Professional)',
             ]}

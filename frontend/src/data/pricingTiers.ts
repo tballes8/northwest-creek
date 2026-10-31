@@ -10,9 +10,8 @@ export interface PlanLimits {
   watchlist: number;
   portfolio: number;
   priceAlerts: number;
-  /** review_period: stock reviews, DCF valuations, TA and AI reset per this */
+  /** review_period: DCF valuations, TA and AI reset per this */
   period: 'week' | 'day';
-  stockReviews: number;
   dcf: number;
   technicalAnalysis: number;
   /** 0 = not included */
@@ -59,7 +58,7 @@ const TIER_DEFINITIONS: TierDefinition[] = [
     description: 'Perfect for getting started — 14-day free trial',
     limits: {
       watchlist: 10, portfolio: 10, priceAlerts: 5, period: 'week',
-      stockReviews: 5, dcf: 5, technicalAnalysis: 5, aiAnalysis: 0,
+      dcf: 5, technicalAnalysis: 5, aiAnalysis: 0,
       smartAlerts: 0, savedScreens: 0, optionsCalculator: false,
     },
     extraBullets: ['Real-time WebSocket prices'],
@@ -77,7 +76,7 @@ const TIER_DEFINITIONS: TierDefinition[] = [
     description: 'For investors tracking a moderate portfolio — 14-day free trial',
     limits: {
       watchlist: 20, portfolio: 20, priceAlerts: 10, period: 'week',
-      stockReviews: 15, dcf: 15, technicalAnalysis: 15, aiAnalysis: 5,
+      dcf: 15, technicalAnalysis: 15, aiAnalysis: 5,
       smartAlerts: 0, savedScreens: 0, optionsCalculator: false,
     },
     ctaLabel: 'Start Free Trial',
@@ -94,7 +93,7 @@ const TIER_DEFINITIONS: TierDefinition[] = [
     description: 'For active traders with larger portfolios',
     limits: {
       watchlist: 45, portfolio: 45, priceAlerts: 20, period: 'day',
-      stockReviews: 20, dcf: 20, technicalAnalysis: 10, aiAnalysis: 10,
+      dcf: 20, technicalAnalysis: 10, aiAnalysis: 10,
       smartAlerts: 5, savedScreens: 15, optionsCalculator: true,
     },
     ctaLabel: 'Get Active',
@@ -110,7 +109,7 @@ const TIER_DEFINITIONS: TierDefinition[] = [
     description: 'Ultimate tools for professional traders',
     limits: {
       watchlist: 75, portfolio: 75, priceAlerts: 50, period: 'day',
-      stockReviews: 40, dcf: 40, technicalAnalysis: 20, aiAnalysis: 25,
+      dcf: 40, technicalAnalysis: 20, aiAnalysis: 25,
       smartAlerts: 20, savedScreens: 50, optionsCalculator: true,
     },
     ctaLabel: 'Go Professional',
@@ -121,7 +120,6 @@ const limitBullets = (l: PlanLimits): string[] => [
   `${l.watchlist} watchlist stocks`,
   `${l.portfolio} portfolio entries`,
   `${l.priceAlerts} price alerts`,
-  `${l.stockReviews} stock reviews per ${l.period}`,
   `${l.dcf} DCF valuations per ${l.period}`,
   `${l.technicalAnalysis} technical analyses per ${l.period}`,
   ...(l.smartAlerts ? [`${l.smartAlerts} smart technical alerts (RSI, MACD, MA cross…)`] : []),
@@ -180,7 +178,6 @@ export const COMPARISON_ROWS: ComparisonRow[] = [
   comparisonRow('Watchlist Stocks', (t) => String(t.limits.watchlist)),
   comparisonRow('Portfolio Entries', (t) => String(t.limits.portfolio)),
   comparisonRow('Price Alerts', (t) => String(t.limits.priceAlerts)),
-  comparisonRow('Stock Reviews', (t) => perPeriod(t.limits.stockReviews, t)),
   comparisonRow('DCF Valuations', (t) => perPeriod(t.limits.dcf, t)),
   comparisonRow('Technical Analysis', (t) => perPeriod(t.limits.technicalAnalysis, t)),
   comparisonRow('AI Stock & Portfolio Analysis', (t) => (t.limits.aiAnalysis ? perPeriod(t.limits.aiAnalysis, t) : false)),

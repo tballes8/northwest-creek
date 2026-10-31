@@ -1966,8 +1966,8 @@ const TechnicalAnalysis: React.FC = () => {
                   </p>
                 )}
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    <strong>Situations to Look For:</strong> When the bands squeeze tight, volatility is contracting — a breakout 
-                    (in either direction) often follows. Watch for expanding volume to confirm the direction of the move.
+                    <strong>Situations to Look For:</strong> When the bands squeeze tight, volatility is contracting. Traders watch 
+                    for it to expand again; the squeeze itself doesn't indicate direction or guarantee a move.
                 </p>
                 <div className="relative" style={{ height: '300px' }}>
                     {clearLineButton}

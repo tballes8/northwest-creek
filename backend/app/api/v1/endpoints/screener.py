@@ -543,7 +543,7 @@ _PRESETS = [
         "id": "oversold_quality",
         "name": "Oversold Quality",
         "universe": "stocks",
-        "description": "Large-cap stocks near 52-week lows but still trading above their 200-day MA",
+        "description": "Stocks above $500M market cap within 15% of their 52-week low but still trading above their 200-day MA",
         "criteria": {
             "universe": "stocks",
             "pct_from_52wk_low": {"max": 15},
@@ -607,7 +607,7 @@ _PRESETS = [
         "id": "momentum_leaders",
         "name": "Momentum Leaders",
         "universe": "stocks",
-        "description": "Large-cap stocks trading above both moving averages with positive momentum today",
+        "description": "Stocks above $1B market cap trading above both moving averages and up 0.5%+ today",
         "criteria": {
             "universe": "stocks",
             "price_above_50ma": True,
@@ -635,7 +635,7 @@ _PRESETS = [
         "id": "death_cross",
         "name": "Death Cross",
         "universe": "stocks",
-        "description": "Stocks where the 50-day MA has crossed below the 200-day MA — bearish technical signal",
+        "description": "Stocks where the 50-day MA has crossed below the 200-day MA, a pattern traders read as bearish",
         "criteria": {
             "universe": "stocks",
             "death_cross": True,
@@ -648,7 +648,7 @@ _PRESETS = [
         "id": "gap_up",
         "name": "Gap Up (2%+)",
         "universe": "stocks",
-        "description": "Stocks that opened at least 2% above the prior close — momentum and catalyst plays",
+        "description": "Stocks that opened at least 2% above the prior close",
         "criteria": {
             "universe": "stocks",
             "gap_percent": {"min": 2},
@@ -661,7 +661,7 @@ _PRESETS = [
         "id": "gap_down",
         "name": "Gap Down (2%+)",
         "universe": "stocks",
-        "description": "Stocks that opened at least 2% below the prior close — potential reversals or continued selling",
+        "description": "Stocks that opened at least 2% below the prior close",
         "criteria": {
             "universe": "stocks",
             "gap_percent": {"max": -2},
@@ -703,9 +703,12 @@ _PRESETS = [
     },
     {
         "id": "in_squeeze",
-        "name": "In Squeeze",
+        "name": "Volatility Squeeze",
         "universe": "stocks",
-        "description": "Volatility is coiling — Bollinger Bands are inside the Keltner Channels. A breakout often follows.",
+        "description": (
+            "Bollinger Bands are inside the Keltner Channels, a low-volatility condition traders "
+            "watch for volatility expansion. It does not indicate direction."
+        ),
         "criteria": {
             "universe": "stocks",
             "squeeze_on": True,
@@ -718,7 +721,10 @@ _PRESETS = [
         "id": "squeeze_fired",
         "name": "Squeeze Fired (3d)",
         "universe": "stocks",
-        "description": "A volatility squeeze released in the last 3 trading days — potential breakout underway.",
+        "description": (
+            "A volatility squeeze ended in the last 3 trading days: the Bollinger Bands moved back "
+            "outside the Keltner Channels. It does not indicate direction."
+        ),
         "criteria": {
             "universe": "stocks",
             "squeeze_fired_within_days": 3,

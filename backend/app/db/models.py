@@ -224,7 +224,7 @@ class FeatureUsage(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
-    feature = Column(String(50), nullable=False)   # e.g. "dcf_valuations", "stock_reviews", "technical_analysis"
+    feature = Column(String(50), nullable=False)   # e.g. "dcf_valuations", "ai_analysis", "technical_analysis"
     used_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="feature_usage")

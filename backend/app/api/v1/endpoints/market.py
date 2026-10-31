@@ -86,7 +86,7 @@ async def get_ticker_tape():
 
 @router.get("/ticker-tape/screens")
 async def get_screens_ticker_tape(db: AsyncSession = Depends(get_db)):
-    """Tickers from the 'High Volume Breakout' and 'In Squeeze' quick-screens.
+    """Tickers from the 'High Volume Breakout' and 'Volatility Squeeze' quick-screens.
 
     Mirrors the screener presets of the same names (see screener.py _PRESETS),
     including their implicit ETF exclusion — except squeeze picks rank by

@@ -12,7 +12,6 @@ TIER_LIMITS = {
         "alerts": 5,
         "indicator_alerts": 0,
         "saved_screens": 0,
-        "stock_reviews": 5,           # per week
         "dcf_valuations": 5,          # per week
         "relval_valuations": 0,       # not available (below RELVAL_MIN_TIER)
         "technical_analysis": 5,      # per week
@@ -28,7 +27,6 @@ TIER_LIMITS = {
         "alerts": 10,
         "indicator_alerts": 0,
         "saved_screens": 0,
-        "stock_reviews": 15,          # per week
         "dcf_valuations": 15,         # per week
         "relval_valuations": 15,      # per week
         "technical_analysis": 15,     # per week
@@ -44,7 +42,6 @@ TIER_LIMITS = {
         "alerts": 20,
         "indicator_alerts": 5,
         "saved_screens": 15,
-        "stock_reviews": 20,          # per day
         "dcf_valuations": 20,         # per day
         "relval_valuations": 20,      # per day
         "technical_analysis": 10,     # per day (70/wk — above casual's 15/wk)
@@ -59,7 +56,6 @@ TIER_LIMITS = {
         "alerts": 50,
         "indicator_alerts": 20,
         "saved_screens": 50,
-        "stock_reviews": 40,          # per day
         "dcf_valuations": 40,         # per day
         "relval_valuations": 40,      # per day
         "technical_analysis": 20,     # per day (140/wk)
@@ -158,8 +154,8 @@ TIER_ORDER = ["beginner", "casual", "active", "professional"]
 # Counted features only — booleans (ad_free) and caps that are not
 # per-period (watchlist_stocks, portfolio_entries, alerts, saved_screens,
 # indicator_alerts) are not rate limits and are excluded.
-_METERED = ["stock_reviews", "dcf_valuations", "relval_valuations",
-            "technical_analysis", "watchlist_screens", "ai_analysis"]
+_METERED = ["dcf_valuations", "relval_valuations", "technical_analysis",
+            "watchlist_screens", "ai_analysis"]
 
 # Features unavailable below a minimum tier — a 0 on a lower tier is intentional,
 # not a missing limit.

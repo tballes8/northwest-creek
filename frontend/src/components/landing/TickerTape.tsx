@@ -25,7 +25,7 @@ interface TickerTapeProps {
   /** When true, render dark-consistent styling that blends into the (always-dark) NavBar. */
   embedded?: boolean;
   /** 'most-active' (default): FMP volume-sorted most-actives. 'screens': High
-   *  Volume Breakout + In Squeeze quick-screen results. */
+   *  Volume Breakout + Volatility Squeeze quick-screen results. */
   source?: 'most-active' | 'screens';
 }
 
