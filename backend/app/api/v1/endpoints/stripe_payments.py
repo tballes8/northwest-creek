@@ -24,13 +24,17 @@ logger = logging.getLogger(__name__)
 
 
 # ---- Webhook Event Deduplication ----
-# Prevents duplicate processing when Stripe retries delivery.
-# TTL-based: entries older than 24h are evicted on insert.
+# Prevents duplicate processing when Stripe retries delivery. An event is
+# recorded only after its handler succeeds: a failed one returns 500 and must
+# stay retryable, or the retry is skipped and the event is lost.
+# In memory and per process. The handlers are idempotent, so a redelivery after
+# a restart at worst repeats an email.
+# TTL-based: entries older than 24h are evicted on lookup.
 _PROCESSED_EVENTS: OrderedDict[str, float] = OrderedDict()
 _EVENT_TTL = 86400  # 24 hours
 
-def _is_duplicate_event(event_id: str) -> bool:
-    """Check if we've already processed this webhook event."""
+def _already_processed(event_id: str) -> bool:
+    """Check if this webhook event was already handled successfully."""
     now = time.time()
     # Evict stale entries (oldest are first in OrderedDict)
     while _PROCESSED_EVENTS:
@@ -39,10 +43,11 @@ def _is_duplicate_event(event_id: str) -> bool:
             _PROCESSED_EVENTS.pop(oldest_key)
         else:
             break
-    if event_id in _PROCESSED_EVENTS:
-        return True
-    _PROCESSED_EVENTS[event_id] = now
-    return False
+    return event_id in _PROCESSED_EVENTS
+
+
+def _mark_processed(event_id: str) -> None:
+    _PROCESSED_EVENTS[event_id] = time.time()
 
 router = APIRouter()
 
@@ -57,6 +62,9 @@ class CheckoutRequest(BaseModel):
 
 class SubscriptionRequest(BaseModel):
     tier: str  # 'beginner', 'casual', 'active', 'professional'
+
+class StartTrialRequest(BaseModel):
+    setup_intent_id: str
 
 
 # ---- Helper: Map tier to price ID ----
@@ -148,11 +156,12 @@ async def create_subscription(
 
     - **New subscriber:** Creates a Customer + Subscription, returns client_secret
       for the frontend to confirm payment via Stripe Elements.
+    - **New trial:** Creates a SetupIntent only and returns its client_secret. The
+      subscription is created by /start-trial once the card is confirmed.
     - **Existing subscriber (upgrade/downgrade):** Modifies the current subscription
-      in-place, swapping the price item with proration. Stripe automatically
-      calculates the credit from the old plan and charges the difference.
-      If the customer already has a payment method on file, the prorated
-      invoice is paid automatically — no client_secret needed.
+      in-place and invoices the prorated difference immediately. If the card on
+      file pays it, the tier changes now; otherwise the change is held as a
+      pending update and a client_secret is returned to confirm the payment.
     """
     try:
         new_price_id = get_price_id_for_tier(request.tier)
@@ -212,36 +221,42 @@ async def create_subscription(
                     cancel_at_period_end=False,
                 )
 
-            # Swap the price item with proration
-            # Stripe calculates: (new price × remaining days) - (old price × remaining days)
+            # Swap the price item and bill the prorated difference now:
+            # (new price × remaining days) - (old price × remaining days).
+            # pending_if_incomplete: if that charge fails or needs 3D Secure, Stripe
+            # holds the swap as a pending update and the plan doesn't change until
+            # it's paid. (Pending updates take a restricted set of parameters,
+            # so no metadata here; nothing reads plan_name back anyway.)
             updated_sub = stripe.Subscription.modify(
                 active_sub.id,
                 items=[{
                     'id': current_item['id'],
                     'price': new_price_id,
                 }],
-                proration_behavior='create_prorations',
-                metadata={
-                    'user_id': str(current_user.id),
-                    'plan_name': get_plan_name_for_price(new_price_id),
-                },
+                proration_behavior='always_invoice',
+                payment_behavior='pending_if_incomplete',
                 expand=['latest_invoice.payment_intent'],
             )
 
-            # The prorated invoice is usually paid automatically if the customer
-            # has a default payment method on file. Check if we need a client_secret.
-            latest_invoice = updated_sub.latest_invoice
-            payment_intent = latest_invoice.payment_intent if latest_invoice else None
-
-            if payment_intent and payment_intent.status in ('requires_payment_method', 'requires_confirmation', 'requires_action'):
-                # Customer needs to confirm payment (e.g., no card on file, 3D Secure)
+            if updated_sub.get('pending_update'):
+                # Not paid yet, so nothing has changed. The frontend confirms the
+                # payment with the card entered; Stripe then applies the new price,
+                # and the invoice.paid / subscription.updated webhooks set the tier.
+                latest_invoice = updated_sub.latest_invoice
+                payment_intent = latest_invoice.payment_intent if latest_invoice else None
+                if not payment_intent:
+                    raise HTTPException(
+                        status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                        detail="We couldn't charge your card for the plan change. Please try again or contact support."
+                    )
                 return {
                     "subscription_id": updated_sub.id,
                     "client_secret": payment_intent.client_secret,
                     "upgrade": True,
                 }
             else:
-                # Payment succeeded automatically — update tier immediately
+                # Applied: the difference was paid (or nothing was due, e.g. a
+                # downgrade, whose credit goes to the customer's balance)
                 new_tier = get_tier_for_price(new_price_id)
                 old_tier = current_user.subscription_tier
                 current_user.subscription_tier = new_tier
@@ -276,34 +291,25 @@ async def create_subscription(
             is_trial = tier_gets_trial(tier) and not _has_had_trial(all_subs)
 
             if is_trial:
-                # Trial subscription: $0 first invoice, collect card via SetupIntent
-                subscription = stripe.Subscription.create(
+                # Card first, subscription second. Stripe puts a trial subscription
+                # in 'trialing' the moment it exists, card or not, so creating it
+                # here would grant the trial before the card is confirmed. Only a
+                # SetupIntent is created; /start-trial creates the subscription
+                # once it succeeds. A declined or abandoned card form leaves no
+                # subscription, no access, and the one trial still unused.
+                setup_intent = stripe.SetupIntent.create(
                     customer=customer.id,
-                    items=[{'price': new_price_id}],
-                    trial_period_days=TRIAL_DAYS,
-                    payment_settings={
-                        'save_default_payment_method': 'on_subscription',
-                    },
-                    expand=['pending_setup_intent'],
+                    payment_method_types=['card'],
+                    usage='off_session',  # charged at trial end with the user away
                     metadata={
                         'user_id': str(current_user.id),
-                        'plan_name': get_plan_name_for_price(new_price_id),
+                        'tier': tier,
                     },
                 )
 
-                setup_intent = subscription.pending_setup_intent
-                client_secret = setup_intent.client_secret if setup_intent else None
-
-                # Trial starts immediately — upgrade user now, and unlock a
-                # returning account now rather than waiting on a webhook
-                current_user.subscription_tier = tier
-                current_user.is_active = True
-                await db.commit()
-                print(f"✅ User {current_user.email} started {TRIAL_DAYS}-day trial on {tier}")
-
                 return {
-                    "subscription_id": subscription.id,
-                    "client_secret": client_secret,
+                    "subscription_id": None,
+                    "client_secret": setup_intent.client_secret,
                     "is_trial": True,
                     "upgrade": False,
                 }
@@ -345,6 +351,94 @@ async def create_subscription(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not set up subscription. Please try again."
+        )
+
+
+@router.post("/start-trial")
+async def start_trial(
+    request: StartTrialRequest,
+    current_user: User = Depends(get_current_user_allow_inactive),  # a locked account resubscribes here
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Start a free trial once its card is confirmed.
+
+    Second half of the trial path in /create-subscription: the frontend confirms
+    that SetupIntent's card, then calls this with its id. The tier comes from the
+    SetupIntent's metadata, set server-side, never from the request.
+    """
+    try:
+        setup_intent = stripe.SetupIntent.retrieve(request.setup_intent_id)
+        tier = setup_intent['metadata'].get('tier')
+        if (
+            setup_intent['metadata'].get('user_id') != str(current_user.id)
+            or setup_intent.status != 'succeeded'
+            or not tier or not tier_gets_trial(tier)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Your card hasn't been confirmed. Please enter it again."
+            )
+
+        all_subs = _all_subscriptions(setup_intent.customer)
+        live_sub = next((s for s in all_subs if s['status'] in _LIVE_STATUSES), None)
+        if live_sub:
+            # A repeat of this same call (double submit, retry after a dropped response)
+            if live_sub['metadata'].get('setup_intent') != setup_intent.id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="You already have a subscription."
+                )
+            subscription = live_sub
+        else:
+            if _has_had_trial(all_subs):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This account has already used its free trial."
+                )
+            price_id = get_price_id_for_tier(tier)
+            subscription = stripe.Subscription.create(
+                customer=setup_intent.customer,
+                items=[{'price': price_id}],
+                trial_period_days=TRIAL_DAYS,
+                default_payment_method=setup_intent.payment_method,
+                payment_settings={
+                    'save_default_payment_method': 'on_subscription',
+                },
+                metadata={
+                    'user_id': str(current_user.id),
+                    'plan_name': get_plan_name_for_price(price_id),
+                    'setup_intent': setup_intent.id,
+                },
+                # Two concurrent calls with one card create one subscription
+                idempotency_key=f"start-trial-{setup_intent.id}",
+            )
+
+        # The card is on file, so the trial is real: grant the tier, and unlock
+        # a returning account now rather than waiting on a webhook
+        current_user.subscription_tier = tier
+        current_user.is_active = True
+        await db.commit()
+        print(f"✅ User {current_user.email} started {TRIAL_DAYS}-day trial on {tier}")
+
+        return {
+            "subscription_id": subscription.id,
+            "is_trial": True,
+        }
+
+    except HTTPException:
+        raise
+    except stripe.error.StripeError as e:
+        print(f"Stripe error in start-trial: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not start your trial. Please try again or contact support."
+        )
+    except Exception as e:
+        print(f"Error starting trial: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not start your trial. Please try again."
         )
 
 
@@ -438,7 +532,7 @@ async def stripe_webhook(
     logger.info(f"Stripe webhook received: {event_type} (event={event_id})")
 
     # Deduplicate — Stripe retries on timeout, don't process twice
-    if _is_duplicate_event(event_id):
+    if _already_processed(event_id):
         logger.info(f"Skipping duplicate webhook event: {event_id}")
         return {"status": "duplicate_skipped"}
 
@@ -476,6 +570,7 @@ async def stripe_webhook(
         # Return 500 so Stripe retries this event
         raise HTTPException(status_code=500, detail=f"Webhook handler error: {event_type}")
 
+    _mark_processed(event_id)
     return {"status": "success"}
 
 

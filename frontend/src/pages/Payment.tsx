@@ -113,7 +113,7 @@ const CheckoutForm: React.FC<{ tier: Tier; trialOffered: boolean; onSuccess: (is
       }
 
       if (is_trial) {
-        // Trial: save card for future charges via SetupIntent
+        // Trial: confirm the card first; the trial only starts once it's on file
         const { error: setupError, setupIntent } = await stripe.confirmCardSetup(client_secret, {
           payment_method: { card: cardNumber },
         });
@@ -125,6 +125,7 @@ const CheckoutForm: React.FC<{ tier: Tier; trialOffered: boolean; onSuccess: (is
         }
 
         if (setupIntent?.status === 'succeeded') {
+          await stripeAPI.startTrial(setupIntent.id);
           onSuccess(true);
         } else {
           setError('Card verification is being processed. Please wait a moment.');

@@ -82,8 +82,10 @@ pins / the account default — watch for API-version-gated shape changes.
 Server-side calls NWC makes (all in `api/v1/endpoints/stripe_payments.py`):
 - `stripe.Customer.list(email=, limit=)`, `stripe.Customer.create(email=, metadata=)` — reads `customer.id`
 - `stripe.Subscription.list(customer=, status=, ...)` — filters by status `active` and `trialing`
-- `stripe.Subscription.create(customer=, items=[{'price': price_id}], metadata=, payment_behavior=, expand=['latest_invoice.payment_intent'], trial_period_days=...)`
-- `stripe.Subscription.modify(sub_id, items=[{id, price}], proration_behavior=, metadata=, cancel_at_period_end=)`
+- `stripe.Subscription.create(customer=, items=[{'price': price_id}], metadata=, payment_behavior=, expand=['latest_invoice.payment_intent'])`;
+  trials: `stripe.Subscription.create(customer=, items=, trial_period_days=, default_payment_method=, metadata=, idempotency_key=)`
+- `stripe.Subscription.modify(sub_id, items=[{id, price}], proration_behavior='always_invoice', payment_behavior='pending_if_incomplete', expand=)`, `stripe.Subscription.modify(sub_id, cancel_at_period_end=)`
+- `stripe.SetupIntent.create(customer=, payment_method_types=['card'], usage='off_session', metadata=)`, `stripe.SetupIntent.retrieve(id)` — reads `status`, `customer`, `payment_method`, `metadata`, `client_secret`
 - `stripe.Subscription.retrieve(sub_id)`
 - `stripe.checkout.Session.create(...)` — reads `.url`, `.id`
 - `stripe.Webhook.construct_event(payload, sig_header, secret)`
@@ -94,9 +96,7 @@ Subscription object fields NWC reads:
 - `metadata.user_id` (links sub back to our User)
 - `status` (expects `active`, `trialing`)
 - `cancel_at_period_end`, `current_period_end`
-- `latest_invoice.payment_intent.client_secret` and `.status`
-  (expects `requires_payment_method`, `requires_confirmation`, `requires_action`)
-- `pending_setup_intent` (and its `client_secret`)
+- `pending_update` (non-null = a plan change awaiting payment) and `latest_invoice.payment_intent.client_secret`
 
 Invoice fields read: `invoice.subscription` (used to retrieve the Subscription), `invoice.id`.
 NOTE: `invoice.subscription` has changed across recent Stripe API versions — flag any

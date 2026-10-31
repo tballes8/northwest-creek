@@ -446,7 +446,11 @@ export const stripeAPI = {
   
   createSubscription: (tier: string) =>
     axiosInstance.post('/stripe/create-subscription', { tier }),
-  
+
+  // Trials: called once the card from create-subscription's SetupIntent is confirmed
+  startTrial: (setupIntentId: string) =>
+    axiosInstance.post('/stripe/start-trial', { setup_intent_id: setupIntentId }),
+
   cancelSubscription: () =>
     axiosInstance.post('/stripe/cancel-subscription'),
   
