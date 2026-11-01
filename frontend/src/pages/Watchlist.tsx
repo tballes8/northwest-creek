@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { authAPI, watchlistAPI, technicalAPI, WatchlistScreenPreset } from '../services/api';
+import { authAPI, watchlistAPI, technicalAPI, intradayAPI, quotesByTicker, IntradayQuote, WatchlistScreenPreset } from '../services/api';
 import { User } from '../types';
 import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
@@ -9,11 +9,9 @@ import ScreenerChartPanel from '../components/ScreenerChartPanel';
 import { useLivePriceContext } from '../contexts/LivePriceContext';
 import MarketStatusBadge from '../components/MarketStatusBadge';
 import UpgradeRequired from '../components/UpgradeRequired';
+import { getTierBySlug, getTierLimits, planIncludes, planNamesWith, toTierSlug } from '../data/pricingTiers';
 import '../styles/livePrice.css';
-import axios from 'axios';
 import { useSectors, SECTOR_COLORS } from '../utils/sectorMap';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 // The four watchlist screens the backend exposes. Labels say what the screen
 // finds; hints state the actual criteria so the pill is never a black box.
@@ -30,6 +28,22 @@ const vsTarget = (target: number | null | undefined, price: number) =>
   target && target > 0
     ? { price_vs_target: price - target, price_vs_target_percent: ((price - target) / target) * 100 }
     : {};
+
+// Overlay a batch quote's price and day-change fields onto a row; a quote with
+// no price leaves the row alone. previous_close is the baseline the live
+// WebSocket effect computes day change from, so it is carried through.
+const withQuote = (item: WatchlistItem, quote?: IntradayQuote): WatchlistItem => {
+  const price = quote?.price;
+  if (!quote || !price) return item;
+  return {
+    ...item,
+    price,
+    change: quote.change ?? item.change,
+    change_percent: quote.change_percent ?? item.change_percent,
+    previous_close: quote.previous_close ?? item.previous_close,
+    ...vsTarget(item.target_price, price),
+  };
+};
 
 const Watchlist: React.FC = () => {
   const navigate = useNavigate();
@@ -52,7 +66,7 @@ const Watchlist: React.FC = () => {
   const previousPricesRef = useRef<Map<string, number>>(new Map());
 
   // Sorting state
-  // Watchlist screening (Active & Professional). Server-gated and server-metered;
+  // Watchlist screening (plans with limits.watchlistScreens). Server-gated and server-metered;
   // the browser only reflects what the API says.
   const [screenPreset, setScreenPreset] = useState<WatchlistScreenPreset | null>(null);
   const [screenTickers, setScreenTickers] = useState<Set<string> | null>(null);
@@ -139,25 +153,11 @@ const Watchlist: React.FC = () => {
 
     const refreshPrices = async () => {
       try {
-        const token = localStorage.getItem('access_token');
-        const priceResponse = await axios.get(
-          `${API_URL}/api/v1/intraday/batch?tickers=${tickerList}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        const freshData: Record<string, any> = {};
-        if (Array.isArray(priceResponse.data)) {
-          priceResponse.data.forEach((item: any) => {
-            if (item.ticker && item.price) {
-              freshData[item.ticker] = item;
-            }
-          });
-        }
+        const priceResponse = await intradayAPI.getBatch(tickerList.split(','));
+        const quotes = quotesByTicker(priceResponse.data);
 
         setWatchlist(prev => prev.map(item => {
-          const fresh = freshData[item.ticker];
-          if (!fresh) return item;
-          const freshPrice = fresh.price;
+          const freshPrice = quotes[item.ticker]?.price;
           if (freshPrice && freshPrice !== item.price) {
             const isUp = freshPrice > (item.price || 0);
             setPriceFlash(pf => ({ ...pf, [item.ticker]: isUp ? 'green' : 'red' }));
@@ -165,14 +165,7 @@ const Watchlist: React.FC = () => {
           }
           // Always refresh day-change fields from the batch quote so the live
           // baseline (previous_close) stays in sync and the field never goes stale.
-          return {
-            ...item,
-            price: freshPrice,
-            change: fresh.change ?? item.change,
-            change_percent: fresh.change_percent ?? item.change_percent,
-            previous_close: fresh.previous_close ?? item.previous_close,
-            ...(freshPrice ? vsTarget(item.target_price, freshPrice) : {}),
-          };
+          return withQuote(item, quotes[item.ticker]);
         }));
       } catch (err) {
         // Silent fail
@@ -194,42 +187,14 @@ const Watchlist: React.FC = () => {
       // Fetch fresh prices from batch endpoint
       if (items.length > 0) {
         try {
-          const tickers = items.map((item: WatchlistItem) => item.ticker).join(',');
-          const token = localStorage.getItem('access_token');
-          const priceResponse = await axios.get(
-            `${API_URL}/api/v1/intraday/batch?tickers=${tickers}`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
+          const priceResponse = await intradayAPI.getBatch(items.map((item: WatchlistItem) => item.ticker));
+          const quotes = quotesByTicker(priceResponse.data);
 
-          const freshData: Record<string, any> = {};
-          if (Array.isArray(priceResponse.data)) {
-            priceResponse.data.forEach((item: any) => {
-              if (item.ticker && item.price) {
-                freshData[item.ticker] = item;
-              }
-            });
-          }
-
-          // Overlay fresh price + day-change baseline onto watchlist items.
-          // previous_close is what the live WebSocket effect uses to compute
-          // day change, so it must be carried through here.
-          const updatedItems = items.map((item: WatchlistItem) => {
-            const fresh = freshData[item.ticker];
-            if (fresh) {
-              return {
-                ...item,
-                price: fresh.price,
-                change: fresh.change ?? item.change,
-                change_percent: fresh.change_percent ?? item.change_percent,
-                previous_close: fresh.previous_close ?? item.previous_close,
-                ...vsTarget(item.target_price, fresh.price),
-              };
-            }
-            return item;
-          });
+          // Overlay fresh price + day-change baseline onto watchlist items
+          const updatedItems = items.map((item: WatchlistItem) => withQuote(item, quotes[item.ticker]));
 
           setWatchlist(updatedItems);
-          console.log(`✅ Refreshed watchlist prices for ${Object.keys(freshData).length} tickers`);
+          console.log(`✅ Refreshed watchlist prices for ${Object.values(quotes).filter(q => q.price).length} tickers`);
         } catch (priceErr) {
           console.warn('⚠️ Could not fetch fresh prices, using cached:', priceErr);
           setWatchlist(items);
@@ -262,17 +227,11 @@ const Watchlist: React.FC = () => {
       return;
     }
 
-  const limits = {
-      beginner: 10,
-      casual: 20,
-      active: 45,
-      professional: 75
-    };
-  
-    const limit = limits[user?.subscription_tier as keyof typeof limits] || 10;
+    const plan = getTierBySlug(toTierSlug(user?.subscription_tier));
+    const limit = plan.limits.watchlist;
 
     if (watchlist.length >= limit) {
-      setError(`You've reached your ${user?.subscription_tier} tier limit of ${limit} stocks`);
+      setError(`You've reached your ${plan.name} plan limit of ${limit} stocks`);
       return;
     }
 
@@ -464,12 +423,11 @@ const Watchlist: React.FC = () => {
     );
   }
 
-  // Mirrors WATCHLIST_SCREEN_MIN_TIERS on the backend. The server is the gate;
-  // this only decides whether to show the buttons or the upsell.
-  const canScreen = user?.subscription_tier === 'active' || user?.subscription_tier === 'professional';
+  // limits.watchlistScreens mirrors the backend's watchlist_screens. The server is
+  // the gate; this only decides whether to show the buttons or the upsell.
+  const canScreen = planIncludes(user?.subscription_tier, 'watchlistScreens');
 
-  const watchlistLimits: Record<string, number> = { beginner: 10, casual: 20, active: 45, professional: 75 };
-  const watchlistLimit = watchlistLimits[user?.subscription_tier || 'beginner'] || 10;
+  const watchlistLimit = getTierLimits(user?.subscription_tier).watchlist;
   const isAtLimit = watchlist.length >= watchlistLimit;
 
   return (
@@ -501,10 +459,7 @@ const Watchlist: React.FC = () => {
             <div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">My Watchlist</h1>
               <p className="text-gray-600 dark:text-gray-400">
-                Track stocks you're interested in ({watchlist.length} / {(() => {
-                  const limits = { beginner: 10, casual: 20, active: 45, professional: 75 };
-                  return limits[user?.subscription_tier as keyof typeof limits] || 10;
-                })()})
+                Track stocks you're interested in ({watchlist.length} / {watchlistLimit})
               </p>
             </div>
             <div className="flex items-center gap-4">
@@ -656,8 +611,8 @@ const Watchlist: React.FC = () => {
               ) : (
                 <span className="text-sm text-gray-500 dark:text-gray-400">
                   Find the oversold, overbought, trending and reversing names in your own list —
-                  available on the <span className="font-semibold text-teal-600 dark:text-teal-400">Active</span> and{' '}
-                  <span className="font-semibold text-teal-600 dark:text-teal-400">Professional</span> plans.
+                  available on the{' '}
+                  <span className="font-semibold text-teal-600 dark:text-teal-400">{planNamesWith('watchlistScreens')}</span> plans.
                 </span>
               )}
               {screenPreset && (

@@ -1,6 +1,7 @@
 /**
  * TypeScript type definitions
  */
+import type { TierSlug } from '../data/pricingTiers';
 
 export interface User {
   id: string;
@@ -8,7 +9,7 @@ export interface User {
   full_name: string | null;
   is_active: boolean;
   is_verified: boolean;
-  subscription_tier: 'beginner' | 'casual' | 'active' | 'professional';
+  subscription_tier: TierSlug;
   created_at: string;
   updated_at: string | null;
   is_admin?: boolean;

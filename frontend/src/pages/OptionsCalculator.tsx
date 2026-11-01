@@ -4,7 +4,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { authAPI, stocksAPI } from "../services/api";
 import NavBar from "../components/NavBar";
 import { useTheme } from "../contexts/ThemeContext";
-import UpgradeRequiredPage from "../pages/UpgradeRequired";
+import UpgradeRequired from "../components/UpgradeRequired";
+import { lowestTierWith, planIncludes } from "../data/pricingTiers";
 
 // ─── Math Utilities ───
 const norm = {
@@ -1008,27 +1009,27 @@ export default function OptionsCalculator() {
     );
   }
 
-  // Tier gate: only Active and Professional can access
-  const allowedTiers = ['active', 'professional'];
-  if (!user || !allowedTiers.includes(user.subscription_tier)) {
-    return (
-      <UpgradeRequiredPage
-        user={user}
-        feature="Options Calculator"
-        featureDescription="Advanced options pricing with Black-Scholes, Greeks, and spread strategies."
-        minimumTier="active"
-        onLogout={() => {
-          localStorage.removeItem('access_token');
-          navigate('/login');
-        }}
-      />
-    );
-  }
-
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     navigate('/login');
   };
+
+  // Tier gate: limits.optionsCalculator in data/pricingTiers.ts. Frontend-only by
+  // design: the calculator is client-side math, and the IV lookup it uses is
+  // shared with the DCF page, so there is nothing to gate on the server.
+  if (!user || !planIncludes(user.subscription_tier, "optionsCalculator")) {
+    return (
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-800 transition-colors duration-200">
+        <NavBar currentPage="options-calculator" user={user} onLogout={handleLogout} />
+        <UpgradeRequired
+          feature="Options Calculator"
+          currentTier={user?.subscription_tier || "beginner"}
+          limitReached={false}
+          minimumTier={lowestTierWith("optionsCalculator")}
+        />
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>

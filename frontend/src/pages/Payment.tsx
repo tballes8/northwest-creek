@@ -9,34 +9,22 @@ import {
   useStripe,
   useElements,
 } from '@stripe/react-stripe-js';
-import axios from 'axios';
 import { PRICING_TIERS, TierSlug } from '../data/pricingTiers';
 import { stripeAPI } from '../services/api';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 type Tier = TierSlug;
 
 interface TierInfo {
   name: string;
   price: string;
-  priceNum: number;
   period: string;
   features: string[];
 }
-
-const PRICE_NUMS: Record<Tier, number> = {
-  beginner: 10,
-  casual: 20,
-  active: 40,
-  professional: 50,
-};
 
 const TIER_INFO: Record<Tier, TierInfo> = PRICING_TIERS.reduce((acc, t) => {
   acc[t.slug] = {
     name: t.name,
     price: t.price,
-    priceNum: PRICE_NUMS[t.slug],
     period: t.period,
     features: t.highlightedBullet ? [t.highlightedBullet, ...t.bullets] : t.bullets,
   };
@@ -82,19 +70,14 @@ const CheckoutForm: React.FC<{ tier: Tier; trialOffered: boolean; onSuccess: (is
     setLoading(true);
 
     try {
-      const token = localStorage.getItem('access_token');
-      if (!token) {
+      if (!localStorage.getItem('access_token')) {
         setError('You must be logged in. Please go back and verify your email.');
         setLoading(false);
         return;
       }
 
       // Step 1: Create or upgrade subscription on backend
-      const response = await axios.post(
-        `${API_URL}/api/v1/stripe/create-subscription`,
-        { tier },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await stripeAPI.createSubscription(tier);
 
       const { client_secret, subscription_id, upgrade, message, new_tier, is_trial } = response.data;
 
@@ -270,7 +253,7 @@ const Payment: React.FC = () => {
     // Load Stripe publishable key from backend
     const loadStripeKey = async () => {
       try {
-        const response = await axios.get(`${API_URL}/api/v1/stripe/config`);
+        const response = await stripeAPI.getConfig();
         const pk = response.data.publishable_key;
         if (pk) {
           setStripePromise(loadStripe(pk));

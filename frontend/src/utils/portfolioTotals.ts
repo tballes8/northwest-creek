@@ -28,3 +28,30 @@ export const summarizePositions = (
   const pl = value - cost;
   return { value, cost, pl, plPercent: cost > 0 ? (pl / cost) * 100 : 0, unpriced };
 };
+
+export interface PositionValues {
+  current_price?: number;
+  total_value?: number;
+  profit_loss?: number;
+  profit_loss_percent?: number;
+}
+
+// The one rule for a position's value and P/L at a price, used for every price
+// source (live tick, 30s /intraday/batch poll, page load) on Portfolio and
+// Dashboard. No price → no figures, so the row stays unpriced. The cost guard
+// matters: the backend enforces buy_price > 0, but an unguarded divide would
+// surface as Infinity in the UI.
+export const deriveValues = (
+  pos: { quantity: number; buy_price: number },
+  price?: number | null
+): PositionValues => {
+  if (!price) return {};
+  const totalValue = price * pos.quantity;
+  const cost = pos.buy_price * pos.quantity;
+  return {
+    current_price: price,
+    total_value: totalValue,
+    profit_loss: totalValue - cost,
+    profit_loss_percent: cost > 0 ? ((totalValue - cost) / cost) * 100 : 0,
+  };
+};

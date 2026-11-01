@@ -1,7 +1,10 @@
 import axios from 'axios';
 import { PortfolioPosition } from '../types';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL 
+// Every backend call goes through the instance below; no page builds an API URL
+// or an auth header. This constant is exported only for what can't use the
+// instance (the live-price WebSocket URL).
+export const API_BASE_URL = process.env.REACT_APP_API_URL
   ? `${process.env.REACT_APP_API_URL}/api/v1`
   : 'http://localhost:8000/api/v1';
 
@@ -10,13 +13,13 @@ const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
 });
 
-// Add token to all requests
+// Add token to all requests. Public endpoints (register, verify-email, blogs,
+// Stripe config) have no auth dependency, so a stale token there is ignored.
 axiosInstance.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
-      console.log('Sending token:', token.substring(0, 20) + '...');
     }
     return config;
   },
@@ -27,17 +30,19 @@ axiosInstance.interceptors.request.use(
 
 // Auth API
 export const authAPI = {
-  register: (data: { email: string; password: string; full_name: string }) =>
-    axiosInstance.post('/auth/register', data),
-  
+  // selectedTier is embedded in the verification email's link
+  register: (data: { email: string; password: string; full_name: string }, selectedTier: string) =>
+    axiosInstance.post('/auth/register', data, { params: { selected_tier: selectedTier } }),
+
   login: (data: { email: string; password: string }) =>
     axiosInstance.post('/auth/login', data),
-  
+
   getCurrentUser: () =>
     axiosInstance.get('/auth/me'),
 
+  // Returns access_token for auto-login
   verifyEmail: (token: string) =>
-    axiosInstance.get(`/auth/verify-email?token=${token}`),
+    axiosInstance.get('/auth/verify-email', { params: { token } }),
 
   resendVerification: (data: { email: string }, selectedTier?: string) =>
     axiosInstance.post(
@@ -305,8 +310,29 @@ export const stocksAPI = {
     return axiosInstance.get(`/stocks/daily-snapshot`, { params });
   },
 
+  getTopLosers: (limit: number = 10) =>
+    axiosInstance.get(`/stocks/top-losers`, { params: { limit } }),
+
+  getIpos: () =>
+    axiosInstance.get(`/stocks/ipos`),
+
+  getCommodityQuotes: () =>
+    axiosInstance.get(`/stocks/commodity-quotes`),
+
+  getIndexQuotes: () =>
+    axiosInstance.get(`/stocks/index-quotes`),
+
+  getCryptoQuotes: () =>
+    axiosInstance.get(`/stocks/crypto-quotes`),
+
   getDividends: (ticker: string) =>
-    axiosInstance.get(`/stocks/dividends/${ticker}`),
+    axiosInstance.get(`/stocks/dividends/${encodeURIComponent(ticker)}`),
+
+  getEtfHoldings: (ticker: string, limit: number = 10) =>
+    axiosInstance.get(`/stocks/etf/${encodeURIComponent(ticker)}/holdings`, { params: { limit } }),
+
+  getEtfInfo: (ticker: string) =>
+    axiosInstance.get(`/stocks/etf/${encodeURIComponent(ticker)}/info`),
 
   getOwnership: (ticker: string) =>
     axiosInstance.get(`/stocks/ownership/${ticker}`),
@@ -368,8 +394,9 @@ export const relvalAPI = {
     axiosInstance.post('/relval/calculate', payload),
 };
 
-// Watchlist screening — Active & Professional only, and metered on its own
-// quota because one screen costs a price-history fetch per watchlist ticker.
+// Watchlist screening — only the plans with `watchlistScreens` in
+// data/pricingTiers.ts, and metered on its own quota because one screen costs a
+// price-history fetch per watchlist ticker.
 export type WatchlistScreenPreset =
   | 'oversold'
   | 'overbought'
@@ -438,6 +465,7 @@ export const financialsAPI = {
 
 // Stripe / Subscription API
 export const stripeAPI = {
+  // Publishable key (public endpoint)
   getConfig: () =>
     axiosInstance.get('/stripe/config'),
   
@@ -464,7 +492,21 @@ export const stripeAPI = {
     axiosInstance.post('/stripe/billing-portal', { return_to: returnTo }),
 };
 
-export default axiosInstance;
+// One row of /intraday/batch (live quote; the extended-hours fields stay empty
+// without FMP batch endpoints)
+export interface IntradayQuote {
+  ticker: string;
+  name: string | null;
+  price: number | null;
+  previous_close: number | null;
+  change: number | null;
+  change_percent: number | null;
+  market_status: string | null;
+  early_trading_change: number | null;
+  early_trading_change_percent: number | null;
+  late_trading_change: number | null;
+  late_trading_change_percent: number | null;
+}
 
 // Intraday API
 export const intradayAPI = {
@@ -474,10 +516,24 @@ export const intradayAPI = {
   getBarsWithMA: (ticker: string) =>
     axiosInstance.get(`/intraday/${ticker}/bars-with-ma`),
 
+  // The only caller of /intraday/batch (at most 200 tickers). Index the rows
+  // with quotesByTicker.
   getBatch: (tickers: string[]) =>
-    axiosInstance.get(`/intraday/batch`, {
+    axiosInstance.get<IntradayQuote[]>(`/intraday/batch`, {
       params: { tickers: tickers.join(',') }
     }),
+};
+
+// Batch rows keyed by ticker. A row can come back without a price, so callers
+// check `price` before using one.
+export const quotesByTicker = (rows: unknown): Record<string, IntradayQuote> => {
+  const byTicker: Record<string, IntradayQuote> = {};
+  if (Array.isArray(rows)) {
+    rows.forEach((row: IntradayQuote) => {
+      if (row?.ticker) byTicker[row.ticker] = row;
+    });
+  }
+  return byTicker;
 };
 
 export const screenerAPI = {
@@ -500,4 +556,62 @@ export const screenerAPI = {
 export const marketAPI = {
   getTickerTape: () => axiosInstance.get('/market/ticker-tape'),
   getScreensTickerTape: () => axiosInstance.get('/market/ticker-tape/screens'),
+};
+
+// Blog (public: published posts only)
+export const blogAPI = {
+  list: () =>
+    axiosInstance.get('/content/blogs'),
+
+  getCategories: () =>
+    axiosInstance.get('/content/blogs/categories'),
+
+  get: (slug: string) =>
+    axiosInstance.get(`/content/blogs/${encodeURIComponent(slug)}`),
+};
+
+// Tutorials (published only; needs a live subscription)
+export const tutorialsAPI = {
+  list: () =>
+    axiosInstance.get('/content/tutorials'),
+
+  getCategories: () =>
+    axiosInstance.get('/content/tutorials/categories'),
+};
+
+// Admin content management (admin accounts only)
+export const adminContentAPI = {
+  listTutorials: () =>
+    axiosInstance.get('/content/admin/tutorials'),
+
+  createTutorial: (data: object) =>
+    axiosInstance.post('/content/admin/tutorials', data),
+
+  updateTutorial: (id: string | number, data: object) =>
+    axiosInstance.put(`/content/admin/tutorials/${id}`, data),
+
+  deleteTutorial: (id: string | number) =>
+    axiosInstance.delete(`/content/admin/tutorials/${id}`),
+
+  listBlogs: () =>
+    axiosInstance.get('/content/admin/blogs'),
+
+  createBlog: (data: object) =>
+    axiosInstance.post('/content/admin/blogs', data),
+
+  updateBlog: (id: string | number, data: object) =>
+    axiosInstance.put(`/content/admin/blogs/${id}`, data),
+
+  deleteBlog: (id: string | number) =>
+    axiosInstance.delete(`/content/admin/blogs/${id}`),
+
+  // Claude review of a pasted vendor changelog; the report is stored
+  reviewChangelog: (data: { changelog_text: string; vendor: string }) =>
+    axiosInstance.post('/content/admin/maintenance/changelog/review', data),
+
+  listMaintenanceReports: () =>
+    axiosInstance.get('/content/admin/maintenance/reports'),
+
+  getMaintenanceReport: (id: string) =>
+    axiosInstance.get(`/content/admin/maintenance/reports/${id}`),
 };

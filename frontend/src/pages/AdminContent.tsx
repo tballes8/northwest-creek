@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import NavBar from '../components/NavBar';
 import { User } from '../types';
-import { authAPI } from '../services/api';
+import { authAPI, adminContentAPI, blogAPI } from '../services/api';
 // HTML file upload utilities
 const readHtmlFile = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -14,8 +13,6 @@ const readHtmlFile = (file: File): Promise<string> => {
   });
 };
 
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 interface Tutorial {
   id: number;
@@ -92,25 +89,20 @@ const AdminContent: React.FC = () => {
   const effectiveVendor = vendor === 'Other' ? customVendor.trim() : vendor;
   const isGrounded = GROUNDED_VENDORS.includes(effectiveVendor);
 
-  const getHeaders = useCallback(() => {
-    const token = localStorage.getItem('access_token');
-    return { Authorization: `Bearer ${token}` };
+  const loadTutorials = useCallback(async () => {
+    const res = await adminContentAPI.listTutorials();
+    setTutorials(res.data);
   }, []);
 
-  const loadTutorials = useCallback(async () => {
-    const res = await axios.get(`${API_URL}/api/v1/content/admin/tutorials`, { headers: getHeaders() });
-    setTutorials(res.data);
-  }, [getHeaders]);
-
   const loadBlogs = useCallback(async () => {
-    const res = await axios.get(`${API_URL}/api/v1/content/admin/blogs`, { headers: getHeaders() });
+    const res = await adminContentAPI.listBlogs();
     setBlogs(res.data);
-  }, [getHeaders]);
+  }, []);
 
   const loadMaintReports = useCallback(async () => {
-    const res = await axios.get(`${API_URL}/api/v1/content/admin/maintenance/reports`, { headers: getHeaders() });
+    const res = await adminContentAPI.listMaintenanceReports();
     setMaintReports(res.data);
-  }, [getHeaders]);
+  }, []);
 
   const showReport = (r: { report_markdown: string; source_text?: string; vendor: string }) => {
     setReviewMarkdown(r.report_markdown);
@@ -134,11 +126,7 @@ const AdminContent: React.FC = () => {
     setReviewRunning(true);
     setReviewMarkdown(null);
     try {
-      const res = await axios.post(
-        `${API_URL}/api/v1/content/admin/maintenance/changelog/review`,
-        { changelog_text: changelogText, vendor: effectiveVendor },
-        { headers: getHeaders() },
-      );
+      const res = await adminContentAPI.reviewChangelog({ changelog_text: changelogText, vendor: effectiveVendor });
       showReport(res.data);
       setMessage({ type: 'success', text: 'Changelog review complete.' });
       await loadMaintReports();
@@ -151,7 +139,7 @@ const AdminContent: React.FC = () => {
 
   const viewMaintReport = async (id: string) => {
     try {
-      const res = await axios.get(`${API_URL}/api/v1/content/admin/maintenance/reports/${id}`, { headers: getHeaders() });
+      const res = await adminContentAPI.getMaintenanceReport(id);
       showReport(res.data);
     } catch {
       setMessage({ type: 'error', text: 'Could not load report.' });
@@ -213,10 +201,10 @@ const AdminContent: React.FC = () => {
     setTutSaving(true);
     try {
       if (editingTutorial) {
-        await axios.put(`${API_URL}/api/v1/content/admin/tutorials/${editingTutorial.id}`, tutForm, { headers: getHeaders() });
+        await adminContentAPI.updateTutorial(editingTutorial.id, tutForm);
         setMessage({ type: 'success', text: 'Tutorial updated!' });
       } else {
-        await axios.post(`${API_URL}/api/v1/content/admin/tutorials`, tutForm, { headers: getHeaders() });
+        await adminContentAPI.createTutorial(tutForm);
         setMessage({ type: 'success', text: 'Tutorial created!' });
       }
       setTutorialForm(false);
@@ -232,7 +220,7 @@ const AdminContent: React.FC = () => {
   const deleteTutorial = async (id: number) => {
     if (!window.confirm('Delete this tutorial?')) return;
     try {
-      await axios.delete(`${API_URL}/api/v1/content/admin/tutorials/${id}`, { headers: getHeaders() });
+      await adminContentAPI.deleteTutorial(id);
       setMessage({ type: 'success', text: 'Tutorial deleted' });
       await loadTutorials();
     } catch {
@@ -247,7 +235,7 @@ const AdminContent: React.FC = () => {
     if (post) {
       // Fetch full content for editing
       try {
-        const res = await axios.get(`${API_URL}/api/v1/content/blogs/${post.slug}`, { headers: getHeaders() });
+        const res = await blogAPI.get(post.slug);
         setEditingBlog(post);
         setBlogPreview(false);
         setBlogFormData({
@@ -282,10 +270,10 @@ const AdminContent: React.FC = () => {
     setBlogSaving(true);
     try {
       if (editingBlog) {
-        await axios.put(`${API_URL}/api/v1/content/admin/blogs/${editingBlog.id}`, blogFormData, { headers: getHeaders() });
+        await adminContentAPI.updateBlog(editingBlog.id, blogFormData);
         setMessage({ type: 'success', text: 'Blog post updated!' });
       } else {
-        await axios.post(`${API_URL}/api/v1/content/admin/blogs`, blogFormData, { headers: getHeaders() });
+        await adminContentAPI.createBlog(blogFormData);
         setMessage({ type: 'success', text: 'Blog post created!' });
       }
       setBlogForm(false);
@@ -301,7 +289,7 @@ const AdminContent: React.FC = () => {
   const deleteBlog = async (id: number) => {
     if (!window.confirm('Delete this blog post?')) return;
     try {
-      await axios.delete(`${API_URL}/api/v1/content/admin/blogs/${id}`, { headers: getHeaders() });
+      await adminContentAPI.deleteBlog(id);
       setMessage({ type: 'success', text: 'Blog post deleted' });
       await loadBlogs();
     } catch {

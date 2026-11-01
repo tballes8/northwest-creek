@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import ResendVerification from '../components/ResendVerification';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+import { authAPI } from '../services/api';
 
 const VerifyEmail: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -24,9 +22,7 @@ const VerifyEmail: React.FC = () => {
 
       try {
         // Step 1: Verify email — backend returns access_token for auto-login
-        const response = await axios.get(
-          `${API_URL}/api/v1/auth/verify-email?token=${token}`
-        );
+        const response = await authAPI.verifyEmail(token);
         
         const accessToken = response.data.access_token;
         

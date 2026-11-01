@@ -8,42 +8,19 @@ import { authAPI, stripeAPI } from '../services/api';
 import { User } from '../types';
 import NavBar from '../components/NavBar';
 import { getTierBadge } from '../components/NavBar';
-import axios from 'axios';
-import { getTierSummary } from '../data/pricingTiers';
+import { getTierBySlug, getTierSummary, toTierSlug, TierSlug } from '../data/pricingTiers';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+// Only colors live here; name, price and features come from data/pricingTiers.ts
+const TIER_COLORS: Record<TierSlug, string> = {
+  beginner: 'text-gray-400',
+  casual: 'text-teal-400',
+  active: 'text-blue-400',
+  professional: 'text-purple-400',
+};
 
-const TIER_DETAILS: Record<string, {
-  name: string;
-  price: string;
-  color: string;
-  bgClass: string;
-  features: string[];
-}> = {
-  beginner: {
-    name: 'Beginner',
-    color: 'text-gray-400',
-    bgClass: 'bg-gray-600',
-    ...getTierSummary('beginner'),
-  },
-  casual: {
-    name: 'Casual Retail Investor',
-    color: 'text-teal-400',
-    bgClass: 'bg-teal-500',
-    ...getTierSummary('casual'),
-  },
-  active: {
-    name: 'Active Retail Investor',
-    color: 'text-blue-400',
-    bgClass: 'bg-blue-500',
-    ...getTierSummary('active'),
-  },
-  professional: {
-    name: 'Professional Investor',
-    color: 'text-purple-400',
-    bgClass: 'bg-purple-500',
-    ...getTierSummary('professional'),
-  },
+const tierDetails = (tier: unknown) => {
+  const slug = toTierSlug(tier);
+  return { name: getTierBySlug(slug).name, color: TIER_COLORS[slug], ...getTierSummary(slug) };
 };
 
 const AccountSettings: React.FC = () => {
@@ -91,10 +68,7 @@ const AccountSettings: React.FC = () => {
 
   const loadSubscriptionStatus = async () => {
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await axios.get(`${API_URL}/api/v1/stripe/subscription-status`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await stripeAPI.getSubscriptionStatus();
       if (res.data.trial_end) {
         setTrialEnd(res.data.trial_end);
       }
@@ -115,13 +89,9 @@ const AccountSettings: React.FC = () => {
     setCancelError(null);
     
     try {
-      const token = localStorage.getItem('access_token');
-      const endpoint = immediate ? 'cancel-subscription-immediate' : 'cancel-subscription';
-      const response = await axios.post(
-        `${API_URL}/api/v1/stripe/${endpoint}`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = immediate
+        ? await stripeAPI.cancelSubscriptionImmediate()
+        : await stripeAPI.cancelSubscription();
       
       // If account was locked (trial cancellation), force logout
       if (response.data.account_locked) {
@@ -193,7 +163,7 @@ const AccountSettings: React.FC = () => {
     }
   };
 
-  const tierInfo = TIER_DETAILS[user?.subscription_tier || 'beginner'] || TIER_DETAILS.beginner;
+  const tierInfo = tierDetails(user?.subscription_tier);
 
   if (loading) {
     return (

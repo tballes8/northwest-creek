@@ -9,10 +9,18 @@
  *     currentUsage={5}
  *     maxUsage={5}
  *   />
+ *
+ *   A feature the plan doesn't include (offers the lowest plan that does):
+ *   <UpgradeRequired
+ *     feature="Options Calculator"
+ *     currentTier={user.subscription_tier}
+ *     limitReached={false}
+ *     minimumTier={lowestTierWith('optionsCalculator')}
+ *   />
  */
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { getTierSummary } from '../data/pricingTiers';
+import { getTierBySlug, getTierSummary, tierRank, toTierSlug, TIER_ORDER, TierSlug } from '../data/pricingTiers';
 
 interface UpgradeRequiredProps {
   feature: string;                // e.g. "Technical Analysis", "DCF Valuation", "Portfolio"
@@ -20,28 +28,23 @@ interface UpgradeRequiredProps {
   limitReached?: boolean;         // true = hit usage limit, false = feature locked
   currentUsage?: number;          // how many they've used
   maxUsage?: number;              // their tier limit
+  minimumTier?: TierSlug;         // lowest plan with the feature; the upgrade offered is never below it
   onBack?: () => void;            // custom back action
 }
 
-const TIER_INFO: Record<string, {
-  name: string;
-  price: string;
-  color: string;
-  bgColor: string;
-  features: string[];
-}> = {
-  // Price and features come from data/pricingTiers.ts; only naming and colors live here
-  beginner: { name: 'Beginner', color: 'text-gray-400', bgColor: 'bg-gray-500', ...getTierSummary('beginner') },
-  casual: { name: 'Casual Retail Investor', color: 'text-teal-400', bgColor: 'bg-teal-500', ...getTierSummary('casual') },
-  active: { name: 'Active Retail Investor', color: 'text-blue-400', bgColor: 'bg-blue-500', ...getTierSummary('active') },
-  professional: { name: 'Professional Investor', color: 'text-purple-400', bgColor: 'bg-purple-500', ...getTierSummary('professional') },
+// Only colors live here; name, price and features come from data/pricingTiers.ts
+const TIER_COLORS: Record<TierSlug, { color: string; bgColor: string }> = {
+  beginner: { color: 'text-gray-400', bgColor: 'bg-gray-500' },
+  casual: { color: 'text-teal-400', bgColor: 'bg-teal-500' },
+  active: { color: 'text-blue-400', bgColor: 'bg-blue-500' },
+  professional: { color: 'text-purple-400', bgColor: 'bg-purple-500' },
 };
 
-const UPGRADE_PATH: Record<string, string> = {
-  beginner: 'casual',
-  casual: 'active',
-  active: 'professional',
-};
+const tierInfo = (slug: TierSlug) => ({
+  name: getTierBySlug(slug).name,
+  ...TIER_COLORS[slug],
+  ...getTierSummary(slug),
+});
 
 const UpgradeRequired: React.FC<UpgradeRequiredProps> = ({
   feature,
@@ -49,12 +52,16 @@ const UpgradeRequired: React.FC<UpgradeRequiredProps> = ({
   limitReached = true,
   currentUsage,
   maxUsage,
+  minimumTier,
   onBack,
 }) => {
   const navigate = useNavigate();
-  const currentInfo = TIER_INFO[currentTier] || TIER_INFO.beginner;
-  const nextTierKey = UPGRADE_PATH[currentTier];
-  const nextInfo = nextTierKey ? TIER_INFO[nextTierKey] : null;
+  const currentSlug = toTierSlug(currentTier);
+  const currentInfo = tierInfo(currentSlug);
+  // The next plan up, or the feature's lowest plan if that is higher
+  const nextTierKey: TierSlug | undefined =
+    TIER_ORDER[Math.max(tierRank(currentSlug) + 1, minimumTier ? tierRank(minimumTier) : 0)];
+  const nextInfo = nextTierKey ? tierInfo(nextTierKey) : null;
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-12">
@@ -151,8 +158,8 @@ const UpgradeRequired: React.FC<UpgradeRequiredProps> = ({
           </div>
         )}
 
-        {/* Already on Professional */}
-        {!nextInfo && currentTier === 'professional' && (
+        {/* Already on the highest plan */}
+        {!nextInfo && (
           <div className="px-8 py-8">
             <div className="bg-purple-50 dark:bg-gray-750 rounded-xl p-6 border border-purple-200 dark:border-purple-800 text-center">
               <p className="text-gray-700 dark:text-gray-300 mb-2">

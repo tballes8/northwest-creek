@@ -3,6 +3,7 @@
  * Connects to backend WebSocket for real-time price updates
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { API_BASE_URL } from '../services/api';
 
 interface LivePrice {
   ticker: string;
@@ -20,9 +21,8 @@ interface UseLivePricesReturn {
   error: string | null;
 }
 
-const WS_URL = process.env.REACT_APP_API_URL
-  ? `${process.env.REACT_APP_API_URL.replace('http', 'ws')}/api/v1/live-prices/ws`
-  : 'ws://localhost:8000/api/v1/live-prices/ws';
+// http(s):// → ws(s)://
+const WS_URL = `${API_BASE_URL.replace('http', 'ws')}/live-prices/ws`;
 
 // Server close code for an unauthenticated socket — reconnecting won't help
 const WS_NOT_AUTHENTICATED = 1008;

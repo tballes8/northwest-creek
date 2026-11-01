@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import ThemeToggle from './ThemeToggle';
 import TickerTape from './landing/TickerTape';
 import { User } from '../types';
+import { getTierBySlug, toTierSlug, TierSlug } from '../data/pricingTiers';
 
 type PageKey =
   | 'dashboard'
@@ -55,17 +56,20 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/options-calculator', key: 'options-calculator', label: 'Options Calc' },
 ];
 
+// Badge colors per plan; the label is the plan's shortName from data/pricingTiers.ts
+const TIER_BADGE_COLORS: Record<TierSlug, { bg: string; text: string }> = {
+  beginner: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200' },
+  casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200' },
+  active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200' },
+  professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200' },
+};
+
 const getTierBadge = (tier: string) => {
-  const badges: Record<string, { bg: string; text: string; label: string }> = {
-    beginner: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Beginner' },
-    casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
-    active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
-    professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
-  };
-  const badge = badges[tier] || badges.beginner;
+  const slug = toTierSlug(tier);
+  const badge = TIER_BADGE_COLORS[slug];
   return (
     <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.bg} ${badge.text}`}>
-      {badge.label}
+      {getTierBySlug(slug).shortName}
     </span>
   );
 };

@@ -1,13 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
 import NavBar from '../components/NavBar';
 import PublicBlogNav from '../components/PublicBlogNav';
 import BackToTop from '../components/BackToTop';
 import { User } from '../types';
-import { authAPI } from '../services/api';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+import { authAPI, blogAPI } from '../services/api';
 
 interface BlogPostFull {
   id: string;
@@ -136,7 +133,7 @@ const BlogPost: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const loadPost = async () => {
+    const loadPost = async (postSlug: string) => {
       // Try to load user details for dropdown (optional)
       if (hasToken) {
         try {
@@ -149,7 +146,7 @@ const BlogPost: React.FC = () => {
 
       // Always fetch the blog post (public endpoint)
       try {
-        const res = await axios.get(`${API_URL}/api/v1/content/blogs/${slug}`);
+        const res = await blogAPI.get(postSlug);
         setPost(res.data);
       } catch (err: any) {
         if (err.response?.status === 404) setError('Post not found');
@@ -158,7 +155,7 @@ const BlogPost: React.FC = () => {
         setLoading(false);
       }
     };
-    if (slug) loadPost();
+    if (slug) loadPost(slug);
   }, [slug, hasToken]);
 
   const handleLogout = () => {

@@ -7,6 +7,7 @@ import BackToTop from '../components/BackToTop';
 import UpgradeRequired from '../components/UpgradeRequired';
 import RelativeValuation from '../components/RelativeValuation';
 import EntityTrustBlock from '../components/EntityTrustBlock';
+import { planIncludes, planNamesWith } from '../data/pricingTiers';
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid,
@@ -1512,11 +1513,11 @@ const DCFValuation: React.FC = () => {
                 >
                   ⚖️ Cross-check with Relative Valuation
                 </button>
-                {/* Trade This — Active/Professional only; placed last so it simply
-                    disappears for Hold ratings without leaving a gap. */}
+                {/* Trade This — an Options Calculator feature, so it follows that
+                    gate; placed last so it simply disappears for Hold ratings
+                    without leaving a gap. */}
                 {dcfData.recommendation.rating !== 'Hold' && (() => {
-                  const tier = user?.subscription_tier;
-                  const isTradeEligible = tier === 'active' || tier === 'professional';
+                  const isTradeEligible = planIncludes(user?.subscription_tier, 'optionsCalculator');
                   return isTradeEligible ? (
                     <button
                       onClick={() => setShowTradeModal(true)}
@@ -1527,7 +1528,7 @@ const DCFValuation: React.FC = () => {
                   ) : (
                     <button
                       disabled
-                      title="Available on Active and Professional plans"
+                      title={`Available on ${planNamesWith('optionsCalculator')} plans`}
                       className="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 rounded-lg font-medium text-sm cursor-not-allowed"
                     >
                       📊 Trade This — Suggest Options Strategy

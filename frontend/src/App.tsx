@@ -1,9 +1,7 @@
 import React, { Suspense, useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
-import axios from 'axios';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
-import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Watchlist from './pages/Watchlist';
 import Portfolio from './pages/Portfolio';
@@ -12,7 +10,6 @@ import TechnicalAnalysis from './pages/TechnicalAnalysis';
 import DCFValuation from './pages/DCFValuation';
 import VerifyEmail from './pages/VerifyEmail';
 import Pricing from './pages/Pricing';
-import PaymentSuccess from './pages/PaymentSuccess';
 import RegisterWithPayment from './pages/RegisterWithPayment';
 import Stocks from './pages/Stocks';
 import { LivePriceProvider } from './contexts/LivePriceContext';
@@ -29,6 +26,7 @@ import OptionsCalculator from './pages/OptionsCalculator';
 import SectorHeatmap from './pages/SectorHeatmap';
 import Billing from './pages/Billing';
 import NotFound from './pages/NotFound';
+import { stripeAPI } from './services/api';
 
 
 const Payment = React.lazy(() => import('./pages/Payment'));
@@ -56,8 +54,6 @@ const PageviewTracker: React.FC = () => {
   return null;
 };
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-
 // Subscription Guard - routes by subscription state: active/trialing → the page,
 // past_due/unpaid → /billing, none → /payment. Navigation only: the server enforces
 // the subscription on every API call (api/dependencies.get_current_user), so
@@ -73,9 +69,7 @@ const SubscriptionGuard: React.FC<{ children: React.ReactNode }> = ({ children }
       return;
     }
 
-    axios.get(`${API_URL}/api/v1/stripe/subscription-status`, {
-      headers: { Authorization: `Bearer ${token}` }
-    }).then(res => {
+    stripeAPI.getSubscriptionStatus().then(res => {
       const { subscription_status, subscription_tier } = res.data;
       if (subscription_status === 'active' || subscription_status === 'trialing') {
         setReady(true);
@@ -111,10 +105,10 @@ function App() {
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+            {/* One sign-up page: without ?tier= it opens on the plan picker */}
+            <Route path="/register" element={<RegisterWithPayment />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/verify-email" element={<VerifyEmail />} />
-            <Route path="/payment-success" element={<PaymentSuccess />} />
             <Route path="/registerwithpayment" element={<RegisterWithPayment />} />
             <Route path="/stocks" element={<SubscriptionGuard><Stocks /></SubscriptionGuard>} />
             <Route path="/dashboard" element={<SubscriptionGuard><Dashboard /></SubscriptionGuard>} />

@@ -6,6 +6,14 @@ import FeatureSection from '../components/landing/FeatureSection';
 import PricingTiers from '../components/landing/PricingTiers';
 import TickerTape from '../components/landing/TickerTape';
 import HeroDemoCard from '../components/landing/HeroDemoCard';
+import { PRICING_TIERS, planNamesWith, tiersWith } from '../data/pricingTiers';
+
+// Feature copy that quotes plan limits, from the one plan source
+const TOP_PLAN = PRICING_TIERS[PRICING_TIERS.length - 1];
+const FIRST_AI_PLAN = tiersWith('aiAnalysis')[0];
+const AI_USAGE_RANGE =
+  `${FIRST_AI_PLAN.limits.aiAnalysis}/${FIRST_AI_PLAN.limits.period} (${FIRST_AI_PLAN.shortName})` +
+  ` → ${TOP_PLAN.limits.aiAnalysis}/${TOP_PLAN.limits.period} (${TOP_PLAN.shortName})`;
 
 const Landing: React.FC = () => {
 
@@ -231,14 +239,14 @@ const Landing: React.FC = () => {
               <>
                 Get plain-language analysis of any stock or your entire portfolio, powered by Anthropic's
                 Claude. Skip the jargon — understand what's actually happening with your investments and
-                what to watch for next. Available on Casual, Active, and Professional tiers.
+                what to watch for next. Available on {planNamesWith('aiAnalysis')} tiers.
               </>
             }
             bullets={[
               'Plain-language stock breakdowns — fundamentals, technicals, sentiment',
               'Portfolio-level summaries: concentration, sector tilt, risk highlights',
               'AI-generated price forecasts cached for 6 hours',
-              'Usage scales with tier: 5/week (Casual) → 25/day (Professional)',
+              `Usage scales with tier: ${AI_USAGE_RANGE}`,
               'Built on Anthropic Claude — no hallucinated tickers or made-up financials',
             ]}
             screenshotFile="ai-analysis.png"
@@ -372,7 +380,7 @@ const Landing: React.FC = () => {
               'Technical alerts: RSI extreme, MA crossover, MACD cross',
               'Technical alerts: Bollinger breach, sentiment shift, Rule of 40',
               'Email delivery on every plan',
-              'Up to 50 price alerts and 20 technical alerts on Professional',
+              `Up to ${TOP_PLAN.limits.priceAlerts} price alerts and ${TOP_PLAN.limits.smartAlerts} technical alerts on ${TOP_PLAN.shortName}`,
             ]}
             screenshotFile="alerts-page.png"
             screenshotDescription="Alerts page showing both a price alert and at least one technical alert configured."
@@ -398,7 +406,7 @@ const Landing: React.FC = () => {
               '52-week high/low proximity, gap %, volume spikes',
               'One-click "Volatility Squeeze" and "Squeeze Fired" presets (Bollinger inside Keltner)',
               'Daily snapshot covers all common stocks and ETFs',
-              'Save your screens (Active and Professional)',
+              `Save your screens (${planNamesWith('savedScreens')})`,
             ]}
             screenshotFile="screener.png"
             screenshotDescription="Stocks page (screener view) with filters applied — ideally a technical filter like golden cross or 52-week range."
@@ -422,7 +430,7 @@ const Landing: React.FC = () => {
                   full Greeks (Delta, Gamma, Theta, Vega, Rho) — each with a plain-English definition a
                   click away. Inputs stay grounded in real market data: a live, tenor-matched Treasury
                   risk-free rate and realistic near-the-money strikes. Implied volatility solver included.
-                  Available on Active and Professional tiers.
+                  Available on {planNamesWith('optionsCalculator')} tiers.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 justify-start md:justify-end">

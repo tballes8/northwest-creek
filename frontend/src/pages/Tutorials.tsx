@@ -1,11 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import NavBar from '../components/NavBar';
 import { User } from '../types';
-import { authAPI } from '../services/api';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+import { authAPI, tutorialsAPI } from '../services/api';
 
 interface Tutorial {
   id: number;
@@ -57,12 +54,9 @@ const Tutorials: React.FC = () => {
         const userRes = await authAPI.getCurrentUser();
         setUser(userRes.data);
 
-        const token = localStorage.getItem('access_token');
-        const headers = { Authorization: `Bearer ${token}` };
-
         const [tutRes, catRes] = await Promise.all([
-          axios.get(`${API_URL}/api/v1/content/tutorials`, { headers }),
-          axios.get(`${API_URL}/api/v1/content/tutorials/categories`, { headers }),
+          tutorialsAPI.list(),
+          tutorialsAPI.getCategories(),
         ]);
         setTutorials(tutRes.data);
         setCategories(catRes.data);

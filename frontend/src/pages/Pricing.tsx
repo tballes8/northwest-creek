@@ -4,20 +4,16 @@ import { authAPI } from '../services/api';
 import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import BackToTop from '../components/BackToTop';
-import { PRICING_TIERS, TRIAL_PLAN_NAMES, COMPARISON_ROWS } from '../data/pricingTiers';
-import axios from 'axios';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+import { getTierBadge } from '../components/NavBar';
+import { PRICING_TIERS, TRIAL_PLAN_NAMES, COMPARISON_ROWS, ALL_PLAN_NAMES } from '../data/pricingTiers';
 
 const Pricing: React.FC = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [stripeConfig, setStripeConfig] = useState<any>(null);
 
   useEffect(() => {
     loadUser();
-    loadStripeConfig();
   }, []);
 
   const loadUser = async () => {
@@ -28,15 +24,6 @@ const Pricing: React.FC = () => {
       console.error('Failed to load user:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadStripeConfig = async () => {
-    try {
-      const response = await axios.get(`${API_URL}/api/v1/stripe/config`);
-      setStripeConfig(response.data);
-    } catch (error) {
-      console.error('Failed to load Stripe config:', error);
     }
   };
 
@@ -56,21 +43,6 @@ const Pricing: React.FC = () => {
     navigate('/');
   };
 
-  const getTierBadge = (tier: string) => {
-    const badges = {
-      beginner: { bg: 'bg-gray-100 dark:bg-gray-600', text: 'text-gray-800 dark:text-gray-200', label: 'Beginner' },
-      casual: { bg: 'bg-primary-100 dark:bg-primary-900/50', text: 'text-primary-800 dark:text-primary-200', label: 'Casual' },
-      active: { bg: 'bg-purple-100 dark:bg-purple-900/50', text: 'text-purple-800 dark:text-purple-200', label: 'Active' },
-      professional: { bg: 'bg-yellow-100 dark:bg-yellow-900/50', text: 'text-yellow-800 dark:text-yellow-200', label: 'Professional' },
-    };
-    const badge = badges[tier as keyof typeof badges] || badges.beginner;
-    return (
-      <span className={`px-3 py-1 rounded-full text-sm font-semibold ${badge.bg} ${badge.text}`}>
-        {badge.label}
-      </span>
-    );
-  };
-
   const pricingTiers = PRICING_TIERS.map((tier) => ({
     ...tier,
     current: user?.subscription_tier === tier.slug,
@@ -86,7 +58,7 @@ const Pricing: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       {/* SEO — React 19 hoists to <head> */}
       <title>Pricing — NWC-Analytics</title>
-      <meta name="description" content="Compare NWC-Analytics subscription plans — Beginner, Casual, Active, and Professional — with real-time data, technical indicators, DCF models, and alerts." />
+      <meta name="description" content={`Compare NWC-Analytics subscription plans — ${ALL_PLAN_NAMES} — with real-time data, technical indicators, DCF models, and alerts.`} />
       <link rel="canonical" href="https://nwc-analytics.com/pricing" />
       {/* Navigation */}
       <nav className="bg-gray-800 dark:bg-gray-900 shadow-sm border-b border-gray-700 dark:border-gray-700">

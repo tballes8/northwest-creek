@@ -5,15 +5,12 @@ import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import { authAPI, stocksAPI, watchlistAPI, screenerAPI, EntityTrust, isEntityContradicted } from '../services/api';
+import { authAPI, stocksAPI, watchlistAPI, screenerAPI, intradayAPI, EntityTrust, isEntityContradicted } from '../services/api';
 import ScreenerChartPanel from '../components/ScreenerChartPanel';
 import EntityTrustBlock from '../components/EntityTrustBlock';
 import { SECTOR_COLORS } from '../utils/sectorMap';
-import { getTierBySlug } from '../data/pricingTiers';
-import axios from 'axios';
+import { planIncludes } from '../data/pricingTiers';
 import { formatDateOnly, parseLocalDate } from '../utils/dates';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
@@ -1023,18 +1020,15 @@ const Stocks: React.FC = () => {
 
       // Overlay live intraday price on top of previous-day quote
       try {
-        const token = localStorage.getItem('access_token');
-        const intradayRes = await axios.get(
-          `${API_URL}/api/v1/intraday/batch?tickers=${symbol.toUpperCase()}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
+        const intradayRes = await intradayAPI.getBatch([symbol.toUpperCase()]);
         if (isStale(seq)) return;
         if (Array.isArray(intradayRes.data) && intradayRes.data.length > 0) {
           const live = intradayRes.data[0];
-          if (live.price) {
+          const livePrice = live.price;
+          if (livePrice) {
             setQuote(prev => prev ? {
               ...prev,
-              price: live.price,
+              price: livePrice,
               change: live.change ?? prev.change,
               change_percent: live.change_percent ?? prev.change_percent,
             } : prev);
@@ -1135,11 +1129,7 @@ const Stocks: React.FC = () => {
     const seq = loadSeqRef.current;
     setDividendLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await axios.get(
-        `${API_URL}/api/v1/stocks/dividends/${encodeURIComponent(symbol.toUpperCase())}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await stocksAPI.getDividends(symbol.toUpperCase());
       if (isStale(seq)) return;
       setDividendInfo(response.data);
     } catch (err) {
@@ -1160,11 +1150,7 @@ const Stocks: React.FC = () => {
     const seq = loadSeqRef.current;
     setHoldingsLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await axios.get(
-        `${API_URL}/api/v1/stocks/etf/${encodeURIComponent(symbol.toUpperCase())}/holdings?limit=10`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await stocksAPI.getEtfHoldings(symbol.toUpperCase(), 10);
       if (isStale(seq)) return;
       setEtfHoldings(response.data.holdings || []);
       // 0 means "unknown" — never fall back to holdings.length, which would let
@@ -1188,11 +1174,7 @@ const Stocks: React.FC = () => {
   // Details rows light up. Non-blocking — the panel renders fine without it.
   const loadEtfInfo = async (symbol: string) => {
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await axios.get(
-        `${API_URL}/api/v1/stocks/etf/${encodeURIComponent(symbol.toUpperCase())}/info`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await stocksAPI.getEtfInfo(symbol.toUpperCase());
       const info = response.data || {};
 
       // Already normalized to a percent by the backend — market_data.get_etf_info runs
@@ -1313,11 +1295,7 @@ const Stocks: React.FC = () => {
   const loadTopLosers = async () => {
     setLosersLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
-      const response = await axios.get(
-        `${API_URL}/api/v1/stocks/top-losers?limit=10`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await stocksAPI.getTopLosers(10);
       setTopLosers(response.data.top_losers || []);
     } catch (err) {
       console.error('Failed to load top losers:', err);
@@ -1802,7 +1780,6 @@ const Stocks: React.FC = () => {
   const [savingScreen, setSavingScreen] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [screenerChartTicker, setScreenerChartTicker] = useState<string | null>(null);
-  const [screenerChartUpgrade, setScreenerChartUpgrade] = useState(false);
   const lastScreenerTickerRef = useRef<string | null>(null);
   const presetsLoadedRef = useRef(false);
 
@@ -1941,8 +1918,8 @@ const Stocks: React.FC = () => {
   // and clicking one flips the toggle anyway.
   const modePresets = presets.filter(p => (p.universe ?? 'stocks') === screenerMode);
 
-  // Saving screens/searches is an Active+ feature (saved_screens limit is 0 below it).
-  const canSaveScreens = user?.subscription_tier === 'active' || user?.subscription_tier === 'professional';
+  // Saving screens/searches needs a saved_screens allowance (limits.savedScreens > 0).
+  const canSaveScreens = planIncludes(user?.subscription_tier, 'savedScreens');
   // Derived, not state: the chip lights up whenever the box holds that saved query.
   const activeSavedSearchId =
     savedSearches.find(s => (s.criteria?.query || '') === searchInput.trim())?.id ?? null;
@@ -2401,7 +2378,7 @@ const Stocks: React.FC = () => {
                             )}
                           </div>
                         )}
-                        {user && getTierBySlug(user.subscription_tier).limits.aiAnalysis > 0 && (
+                        {user && planIncludes(user.subscription_tier, 'aiAnalysis') && (
                           <div className="text-sm text-gray-500 dark:text-gray-400">
                             <span className="text-indigo-500 dark:text-indigo-400">✦ NWC AI target price:</span>{' '}
                             {forecastLoading ? (
@@ -3981,14 +3958,8 @@ const Stocks: React.FC = () => {
                                 className="px-3 py-2.5 font-semibold text-teal-600 dark:text-teal-400 whitespace-nowrap"
                                 onClick={e => {
                                   e.stopPropagation();
-                                  if (user?.subscription_tier === 'active' || user?.subscription_tier === 'professional') {
-                                    lastScreenerTickerRef.current = r.symbol;
-                                    setScreenerChartTicker(r.symbol);
-                                    setScreenerChartUpgrade(false);
-                                  } else {
-                                    setScreenerChartUpgrade(true);
-                                    setScreenerChartTicker(null);
-                                  }
+                                  lastScreenerTickerRef.current = r.symbol;
+                                  setScreenerChartTicker(r.symbol);
                                 }}
                               >
                                 <span className="cursor-pointer hover:underline">{r.symbol}</span>
@@ -4098,36 +4069,13 @@ const Stocks: React.FC = () => {
         )}
       </div>
 
-      {/* Intraday chart popup — active/professional only, large centered modal */}
+      {/* Intraday chart popup — every plan (as on Watchlist and Portfolio), large centered modal */}
       {screenerChartTicker && (
         <ScreenerChartPanel
           ticker={screenerChartTicker}
           onClose={() => setScreenerChartTicker(null)}
           displayMode="modal"
         />
-      )}
-
-      {/* Upgrade notice — floats in same position for consistent UX */}
-      {screenerChartUpgrade && !screenerChartTicker && (
-        <div className="fixed top-20 right-4 z-40 w-96 bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-6 flex flex-col items-center gap-3 text-center">
-          <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-          </svg>
-          <div>
-            <p className="text-sm font-semibold text-gray-900 dark:text-white mb-1">
-              Active or Professional plan required
-            </p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Live intraday charts with drawing tools are available on the Active and Professional tiers.
-            </p>
-          </div>
-          <button
-            onClick={() => setScreenerChartUpgrade(false)}
-            className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-          >
-            Dismiss
-          </button>
-        </div>
       )}
 
       <BackToTop />

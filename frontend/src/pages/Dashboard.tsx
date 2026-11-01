@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { authAPI, watchlistAPI, portfolioAPI, alertsAPI } from '../services/api';
+import { authAPI, watchlistAPI, portfolioAPI, alertsAPI, stocksAPI, stripeAPI, intradayAPI, quotesByTicker } from '../services/api';
 import { User, WatchlistItem, PortfolioPosition, Alert } from '../types';
 import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
@@ -8,11 +8,10 @@ import { useLivePriceContext } from '../contexts/LivePriceContext';
 import MarketStatusBadge from '../components/MarketStatusBadge';
 import SectorPieChart from '../components/SectorPieChart';
 import { computeSectorBreakdown, useSectors, SECTOR_COLORS, SectorBreakdown } from '../utils/sectorMap';
-import { summarizePositions } from '../utils/portfolioTotals';
+import { summarizePositions, deriveValues } from '../utils/portfolioTotals';
 import { formatDateOnly } from '../utils/dates';
-import { getTierBySlug, getTierSummary } from '../data/pricingTiers';
+import { getTierBySlug, getTierLimits, getTierSummary } from '../data/pricingTiers';
 import '../styles/livePrice.css';
-import axios from 'axios';
 
 const EMPTY_SECTORS: SectorBreakdown[] = [
   'Technology', 'Healthcare', 'Financial Services', 'Consumer Cyclical',
@@ -26,8 +25,6 @@ const EMPTY_SECTORS: SectorBreakdown[] = [
   color: SECTOR_COLORS[sector] || SECTOR_COLORS['Other'],
   tickers: [],
 }));
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 interface IPOItem {
   ticker: string;
@@ -326,17 +323,7 @@ const Dashboard: React.FC = () => {
           hasChange = true;
           previousPricesRef.current.set(pos.ticker, livePrice.price);
 
-          const totalValue = livePrice.price * pos.quantity;
-          const profitLoss = totalValue - (pos.buy_price * pos.quantity);
-          const profitLossPercent = ((livePrice.price - pos.buy_price) / pos.buy_price) * 100;
-
-          return {
-            ...pos,
-            current_price: livePrice.price,
-            total_value: totalValue,
-            profit_loss: profitLoss,
-            profit_loss_percent: profitLossPercent,
-          };
+          return { ...pos, ...deriveValues(pos, livePrice.price) };
         }
         return pos;
       });
@@ -367,34 +354,14 @@ const Dashboard: React.FC = () => {
 
     const refreshPrices = async () => {
       try {
-        const token = localStorage.getItem('access_token');
-        const priceResponse = await axios.get(
-          `${API_URL}/api/v1/intraday/batch?tickers=${tickerList}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        const freshPrices: Record<string, number> = {};
-        if (Array.isArray(priceResponse.data)) {
-          priceResponse.data.forEach((item: any) => {
-            if (item.ticker && item.price) {
-              freshPrices[item.ticker] = item.price;
-            }
-          });
-        }
+        const priceResponse = await intradayAPI.getBatch(tickerList.split(','));
+        const quotes = quotesByTicker(priceResponse.data);
 
         setPositions(prev => {
           const updated = prev.map(pos => {
-            const freshPrice = freshPrices[pos.ticker];
+            const freshPrice = quotes[pos.ticker]?.price;
             if (!freshPrice || freshPrice === pos.current_price) return pos;
-            const tv = freshPrice * pos.quantity;
-            const cost = pos.buy_price * pos.quantity;
-            return {
-              ...pos,
-              current_price: freshPrice,
-              total_value: tv,
-              profit_loss: tv - cost,
-              profit_loss_percent: cost > 0 ? ((tv - cost) / cost) * 100 : 0,
-            };
+            return { ...pos, ...deriveValues(pos, freshPrice) };
           });
 
           const totals = portfolioStats(updated);
@@ -457,36 +424,11 @@ const Dashboard: React.FC = () => {
 
       if (portfolioPositions.length > 0) {
         try {
-          const tickers = portfolioPositions.map(p => p.ticker).join(',');
-          const token = localStorage.getItem('access_token');
-          const priceResponse = await axios.get(
-            `${API_URL}/api/v1/intraday/batch?tickers=${tickers}`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-
-          const freshPrices: Record<string, number> = {};
-          if (Array.isArray(priceResponse.data)) {
-            priceResponse.data.forEach((item: any) => {
-              if (item.ticker && item.price) {
-                freshPrices[item.ticker] = item.price;
-              }
-            });
-          }
+          const priceResponse = await intradayAPI.getBatch(portfolioPositions.map(p => p.ticker));
+          const quotes = quotesByTicker(priceResponse.data);
 
           // Override with fresh prices; a position with neither price stays unpriced
-          finalPositions = portfolioPositions.map(pos => {
-            const freshPrice = freshPrices[pos.ticker];
-            if (!freshPrice) return pos;
-            const tv = freshPrice * pos.quantity;
-            const cost = pos.buy_price * pos.quantity;
-            return {
-              ...pos,
-              current_price: freshPrice,
-              total_value: tv,
-              profit_loss: tv - cost,
-              profit_loss_percent: cost > 0 ? ((tv - cost) / cost) * 100 : 0,
-            };
-          });
+          finalPositions = portfolioPositions.map(pos => ({ ...pos, ...deriveValues(pos, quotes[pos.ticker]?.price) }));
         } catch (priceErr) {
           console.warn('⚠️ Could not fetch fresh intraday prices for dashboard, using cached:', priceErr);
         }
@@ -527,10 +469,7 @@ const Dashboard: React.FC = () => {
   const loadIPOData = async () => {
     try {
       setIpoLoading(true);
-      const token = localStorage.getItem('access_token');
-      const ipoResponse = await axios.get(`${API_URL}/api/v1/stocks/ipos`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const ipoResponse = await stocksAPI.getIpos();
       setIpoData({
         upcoming: ipoResponse.data?.upcoming ?? [],
         recently_active: ipoResponse.data?.recently_active ?? [],
@@ -547,12 +486,9 @@ const Dashboard: React.FC = () => {
   const loadMarketOverview = async (silent: boolean = false) => {
     if (!silent) setMarketDataLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
-      const headers = { Authorization: `Bearer ${token}` };
-
       // Treasury Rates
       try {
-        const treasuryResp = await axios.get(`${API_URL}/api/v1/stocks/treasury-rates`, { headers });
+        const treasuryResp = await stocksAPI.getTreasuryRates();
         const rates = treasuryResp.data?.rates || [];
         setTreasuryDate(treasuryResp.data?.date ?? null);
         setTreasuryRates(rates.map((r: any) => ({
@@ -567,7 +503,7 @@ const Dashboard: React.FC = () => {
 
       // Commodities
       try {
-        const commodityResp = await axios.get(`${API_URL}/api/v1/stocks/commodity-quotes`, { headers });
+        const commodityResp = await stocksAPI.getCommodityQuotes();
         const items = commodityResp.data?.commodities || [];
         setCommodities(items.map((c: any) => ({
           name: c.name,
@@ -581,7 +517,7 @@ const Dashboard: React.FC = () => {
 
       // Indexes
       try {
-        const indexResp = await axios.get(`${API_URL}/api/v1/stocks/index-quotes`, { headers });
+        const indexResp = await stocksAPI.getIndexQuotes();
         const indexItems = indexResp.data?.indexes || [];
         setIndexes(indexItems.map((i: any) => ({
           name: i.name,
@@ -595,7 +531,7 @@ const Dashboard: React.FC = () => {
 
       // Crypto
       try {
-        const cryptoResp = await axios.get(`${API_URL}/api/v1/stocks/crypto-quotes`, { headers });
+        const cryptoResp = await stocksAPI.getCryptoQuotes();
         const cryptoItems = cryptoResp.data?.cryptos || [];
         setCrypto(cryptoItems.map((c: any) => ({
           name: c.name,
@@ -616,10 +552,7 @@ const Dashboard: React.FC = () => {
   // Non-blocking trial status loader
   const loadTrialStatus = async () => {
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await axios.get(`${API_URL}/api/v1/stripe/subscription-status`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await stripeAPI.getSubscriptionStatus();
       if (res.data.trial_end) {
         setTrialEnd(res.data.trial_end);
       }
@@ -653,14 +586,11 @@ const Dashboard: React.FC = () => {
       watchlistTickers.includes(ipo.ticker.toUpperCase()) ? 'already' : 'idle'
     );
 
-    const token = localStorage.getItem('access_token');
-    const headers = { Authorization: `Bearer ${token}` };
-
     // Fetch all three in parallel — each is non-fatal
     const [quoteRes, companyRes, newsRes] = await Promise.allSettled([
-      axios.get(`${API_URL}/api/v1/stocks/quote/${ipo.ticker}`, { headers }),
-      axios.get(`${API_URL}/api/v1/stocks/company/${ipo.ticker}`, { headers }),
-      axios.get(`${API_URL}/api/v1/stocks/news/${ipo.ticker}?limit=5`, { headers }),
+      stocksAPI.getQuote(ipo.ticker),
+      stocksAPI.getCompany(ipo.ticker),
+      stocksAPI.getNews(ipo.ticker, 5),
     ]);
 
     if (quoteRes.status === 'fulfilled') setIpoModalQuote(quoteRes.value.data);
@@ -753,15 +683,7 @@ const Dashboard: React.FC = () => {
   };
 
 
-  const getTierLimit = () => {
-    const limits = {
-      beginner: 10,
-      casual: 20,
-      active: 45,
-      professional: 75
-    };
-    return limits[user?.subscription_tier as keyof typeof limits] || 10;
-  };
+  const tierLimits = getTierLimits(user?.subscription_tier);
 
   if (loading) {
     return (
@@ -882,7 +804,7 @@ return (
             <div>
               <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">Watchlist</p>
               <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.watchlistCount}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">of {getTierLimit()} stocks</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">of {tierLimits.watchlist} stocks</p>
             </div>
             <div className="bg-primary-100 dark:bg-primary-900/30 rounded-lg p-2 ml-2 flex-shrink-0">
               <svg className="w-5 h-5 text-primary-600 dark:text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -897,7 +819,7 @@ return (
             <div>
               <p className="text-xs text-gray-600 dark:text-gray-400 mb-0.5">Positions</p>
               <p className="text-xl font-bold text-gray-900 dark:text-white">{stats.portfolioCount}</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">of {getTierLimit()} positions</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">of {tierLimits.portfolio} positions</p>
             </div>
             <div className="bg-purple-100 dark:bg-purple-900/30 rounded-lg p-2 ml-2 flex-shrink-0">
               <svg className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">

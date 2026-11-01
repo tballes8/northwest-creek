@@ -2,15 +2,17 @@ export type TierSlug = 'beginner' | 'casual' | 'active' | 'professional';
 
 /**
  * What a plan allows. Mirrors TIER_LIMITS in backend core/tier_limits.py, which is
- * what's enforced: change both together. The card bullets, the AI highlight and the
- * comparison tables are all generated from these numbers, so no screen can show a
- * limit of its own.
+ * what's enforced: change both together (pricingTiers.test.ts fails when they
+ * differ). The card bullets, the AI highlight, the comparison tables and every
+ * page's limits and feature gates are generated from these numbers, so no screen
+ * can show a limit of its own.
  */
 export interface PlanLimits {
   watchlist: number;
   portfolio: number;
+  /** alerts: price and technical alerts count against it together */
   priceAlerts: number;
-  /** review_period: DCF valuations, TA and AI reset per this */
+  /** review_period: DCF valuations, TA, AI and watchlist screens reset per this */
   period: 'week' | 'day';
   dcf: number;
   technicalAnalysis: number;
@@ -20,6 +22,9 @@ export interface PlanLimits {
   smartAlerts: number;
   /** 0 = not included */
   savedScreens: number;
+  /** watchlist_screens, per period; 0 = not included */
+  watchlistScreens: number;
+  /** Frontend-only: client-side math, so the server has no key for it */
   optionsCalculator: boolean;
 }
 
@@ -59,7 +64,7 @@ const TIER_DEFINITIONS: TierDefinition[] = [
     limits: {
       watchlist: 10, portfolio: 10, priceAlerts: 5, period: 'week',
       dcf: 5, technicalAnalysis: 5, aiAnalysis: 0,
-      smartAlerts: 0, savedScreens: 0, optionsCalculator: false,
+      smartAlerts: 0, savedScreens: 0, watchlistScreens: 0, optionsCalculator: false,
     },
     extraBullets: ['Real-time WebSocket prices'],
     ctaLabel: 'Start Free Trial',
@@ -77,7 +82,7 @@ const TIER_DEFINITIONS: TierDefinition[] = [
     limits: {
       watchlist: 20, portfolio: 20, priceAlerts: 10, period: 'week',
       dcf: 15, technicalAnalysis: 15, aiAnalysis: 5,
-      smartAlerts: 0, savedScreens: 0, optionsCalculator: false,
+      smartAlerts: 0, savedScreens: 0, watchlistScreens: 0, optionsCalculator: false,
     },
     ctaLabel: 'Start Free Trial',
   },
@@ -94,7 +99,7 @@ const TIER_DEFINITIONS: TierDefinition[] = [
     limits: {
       watchlist: 45, portfolio: 45, priceAlerts: 20, period: 'day',
       dcf: 20, technicalAnalysis: 10, aiAnalysis: 10,
-      smartAlerts: 5, savedScreens: 15, optionsCalculator: true,
+      smartAlerts: 5, savedScreens: 15, watchlistScreens: 5, optionsCalculator: true,
     },
     ctaLabel: 'Get Active',
   },
@@ -110,7 +115,7 @@ const TIER_DEFINITIONS: TierDefinition[] = [
     limits: {
       watchlist: 75, portfolio: 75, priceAlerts: 50, period: 'day',
       dcf: 40, technicalAnalysis: 20, aiAnalysis: 25,
-      smartAlerts: 20, savedScreens: 50, optionsCalculator: true,
+      smartAlerts: 20, savedScreens: 50, watchlistScreens: 15, optionsCalculator: true,
     },
     ctaLabel: 'Go Professional',
   },
@@ -139,10 +144,60 @@ export const PRICING_TIERS: PricingTier[] = TIER_DEFINITIONS.map(({ extraBullets
 export const getTierBySlug = (slug: TierSlug): PricingTier =>
   PRICING_TIERS.find((t) => t.slug === slug) ?? PRICING_TIERS[0];
 
+// ── Tier order and gates ───────────────────────────────────────────────────
+// The one frontend tier order, lowest plan first. Upgrade paths, ranks and
+// "which plans include X" all read it; no page keeps its own list.
+
+export const TIER_ORDER: TierSlug[] = PRICING_TIERS.map((t) => t.slug);
+
+export const isTierSlug = (value: unknown): value is TierSlug =>
+  typeof value === 'string' && TIER_ORDER.indexOf(value as TierSlug) !== -1;
+
+/**
+ * A tier from untrusted input (?tier=, a user record still loading). Anything
+ * unknown is the lowest plan, as on the backend (DEFAULT_TIER in tier_limits.py).
+ */
+export const toTierSlug = (value: unknown): TierSlug => (isTierSlug(value) ? value : TIER_ORDER[0]);
+
+/** 0 for the lowest plan, rising with price. */
+export const tierRank = (tier: unknown): number => TIER_ORDER.indexOf(toTierSlug(tier));
+
+/** A plan's limits; an unknown tier gets the lowest plan's. */
+export const getTierLimits = (tier: unknown): PlanLimits => getTierBySlug(toTierSlug(tier)).limits;
+
+/** The limits that switch a feature on: a count (0 = not included) or a flag. */
+export type PlanFeature = Exclude<keyof PlanLimits, 'period'>;
+
+/**
+ * Whether a plan includes a feature: the one frontend gate. It reads the
+ * feature's own limit, so it moves with the plan data. The server enforces
+ * every limit it has a key for; this only decides what a page shows.
+ */
+export const planIncludes = (tier: unknown, feature: PlanFeature): boolean => {
+  const value = getTierLimits(tier)[feature];
+  return typeof value === 'boolean' ? value : value > 0;
+};
+
+/** The plans that include a feature, lowest first. */
+export const tiersWith = (feature: PlanFeature): PricingTier[] =>
+  PRICING_TIERS.filter((t) => planIncludes(t.slug, feature));
+
+/** The lowest plan that includes a feature (undefined if none does). */
+export const lowestTierWith = (feature: PlanFeature): TierSlug | undefined => tiersWith(feature)[0]?.slug;
+
+/** "A", "A and B", "A, B, and C" */
+const joinNames = (names: string[]): string =>
+  names.length <= 2 ? names.join(' and ') : `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`;
+
+/** "Active and Professional": the plans that include a feature, for copy. */
+export const planNamesWith = (feature: PlanFeature): string =>
+  joinNames(tiersWith(feature).map((t) => t.shortName));
+
+/** "Beginner, Casual, Active, and Professional" */
+export const ALL_PLAN_NAMES = joinNames(PRICING_TIERS.map((t) => t.shortName));
+
 /** "Beginner and Casual" — the plans with a free trial (backend: TRIAL_TIERS in stripe_payments.py). */
-export const TRIAL_PLAN_NAMES = PRICING_TIERS.filter((t) => t.hasTrial)
-  .map((t) => t.shortName)
-  .join(' and ');
+export const TRIAL_PLAN_NAMES = joinNames(PRICING_TIERS.filter((t) => t.hasTrial).map((t) => t.shortName));
 
 /**
  * Price label and full feature list for compact tier cards (upgrade prompts,

@@ -4,6 +4,7 @@ import { authAPI, alertsAPI, technicalAlertsAPI } from '../services/api';
 import { User } from '../types';
 import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
+import { getTierLimits } from '../data/pricingTiers';
 
 interface Alert {
   id: string;
@@ -238,10 +239,8 @@ const Alerts: React.FC = () => {
     alerts.filter(a => a.triggered_at).length +
     techAlerts.filter(a => a.triggered_at).length;
 
-  const tierLimit = (() => {
-    const limits: Record<string, number> = { beginner: 5, casual: 10, active: 20, professional: 50 };
-    return limits[user?.subscription_tier || 'beginner'] || 5;
-  })();
+  // Price and technical alerts share this one allowance (backend: "alerts")
+  const tierLimit = getTierLimits(user?.subscription_tier).priceAlerts;
 
   // ── Render ──────────────────────────────────────────────────────
 

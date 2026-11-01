@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { authAPI, portfolioAPI, stocksAPI, SellPositionResponse } from '../services/api';
+import { authAPI, portfolioAPI, stocksAPI, intradayAPI, quotesByTicker, IntradayQuote, SellPositionResponse } from '../services/api';
 import SellPositionModal from '../components/SellPositionModal';
 import TransactionHistoryModal from '../components/TransactionHistoryModal';
 import { User } from '../types';
@@ -12,10 +12,8 @@ import MarketStatusBadge from '../components/MarketStatusBadge';
 import '../styles/livePrice.css';
 import { useSectors, SECTOR_COLORS } from '../utils/sectorMap';
 import { downloadCSV } from '../utils/csv';
-import { summarizePositions } from '../utils/portfolioTotals';
-import axios from 'axios';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+import { summarizePositions, deriveValues } from '../utils/portfolioTotals';
+import { getTierLimits } from '../data/pricingTiers';
 
 interface PortfolioPosition {
   id: string;
@@ -30,25 +28,6 @@ interface PortfolioPosition {
   profit_loss_percent?: number;
   created_at: string;
 }
-
-// Single source of truth for a position's derived value figures. Previously
-// duplicated in the WebSocket tick handler, the 30s refresh, and loadData, all
-// of which had to agree. The buy_price guard matters: the backend enforces
-// buy_price > 0, but an unguarded divide would surface as Infinity in the UI.
-const deriveValues = (
-  pos: { quantity: number; buy_price: number },
-  price?: number
-): Partial<PortfolioPosition> => {
-  if (!price) return {};
-  const totalValue = price * pos.quantity;
-  const cost = pos.buy_price * pos.quantity;
-  return {
-    current_price: price,
-    total_value: totalValue,
-    profit_loss: totalValue - cost,
-    profit_loss_percent: cost > 0 ? ((totalValue - cost) / cost) * 100 : 0,
-  };
-};
 
 const Portfolio: React.FC = () => {
   const navigate = useNavigate();
@@ -244,50 +223,43 @@ const Portfolio: React.FC = () => {
     });
   }, [prices]);
 
+  // Day-change baseline and pre/after-hours fields from an /intraday/batch reply
+  const storeQuoteExtras = useCallback((quotes: Record<string, IntradayQuote>) => {
+    const freshPrevClose: Record<string, number> = {};
+    const freshExtended: typeof extendedHoursMap = {};
+    Object.values(quotes).forEach(item => {
+      if (item.previous_close) {
+        freshPrevClose[item.ticker] = item.previous_close;
+      }
+      freshExtended[item.ticker] = {
+        earlyChange: item.early_trading_change ?? null,
+        earlyChangePercent: item.early_trading_change_percent ?? null,
+        lateChange: item.late_trading_change ?? null,
+        lateChangePercent: item.late_trading_change_percent ?? null,
+        marketStatus: item.market_status ?? null,
+      };
+    });
+
+    if (Object.keys(freshPrevClose).length > 0) {
+      setPrevCloseMap(prev => ({ ...prev, ...freshPrevClose }));
+    }
+
+    if (Object.keys(freshExtended).length > 0) {
+      setExtendedHoursMap(prev => ({ ...prev, ...freshExtended }));
+    }
+  }, []);
+
   useEffect(() => {
     if (!tickerList) return;
 
     const refreshPrices = async () => {
       try {
-        const token = localStorage.getItem('access_token');
-        const priceResponse = await axios.get(
-          `${API_URL}/api/v1/intraday/batch?tickers=${tickerList}`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        const freshPrices: Record<string, number> = {};
-        const freshPrevClose: Record<string, number> = {};
-        const freshExtended: Record<string, any> = {};
-        if (Array.isArray(priceResponse.data)) {
-          priceResponse.data.forEach((item: any) => {
-            if (item.ticker && item.price) {
-              freshPrices[item.ticker] = item.price;
-            }
-            if (item.ticker && item.previous_close) {
-              freshPrevClose[item.ticker] = item.previous_close;
-            }
-            if (item.ticker) {
-              freshExtended[item.ticker] = {
-                earlyChange: item.early_trading_change ?? null,
-                earlyChangePercent: item.early_trading_change_percent ?? null,
-                lateChange: item.late_trading_change ?? null,
-                lateChangePercent: item.late_trading_change_percent ?? null,
-                marketStatus: item.market_status ?? null,
-              };
-            }
-          });
-        }
-
-        if (Object.keys(freshPrevClose).length > 0) {
-          setPrevCloseMap(prev => ({ ...prev, ...freshPrevClose }));
-        }
-
-        if (Object.keys(freshExtended).length > 0) {
-          setExtendedHoursMap(prev => ({ ...prev, ...freshExtended }));
-        }
+        const priceResponse = await intradayAPI.getBatch(tickerList.split(','));
+        const quotes = quotesByTicker(priceResponse.data);
+        storeQuoteExtras(quotes);
 
         setPortfolio(prev => prev.map(pos => {
-          const freshPrice = freshPrices[pos.ticker];
+          const freshPrice = quotes[pos.ticker]?.price;
           if (freshPrice && freshPrice !== pos.current_price) {
             const isUp = freshPrice > (pos.current_price || 0);
             setPriceFlash(pf => ({ ...pf, [pos.ticker]: isUp ? 'green' : 'red' }));
@@ -309,7 +281,7 @@ const Portfolio: React.FC = () => {
 
     const interval = setInterval(refreshPrices, 30000);
     return () => clearInterval(interval);
-  }, [tickerList]);
+  }, [tickerList, storeQuoteExtras]);
 
   const loadData = async () => {
     try {
@@ -325,46 +297,12 @@ const Portfolio: React.FC = () => {
       
       if (positions.length > 0) {
         try {
-          const tickers = positions.map((p: PortfolioPosition) => p.ticker).join(',');
-          const token = localStorage.getItem('access_token');
-          const priceResponse = await axios.get(
-            `${API_URL}/api/v1/intraday/batch?tickers=${tickers}`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          );
-          
-          const freshPrices: Record<string, number> = {};
-          const freshPrevClose: Record<string, number> = {};
-          const freshExtended: Record<string, any> = {};
-          if (Array.isArray(priceResponse.data)) {
-            priceResponse.data.forEach((item: any) => {
-              if (item.ticker && item.price) {
-                freshPrices[item.ticker] = item.price;
-              }
-              if (item.ticker && item.previous_close) {
-                freshPrevClose[item.ticker] = item.previous_close;
-              }
-              if (item.ticker) {
-                freshExtended[item.ticker] = {
-                  earlyChange: item.early_trading_change ?? null,
-                  earlyChangePercent: item.early_trading_change_percent ?? null,
-                  lateChange: item.late_trading_change ?? null,
-                  lateChangePercent: item.late_trading_change_percent ?? null,
-                  marketStatus: item.market_status ?? null,
-                };
-              }
-            });
-          }
-          
-          if (Object.keys(freshPrevClose).length > 0) {
-            setPrevCloseMap(prev => ({ ...prev, ...freshPrevClose }));
-          }
-          
-          if (Object.keys(freshExtended).length > 0) {
-            setExtendedHoursMap(prev => ({ ...prev, ...freshExtended }));
-          }
+          const priceResponse = await intradayAPI.getBatch(positions.map((p: PortfolioPosition) => p.ticker));
+          const quotes = quotesByTicker(priceResponse.data);
+          storeQuoteExtras(quotes);
           
           const updatedPositions = positions.map((pos: PortfolioPosition) => {
-            const freshPrice = freshPrices[pos.ticker];
+            const freshPrice = quotes[pos.ticker]?.price;
             if (freshPrice) {
               return { ...pos, ...deriveValues(pos, freshPrice) };
             }
@@ -372,7 +310,7 @@ const Portfolio: React.FC = () => {
           });
           
           setPortfolio(updatedPositions);
-          console.log(`✅ Refreshed prices for ${Object.keys(freshPrices).length} tickers`);
+          console.log(`✅ Refreshed prices for ${Object.values(quotes).filter(q => q.price).length} tickers`);
         } catch (priceErr) {
           console.warn('⚠️ Could not fetch fresh prices, using cached:', priceErr);
           setPortfolio(positions);
@@ -595,15 +533,7 @@ const Portfolio: React.FC = () => {
     navigate('/');
   };
 
-  const getTierLimit = () => {
-    const limits = {
-      beginner: 10,
-      casual: 20,
-      active: 45,
-      professional: 75
-    };
-    return limits[user?.subscription_tier as keyof typeof limits] || 10;
-  };
+  const portfolioLimit = getTierLimits(user?.subscription_tier).portfolio;
 
   const totals = calculateTotals();
 
@@ -801,7 +731,7 @@ const Portfolio: React.FC = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Portfolio</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Tracking {portfolio.length} of {getTierLimit()} positions
+              Tracking {portfolio.length} of {portfolioLimit} positions
             </p>
           </div>
           <div className="flex gap-3">

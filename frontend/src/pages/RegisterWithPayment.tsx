@@ -1,22 +1,24 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import axios from 'axios';
-import { PRICING_TIERS, TierSlug } from '../data/pricingTiers';
+import { getTierBySlug, isTierSlug, PRICING_TIERS, TIER_ORDER, TierSlug } from '../data/pricingTiers';
 import ResendVerification from '../components/ResendVerification';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+import { authAPI } from '../services/api';
 
 type Step = 'plan' | 'account' | 'success';
 type Tier = TierSlug;
 
+// Serves both /register and /registerwithpayment.
 const RegisterWithPayment: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const urlTier = searchParams.get('tier') as Tier | null;
+  // Only a real plan counts: a missing or unknown ?tier= shows the plan picker
+  const tierParam = searchParams.get('tier');
+  const urlTier: Tier | null = isTierSlug(tierParam) ? tierParam : null;
 
   // If a tier was passed via URL, skip straight to account creation
   const [step, setStep] = useState<Step>(urlTier ? 'account' : 'plan');
-  const [selectedTier, setSelectedTier] = useState<Tier>(urlTier || 'casual');
+  // Without one, the selection falls back to the lowest plan (Beginner)
+  const [selectedTier, setSelectedTier] = useState<Tier>(urlTier ?? TIER_ORDER[0]);
   
   const [formData, setFormData] = useState({
     email: '',
@@ -59,13 +61,13 @@ const RegisterWithPayment: React.FC = () => {
 
     try {
       // Create account — pass selected tier so backend embeds it in verification email URL
-      const res = await axios.post(
-        `${API_URL}/api/v1/auth/register?selected_tier=${selectedTier}`,
+      const res = await authAPI.register(
         {
           email: formData.email,
           password: formData.password,
           full_name: formData.full_name,
-        }
+        },
+        selectedTier
       );
 
       // The account is created even when the verification email fails to send;
@@ -335,7 +337,7 @@ const RegisterWithPayment: React.FC = () => {
                 >
                   {loading 
                     ? 'Creating account...' 
-                    : (selectedTier === 'beginner' || selectedTier === 'casual')
+                    : getTierBySlug(selectedTier).hasTrial
                     ? 'Create Account & Start Free Trial'
                     : 'Create Account & Continue to Payment'}
                 </button>
@@ -376,7 +378,7 @@ const RegisterWithPayment: React.FC = () => {
                   {selectedTier && (
                     <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-700 rounded-lg p-4 mb-4">
                       <p className="text-sm text-primary-800 dark:text-primary-200">
-                        <strong>Next step:</strong> After verifying your email, you'll be automatically redirected to complete your <strong>{selectedTier}</strong> subscription payment.
+                        <strong>Next step:</strong> After verifying your email, you'll be automatically redirected to complete your <strong>{getTierBySlug(selectedTier).name}</strong> subscription payment.
                       </p>
                     </div>
                   )}

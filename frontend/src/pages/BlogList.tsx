@@ -1,13 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import NavBar from '../components/NavBar';
 import PublicBlogNav from '../components/PublicBlogNav';
 import BackToTop from '../components/BackToTop';
-import { authAPI } from '../services/api';
+import { authAPI, blogAPI } from '../services/api';
 import { User } from '../types';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 interface BlogPostItem {
   id: string;
@@ -45,8 +42,8 @@ const BlogList: React.FC = () => {
 
       try {
         const [postsRes, catsRes] = await Promise.all([
-          axios.get(`${API_URL}/api/v1/content/blogs`),
-          axios.get(`${API_URL}/api/v1/content/blogs/categories`),
+          blogAPI.list(),
+          blogAPI.getCategories(),
         ]);
         setPosts(postsRes.data);
         setCategories(catsRes.data);
