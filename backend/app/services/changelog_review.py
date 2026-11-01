@@ -19,6 +19,7 @@ import re
 import httpx
 
 from app.config import get_settings
+from app.core.redaction import redact
 from app.services.anthropic_response import extract_text
 from app.services.vendor_registries import (
     NWC_STACK_PROFILE,
@@ -36,10 +37,8 @@ MAX_TOKENS = 2000
 # Admins paste API calls alongside the changelog to show a live response, and the
 # URL usually carries the key (`...?apikey=abc123`). Pasted text is stored on the
 # MaintenanceReport, sent to Anthropic and shown back in the panel and its
-# download, so credentials are blanked before any of that happens.
-_SECRET_PARAM = re.compile(
-    r"(?i)\b(apikey|api_key|access_token|token|secret|key)=([^&\s\"'<>]+)"
-)
+# download, so credentials are blanked before any of that happens: query values by
+# the app-wide rule (app/core/redaction.py), header lines here.
 _SECRET_HEADER = re.compile(
     r"(?im)^(\s*(?:authorization|x-api-key|api-key)\s*:\s*)(?:bearer\s+)?\S+"
 )
@@ -47,7 +46,7 @@ _SECRET_HEADER = re.compile(
 
 def redact_secrets(text: str) -> str:
     """Blank credential values in query strings and header lines."""
-    text = _SECRET_PARAM.sub(r"\1=[REDACTED]", text)
+    text = redact(text, "[REDACTED]")
     return _SECRET_HEADER.sub(r"\1[REDACTED]", text)
 
 

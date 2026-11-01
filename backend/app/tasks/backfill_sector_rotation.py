@@ -15,6 +15,7 @@ via append_today_closes().
 import asyncio
 import os
 
+from app.core.redaction import install_log_redaction
 from app.services.fmp_client import init_fmp_client, close_fmp_client
 from app.services.sector_rotation import backfill_history
 
@@ -32,4 +33,5 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    install_log_redaction()
     asyncio.run(main())

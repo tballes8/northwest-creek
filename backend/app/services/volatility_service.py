@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from app.services.market_data import market_data_service
+from app.core.redaction import safe_error
 from app.utils.cache import SimpleCache
 
 logger = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ async def compute_realized_volatility(
     try:
         history = await market_data_service.get_historical_prices(ticker, days=calendar_days)
     except Exception as exc:
-        logger.warning(f"Realized vol: get_historical_prices failed for {ticker}: {exc}")
+        logger.warning(f"Realized vol: get_historical_prices failed for {ticker}: {safe_error(exc)}")
         return None
 
     if not history or len(history) < 6:

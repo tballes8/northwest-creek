@@ -2,10 +2,9 @@
 Live Prices WebSocket Endpoint
 Real-time stock price streaming via WebSocket
 """
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 from app.services.websocket_service import live_price_service
-from app.api.dependencies import get_current_user
 from app.core.entitlements import has_app_access
 from app.core.security import decode_token
 from app.db.models import User
@@ -105,43 +104,3 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.close()
         except:
             pass
-
-
-@router.get("/snapshot/{ticker}")
-async def get_price_snapshot(
-    ticker: str,
-    current_user: User = Depends(get_current_user)
-):
-    """
-    Get current cached price for a ticker (REST endpoint fallback)
-    """
-    ticker = ticker.upper()
-    
-    if ticker in live_price_service.price_cache:
-        return {
-            "ticker": ticker,
-            "price": live_price_service.price_cache[ticker]["price"],
-            "timestamp": live_price_service.price_cache[ticker]["timestamp"],
-            "updated_at": live_price_service.price_cache[ticker]["updated_at"],
-            "source": "live_cache"
-        }
-    else:
-        return {
-            "ticker": ticker,
-            "price": None,
-            "error": "Price not available. Subscribe to ticker for live updates.",
-            "source": "cache_miss"
-        }
-
-
-@router.get("/status")
-async def get_service_status(current_user: User = Depends(get_current_user)):
-    """Get live price service status"""
-    return {
-        "running": live_price_service.running,
-        "connected_clients": len(live_price_service.clients),
-        "subscribed_tickers": list(live_price_service.subscribed_tickers),
-        "cached_tickers": list(live_price_service.price_cache.keys()),
-        "market_hours": live_price_service.is_market_hours(),
-        "polling_active": live_price_service.running
-    }

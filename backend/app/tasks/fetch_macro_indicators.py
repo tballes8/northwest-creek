@@ -16,6 +16,7 @@ from decimal import Decimal
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from app.core.redaction import install_log_redaction, safe_error
 from app.db.models import MacroIndicator
 from app.db.session import async_session
 from app.services.fred_client import MACRO_SERIES, fetch_latest_observation
@@ -63,9 +64,10 @@ async def macro_indicators_job() -> None:
         n = await fetch_and_store_macro_indicators()
         logger.info(f"Macro indicators job done: {n}/{len(MACRO_SERIES)} series written")
     except Exception as exc:
-        logger.exception(f"Macro indicators job failed: {exc}")
+        logger.exception(f"Macro indicators job failed: {safe_error(exc)}")
 
 
 if __name__ == "__main__":
+    install_log_redaction()
     asyncio.run(macro_indicators_job())
     print("Macro indicators job completed")

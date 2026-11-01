@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.core.redaction import install_log_redaction, print_redacted_exc, safe_error
 from app.db.engine import make_async_engine
 from app.services.technical_alert_checker import technical_alert_checker
 from app.services.fmp_client import init_fmp_client, close_fmp_client
@@ -38,9 +39,8 @@ async def run_check():
             result = await technical_alert_checker.check_all_alerts(session)
             print(f"✅ Technical alert check complete: {result}")
     except Exception as e:
-        print(f"❌ Technical alert check failed: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Technical alert check failed: {safe_error(e)}")
+        print_redacted_exc()
     finally:
         await close_fmp_client()
         await engine.dispose()
@@ -49,4 +49,5 @@ async def run_check():
 
 
 if __name__ == "__main__":
+    install_log_redaction()
     asyncio.run(run_check())

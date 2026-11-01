@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from datetime import date
 import httpx
 
+from app.core.listings import is_common_stock, is_us_symbol
+from app.core.redaction import install_log_redaction, print_redacted_exc, safe_error
 from app.db.engine import make_async_engine
 from app.db.models import DailyStockSnapshot
 from app.db.models import WaitlistSignup
@@ -144,22 +146,32 @@ async def fetch_and_store_snapshots():
                             etf_symbols.add(sym.upper())
                 print(f"✅ Got {len(etf_symbols)} ETF symbols from FMP")
             except Exception as etf_err:
-                print(f"⚠️ Could not fetch ETF list (will classify all as CS): {etf_err}")
+                print(f"⚠️ Could not fetch ETF list (will classify all as CS): {safe_error(etf_err)}")
 
         # Filter to US-only tickers: skip foreign symbols (contain dots like .T, .PA),
-        # tickers longer than 10 chars (DB column is VARCHAR(10)), and delisted stocks
+        # tickers longer than 10 chars (DB column is VARCHAR(10)), delisted stocks, and
+        # (ETFs aside) anything that is not common stock: warrants, units, rights,
+        # preferreds, notes. The shared rule in app/core/listings.py, so a symbol the
+        # screener leaves out is not offered on the discovery cards either.
         tickers = []
         ticker_type_map: dict[str, str] = {}  # ticker -> asset type (ETF or CS)
+        skipped_non_common = 0
         for s in stock_list:
             sym = s.get("symbol")
-            if not sym or "." in sym or len(sym) > 10:
+            if not is_us_symbol(sym):
                 continue
             if sym.upper() in delisted_symbols:
                 continue
+            asset_type = "ETF" if sym.upper() in etf_symbols else "CS"
+            if asset_type == "CS" and not is_common_stock(sym, s.get("companyName")):
+                skipped_non_common += 1
+                continue
             tickers.append(sym)
-            ticker_type_map[sym] = "ETF" if sym.upper() in etf_symbols else "CS"
+            ticker_type_map[sym] = asset_type
 
         print(f"✅ Got {len(tickers)} tickers from stock list (after filtering delisted)")
+        if skipped_non_common:
+            print(f"   Skipped {skipped_non_common} non-common instruments (warrants, units, rights, preferreds, notes)")
 
         # Step 2: Batch-fetch quotes
         print("📈 Fetching quotes in batches...")
@@ -192,7 +204,7 @@ async def fetch_and_store_snapshots():
 
                         if not ticker or open_price is None or close_price is None:
                             continue
-                        if "." in ticker or len(ticker) > 10:
+                        if not is_us_symbol(ticker):
                             continue
                         if (abs(open_price) >= NUMERIC_18_2_MAX
                                 or abs(close_price) >= NUMERIC_18_2_MAX):
@@ -239,7 +251,7 @@ async def fetch_and_store_snapshots():
                         })
 
                 except Exception as batch_err:
-                    print(f"⚠️ Batch {i}-{i+QUOTE_BATCH_SIZE} failed: {batch_err}")
+                    print(f"⚠️ Batch {i}-{i+QUOTE_BATCH_SIZE} failed: {safe_error(batch_err)}")
                     continue
 
                 # Progress logging every 500 tickers
@@ -289,14 +301,13 @@ async def fetch_and_store_snapshots():
             written = await append_today_closes()
             print(f"📊 Sector rotation: appended {written} ETF close rows")
         except Exception as sector_err:
-            print(f"⚠️  Sector rotation append failed (non-fatal): {sector_err}")
+            print(f"⚠️  Sector rotation append failed (non-fatal): {safe_error(sector_err)}")
 
         print("🔒 Database connection closed")
 
     except Exception as e:
-        print(f"❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Error: {safe_error(e)}")
+        print_redacted_exc()
         raise
     finally:
         # Clean up engine
@@ -361,6 +372,7 @@ async def fetch_waitlist_report():
 
 
 if __name__ == "__main__":
+    install_log_redaction()
     asyncio.run(fetch_and_store_snapshots())
     print("✅ Snapshot job completed")
     asyncio.run(fetch_waitlist_report())

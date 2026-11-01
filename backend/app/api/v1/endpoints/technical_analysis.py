@@ -3,32 +3,21 @@ Stock Screener API Endpoints - Filter stocks by technical indicators
 ⭐ PAID TIERS ONLY ⭐
 """
 import asyncio
-import re
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func as sa_func
+from sqlalchemy import select
 from typing import List, Optional
-from datetime import datetime, timedelta, timezone
-from app.db.models import User, Watchlist, FeatureUsage
+from app.db.models import User, Watchlist
 from app.api.dependencies import get_current_user
-from app.core.tier_limits import (
-    get_tier_limit, get_review_period, get_upgrade_tier, WATCHLIST_SCREEN_MIN_TIERS,
-)
+from app.core.redaction import print_redacted_exc, safe_error
+from app.core.tier_limits import get_review_period, WATCHLIST_SCREEN_MIN_TIERS
+from app.core.usage_limits import check_feature_limit, record_feature_usage
 from app.db.session import get_db
 from app.services.market_data import market_data_service
 from app.services.technical_indicators import (
     technical_indicators, generate_summary, build_signal_rows, INDICATOR_HISTORY_DAYS,
 )
 
-
-def _safe_error(e: Exception) -> str:
-    """Strip API keys and sensitive params from error messages."""
-    msg = str(e)
-    msg = re.sub(r'apiKey=[^&\s\'"]+', 'apiKey=***', msg)
-    msg = re.sub(r'apikey=[^&\s\'"]+', 'apikey=***', msg)
-    msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
-    msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg)
-    return msg
 
 router = APIRouter()
 
@@ -54,66 +43,14 @@ def require_valid_tier(current_user: User = Depends(get_current_user)):
         )
     return current_user
 
-async def _check_feature_limit(user: User, db: AsyncSession, feature: str, label: str) -> int:
-    """Check a per-period quota and raise 403 if it is spent.
-
-    Returns the current usage count. The 403 detail matches the shape the other
-    metered endpoints use, so the frontend renders <UpgradeRequired/> straight
-    from the response instead of counting in the browser.
-    """
-    limit = get_tier_limit(user.subscription_tier, feature)
-    period = get_review_period(user.subscription_tier)
-
-    now = datetime.now(timezone.utc)
-    window_start = now - timedelta(days=1) if period == "day" else now - timedelta(weeks=1)
-
-    result = await db.execute(
-        select(sa_func.count(FeatureUsage.id))
-        .where(
-            FeatureUsage.user_id == user.id,
-            FeatureUsage.feature == feature,
-            FeatureUsage.used_at >= window_start,
-        )
-    )
-    current_count = result.scalar() or 0
-
-    if current_count >= limit:
-        next_tier = get_upgrade_tier(user.subscription_tier)
-        if next_tier and get_tier_limit(next_tier, feature) > limit:
-            upgrade_msg = (
-                f" Upgrade to {next_tier.capitalize()} for "
-                f"{get_tier_limit(next_tier, feature)} per {get_review_period(next_tier)}."
-            )
-        else:
-            upgrade_msg = ""
-
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "message": f"{label} limit reached. {user.subscription_tier.capitalize()} tier allows {limit} per {period}.{upgrade_msg}",
-                "current_usage": current_count,
-                "max_usage": limit,
-                "period": period,
-            }
-        )
-
-    return current_count
-
-
-async def _record_feature_usage(user: User, db: AsyncSession, feature: str) -> None:
-    """Record one usage event. Called only after the work succeeds, so an upstream
-    failure or a bad ticker never costs the user a run."""
-    db.add(FeatureUsage(user_id=user.id, feature=feature))
-    await db.commit()
-
 
 async def check_analysis_limit(user: User, db: AsyncSession) -> int:
     """Quota for a single-stock analysis — roughly one FMP fetch."""
-    return await _check_feature_limit(user, db, "technical_analysis", "Technical Analysis")
+    return await check_feature_limit(user, db, "technical_analysis", "Technical Analysis")
 
 
 async def record_analysis_usage(user: User, db: AsyncSession) -> None:
-    await _record_feature_usage(user, db, "technical_analysis")
+    await record_feature_usage(user, db, "technical_analysis")
 
 
 async def check_watchlist_screen_limit(user: User, db: AsyncSession) -> int:
@@ -124,11 +61,11 @@ async def check_watchlist_screen_limit(user: User, db: AsyncSession) -> int:
     costs ~75x what /analyze does. Charging both against one counter would hide
     that entirely.
     """
-    return await _check_feature_limit(user, db, "watchlist_screens", "Watchlist screening")
+    return await check_feature_limit(user, db, "watchlist_screens", "Watchlist screening")
 
 
 async def record_watchlist_screen_usage(user: User, db: AsyncSession) -> None:
-    await _record_feature_usage(user, db, "watchlist_screens")
+    await record_feature_usage(user, db, "watchlist_screens")
 
 
 def require_watchlist_screening_tier(current_user: User = Depends(require_valid_tier)):
@@ -382,53 +319,41 @@ async def analyze_stock(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Analysis error for {ticker}: {_safe_error(e)}")
-        import traceback
-        traceback.print_exc()
+        print(f"Analysis error for {ticker}: {safe_error(e)}")
+        print_redacted_exc()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Could not analyze {ticker}: {_safe_error(e)}"
+            detail=f"Could not analyze {ticker}: {safe_error(e)}"
         )
-    
-@router.get("/watchlist")
+
+
+# Not a route (GET /watchlist had no callers): the presets below call it. Plain None
+# defaults, because called as a function FastAPI's Query() defaults are never resolved:
+# a filter the preset didn't pass arrived as a truthy Query object, and comparing an RSI
+# against it raised for every ticker, so no preset ever matched anything.
 async def screen_watchlist(
-    rsi_below: Optional[float] = Query(None, ge=0, le=100, description="RSI below this value"),
-    rsi_above: Optional[float] = Query(None, ge=0, le=100, description="RSI above this value"),
-    macd_bullish: Optional[bool] = Query(None, description="MACD bullish trend"),
-    macd_bearish: Optional[bool] = Query(None, description="MACD bearish trend"),
-    above_sma_20: Optional[bool] = Query(None, description="Price above 20-day SMA"),
-    above_sma_50: Optional[bool] = Query(None, description="Price above 50-day SMA"),
-    bollinger_oversold: Optional[bool] = Query(None, description="Below lower Bollinger Band"),
-    bollinger_overbought: Optional[bool] = Query(None, description="Above upper Bollinger Band"),
-    current_user: User = Depends(require_watchlist_screening_tier),
-    db: AsyncSession = Depends(get_db)
+    *,
+    current_user: User,
+    db: AsyncSession,
+    rsi_below: Optional[float] = None,
+    rsi_above: Optional[float] = None,
+    macd_bullish: Optional[bool] = None,
+    macd_bearish: Optional[bool] = None,
+    above_sma_20: Optional[bool] = None,
+    above_sma_50: Optional[bool] = None,
+    bollinger_oversold: Optional[bool] = None,
+    bollinger_overbought: Optional[bool] = None,
 ):
     """
-    🔒 ACTIVE & PROFESSIONAL - Screen your watchlist by technical indicators
-    
-    **Find trading opportunities in your watchlist:**
-    
-    **RSI Filters:**
-    - `rsi_below=30` - Find oversold stocks (potential buys)
-    - `rsi_above=70` - Find overbought stocks (potential sells)
-    
-    **MACD Filters:**
-    - `macd_bullish=true` - Bullish momentum
-    - `macd_bearish=true` - Bearish momentum
-    
-    **Moving Average Filters:**
-    - `above_sma_20=true` - Above 20-day average (short-term uptrend)
-    - `above_sma_50=true` - Above 50-day average (medium-term uptrend)
-    
-    **Bollinger Bands:**
-    - `bollinger_oversold=true` - Price below lower band
-    - `bollinger_overbought=true` - Price above upper band
-    
-    **Examples:**
-    - `/screener/watchlist?rsi_below=30` → Oversold stocks
-    - `/screener/watchlist?macd_bullish=true&above_sma_50=true` → Strong uptrends
-    - `/screener/watchlist?bollinger_oversold=true` → Potential bounce opportunities
-    
+    Screen the user's watchlist by technical indicators: the shared body of the
+    /presets/* routes, which pass the tier-checked user. A filter left as None is
+    not applied.
+
+    RSI: rsi_below / rsi_above. MACD: macd_bullish / macd_bearish (trend).
+    Moving averages: above_sma_20 / above_sma_50. Bollinger Bands:
+    bollinger_oversold (below the lower band) / bollinger_overbought (above the
+    upper band).
+
     ⭐ **Active:** 5 screens/day · **Professional:** 15 screens/day
     """
     # One screen fans out a historical fetch per watchlist ticker, so it draws

@@ -26,6 +26,8 @@ import math
 import time
 from datetime import date, datetime, timedelta
 
+from app.core.redaction import safe_error
+
 # Statement fields that are numeric but not money. Every other int/float field on an
 # FMP income, balance-sheet or cash-flow row is a money amount (EPS is money per
 # share), so it is converted; a field FMP adds later is converted too, which errs
@@ -185,7 +187,7 @@ async def get_fx_per_usd() -> dict[str, float]:
                 rows = await market_data_service.get_quote_rows(list(_FX_PAIRS))
             rates = fx_per_usd(rows)
         except Exception as e:
-            print(f"WARN: exchange rates failed ({type(e).__name__}: {e})")
+            print(f"WARN: exchange rates failed ({type(e).__name__}: {safe_error(e)})")
             rates = {}
         _fx_fetched_at = time.time()
         _fx_ok = len(rates) > 1
@@ -216,7 +218,7 @@ async def get_fx_history(currency: str) -> dict[str, float]:
             try:
                 rows = await market_data_service._fmp_get("historical-price-eod/full", {"symbol": symbol, **params})
             except Exception as e:
-                print(f"WARN: FX history {symbol} failed ({type(e).__name__}: {e})")
+                print(f"WARN: FX history {symbol} failed ({type(e).__name__}: {safe_error(e)})")
                 continue
             for r in rows if isinstance(rows, list) else []:
                 try:
@@ -250,7 +252,7 @@ async def get_reporting_currency(ticker: str) -> str | None:
             "income-statement", {"symbol": sym, "period": "quarter", "limit": 1}
         )
     except Exception as e:
-        print(f"WARN: reporting currency for {sym} unavailable ({type(e).__name__}: {e})")
+        print(f"WARN: reporting currency for {sym} unavailable ({type(e).__name__}: {safe_error(e)})")
         return None
     ccy = rows[0].get("reportedCurrency") if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
     if ccy:

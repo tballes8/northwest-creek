@@ -20,7 +20,6 @@ multiples (stocks only, after profiles because it reads the CIK they store).
 """
 import asyncio
 import logging
-import re
 from collections import Counter
 from datetime import date, datetime, time, timedelta, timezone
 from typing import NamedTuple
@@ -36,6 +35,9 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.models import StockSnapshot
 from app.config import get_settings
+from app.core.listings import US_EXCHANGES, is_common_stock, is_us_exchange, is_us_symbol
+from app.core.listings import _selftest as _listings_selftest
+from app.core.redaction import install_log_redaction, safe_error
 from app.db.session import async_session
 from app.services.edgar_identity import (
     CANNOT_RESOLVE, CONTRADICTION, build_entity_trust, normalize_cik,
@@ -96,26 +98,8 @@ VALUATION_CONCURRENCY = 8
 # FMP's P/E against the company's own earnings. It lives there, not here, because
 # financials_service applies the same rule to what it serves.
 
-# Exchanges that count as a US listing for the screener universe.
-#
-# These are batch-quote's `exchange` values, which are NOT what /company-screener
-# reports for the same symbol — the screener says "New York Stock Exchange Arca" and
-# "Chicago Board Options Exchange" where batch-quote says "AMEX" and "CBOE". The gate
-# below reads batch-quote, so it must be spelled batch-quote's way.
-#
-# CBOE is here because Cboe BZX lists ~14% of US ETFs (measured over a 1000-symbol
-# sample by scripts/probe_etf_universe.py: AMEX 644, NASDAQ 202, CBOE 143, NYSE 10).
-# Without it those funds are fetched and then silently dropped — the ETF screener
-# would just be missing ~675 funds with nothing in the logs to say why.
-#
-# OTC is deliberately NOT here. It was 1 symbol in that sample, and since this gate
-# applies to every row, adding it would also admit OTC common stock to the stock
-# screener — a change to stock-side behaviour that buys one fund.
-US_EXCHANGES = {"NYSE", "NASDAQ", "AMEX", "CBOE"}
-
-# Compared case-insensitively: the gate drops silently, so a vendor-side casing or
-# whitespace change ("Nasdaq", "NYSE ") would quietly shrink the universe.
-_US_EXCHANGES_NORM = {e.upper() for e in US_EXCHANGES}
+# Exchanges that count as a US listing (US_EXCHANGES) and the gate on them
+# (is_us_exchange) live in app/core/listings.py, shared with every other ticker list.
 
 # The universe is "listed on a US exchange", asked of /company-screener by exchange.
 #
@@ -204,57 +188,8 @@ async def _last_refresh_ts() -> datetime | None:
         return result
 
 
-# Instruments /company-screener's stock leg returns that are not common stock: warrants,
-# SPAC units and rights, preferreds and depositary shares, exchange-traded notes and
-# baby bonds, and synthetic trust certificates. FMP has no instrument-type field on the
-# screener and the symbol alone is not enough: most carry a plain five-letter ticker
-# (ACGCW warrants, IDACU units, CGABL notes), so the name is checked too. Measured
-# 2026-10-25: 286 of 4,642 stock-leg rows, none of them common stock, many listed with
-# the parent's market cap (a Bank of America note at $175B). They passed every screen
-# and, carrying junk multiples, led every P/E-ascending sort.
-_NON_COMMON_SYMBOL = re.compile(r"-(P[A-Z]?|WT|WS|UN?|RI?)$")   # -PA preferred, -WT warrant, -UN unit, -RI rights
-# "Depositary shares" means a preferred stake only when it is not "American Depositary
-# Shares": an ADR is the US line of a foreign company's common stock (ARM, $224B, is
-# named "Arm Holdings plc American Depositary Shares"). Every depositary name on the
-# 2026-10-25 universe was an ADR; preferred depositaries are also caught by
-# _PREFERRED_CONTEXT and their -P symbol suffixes.
-_NON_COMMON_NAME = re.compile(
-    r"\b(warrants?|units?|rights?|contingent value|pfd|(?<!american )depositary (shares?|receipts?)|"
-    r"debentures?|subordinated|senior notes?|notes? due|bonds? due|trust certificates?|"
-    r"synthetic fixed-income|strats|corts|saturns|pplus)\b",
-    re.I,
-)
-# "Preferred" alone is a real company name (Preferred Bank, Preferred Apartment
-# Communities); a preferred security's name also carries a coupon, series or share word.
-_PREFERRED_WORD = re.compile(r"\bpreferred\b", re.I)
-_PREFERRED_CONTEXT = re.compile(r"%|\b(series|stock|shares?|pfd|cum|non-?cum|perpetual|depositary|redeemable)\b", re.I)
-# Nasdaq's fifth letter is an instrument code: W is a warrant, U a unit. FMP names most
-# of these after the parent ("NioCorp Developments Ltd." for NIOBW, "Gores Holdings XI"
-# for GHXIU), so the name rule above cannot see them; the shape alone can. Measured
-# 2026-10-25 over 4,642 stock-leg rows: 22 five-letter-W symbols, all warrants; 84
-# five-letter-U, all SPAC units; no common stock of either shape.
-_UNIT_OR_WARRANT_SYMBOL = re.compile(r"^[A-Z]{4}[UW]$")
-# Rights (fifth letter R) are rarer and a five-letter common could end in R, so they
-# stay gated on a SPAC-shaped name. No trailing boundary: "Acquisitions Corp." and
-# "Acquisition1 Corp" are both real names.
-_SPAC_RIGHT_SYMBOL = re.compile(r"^[A-Z]{4}R$")
-_SPAC_NAME = re.compile(r"\b(acquisition|merger|spac)", re.I)
-
-
-def _is_common_stock(symbol: str, name: str) -> bool:
-    """False for any instrument the screener's stock universe should not carry."""
-    name = name or ""
-    if _NON_COMMON_SYMBOL.search(symbol):
-        return False
-    if _NON_COMMON_NAME.search(name):
-        return False
-    if _PREFERRED_WORD.search(name) and _PREFERRED_CONTEXT.search(name):
-        return False
-    if _UNIT_OR_WARRANT_SYMBOL.match(symbol):
-        return False
-    if _SPAC_RIGHT_SYMBOL.match(symbol) and _SPAC_NAME.search(name):
-        return False
-    return True
+# Which instruments are common stock (is_common_stock) is app/core/listings.py's rule,
+# shared with every other ticker list; its cases run in this module's --selftest.
 
 
 async def _screener_leg(client, api_key: str, *, is_etf: bool) -> list[UniverseRow]:
@@ -317,10 +252,10 @@ async def _screener_leg(client, api_key: str, *, is_etf: bool) -> list[UniverseR
         if not isinstance(r, dict):
             continue
         sym = (r.get("symbol") or "").strip()
-        if not sym or "." in sym or len(sym) > 10:
+        if not is_us_symbol(sym):
             continue
         name = r.get("companyName") or r.get("name") or ""
-        if not is_etf and not _is_common_stock(sym, name):
+        if not is_etf and not is_common_stock(sym, name):
             excluded += 1
             continue
         div = _num(r.get("lastAnnualDividend"))
@@ -461,9 +396,9 @@ async def _fetch_quotes(
 
                 for q in quotes:
                     sym = q.get("symbol", "")
-                    if not sym or "." in sym or len(sym) > 10:
+                    if not is_us_symbol(sym):
                         continue
-                    if (q.get("exchange") or "").strip().upper() not in _US_EXCHANGES_NORM:
+                    if not is_us_exchange(q.get("exchange")):
                         rejected_exchanges[q.get("exchange")] += 1
                         continue
                     ts_raw = q.get("timestamp")
@@ -512,8 +447,8 @@ async def _fetch_quotes(
                         duplicates += 1
                     by_symbol[sym] = row
             except Exception as e:
-                print(f"⚠️ Batch {i}–{i + QUOTE_BATCH_SIZE} failed: {e}", flush=True)
-                logger.warning(f"Batch {i}–{i + QUOTE_BATCH_SIZE} failed: {e}")
+                print(f"⚠️ Batch {i}–{i + QUOTE_BATCH_SIZE} failed: {safe_error(e)}", flush=True)
+                logger.warning(f"Batch {i}–{i + QUOTE_BATCH_SIZE} failed: {safe_error(e)}")
 
     if duplicates:
         msg = f"batch-quote echoed {duplicates} duplicate symbol(s); collapsed to one row each"
@@ -715,7 +650,7 @@ async def _update_company_profiles(
                 try:
                     info = await market_data_service.get_company_info(symbol)
                 except Exception as e:
-                    logger.debug(f"Failed to fetch profile for {symbol}: {e}")
+                    logger.debug(f"Failed to fetch profile for {symbol}: {safe_error(e)}")
                     return None
 
             # get_company_info substitutes "Other" when the profile carries no sector.
@@ -800,7 +735,7 @@ async def _update_company_profiles(
         logger.info(summary)
         return remaining
     except Exception as e:
-        logger.warning(f"Failed to update company profiles: {e}")
+        logger.warning(f"Failed to update company profiles: {safe_error(e)}")
         return None
 
 
@@ -881,7 +816,7 @@ async def _update_etf_metadata() -> int | None:
                     # otherwise pin ~4.7k entries in a process-lifetime dict.
                     info = await market_data_service.get_etf_info(symbol, use_cache=False)
                 except Exception as e:
-                    logger.debug(f"Failed to fetch etf/info for {symbol}: {e}")
+                    logger.debug(f"Failed to fetch etf/info for {symbol}: {safe_error(e)}")
                     return None
             if not info:
                 # Not an error: some symbols flagged as ETFs are ETNs or trusts that
@@ -957,7 +892,7 @@ async def _update_etf_metadata() -> int | None:
         logger.info(summary)
         return len(rows)
     except Exception as e:
-        logger.warning(f"Failed to update ETF metadata: {e}")
+        logger.warning(f"Failed to update ETF metadata: {safe_error(e)}")
         return None
 
 
@@ -1013,7 +948,7 @@ async def _update_dividends() -> int | None:
                     info = await market_data_service.get_dividends(symbol)
                 except Exception as e:
                     skipped["fetch failed"] += 1
-                    logger.debug(f"Failed to fetch dividends for {symbol}: {e}")
+                    logger.debug(f"Failed to fetch dividends for {symbol}: {safe_error(e)}")
                     return None
             if info.get("fetch_failed"):
                 skipped["fetch failed"] += 1
@@ -1075,7 +1010,7 @@ async def _update_dividends() -> int | None:
         logger.info(summary)
         return len(rows)
     except Exception as e:
-        logger.warning(f"Failed to update dividends: {e}")
+        logger.warning(f"Failed to update dividends: {safe_error(e)}")
         return None
 
 
@@ -1134,7 +1069,7 @@ async def _update_valuations() -> int | None:
             fx = fx_per_usd(await market_data_service._fmp_get("batch-forex-quotes"))
         except Exception as e:
             fx = {}
-            logger.debug(f"batch-forex-quotes failed: {e}")
+            logger.debug(f"batch-forex-quotes failed: {safe_error(e)}")
         if len(fx) < 2:
             msg = "Valuations: exchange rates unavailable, pass skipped; stored multiples left as they were"
             print(f"⚠️ {msg}", flush=True)
@@ -1177,7 +1112,7 @@ async def _update_valuations() -> int | None:
                 except Exception as e:
                     status = getattr(getattr(e, "response", None), "status_code", None)
                     skipped["throttled (429)" if status == 429 else "fetch failed"] += 1
-                    logger.debug(f"Failed to fetch ratios-ttm/income-statement-ttm for {symbol}: {e}")
+                    logger.debug(f"Failed to fetch ratios-ttm/income-statement-ttm for {symbol}: {safe_error(e)}")
                     return None
             if not data or not isinstance(data, list) or not isinstance(data[0], dict):
                 skipped["no data"] += 1
@@ -1198,7 +1133,7 @@ async def _update_valuations() -> int | None:
                 )
             except Exception as e:
                 # Never fail the pass over identity. Unverifiable does not block.
-                logger.debug(f"Identity check failed for {symbol}: {e}")
+                logger.debug(f"Identity check failed for {symbol}: {safe_error(e)}")
                 verdict = CANNOT_RESOLVE
             blocked = verdict == CONTRADICTION or check != "ok"
 
@@ -1260,7 +1195,7 @@ async def _update_valuations() -> int | None:
         logger.info(summary)
         return len(rows)
     except Exception as e:
-        logger.warning(f"Failed to update valuations: {e}")
+        logger.warning(f"Failed to update valuations: {safe_error(e)}")
         return None
 
 
@@ -1324,7 +1259,7 @@ async def refresh_stock_snapshots_job(api_key: str) -> None:
         print(f"✅ Snapshot refresh complete — {len(rows)} symbols", flush=True)
         logger.info(f"Snapshot refresh complete — {len(rows)} symbols")
     except Exception as exc:
-        print(f"❌ Snapshot refresh failed: {exc}", flush=True)
+        print(f"❌ Snapshot refresh failed: {safe_error(exc)}", flush=True)
         logger.exception("Snapshot refresh failed")
 
 
@@ -1405,36 +1340,12 @@ def _selftest() -> None:
     assert clean_multiple(0.001, _PB_FLOOR) is None             # mis-scaled book value
     assert clean_multiple(0.25, _PB_FLOOR) == Decimal("0.25")    # distressed, kept
     assert clean_multiple(0.26, _EV_EBITDA_FLOOR) is None
-    # _is_common_stock: real companies, share classes and awkward names stay in
-    for sym, name in [
-        ("AAPL", "Apple Inc."), ("BRK-B", "Berkshire Hathaway Inc."), ("BF-B", "Brown-Forman Corporation"),
-        ("MKC-V", "McCormick & Company, Incorporated"), ("PFBC", "Preferred Bank"),
-        ("APTS", "Preferred Apartment Communities, Inc."), ("IPHX", "Inflection Point Acquisition Corp. VIII"),
-        ("UAL", "United Airlines Holdings, Inc."), ("ACQU", "Acquire Holdings"),
-        ("GOOGL", "Alphabet Inc."), ("LBTYA", "Liberty Global Ltd."), ("SHOW", "ShowBiz Inc."),
-        ("ARM", "Arm Holdings plc American Depositary Shares"), ("TSM", "Taiwan Semiconductor Manufacturing Company Limited"),
-        ("ACN", "Accenture plc"), ("PBR-A", "Petróleo Brasileiro S.A. - Petrobras"),
-        ("JOYY", "JOYY, Inc. Sponsored ADR Class A"),
-    ]:
-        assert _is_common_stock(sym, name), (sym, name)
-    # ...and every instrument class found on the stock leg 2026-10-25 goes out
-    for sym, name in [
-        ("SCE-PG", "SCE Trust II TR PFD SECS 5.1%"), ("CELG-RI", "Bristol-Myers Squibb Company Contingent Value Rights"),
-        ("ACGCW", "ACP Holdings Acquisition Corp. Warrants"), ("IPHXU", "Inflection Point Acquisition Corp. VIII"),
-        ("SORNR", "Soren Acquisition Corp."), ("CGABL", "The Carlyle Group Inc. 4.625% Subordinated Notes due 2061"),
-        ("STRF", "MicroStrategy Incorporated 10.00% Series A Perpetual Strife Preferred Stock"),
-        ("DUKU", "Duke Energy Corporation Units 1.08.29"), ("MER-PK", "Bank of America Corp 6.45 % Notes 2018-15.12.66"),
-        ("AAC-UN", "Ares Acquisition Corporation II"), ("PEW-WT", "GrabAGun Digital Holdings Inc."),
-        ("CTA-PB", "EIDP, Inc. USD 4.50 Cum Pfd Registered Shs"), ("ETI-P", "Entergy Texas, Inc."),
-        ("GJO", "STRATS(SM) Trust for Wal-Mart Stores, Inc. Securities, Series 2004-5"),
-        ("NIOBW", "NioCorp Developments Ltd."), ("MDAIW", "Spectral AI, Inc."),
-        ("HVMCU", "Highview Merger Corp."), ("XSLLU", "Xsolla SPAC 1"), ("GHXIU", "Gores Holdings XI, Inc."),
-        ("TRGSR", "TRG Latin America Acquisitions Corp."), ("JONER", "Jones Ventures INTL Acquisition1 Corp"),
-        ("XYZP", "Depositary Shares each representing a 1/1000th interest in a 5.375% Series H Preferred"),
-        ("LILAP", "Liberty Latin America Ltd. 9% Cum Perp Red Pfd Shs Series A"),
-    ]:
-        assert not _is_common_stock(sym, name), (sym, name)
+    # The shared ticker filter (is_common_stock, is_us_symbol, is_us_exchange), with every
+    # instrument class found on the stock leg 2026-10-25
+    _listings_selftest()
+    # The universe asks FMP for exactly the venues the quote gate accepts
     assert set(_SCREENER_EXCHANGES.split(",")) == US_EXCHANGES
+    assert all(is_us_exchange(ex) for ex in _SCREENER_EXCHANGES.split(","))
     # The P/E cross-check has its own: python -m app.services.valuation_check --selftest
     print("refresh_stock_snapshots selftest OK")
 
@@ -1442,6 +1353,7 @@ def _selftest() -> None:
 if __name__ == "__main__":
     import sys
 
+    install_log_redaction()
     if "--selftest" in sys.argv[1:]:
         _selftest()
     elif "--valuations" in sys.argv[1:]:

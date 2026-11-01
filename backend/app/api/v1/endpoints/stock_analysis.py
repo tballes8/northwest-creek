@@ -2,7 +2,6 @@
 Stock AI analysis endpoint — on-demand plain-language summary of a stock's
 technical indicators.  Shares the same ai_analysis usage pool as portfolio analysis.
 """
-import re
 import time
 import asyncio
 import logging
@@ -12,7 +11,9 @@ from datetime import datetime, timezone
 
 from app.db.session import get_db
 from app.api.dependencies import get_current_user
-from app.db.models import User, FeatureUsage
+from app.core.redaction import safe_error
+from app.core.usage_limits import record_feature_usage
+from app.db.models import User
 from app.services.market_data import market_data_service
 from app.services.technical_indicators import technical_indicators, generate_summary, INDICATOR_HISTORY_DAYS
 from app.services.stock_analyzer import analyze_stock, forecast_stock_price
@@ -46,16 +47,6 @@ _FORECAST_TTL = 6 * 3600  # 6 hours
 _financials_ai_cache: dict[str, tuple[float, dict]] = {}
 _FINANCIALS_AI_TTL = 24 * 3600      # statements change quarterly; 24h caps cost
 _FINANCIALS_AI_SUPPRESSED_TTL = 3600  # shorter, so a mid-refresh ticker recovers same-day
-
-
-def _safe_error(e: Exception) -> str:
-    """Strip API keys and sensitive params from error messages."""
-    msg = str(e)
-    msg = re.sub(r'apiKey=[^&\s\'"]+', 'apiKey=***', msg)
-    msg = re.sub(r'apikey=[^&\s\'"]+', 'apikey=***', msg)
-    msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
-    msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg)
-    return msg
 
 
 def _strip_history(indicator_data):
@@ -137,8 +128,7 @@ async def stock_ai_analysis(
         )
 
         # Record usage (shared ai_analysis pool)
-        db.add(FeatureUsage(user_id=current_user.id, feature="ai_analysis"))
-        await db.commit()
+        await record_feature_usage(current_user, db, "ai_analysis")
 
         return {
             "summary": ai_summary,
@@ -150,7 +140,7 @@ async def stock_ai_analysis(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Could not generate AI analysis for {ticker.upper()}: {_safe_error(e)}",
+            detail=f"Could not generate AI analysis for {ticker.upper()}: {safe_error(e)}",
         )
 
 
@@ -301,8 +291,7 @@ async def stock_price_forecast(
         _forecast_cache[sym] = (time.time(), result)
 
         # Record usage (shared ai_analysis pool) only once a forecast exists
-        db.add(FeatureUsage(user_id=current_user.id, feature="ai_analysis"))
-        await db.commit()
+        await record_feature_usage(current_user, db, "ai_analysis")
 
         return result
 
@@ -311,7 +300,7 @@ async def stock_price_forecast(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Could not generate price forecast for {sym}: {_safe_error(e)}",
+            detail=f"Could not generate price forecast for {sym}: {safe_error(e)}",
         )
 
 
@@ -421,7 +410,7 @@ async def stock_ai_financials(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Could not load financials for {sym}: {_safe_error(e)}",
+            detail=f"Could not load financials for {sym}: {safe_error(e)}",
         )
 
     # A statement that failed to load is an error to retry, never a "no_data"
@@ -507,8 +496,7 @@ async def stock_ai_financials(
             sym, untraceable, fact_block.reasons, summary,
         )
 
-    db.add(FeatureUsage(user_id=current_user.id, feature="ai_analysis"))
-    await db.commit()
+    await record_feature_usage(current_user, db, "ai_analysis")
 
     payload = _financials_ai_response(sym, summary, None, generated_at)
     _financials_ai_cache[sym] = (time.time(), payload)

@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
 from app.core.entitlements import app_access_clause
+from app.core.redaction import safe_error
 from app.core.tier_limits import get_tier_limit
 from app.db.models import TechnicalAlert, User
 from app.services.email_service import email_service
@@ -169,7 +170,7 @@ class TechnicalAlertChecker:
                             )
 
                 except Exception as e:
-                    print(f"   ❌ Error processing {ticker}: {e}")
+                    print(f"   ❌ Error processing {ticker}: {safe_error(e)}")
 
         tasks = [
             process_ticker(ticker, ticker_alerts)
@@ -186,7 +187,7 @@ class TechnicalAlertChecker:
         try:
             historical = await market_data_service.get_historical_prices(ticker, days=INDICATOR_HISTORY_DAYS)
         except Exception as e:
-            print(f"   ⚠️  Could not fetch history for {ticker}: {e}")
+            print(f"   ⚠️  Could not fetch history for {ticker}: {safe_error(e)}")
             return None
 
         if len(historical) < 50:
@@ -469,7 +470,7 @@ class TechnicalAlertChecker:
                 "financials": financials,
             }
         except Exception as e:
-            print(f"   ⚠️  Could not fetch fundamentals for {ticker}: {e}")
+            print(f"   ⚠️  Could not fetch fundamentals for {ticker}: {safe_error(e)}")
             return None
 
     @staticmethod

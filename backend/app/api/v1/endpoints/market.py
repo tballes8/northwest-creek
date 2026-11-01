@@ -7,18 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.listings import is_common_stock, is_us_symbol
+from app.core.redaction import safe_error
 from app.db.models import StockSnapshot
 from app.db.session import get_db
 from app.services.market_data import market_data_service
 from app.utils.cache import SimpleCache
-
-
-def _safe_error(e: Exception) -> str:
-    msg = str(e)
-    msg = re.sub(r'apiKey=[^&\s\'"]+', 'apiKey=***', msg)
-    msg = re.sub(r'apikey=[^&\s\'"]+', 'apikey=***', msg)
-    msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
-    return msg
 
 
 router = APIRouter()
@@ -63,7 +57,7 @@ async def get_ticker_tape():
         items = []
         for item in raw:
             ticker = item.get("symbol", "")
-            if not ticker or market_data_service._is_warrant_ticker(ticker):
+            if not (is_us_symbol(ticker) and is_common_stock(ticker, item.get("name"))):
                 continue
             price = item.get("price")
             change_pct = item.get("changesPercentage")
@@ -81,7 +75,7 @@ async def get_ticker_tape():
         _ticker_tape_cache.set("tape", payload)
         return payload
     except Exception as e:
-        raise HTTPException(status_code=500, detail=_safe_error(e))
+        raise HTTPException(status_code=500, detail=safe_error(e))
 
 
 @router.get("/ticker-tape/screens")
@@ -138,7 +132,7 @@ async def get_screens_ticker_tape(db: AsyncSession = Depends(get_db)):
         def add(row, tag, cap):
             if len(items) >= cap or row.symbol in seen:
                 return
-            if market_data_service._is_warrant_ticker(row.symbol):
+            if not is_common_stock(row.symbol, row.name):
                 return
             company = _company_key(row.name, row.symbol)
             if company in seen_companies:
@@ -162,4 +156,4 @@ async def get_screens_ticker_tape(db: AsyncSession = Depends(get_db)):
         _screens_tape_cache.set("tape", payload)
         return payload
     except Exception as e:
-        raise HTTPException(status_code=500, detail=_safe_error(e))
+        raise HTTPException(status_code=500, detail=safe_error(e))

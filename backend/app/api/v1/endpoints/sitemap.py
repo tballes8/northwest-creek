@@ -13,9 +13,10 @@ router = APIRouter()
 
 BASE_URL = "https://nwc-analytics.com"
 
-# Static pages worth indexing. Deliberately excludes /login and /register —
-# auth pages have no search value and robots.txt blocks them.
-STATIC_PATHS = ["/", "/pricing", "/blogs"]
+# Public static pages worth indexing (routes outside SubscriptionGuard in the
+# frontend's App.tsx). Deliberately excludes /login and /register — auth pages
+# have no search value and robots.txt blocks them.
+STATIC_PATHS = ["/", "/pricing", "/blogs", "/faq", "/privacy", "/terms"]
 
 
 def _url_entry(loc: str, lastmod: datetime | None = None) -> str:

@@ -72,7 +72,8 @@ async def get_current_user_any_subscription(
     """
     Authenticated user whatever the state of their subscription.
 
-    Only for the routes someone without a live subscription needs to get one:
-    /auth/me, subscription status, (re)subscribe, the billing portal and cancelling.
+    Only for the routes someone without a live subscription still needs: /auth/me,
+    changing their password, subscription status, (re)subscribe, the billing portal
+    and cancelling.
     """
     return await _authenticate(credentials, db)

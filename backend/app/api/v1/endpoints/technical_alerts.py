@@ -16,6 +16,7 @@ from app.schemas.technical_alert import (
     _config_display,
 )
 from app.api.dependencies import get_current_user
+from app.core.redaction import safe_error
 from app.db.session import get_db
 from app.services.market_data import market_data_service
 from app.services.technical_alert_checker import technical_alert_checker
@@ -124,7 +125,7 @@ async def create_technical_alert(
             config=alert.config,
         )
     except Exception as e:
-        print(f"Warning: could not seed initial state for {alert.ticker}: {e}")
+        print(f"Warning: could not seed initial state for {alert.ticker}: {safe_error(e)}")
         initial_state = {}
 
     # ── Create alert ──────────────────────────────────────────────────

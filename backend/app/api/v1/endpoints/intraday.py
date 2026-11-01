@@ -11,7 +11,7 @@ import pytz
 import httpx
 from app.api.dependencies import get_current_user
 from app.config import get_settings
-from app.services.fmp_client import get_fmp_client, API_KEY
+from app.core.redaction import safe_error
 from app.services.market_data import market_data_service
 
 # Every route needs a live subscription (licensed FMP data; shared FMP quota)
@@ -27,21 +27,10 @@ MAX_BATCH_TICKERS = 200
 ET = pytz.timezone('US/Eastern')
 
 
-def _safe_error(e: Exception) -> str:
-    """Strip API keys and sensitive params from error messages."""
-    msg = str(e)
-    msg = re.sub(r'apiKey=[^&\s\'"]+', 'apiKey=***', msg)
-    msg = re.sub(r'apikey=[^&\s\'"]+', 'apikey=***', msg)
-    msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
-    msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg)
-    return msg
-
-
-
 async def _get_market_status() -> Optional[str]:
     """Fetch NASDAQ market status from FMP. Returns 'open', 'closed', or None."""
     try:
-        data = await _fmp_get("exchange-market-hours", {"exchange": "NASDAQ"})
+        data = await market_data_service._fmp_get("exchange-market-hours", {"exchange": "NASDAQ"})
         if data and isinstance(data, list) and len(data) > 0:
             is_open = data[0].get("isMarketOpen")
             if is_open is None:
@@ -77,7 +66,7 @@ async def _get_extended_hours_quotes(
     if not get_settings().FMP_BATCH_ENDPOINTS:
         return {}
     try:
-        data = await _fmp_get("batch-aftermarket-trade", {"symbols": symbols})
+        data = await market_data_service._fmp_get("batch-aftermarket-trade", {"symbols": symbols})
         if not data or not isinstance(data, list):
             return {}
 
@@ -143,7 +132,7 @@ async def _get_extended_hours_quotes(
 async def _get_holiday_dates() -> Set[date]:
     """Fetch NASDAQ holidays from FMP. Returns a set of fully-closed dates."""
     try:
-        data = await _fmp_get("holidays-by-exchange", {"exchange": "NASDAQ"})
+        data = await market_data_service._fmp_get("holidays-by-exchange", {"exchange": "NASDAQ"})
         if not data or not isinstance(data, list):
             return set()
         closed = set()
@@ -161,17 +150,6 @@ async def _get_holiday_dates() -> Set[date]:
 def _is_trading_day(d: date, holidays: Set[date]) -> bool:
     """Return True if d is a weekday and not a market holiday."""
     return d.weekday() < 5 and d not in holidays
-
-
-async def _fmp_get(path: str, params: dict = None) -> Any:
-    """FMP request helper."""
-    if params is None:
-        params = {}
-    params["apikey"] = API_KEY
-    client = get_fmp_client()
-    response = await client.get(path, params=params)
-    response.raise_for_status()
-    return response.json()
 
 
 @router.get("/batch")
@@ -254,7 +232,7 @@ async def get_batch_intraday_data(tickers: str) -> List[Dict[str, Any]]:
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch batch intraday data: {_safe_error(e)}"
+            detail=f"Failed to fetch batch intraday data: {safe_error(e)}"
         )
 
 
@@ -267,7 +245,7 @@ async def get_intraday_data(ticker: str) -> Dict[str, Any]:
     try:
         ticker_upper = ticker.upper()
 
-        data = await _fmp_get("quote", {"symbol": ticker_upper})
+        data = await market_data_service._fmp_get("quote", {"symbol": ticker_upper})
         market_status = await _get_market_status()
 
         regular_lookup = {ticker_upper: {"previousClose": None}}
@@ -317,7 +295,7 @@ async def get_intraday_data(ticker: str) -> Dict[str, Any]:
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch intraday data: {_safe_error(e)}"
+            detail=f"Failed to fetch intraday data: {safe_error(e)}"
         )
 
 
@@ -346,7 +324,7 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
                 continue
 
             try:
-                intraday_data = await _fmp_get(
+                intraday_data = await market_data_service._fmp_get(
                     "historical-chart/1min",
                     {
                         "symbol": ticker_upper,
@@ -378,9 +356,9 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
         # Fetch pre-computed SMAs from FMP technical indicators (parallel)
         sma_params = {"symbol": ticker_upper, "timeframe": "1day"}
         sma_20_data, sma_50_data, sma_200_data = await asyncio.gather(
-            _fmp_get("technical-indicators/sma", {**sma_params, "periodLength": 20}),
-            _fmp_get("technical-indicators/sma", {**sma_params, "periodLength": 50}),
-            _fmp_get("technical-indicators/sma", {**sma_params, "periodLength": 200}),
+            market_data_service._fmp_get("technical-indicators/sma", {**sma_params, "periodLength": 20}),
+            market_data_service._fmp_get("technical-indicators/sma", {**sma_params, "periodLength": 50}),
+            market_data_service._fmp_get("technical-indicators/sma", {**sma_params, "periodLength": 200}),
         )
 
         # Extract latest SMA value from each response (newest-first array)
@@ -460,7 +438,7 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
     except httpx.HTTPStatusError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch data from FMP API: {_safe_error(e)}"
+            detail=f"Failed to fetch data from FMP API: {safe_error(e)}"
         )
     except httpx.TimeoutException:
         raise HTTPException(
@@ -470,5 +448,5 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch intraday bars with moving averages: {_safe_error(e)}"
+            detail=f"Failed to fetch intraday bars with moving averages: {safe_error(e)}"
         )

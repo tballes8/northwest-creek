@@ -33,6 +33,7 @@ import pytz
 from sqlalchemy import select, delete, func, update, bindparam
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from app.core.redaction import install_log_redaction, safe_error
 from app.db.models import StockSnapshot, TickerDailyBar
 from app.db.session import async_session
 from app.services.market_data import market_data_service
@@ -122,7 +123,7 @@ async def _seed_symbol(symbol: str, sem: asyncio.Semaphore) -> list[dict]:
         try:
             history = await market_data_service.get_historical_prices(symbol, days=SEED_DAYS)
         except Exception as e:
-            logger.debug(f"seed {symbol} failed: {e}")
+            logger.debug(f"seed {symbol} failed: {safe_error(e)}")
             return []
     out = []
     for h in history:
@@ -259,13 +260,15 @@ async def compute_squeeze_job(api_key: str | None = None) -> None:
         )
         logger.info(f"Squeeze precompute: appended={appended} seeded={seeded} scored={computed}")
     except Exception as exc:
-        print(f"❌ Squeeze precompute failed: {exc}", flush=True)
+        print(f"❌ Squeeze precompute failed: {safe_error(exc)}", flush=True)
         logger.exception("Squeeze precompute failed")
         raise  # surface the failure so the process exits non-zero (Railway shows red)
 
 
 if __name__ == "__main__":
     from app.services.fmp_client import init_fmp_client, close_fmp_client
+
+    install_log_redaction()
 
     async def _main():
         await init_fmp_client()

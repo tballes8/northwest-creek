@@ -33,6 +33,7 @@ from decimal import Decimal
 
 from sqlalchemy import and_, delete, select
 
+from app.core.redaction import install_log_redaction, safe_error
 from app.db.models import SectorEtfDailyClose
 from app.db.session import async_session, engine
 from app.services.fmp_client import init_fmp_client, close_fmp_client
@@ -68,7 +69,7 @@ async def plan_repair() -> dict | None:
         try:
             history = await market_data_service.get_historical_prices(ticker, days=days)
         except Exception as exc:
-            print(f"Could not fetch EOD bars for {ticker}: {exc}. Nothing written; re-run later.")
+            print(f"Could not fetch EOD bars for {ticker}: {safe_error(exc)}. Nothing written; re-run later.")
             return None
         rows = sr._session_rows(ticker, history, now_et)
         if not rows:
@@ -190,4 +191,5 @@ async def main(apply: bool) -> None:
 
 
 if __name__ == "__main__":
+    install_log_redaction()
     asyncio.run(main(apply="--apply" in sys.argv[1:]))

@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.config import get_settings
+from app.core.redaction import install_log_redaction
 from app.api.v1.endpoints import (
     alerts, auth, dcf_valuation, portfolio,
     stocks, watchlist, technical_analysis, stripe_payments,
@@ -26,6 +27,10 @@ from app.tasks.audit_fmp_fields_task import fmp_field_audit_job
 from app.services.sector_rotation import append_today_closes
 from app.services.subscription_sync import reconcile_subscriptions
 
+
+# Credentials blanked from every log record in the process, the httpx logger's request
+# URLs (apikey included) among them. See app/core/redaction.py.
+install_log_redaction()
 
 settings = get_settings()
 _scheduler = AsyncIOScheduler()

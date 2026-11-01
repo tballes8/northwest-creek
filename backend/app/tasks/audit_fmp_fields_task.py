@@ -14,6 +14,7 @@ import asyncio
 import logging
 
 from app.config import get_settings
+from app.core.redaction import install_log_redaction, safe_error
 from app.services.fmp_field_audit import (
     run_audit,
     summarize,
@@ -36,7 +37,7 @@ async def fmp_field_audit_job() -> None:
     try:
         results = await run_audit(api_key)
     except Exception as e:  # noqa: BLE001
-        logger.error(f"FMP field audit run failed: {e}")
+        logger.error(f"FMP field audit run failed: {safe_error(e)}")
         return
 
     s = summarize(results)
@@ -68,5 +69,7 @@ async def fmp_field_audit_job() -> None:
 
 
 if __name__ == "__main__":
+    # Before basicConfig: at INFO the httpx logger prints every request URL, apikey included
+    install_log_redaction()
     logging.basicConfig(level=logging.INFO)
     asyncio.run(fmp_field_audit_job())

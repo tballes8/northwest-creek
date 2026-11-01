@@ -178,7 +178,8 @@ FMP_ENDPOINTS: list[dict[str, Any]] = [
     {"path": "holidays-by-exchange", "description": "Market holidays for an exchange",
      "used_by": ["api/v1/endpoints/intraday.py:131"], "key_fields": ["date", "isClosed"]},
     # `exchange` is load-bearing: _parse_ipo_response drops any row whose exchange is
-    # not in US_EXCHANGES, so a rename would silently let every foreign listing through.
+    # not a US one (app/core/listings.is_us_exchange), so a rename would silently let
+    # every foreign listing through.
     # priceRange is parsed null-safely (_parse_price_range returns (None, None)).
     # There is no issue-price field: _build_ipo_item derives it as dealSize / shares,
     # and only when actions == "Priced" (Expected deals' dealSize includes the 15%

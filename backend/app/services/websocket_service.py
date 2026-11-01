@@ -15,6 +15,7 @@ from typing import Set, Dict, Optional, Callable, Awaitable
 from datetime import datetime, time as dt_time
 import pytz
 from app.config import get_settings
+from app.core.redaction import safe_error
 
 # How often to poll FMP for price updates (seconds)
 POLL_INTERVAL = 20
@@ -183,7 +184,7 @@ class LivePriceService:
                             print(f"⚠️ Alert check error for {ticker}: {e}")
 
             except Exception as e:
-                print(f"❌ Error in FMP price poller: {e}")
+                print(f"❌ Error in FMP price poller: {safe_error(e)}")
 
             await asyncio.sleep(interval)
 

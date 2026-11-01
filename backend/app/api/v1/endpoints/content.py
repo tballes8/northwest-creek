@@ -20,6 +20,7 @@ from app.schemas.content import (
     BlogPostCreate, BlogPostUpdate, BlogPostResponse, BlogPostListItem,
     ChangelogReviewRequest, MaintenanceReportResponse, MaintenanceReportListItem,
 )
+from app.core.redaction import safe_error
 from app.services.changelog_review import assess_changelog, redact_secrets
 
 # ── Auth dependencies ──────────────────────────────────────
@@ -83,22 +84,6 @@ async def list_tutorial_categories(
         .order_by(Tutorial.category)
     )
     return [row[0] for row in result.all() if row[0]]
-
-
-@router.get("/tutorials/{tutorial_id}", response_model=TutorialResponse)
-async def get_tutorial(
-    tutorial_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Get a single tutorial."""
-    result = await db.execute(
-        select(Tutorial).where(Tutorial.id == tutorial_id, Tutorial.is_published == True)
-    )
-    tutorial = result.scalar_one_or_none()
-    if not tutorial:
-        raise HTTPException(status_code=404, detail="Tutorial not found")
-    return tutorial
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -331,7 +316,7 @@ async def review_changelog(
     try:
         markdown = await assess_changelog(source_text, data.vendor)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"AI review failed: {e}")
+        raise HTTPException(status_code=502, detail=f"AI review failed: {safe_error(e)}")
 
     report = MaintenanceReport(
         vendor=(data.vendor or "FMP").strip(),

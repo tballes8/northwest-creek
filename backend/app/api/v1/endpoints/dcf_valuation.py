@@ -3,31 +3,20 @@ DCF Valuation API Endpoints - Discounted Cash Flow Analysis
 ⭐ PAID TIERS ONLY
 """
 import asyncio
-import re
-from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func as sa_func
 from typing import Optional, Dict, Any
-from app.db.models import User, FeatureUsage
+from app.db.models import User
 from app.api.dependencies import get_current_user
+from app.core.redaction import print_redacted_exc, safe_error
+from app.core.usage_limits import check_feature_limit, record_feature_usage
 from app.db.session import get_db
 from app.services.market_data import market_data_service
 from app.services.financials_service import get_company_financials
 from app.services.edgar_identity import is_contradicted
 from app.services.valuation_check import vendor_per_share_ok
 from app.services.dcf_service import compute_dcf, calculate_reverse_dcf
-from app.core.tier_limits import get_tier_limit, get_review_period, get_upgrade_tier
 
-
-def _safe_error(e: Exception) -> str:
-    """Strip API keys and sensitive params from error messages."""
-    msg = str(e)
-    msg = re.sub(r'apiKey=[^&\s\'"]+', 'apiKey=***', msg)
-    msg = re.sub(r'apikey=[^&\s\'"]+', 'apikey=***', msg)
-    msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
-    msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg)
-    return msg
 
 router = APIRouter()
 
@@ -159,51 +148,12 @@ async def check_dcf_limit(user: User, db: AsyncSession) -> int:
 
     Returns the current usage count. Raises 403 if the limit is exceeded.
     """
-    limit = get_tier_limit(user.subscription_tier, "dcf_valuations")
-    period = get_review_period(user.subscription_tier)
-
-    now = datetime.now(timezone.utc)
-    if period == "day":
-        window_start = now - timedelta(days=1)
-    else:  # "week"
-        window_start = now - timedelta(weeks=1)
-
-    result = await db.execute(
-        select(sa_func.count(FeatureUsage.id))
-        .where(
-            FeatureUsage.user_id == user.id,
-            FeatureUsage.feature == "dcf_valuations",
-            FeatureUsage.used_at >= window_start,
-        )
-    )
-    current_count = result.scalar() or 0
-
-    if current_count >= limit:
-        next_tier = get_upgrade_tier(user.subscription_tier)
-        if next_tier:
-            next_limit = get_tier_limit(next_tier, "dcf_valuations")
-            upgrade_msg = f" Upgrade to {next_tier.capitalize()} for {next_limit} DCF valuations per {get_review_period(next_tier)}."
-        else:
-            upgrade_msg = ""
-
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "message": f"DCF valuation limit reached. {user.subscription_tier.capitalize()} tier allows {limit} per {period}.{upgrade_msg}",
-                "current_usage": current_count,
-                "max_usage": limit,
-                "period": period,
-            }
-        )
-
-    return current_count
+    return await check_feature_limit(user, db, "dcf_valuations", "DCF valuation", "DCF valuations")
 
 
 async def record_dcf_usage(user: User, db: AsyncSession) -> None:
     """Record a DCF valuation usage event."""
-    usage = FeatureUsage(user_id=user.id, feature="dcf_valuations")
-    db.add(usage)
-    await db.commit()
+    await record_feature_usage(user, db, "dcf_valuations")
 
 
 @router.get("/suggestions/{ticker}")
@@ -470,7 +420,7 @@ async def get_dcf_suggestions(
                     discount_from_actuals = True
 
         except Exception as fin_err:
-            print(f"⚠️ Could not fetch financials for DCF suggestions ({ticker}): {_safe_error(fin_err)}")
+            print(f"⚠️ Could not fetch financials for DCF suggestions ({ticker}): {safe_error(fin_err)}")
             growth_from_actuals = False
             growth_from_consensus = False
             discount_from_actuals = False
@@ -588,12 +538,11 @@ async def get_dcf_suggestions(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"DCF suggestions error for {ticker}: {_safe_error(e)}")
-        import traceback
-        traceback.print_exc()
+        print(f"DCF suggestions error for {ticker}: {safe_error(e)}")
+        print_redacted_exc()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Could not generate suggestions for {ticker}: {_safe_error(e)}"
+            detail=f"Could not generate suggestions for {ticker}: {safe_error(e)}"
         )
 
 
@@ -822,7 +771,7 @@ async def calculate_dcf(
                 fcf_source=fcf_source,
             )
         except Exception as rev_err:
-            print(f"⚠️ Reverse DCF failed for {ticker}: {_safe_error(rev_err)}")
+            print(f"⚠️ Reverse DCF failed for {ticker}: {safe_error(rev_err)}")
             reverse_dcf = {
                 "converged": False,
                 "implied_growth_low": None,
@@ -915,10 +864,9 @@ async def calculate_dcf(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"DCF calculation error for {ticker}: {_safe_error(e)}")
-        import traceback
-        traceback.print_exc()
+        print(f"DCF calculation error for {ticker}: {safe_error(e)}")
+        print_redacted_exc()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Could not calculate DCF for {ticker}: {_safe_error(e)}"
+            detail=f"Could not calculate DCF for {ticker}: {safe_error(e)}"
         )

@@ -11,16 +11,17 @@ Two consumers share this module:
   - scripts/audit_fmp_fields.py  — CLI (reads key from env/.env, prints report)
   - app/tasks/audit_fmp_fields_task.py — weekly scheduled job (emails on drift)
 
-This module depends only on httpx + stdlib + the (pure) endpoint registry — it
-does NOT import app.config/fmp_client, so the CLI stays runnable without booting
-the app. The API key and base URL are passed in by the caller.
+This module depends only on httpx + stdlib + the (pure) endpoint registry and
+redaction helper — it does NOT import app.config/fmp_client, so the CLI stays
+runnable without booting the app. The API key and base URL are passed in by the
+caller.
 """
 import asyncio
-import re
 from datetime import date, timedelta
 
 import httpx
 
+from app.core.redaction import safe_error
 from app.services.fmp_endpoint_registry import FMP_ENDPOINTS
 
 FMP_BASE = "https://financialmodelingprep.com/stable/"
@@ -95,10 +96,6 @@ def build_sample_params() -> dict[str, dict]:
     }
 
 
-def _redact(msg: str) -> str:
-    return re.sub(r"(apikey|api_key|token)=[^&\s'\"]+", r"\1=***", msg)
-
-
 def _first_record_keys(data) -> set[str] | None:
     """Top-level field names of the first record, or None if there's no record."""
     if isinstance(data, list):
@@ -124,7 +121,7 @@ async def _audit_one(client: httpx.AsyncClient, sem: asyncio.Semaphore,
             r.raise_for_status()
             data = r.json()
         except Exception as e:  # noqa: BLE001 - report, don't crash the whole run
-            return {"path": path, "status": "ERROR", "detail": _redact(str(e))}
+            return {"path": path, "status": "ERROR", "detail": safe_error(e)}
 
     keys = _first_record_keys(data)
     if keys is None:

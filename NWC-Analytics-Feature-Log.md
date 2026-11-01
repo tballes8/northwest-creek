@@ -1,6 +1,6 @@
 # NWC-Analytics — Shipped Features Log
 
-**Last Updated:** October 24, 2026  
+**Last Updated:** October 31, 2026  
 **Purpose:** Cross-project reference document. Attach to NWC Marketing, NWC Blog/SM Post, NWC Enhancements, and NWC Sandbox projects so all workstreams have visibility into what has shipped, what tier it lives on, and what content angles it unlocks.
 
 ---
@@ -254,7 +254,9 @@ Each entry follows a consistent format:
 
 ---
 
-#### SMS Alerts — Twilio Integration & Phone Verification
+#### SMS Alerts — Twilio Integration & Phone Verification (removed)
+
+> **Removed 2026-10-30. Do not market.** SMS alerts, phone verification and the Twilio integration were taken out of the product. Every alert is delivered by email only.
 
 **What It Does:** Added SMS text alert capability to the platform. Users can add and verify a phone number via a one-time passcode flow, then opt individual price alerts into SMS notification on creation or from the alert list. Verification is required before any SMS sends. Includes a new phone management API, OTP generation and validation, and Twilio integration for message delivery.
 
@@ -271,7 +273,7 @@ Each entry follows a consistent format:
 
 #### Background Alert Checker — Price Monitoring Engine
 
-**What It Does:** Built the background service that actually monitors prices against active alerts and fires notifications when conditions are met. Previously alerts existed in the database but nothing ever evaluated them. The checker hooks into the live WebSocket price stream, evaluates price alerts on every trade tick with throttling to prevent database overload, marks triggered alerts as inactive, sends SMS via Twilio and styled HTML email via SendGrid, and broadcasts a real-time WebSocket event for frontend notifications.
+**What It Does:** Built the background service that actually monitors prices against active alerts and fires notifications when conditions are met. Previously alerts existed in the database but nothing ever evaluated them. The checker hooks into the live WebSocket price stream, evaluates price alerts on every trade tick with throttling to prevent database overload, marks triggered alerts as inactive, sends a styled HTML email, and broadcasts a real-time WebSocket event for frontend notifications. (Corrected 2026-10-31: email goes out through Postmark, not SendGrid, and the Twilio SMS path was removed on 2026-10-30.)
 
 **Tier Availability:** All tiers with alerts access
 
@@ -518,7 +520,7 @@ Each entry follows a consistent format:
 
 **What It Does:** Renamed the existing VWAP indicator to MVWAP (Multi-Day VWAP) to accurately reflect that it computes a cumulative running average across the selected date range rather than resetting each session. Clicking the MVWAP summary card now opens a modal showing a true single-session intraday VWAP — calculated from 1-minute bars, resetting at market open — displayed as a dashed amber line overlaid on a price area chart. The modal footer shows the current VWAP value, current price, and an ABOVE/BELOW signal badge.
 
-**Tier Availability:** All tiers (MVWAP chart); Advanced Charts required for intraday data (Casual and above)
+**Tier Availability:** All tiers (the MVWAP chart and the intraday VWAP modal)
 
 **Marketing Angle:** True intraday VWAP is one of the most widely used institutional trading benchmarks — it tells traders whether price is tracking above or below where the market has been doing business all day. Surfacing it as a one-click modal gives retail investors access to a signal that previously required dedicated intraday charting software.
 
@@ -943,9 +945,9 @@ Each entry follows a consistent format:
 
 #### Fundamental Company Screener
 
-**What It Does:** A full stock screener on the Stocks page that filters the ~5,000-name daily snapshot universe on both fundamental and technical criteria in one panel. Fundamental filters: price, market cap, daily change %, **dividend yield %** (min/max), **beta** (min/max), sector, and industry (the industry dropdown is data-driven and narrows to the chosen sector). Liquidity filters: trading volume and dollar volume. Positioning filters: % from 52-week high/low, plus moving-average conditions (Golden Cross, price above 50-day MA, price above 200-day MA) and the full volatility-squeeze set (in-squeeze, minimum days coiling, maximum BB÷KC tightness, and fired-within-N-days). Universe controls: exchange toggles (NYSE / NASDAQ / AMEX) and an "Exclude ETFs & Funds" checkbox that is on by default. Results are sortable by any core column — including dividend yield and beta — paginated, stamped with a "data as of" time, and each row opens an inline price chart (Active/Professional). The screener ships with one-click presets — Near 52-Week High, Oversold Quality, Golden Cross, High Volume Breakout, Momentum Leaders, Near/at 52-Week Low, Death Cross, Gap Up, Gap Down, **Dividend Income**, In Squeeze, and Squeeze Fired — and users can save their own screens (count gated by tier). Dividend yield is derived from each company's trailing annual dividend (captured on the daily universe rebuild from FMP's company-screener) against the live price, so a non-payer reads as no yield rather than a misleading zero.
+**What It Does:** A full stock screener on the Stocks page that filters the ~5,000-name daily snapshot universe on both fundamental and technical criteria in one panel. Fundamental filters: price, market cap, daily change %, **dividend yield %** (min/max), **beta** (min/max), sector, and industry (the industry dropdown is data-driven and narrows to the chosen sector). Liquidity filters: trading volume and dollar volume. Positioning filters: % from 52-week high/low, plus moving-average conditions (Golden Cross, price above 50-day MA, price above 200-day MA) and the full volatility-squeeze set (in-squeeze, minimum days coiling, maximum BB÷KC tightness, and fired-within-N-days). Universe controls: exchange toggles (NYSE / NASDAQ / AMEX) and an "Exclude ETFs & Funds" checkbox that is on by default. Results are sortable by any core column — including dividend yield and beta — paginated, stamped with a "data as of" time, and each row opens an inline price chart (every plan since 2026-10-31; it was Active/Professional before). The screener ships with one-click presets — Near 52-Week High, Oversold Quality, Golden Cross, High Volume Breakout, Momentum Leaders, Near/at 52-Week Low, Death Cross, Gap Up, Gap Down, **Dividend Income**, In Squeeze, and Squeeze Fired — and users can save their own screens (count gated by tier). Dividend yield is derived from each company's trailing annual dividend (captured on the daily universe rebuild from FMP's company-screener) against the live price, so a non-payer reads as no yield rather than a misleading zero.
 
-**Tier Availability:** All tiers can run the screener, use presets, and filter by dividend yield. Saved-screen count is tier-gated; the inline per-result price chart is Active and Professional.
+**Tier Availability:** All tiers can run the screener, use presets, and filter by dividend yield. Saved-screen count is tier-gated. The inline per-result price chart is on every plan (since 2026-10-31).
 
 **Marketing Angle:** The technical screener finds setups — this one finds companies. Income and value investors can build a candidate universe by dividend yield, market cap, and sector, then layer on moving-average and squeeze conditions to time an entry — a full top-down research workflow without leaving the platform. The dividend-yield filter directly serves income investors (with a one-click Dividend Income preset for "quality names paying 3%+"), while the beta filter lets risk-conscious investors screen for defensive, low-volatility names or, conversely, high-beta movers — matching the candidate universe to their risk tolerance before they ever look at a chart.
 
@@ -1470,7 +1472,7 @@ Also shipped (October 1): position notes that are too long for the column are cu
 
 **What It Does:** The intraday chart (opened from a ticker on the Stocks screener, Portfolio or Watchlist) now draws a dashed reference line at the day's opening price, labeled with that price. The price line turns **green while the stock trades at or above the open and red while it trades below it**, switching exactly where it crosses. The chart's scale always keeps the open line in view. On a day the market is closed, the chart uses the open of the session it is actually showing.
 
-**Tier Availability:** All tiers with intraday chart access (Stocks, Portfolio, Watchlist)
+**Tier Availability:** All tiers (the intraday chart from the Stocks screener, Portfolio and Watchlist)
 
 **Marketing Angle:** The daily change figure answers "how is it doing versus yesterday?" The open line answers a different question intraday traders care about: "has today's session been buyers or sellers?" Biohaven (BHVN) on October 22 shows why they differ: it gapped up 37% at the open, then sold off all session, so the header read **+26%** while the line ran red from the first few minutes. Gap-and-fade, gap-and-go, and an opening-range breakout are all visible at a glance now, without the user drawing the line themselves.
 

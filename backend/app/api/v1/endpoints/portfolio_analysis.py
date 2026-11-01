@@ -5,16 +5,18 @@ Available to Casual, Active, and Professional tiers.
 import asyncio
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func as sa_func
-from datetime import datetime, timezone, timedelta
+from sqlalchemy import select
+from datetime import datetime, timezone
 
 from app.db.session import get_db
 from app.api.dependencies import get_current_user
-from app.db.models import User, Portfolio, FeatureUsage
+from app.core.redaction import safe_error
+from app.core.usage_limits import check_feature_limit, record_feature_usage
+from app.db.models import User, Portfolio
 from app.services.market_data import market_data_service, evaluate_dividend
 from app.services.portfolio_analyzer import analyze_portfolio
 from app.api.v1.endpoints.stocks import get_index_quotes
-from app.core.tier_limits import get_tier_limit, get_review_period, get_upgrade_tier
+from app.core.tier_limits import get_tier_limit, get_upgrade_tier
 
 router = APIRouter()
 
@@ -31,35 +33,7 @@ async def check_ai_analysis_access(user: User, db: AsyncSession) -> None:
             detail=f"AI Portfolio Analysis is not available on the {user.subscription_tier.capitalize()} plan.{upgrade_msg}",
         )
 
-    period = get_review_period(user.subscription_tier)
-    now = datetime.now(timezone.utc)
-    window_start = now - timedelta(days=1) if period == "day" else now - timedelta(weeks=1)
-
-    result = await db.execute(
-        select(sa_func.count(FeatureUsage.id)).where(
-            FeatureUsage.user_id == user.id,
-            FeatureUsage.feature == "ai_analysis",
-            FeatureUsage.used_at >= window_start,
-        )
-    )
-    current_count = result.scalar() or 0
-
-    if current_count >= limit:
-        next_tier = get_upgrade_tier(user.subscription_tier)
-        if next_tier:
-            next_limit = get_tier_limit(next_tier, "ai_analysis")
-            upgrade_msg = f" Upgrade to {next_tier.capitalize()} for {next_limit} analyses per {get_review_period(next_tier)}."
-        else:
-            upgrade_msg = ""
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "message": f"AI analysis limit reached. {user.subscription_tier.capitalize()} tier allows {limit} per {period}.{upgrade_msg}",
-                "current_usage": current_count,
-                "max_usage": limit,
-                "period": period,
-            },
-        )
+    await check_feature_limit(user, db, "ai_analysis", "AI analysis", "analyses")
 
 
 @router.post("/analyze")
@@ -98,7 +72,7 @@ async def analyze_user_portfolio(
     )
     for ticker, result in zip(tickers, div_results):
         if isinstance(result, Exception):
-            print(f"Portfolio analysis: dividend fetch raised for {ticker}: {result}")
+            print(f"Portfolio analysis: dividend fetch raised for {ticker}: {safe_error(result)}")
             dividend_unknown.append(ticker.upper())
         elif result.get("fetch_failed"):
             dividend_unknown.append(ticker.upper())
@@ -179,7 +153,7 @@ async def analyze_user_portfolio(
                 })
     except Exception as e:
         # The prompt already says "Market data unavailable"; just make it visible
-        print(f"Portfolio analysis: market context unavailable: {e}")
+        print(f"Portfolio analysis: market context unavailable: {safe_error(e)}")
 
     summary = await analyze_portfolio(
         positions=positions,
@@ -194,8 +168,7 @@ async def analyze_user_portfolio(
     )
 
     # Record usage after a successful call
-    db.add(FeatureUsage(user_id=current_user.id, feature="ai_analysis"))
-    await db.commit()
+    await record_feature_usage(current_user, db, "ai_analysis")
 
     return {
         "summary": summary,

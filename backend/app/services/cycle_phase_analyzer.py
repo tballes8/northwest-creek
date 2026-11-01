@@ -19,6 +19,7 @@ import httpx
 from sqlalchemy import select
 
 from app.config import get_settings
+from app.core.redaction import safe_error
 from app.db.models import MacroIndicator
 from app.db.session import async_session
 from app.services.anthropic_response import extract_text
@@ -206,7 +207,7 @@ async def synthesize_cycle_phase(end_date: date_cls) -> Optional[dict[str, Any]]
             data = resp.json()
             raw_text = extract_text(data).strip()
     except Exception as exc:
-        logger.warning(f"Anthropic call failed during cycle phase synthesis: {exc}")
+        logger.warning(f"Anthropic call failed during cycle phase synthesis: {safe_error(exc)}")
         return None
 
     if raw_text.startswith("```"):

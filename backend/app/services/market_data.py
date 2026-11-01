@@ -8,6 +8,8 @@ import httpx
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone, timedelta, date
 from app.config import get_settings
+from app.core.listings import is_common_stock, is_us_symbol
+from app.core.redaction import safe_error
 from app.services.fmp_client import get_fmp_client
 from app.utils.cache import SimpleCache
 
@@ -42,16 +44,6 @@ def _retry_after_seconds(response) -> float | None:
         return None
 
 settings = get_settings()
-
-
-def _safe_error(e: Exception) -> str:
-    """Strip API keys and sensitive params from error messages."""
-    msg = str(e)
-    msg = re.sub(r'apiKey=[^&\s\'"]+', 'apiKey=***', msg)
-    msg = re.sub(r'apikey=[^&\s\'"]+', 'apikey=***', msg)
-    msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
-    msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg)
-    return msg
 
 
 def _safe_int(value: Any, default: int = 0) -> int:
@@ -303,19 +295,6 @@ class MarketDataService:
         self._dividend_cache = SimpleCache(ttl_seconds=900)
         self._etf_info_cache = SimpleCache(ttl_seconds=86400)  # 24 hours — fund metadata changes rarely
 
-    @staticmethod
-    def _is_warrant_ticker(ticker: str) -> bool:
-        """Fast heuristic pre-filter for obvious warrant tickers."""
-        t = ticker.upper().strip()
-        for suffix in ('.WS', '.WT', '.W', '+WS', '+WT', '+W', '/WS', '/WT', '/W'):
-            if t.endswith(suffix):
-                return True
-        if t.endswith('WW') or t.endswith('+'):
-            return True
-        if len(t) > 4 and t.endswith('WS') and t[-3].isalpha():
-            return True
-        return False
-
     async def _fmp_get(self, path: str, params: dict = None) -> Any:
         """Central FMP request helper. Appends apikey and handles errors.
 
@@ -396,9 +375,9 @@ class MarketDataService:
         except httpx.TimeoutException:
             raise ValueError(f"Timeout fetching data for {ticker}")
         except httpx.HTTPError as e:
-            raise ValueError(f"HTTP error fetching data for {ticker}: {_safe_error(e)}")
+            raise ValueError(f"HTTP error fetching data for {ticker}: {safe_error(e)}")
         except Exception as e:
-            raise ValueError(f"Error fetching quote for {ticker}: {_safe_error(e)}")
+            raise ValueError(f"Error fetching quote for {ticker}: {safe_error(e)}")
 
     async def get_quote_rows(self, symbols: List[str]) -> List[Dict[str, Any]]:
         """Raw FMP quote rows for a list of symbols: the one path for quoting a list.
@@ -471,7 +450,7 @@ class MarketDataService:
             return quotes
 
         except Exception as e:
-            print(f"Error fetching batch quotes: {_safe_error(e)}")
+            print(f"Error fetching batch quotes: {safe_error(e)}")
             return {}
 
     async def get_company_info(self, ticker: str) -> Dict[str, Any]:
@@ -536,9 +515,9 @@ class MarketDataService:
         except httpx.TimeoutException:
             raise ValueError(f"Timeout fetching company info for {ticker}")
         except httpx.HTTPError as e:
-            raise ValueError(f"HTTP error fetching company info for {ticker}: {_safe_error(e)}")
+            raise ValueError(f"HTTP error fetching company info for {ticker}: {safe_error(e)}")
         except Exception as e:
-            raise ValueError(f"Error fetching company info for {ticker}: {_safe_error(e)}")
+            raise ValueError(f"Error fetching company info for {ticker}: {safe_error(e)}")
 
     async def get_etf_info(
         self, ticker: str, *, use_cache: bool = True
@@ -648,9 +627,9 @@ class MarketDataService:
         except httpx.TimeoutException:
             raise ValueError(f"Timeout fetching historical data for {ticker}")
         except httpx.HTTPError as e:
-            raise ValueError(f"HTTP error fetching historical data for {ticker}: {_safe_error(e)}")
+            raise ValueError(f"HTTP error fetching historical data for {ticker}: {safe_error(e)}")
         except Exception as e:
-            raise ValueError(f"Error fetching historical data for {ticker}: {_safe_error(e)}")
+            raise ValueError(f"Error fetching historical data for {ticker}: {safe_error(e)}")
 
     async def _news_name_tokens(self, ticker: str) -> set:
         """Name tokens used to gate news for `ticker`. An empty set means no
@@ -662,7 +641,7 @@ class MarketDataService:
             profile = await self.get_company_info(ticker)
         except Exception as e:
             print(f"news/{ticker}: profile unavailable, skipping collision "
-                  f"guard ({_safe_error(e)})")
+                  f"guard ({safe_error(e)})")
             return set()
         if str(profile.get("type") or "").upper() in _FUND_PROFILE_TYPES:
             return set()
@@ -732,8 +711,8 @@ class MarketDataService:
             return articles
 
         except Exception as e:
-            print(f"Error fetching news for {ticker}: {_safe_error(e)}")
-            raise Exception(f"Failed to fetch news: {_safe_error(e)}")
+            print(f"Error fetching news for {ticker}: {safe_error(e)}")
+            raise Exception(f"Failed to fetch news: {safe_error(e)}")
 
     async def get_stock_news_rest(self, ticker: str, limit: int = 3) -> List[Dict[str, Any]]:
         """Alias for get_stock_news — kept for backward compatibility."""
@@ -767,7 +746,7 @@ class MarketDataService:
             return articles
 
         except Exception as e:
-            print(f"Error fetching general market news: {_safe_error(e)}")
+            print(f"Error fetching general market news: {safe_error(e)}")
             return []
 
 # Mapping from FMP frequency strings to annual payment counts
@@ -853,7 +832,7 @@ class MarketDataService:
             return result
 
         except Exception as e:
-            print(f"Error fetching dividends for {ticker}: {e}")
+            print(f"Error fetching dividends for {ticker}: {safe_error(e)}")
             # fetch_failed tells the screener's dividend pass to skip this symbol.
             # Without it an empty history is indistinguishable from "no dividends",
             # which is how a 429 burst once rewrote 2,186 payers as non-payers.
@@ -866,8 +845,9 @@ class MarketDataService:
         
     async def get_top_gainers(self, limit: int = 10) -> Dict[str, Any]:
         """
-        Get top stock gainers from FMP /stable/gainers.
-        Heuristic filter removes obvious warrants.
+        Get top stock gainers from FMP /stable/biggest-gainers, US-listed common
+        stock only (app/core/listings.py drops foreign lines, warrants, units,
+        rights, preferreds and notes).
         """
         try:
             if limit < 1 or limit > 50:
@@ -885,7 +865,7 @@ class MarketDataService:
             filtered = []
             for item in data:
                 ticker = item.get("symbol", "")
-                if self._is_warrant_ticker(ticker):
+                if not (is_us_symbol(ticker) and is_common_stock(ticker, item.get("name"))):
                     continue
 
                 filtered.append({
@@ -905,12 +885,12 @@ class MarketDataService:
             }
 
         except Exception as e:
-            raise Exception(f"Failed to fetch top gainers: {_safe_error(e)}")
+            raise Exception(f"Failed to fetch top gainers: {safe_error(e)}")
 
     async def get_top_losers(self, limit: int = 10) -> Dict[str, Any]:
         """
-        Get top stock losers from FMP /stable/losers.
-        Heuristic filter removes obvious warrants.
+        Get top stock losers from FMP /stable/biggest-losers, filtered as
+        get_top_gainers is.
         """
         try:
             if limit < 1 or limit > 50:
@@ -928,7 +908,7 @@ class MarketDataService:
             filtered = []
             for item in data:
                 ticker = item.get("symbol", "")
-                if self._is_warrant_ticker(ticker):
+                if not (is_us_symbol(ticker) and is_common_stock(ticker, item.get("name"))):
                     continue
 
                 filtered.append({
@@ -948,7 +928,7 @@ class MarketDataService:
             }
 
         except Exception as e:
-            raise Exception(f"Failed to fetch top losers: {_safe_error(e)}")
+            raise Exception(f"Failed to fetch top losers: {safe_error(e)}")
 
 
 # Singleton instance

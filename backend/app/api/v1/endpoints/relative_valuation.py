@@ -12,26 +12,24 @@ point. P/S is the central estimate for low-earnings names; the P/E method is
 flagged unreliable when the trailing multiple is extreme.
 """
 import asyncio
-import re
-from datetime import datetime, timedelta, timezone, date
 from statistics import median
 from typing import Optional, List, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_user
+from app.core.redaction import safe_error
+from app.core.usage_limits import check_feature_limit, record_feature_usage
 from app.db.session import get_db
-from app.db.models import User, FeatureUsage
+from app.db.models import User
 from app.services.market_data import market_data_service
 from app.services.financials_service import get_company_financials, compute_peer_fundamentals
 from app.services.edgar_identity import is_contradicted
 from app.services.analyst_estimates import estimates_to_usd, fetch_estimates
 from app.services.fx import get_fx_per_usd, get_reporting_currency, usd_rate
 from app.services.valuation_check import check_against_quarters, multiple_or_none, PE_FLOOR, EV_EBITDA_FLOOR
-from app.core.tier_limits import get_tier_limit, get_review_period, get_upgrade_tier
 
 
 # ── Tier gating ──────────────────────────────────────────────────────────
@@ -40,16 +38,6 @@ RELVAL_MIN_TIER = "casual"
 
 # Rank order for "tier >= RELVAL_MIN_TIER" comparisons.
 _TIER_RANK = {"beginner": 0, "casual": 1, "active": 2, "professional": 3}
-
-
-def _safe_error(e: Exception) -> str:
-    """Strip API keys and sensitive params from error messages."""
-    msg = str(e)
-    msg = re.sub(r'apiKey=[^&\s\'"]+', 'apiKey=***', msg)
-    msg = re.sub(r'apikey=[^&\s\'"]+', 'apikey=***', msg)
-    msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg)
-    msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg)
-    return msg
 
 
 router = APIRouter()
@@ -74,53 +62,14 @@ async def check_relval_limit(user: User, db: AsyncSession) -> int:
 
     Returns the current usage count. Raises 403 if the limit is exceeded.
     """
-    limit = get_tier_limit(user.subscription_tier, "relval_valuations")
-    period = get_review_period(user.subscription_tier)
-
-    now = datetime.now(timezone.utc)
-    window_start = now - (timedelta(days=1) if period == "day" else timedelta(weeks=1))
-
-    result = await db.execute(
-        select(sa_func.count(FeatureUsage.id)).where(
-            FeatureUsage.user_id == user.id,
-            FeatureUsage.feature == "relval_valuations",
-            FeatureUsage.used_at >= window_start,
-        )
+    return await check_feature_limit(
+        user, db, "relval_valuations", "Relative valuation", "relative valuations",
     )
-    current_count = result.scalar() or 0
-
-    if current_count >= limit:
-        next_tier = get_upgrade_tier(user.subscription_tier)
-        if next_tier:
-            next_limit = get_tier_limit(next_tier, "relval_valuations")
-            upgrade_msg = (
-                f" Upgrade to {next_tier.capitalize()} for {next_limit} relative "
-                f"valuations per {get_review_period(next_tier)}."
-            )
-        else:
-            upgrade_msg = ""
-
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={
-                "message": (
-                    f"Relative valuation limit reached. "
-                    f"{user.subscription_tier.capitalize()} tier allows {limit} per {period}."
-                    f"{upgrade_msg}"
-                ),
-                "current_usage": current_count,
-                "max_usage": limit,
-                "period": period,
-            },
-        )
-
-    return current_count
 
 
 async def record_relval_usage(user: User, db: AsyncSession) -> None:
     """Record a relative-valuation usage event."""
-    db.add(FeatureUsage(user_id=user.id, feature="relval_valuations"))
-    await db.commit()
+    await record_feature_usage(user, db, "relval_valuations")
 
 
 # ── Forward estimates (mirrors stocks.py:get_analyst_estimates) ──────────
@@ -318,10 +267,10 @@ async def get_relval_inputs(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Relval inputs error for {sym}: {_safe_error(e)}")
+        print(f"Relval inputs error for {sym}: {safe_error(e)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Could not load relative-valuation inputs for {sym}: {_safe_error(e)}",
+            detail=f"Could not load relative-valuation inputs for {sym}: {safe_error(e)}",
         )
 
 
@@ -397,7 +346,7 @@ async def _fetch_peer_ratio(sym: str, fx: Dict[str, float]) -> Dict[str, Any]:
             row["revenue_growth_yoy"] = fundamentals["revenue_growth_yoy_pct"]
             row["gross_margin"] = fundamentals["gross_margin_pct"]
     except Exception as e:
-        print(f"⚠️ Peer ratio fetch failed for {sym}: {_safe_error(e)}")
+        print(f"⚠️ Peer ratio fetch failed for {sym}: {safe_error(e)}")
 
     row["valuation_check"] = check_against_quarters(
         ratios.get("priceToEarningsRatioTTM"), row["market_cap"], quarters, fx,
@@ -557,7 +506,7 @@ async def calculate_relval(
     except Exception as e:
         raise HTTPException(
             status_code=400,
-            detail=f"Could not compute relative valuation: {_safe_error(e)}",
+            detail=f"Could not compute relative valuation: {safe_error(e)}",
         )
 
     await record_relval_usage(current_user, db)

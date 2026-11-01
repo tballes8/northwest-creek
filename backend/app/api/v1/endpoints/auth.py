@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timedelta, timezone
 import asyncio
 import logging
@@ -20,7 +19,6 @@ from app.core.security import (
     get_password_hash,
     verify_password,
     create_access_token,
-    decode_token
 )
 from app.db.session import get_db
 from app.api.dependencies import get_current_user_any_subscription
@@ -31,7 +29,6 @@ from app.services.email_service import email_service
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-security = HTTPBearer()
 
 # Minimum seconds between resend-verification requests for the same address
 RESEND_COOLDOWN_SECONDS = 60
@@ -414,49 +411,31 @@ async def reset_password(
 @router.post("/change-password")
 async def change_password(
     request: ChangePasswordRequest,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    current_user: User = Depends(get_current_user_any_subscription),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Change password for the currently authenticated user.
     Requires the current password for verification.
+
+    Any subscription state: someone whose subscription lapsed must still be able
+    to change their password.
     """
-    # Resolve current user from JWT
-    try:
-        payload = decode_token(credentials.credentials)
-        user_id = payload.get("sub")
-        if not user_id:
-            raise ValueError("Missing sub claim")
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials"
-        )
-
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
-
     # Verify current password
-    if not verify_password(request.current_password, user.password_hash):
+    if not verify_password(request.current_password, current_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect."
         )
 
     # Prevent setting the same password
-    if verify_password(request.new_password, user.password_hash):
+    if verify_password(request.new_password, current_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="New password must be different from your current password."
         )
 
-    user.password_hash = get_password_hash(request.new_password)
+    current_user.password_hash = get_password_hash(request.new_password)
     await db.commit()
 
     return {"message": "Password changed successfully."}

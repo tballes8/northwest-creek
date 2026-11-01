@@ -27,6 +27,7 @@ from sqlalchemy import select, and_, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.models import SectorEtfDailyClose
+from app.core.redaction import safe_error
 from app.db.session import async_session
 from app.services.market_data import market_data_service
 
@@ -132,7 +133,7 @@ async def backfill_history(years: int = 2) -> int:
         try:
             history = await market_data_service.get_historical_prices(ticker, days=days)
         except Exception as exc:
-            logger.warning(f"Failed to fetch history for {ticker}: {exc}")
+            logger.warning(f"Failed to fetch history for {ticker}: {safe_error(exc)}")
             continue
 
         written = await _upsert_closes(_session_rows(ticker, history, now_et))
@@ -161,7 +162,7 @@ async def append_today_closes() -> int:
         try:
             history = await market_data_service.get_historical_prices(ticker, days=_APPEND_LOOKBACK_DAYS)
         except Exception as exc:
-            logger.warning(f"Sector rotation: no EOD bars for {ticker}, skipping: {exc}")
+            logger.warning(f"Sector rotation: no EOD bars for {ticker}, skipping: {safe_error(exc)}")
             continue
         rows.extend(_session_rows(ticker, history, now_et))
     if not rows:

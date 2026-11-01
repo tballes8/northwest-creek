@@ -6,6 +6,7 @@ Provides financial statements and derived DCF inputs via FMP.
 from fastapi import APIRouter, Depends, HTTPException, status
 from app.db.models import User
 from app.api.dependencies import get_current_user
+from app.core.redaction import print_redacted_exc, safe_error
 from app.services.financials_service import get_company_financials
 from app.services.edgar_identity import is_contradicted
 
@@ -81,10 +82,9 @@ async def get_financials(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Financials error for {ticker}: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ Financials error for {ticker}: {safe_error(e)}")
+        print_redacted_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch financial data for {ticker}: {str(e)}"
+            detail=f"Failed to fetch financial data for {ticker}: {safe_error(e)}"
         )

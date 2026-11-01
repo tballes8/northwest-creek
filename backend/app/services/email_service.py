@@ -12,6 +12,7 @@ import logging
 import requests
 
 from app.config import get_settings
+from app.core.redaction import safe_error
 from app.core.tier_limits import TIER_LIMITS, get_plan_name, get_review_period, get_trial_days
 
 logger = logging.getLogger(__name__)
@@ -136,7 +137,7 @@ class EmailService:
             logger.error("Timed out after %ss sending email to %s", POSTMARK_TIMEOUT_SECONDS, to_email)
             return False
         except Exception as e:
-            logger.error("Failed to send email to %s: %s", to_email, e)
+            logger.error("Failed to send email to %s: %s", to_email, safe_error(e))
             return False
     
     def send_verification_email(self, to_email: str, verification_token: str, user_name: str, selected_tier: str = "beginner") -> bool:

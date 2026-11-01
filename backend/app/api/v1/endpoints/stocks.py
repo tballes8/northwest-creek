@@ -1,7 +1,6 @@
 """
 Stock API Endpoints
 """
-import re
 from fastapi import APIRouter, HTTPException, Query, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, Date, or_, update
@@ -10,8 +9,9 @@ from typing import Optional
 import asyncio
 from app.api.dependencies import get_current_user
 from app.config import get_settings
+from app.core.listings import is_common_stock, is_us_exchange, is_us_symbol
+from app.core.redaction import safe_error
 from app.services.market_data import market_data_service, evaluate_dividend
-from app.services.fmp_client import get_fmp_client, API_KEY
 from app.services.analyst_estimates import estimates_to_usd, fetch_estimates
 from app.services.fx import get_fx_per_usd, get_reporting_currency, usd_rate
 from app.services.sec_filings import detect_bankruptcy, is_new_issuer
@@ -20,7 +20,6 @@ from app.services.valuation_check import vendor_per_share_ok
 from app.db.session import get_db
 from app.schemas.daily_snapshot import DailySnapshotItem, DailySnapshotResponse
 from app.db.models import DailyStockSnapshot, StockSnapshot
-from app.core.tier_limits import can_use_feature, get_upgrade_tier
 from app.schemas.stock import (
     StockQuote,
     CompanyInfo,
@@ -30,17 +29,6 @@ from app.schemas.stock import (
     NewsData,
     NewsArticle,
 )
-
-def _safe_error(e: Exception) -> str:
-    """Strip API keys and sensitive params from error messages before sending to client."""
-    msg = str(e)
-    # Case-insensitive: FMP calls pass `apikey=`, and httpx errors quote the full URL
-    msg = re.sub(r'apikey=[^&\s\'"]+', 'apikey=***', msg, flags=re.IGNORECASE)
-    msg = re.sub(r'api_key=[^&\s\'"]+', 'api_key=***', msg, flags=re.IGNORECASE)
-    msg = re.sub(r'token=[^&\s\'"]+', 'token=***', msg, flags=re.IGNORECASE)
-    return msg
-
-
 
 
 # Every route needs a live subscription: this is licensed FMP data, served only to
@@ -135,7 +123,7 @@ async def get_daily_snapshot(
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching daily snapshot: {_safe_error(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching daily snapshot: {safe_error(e)}")
 
 @router.get("/top-gainers")
 async def get_top_gainers(limit: int = 10):
@@ -144,7 +132,7 @@ async def get_top_gainers(limit: int = 10):
         result = await market_data_service.get_top_gainers(limit)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=_safe_error(e))
+        raise HTTPException(status_code=500, detail=safe_error(e))
 
 @router.get("/top-losers")
 async def get_top_losers(limit: int = 10):
@@ -153,7 +141,7 @@ async def get_top_losers(limit: int = 10):
         result = await market_data_service.get_top_losers(limit)
         return result
     except Exception as e:
-        raise HTTPException(status_code=500, detail=_safe_error(e))
+        raise HTTPException(status_code=500, detail=safe_error(e))
     
 @router.get("/{ticker}/implied-volatility")
 async def get_implied_volatility(
@@ -171,7 +159,7 @@ async def get_implied_volatility(
     try:
         return await get_volatility_estimate(ticker, lookback_days)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error estimating volatility: {_safe_error(e)}")
+        raise HTTPException(status_code=500, detail=f"Error estimating volatility: {safe_error(e)}")
 
 
 @router.get("/quote/{ticker}", response_model=StockQuote)
@@ -189,9 +177,9 @@ async def get_stock_quote(ticker: str):
         quote = await market_data_service.get_quote(ticker)
         return quote
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=_safe_error(e))
+        raise HTTPException(status_code=404, detail=safe_error(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching quote: {_safe_error(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching quote: {safe_error(e)}")
 
 
 @router.get("/company/{ticker}", response_model=CompanyInfo)
@@ -209,9 +197,9 @@ async def get_company_info(ticker: str):
         company = await market_data_service.get_company_info(ticker)
         return company
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=_safe_error(e))
+        raise HTTPException(status_code=404, detail=safe_error(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching company info: {_safe_error(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching company info: {safe_error(e)}")
 
 
 @router.get("/sectors")
@@ -346,9 +334,9 @@ async def get_historical_data(
             "days": len(historical)
         }
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=_safe_error(e))
+        raise HTTPException(status_code=404, detail=safe_error(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching historical data: {_safe_error(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching historical data: {safe_error(e)}")
 
 @router.get("/news/{ticker}", response_model=NewsData)
 async def get_stock_news(
@@ -373,9 +361,9 @@ async def get_stock_news(
             "count": len(news)
         }
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=_safe_error(e))
+        raise HTTPException(status_code=404, detail=safe_error(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching news: {_safe_error(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching news: {safe_error(e)}")
     
 @router.get("/news-market/latest")
 async def get_market_news(
@@ -392,7 +380,7 @@ async def get_market_news(
             "count": len(news)
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching market news: {_safe_error(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching market news: {safe_error(e)}")
 
 
 @router.get("/treasury-rates")
@@ -421,13 +409,7 @@ async def get_treasury_rates():
     ]
 
     try:
-        client = get_fmp_client()
-        resp = await client.get(
-            "treasury-rates",
-            params={"from": week_ago, "to": today, "apikey": API_KEY},
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        data = await market_data_service._fmp_get("treasury-rates", {"from": week_ago, "to": today})
 
         if not data or not isinstance(data, list) or len(data) < 1:
             return {"rates": [], "date": None}
@@ -452,7 +434,28 @@ async def get_treasury_rates():
         return {"rates": rates, "date": current.get("date")}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching treasury rates: {_safe_error(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching treasury rates: {safe_error(e)}")
+
+
+async def _card_quotes(symbols: list[str], batch_path: str) -> dict[str, dict]:
+    """Quote rows for a dashboard card's symbols, keyed by symbol.
+
+    With batch endpoints in the plan, one call for the card's whole asset class
+    (`batch_path`); any symbol that answer leaves out, and every symbol without batch
+    endpoints, goes through get_quote_rows, the one path for quoting a list. A symbol
+    whose quote failed is missing, so the card leaves it out rather than showing a
+    blank; get_quote_rows logs which ones failed.
+    """
+    lookup: dict[str, dict] = {}
+    if get_settings().FMP_BATCH_ENDPOINTS:
+        data = await market_data_service._fmp_get(batch_path)
+        if isinstance(data, list):
+            lookup = {(item.get("symbol") or "").upper(): item for item in data if isinstance(item, dict)}
+    missing = [sym for sym in symbols if sym not in lookup]
+    if missing:
+        for row in await market_data_service.get_quote_rows(missing):
+            lookup[(row.get("symbol") or "").upper()] = row
+    return lookup
 
 
 @router.get("/commodity-quotes")
@@ -460,8 +463,9 @@ async def get_commodity_quotes():
     """
     Get quotes for 10 key commodities.
 
-    Calls FMP batch-commodity-quotes, filters to our curated list,
-    and returns name/price/change data for the dashboard card + modal.
+    Quoted through _card_quotes (batch-commodity-quotes when the plan has batch
+    endpoints, one /quote per symbol otherwise), filtered to our curated list,
+    and returned as name/price/change data for the dashboard card + modal.
     """
     # Symbol → display name mapping (order matters for the card preview)
     COMMODITY_MAP = {
@@ -478,50 +482,7 @@ async def get_commodity_quotes():
     }
 
     try:
-        client = get_fmp_client()
-        # The batch call only when the plan has batch endpoints; otherwise every
-        # symbol below is "missing" and the per-symbol /quote fallback fetches it.
-        data = []
-        if get_settings().FMP_BATCH_ENDPOINTS:
-            resp = await client.get(
-                "batch-commodity-quotes",
-                params={"apikey": API_KEY},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
-        if not data or not isinstance(data, list):
-            data = []
-
-        # Build a lookup from the full batch response
-        lookup = {item.get("symbol", "").upper(): item for item in data}
-
-        # Identify symbols missing from the batch response
-        missing = [sym for sym in COMMODITY_MAP if sym not in lookup]
-
-        # Fallback: fetch individual quotes for any missing symbols
-        if missing:
-            async def _fetch_quote(sym: str):
-                try:
-                    r = await client.get(
-                        "quote",
-                        params={"symbol": sym, "apikey": API_KEY},
-                    )
-                    r.raise_for_status()
-                    items = r.json()
-                    if isinstance(items, list) and items:
-                        return items[0]
-                    print(f"Commodity quote fallback: no data for {sym}")
-                except Exception as e:
-                    print(f"Commodity quote fallback failed for {sym}: {_safe_error(e)}")
-                return None
-
-            fallback_results = await asyncio.gather(
-                *[_fetch_quote(sym) for sym in missing]
-            )
-            for sym, result in zip(missing, fallback_results):
-                if result:
-                    lookup[sym] = result
+        lookup = await _card_quotes(list(COMMODITY_MAP), "batch-commodity-quotes")
 
         commodities = []
         for symbol, display_name in COMMODITY_MAP.items():
@@ -550,7 +511,7 @@ async def get_commodity_quotes():
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Error fetching commodity quotes: {_safe_error(e)}",
+            detail=f"Error fetching commodity quotes: {safe_error(e)}",
         )
 
 
@@ -559,10 +520,9 @@ async def get_crypto_quotes():
     """
     Get quotes for 10 key cryptocurrencies.
 
-    Calls FMP batch-crypto-quotes, filters to our curated list,
-    and returns name/price/change data for the dashboard card + modal.
-    Falls back to individual /stable/quote calls for any symbols
-    missing from the batch response.
+    Quoted through _card_quotes (batch-crypto-quotes when the plan has batch
+    endpoints, one /quote per symbol otherwise), filtered to our curated list,
+    and returned as name/price/change data for the dashboard card + modal.
     """
     # Symbol → display name mapping (order matters for the card preview)
     CRYPTO_MAP = {
@@ -579,50 +539,7 @@ async def get_crypto_quotes():
     }
 
     try:
-        client = get_fmp_client()
-        # The batch call only when the plan has batch endpoints; otherwise every
-        # symbol below is "missing" and the per-symbol /quote fallback fetches it.
-        data = []
-        if get_settings().FMP_BATCH_ENDPOINTS:
-            resp = await client.get(
-                "batch-crypto-quotes",
-                params={"apikey": API_KEY},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
-        if not data or not isinstance(data, list):
-            data = []
-
-        # Build a lookup from the full batch response
-        lookup = {item.get("symbol", "").upper(): item for item in data}
-
-        # Identify symbols missing from the batch response
-        missing = [sym for sym in CRYPTO_MAP if sym not in lookup]
-
-        # Fallback: fetch individual quotes for any missing symbols
-        if missing:
-            async def _fetch_quote(sym: str):
-                try:
-                    r = await client.get(
-                        "quote",
-                        params={"symbol": sym, "apikey": API_KEY},
-                    )
-                    r.raise_for_status()
-                    items = r.json()
-                    if isinstance(items, list) and items:
-                        return items[0]
-                    print(f"Crypto quote fallback: no data for {sym}")
-                except Exception as e:
-                    print(f"Crypto quote fallback failed for {sym}: {_safe_error(e)}")
-                return None
-
-            fallback_results = await asyncio.gather(
-                *[_fetch_quote(sym) for sym in missing]
-            )
-            for sym, result in zip(missing, fallback_results):
-                if result:
-                    lookup[sym] = result
+        lookup = await _card_quotes(list(CRYPTO_MAP), "batch-crypto-quotes")
 
         cryptos = []
         for symbol, display_name in CRYPTO_MAP.items():
@@ -651,7 +568,7 @@ async def get_crypto_quotes():
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Error fetching crypto quotes: {_safe_error(e)}",
+            detail=f"Error fetching crypto quotes: {safe_error(e)}",
         )
 
 
@@ -660,10 +577,9 @@ async def get_index_quotes():
     """
     Get quotes for 8 key market indexes.
 
-    Calls FMP batch-index-quotes, filters to our curated list,
-    and returns name/price/change data for the dashboard card + modal.
-    Falls back to individual /stable/quote calls for any symbols
-    missing from the batch response.
+    Quoted through _card_quotes (batch-index-quotes when the plan has batch
+    endpoints, one /quote per symbol otherwise), filtered to our curated list,
+    and returned as name/price/change data for the dashboard card + modal.
     """
     # Symbol → (display name, is_points) mapping
     # is_points=True means display raw value (no $ prefix)
@@ -684,51 +600,7 @@ async def get_index_quotes():
     }
 
     try:
-        client = get_fmp_client()
-        # The batch call only when the plan has batch endpoints; otherwise every
-        # symbol below is "missing" and the per-symbol /quote fallback fetches it.
-        data = []
-        if get_settings().FMP_BATCH_ENDPOINTS:
-            resp = await client.get(
-                "batch-index-quotes",
-                params={"apikey": API_KEY},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
-        if not data or not isinstance(data, list):
-            data = []
-
-        # Build a lookup from the full batch response
-        lookup = {item.get("symbol", ""): item for item in data}
-
-        # Identify symbols missing from the batch response
-        missing = [sym for sym in INDEX_MAP if sym not in lookup]
-
-        # Fallback: fetch individual quotes for any missing symbols
-        if missing:
-            async def _fetch_quote(sym: str):
-                try:
-                    r = await client.get(
-                        "quote",
-                        params={"symbol": sym, "apikey": API_KEY},
-                    )
-                    r.raise_for_status()
-                    items = r.json()
-                    if isinstance(items, list) and items:
-                        return items[0]
-                    print(f"Index quote fallback: no data for {sym}")
-                except Exception as e:
-                    # Surface it: a swallowed 402 is how ^GSPC/^DJI vanished unnoticed
-                    print(f"Index quote fallback failed for {sym}: {_safe_error(e)}")
-                return None
-
-            fallback_results = await asyncio.gather(
-                *[_fetch_quote(sym) for sym in missing]
-            )
-            for sym, result in zip(missing, fallback_results):
-                if result:
-                    lookup[sym] = result
+        lookup = await _card_quotes(list(INDEX_MAP), "batch-index-quotes")
 
         indexes = []
         for symbol, (display_name, _) in INDEX_MAP.items():
@@ -757,7 +629,7 @@ async def get_index_quotes():
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Error fetching index quotes: {_safe_error(e)}",
+            detail=f"Error fetching index quotes: {safe_error(e)}",
         )
 
 
@@ -780,7 +652,8 @@ async def get_ipos():
     the same four rows rendered under Upcoming and again under Pending. A
     listing dated today is not upcoming; it is pending until it prints.
 
-    Filters out warrants, rights, units, foreign listings, SPAC shells, and
+    Filters out foreign listings, share listings that are not common stock
+    (warrants, rights, units, preferreds, notes: app/core/listings.py), and
     companies that were already public — the vendor calendar also carries
     exchange transfers, uplistings and relistings, which are listing events
     rather than new issuers. See `_drop_established_registrants`.
@@ -789,35 +662,16 @@ async def get_ipos():
     filtered out here because they are a legitimate thing to watch; they are
     labelled so the client can separate them from share IPOs, which they
     otherwise outnumber. See `_tag_asset_types`.
+
+    A calendar window that fails to load leaves its tabs empty and names them in
+    `unavailable` ("upcoming"; "recently_active" and "pending" share the recent
+    window), the convention financials_service uses: an empty Upcoming tab alone
+    would read as "no IPOs coming".
     """
     today = datetime.now().strftime("%Y-%m-%d")
     seven_days_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
     tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     twenty_one_days_ahead = (datetime.now() + timedelta(days=21)).strftime("%Y-%m-%d")
-
-    # US exchanges we care about
-    US_EXCHANGES = {"NYSE", "NASDAQ", "AMEX", "NYSEAMERICAN", "NYSEARCA", "BATS"}
-
-    def _is_junk_symbol(symbol: str) -> bool:
-        """Filter out warrants, rights, units, and foreign tickers."""
-        if not symbol or symbol == "N/A":
-            return True
-        s = symbol.upper().strip()
-        # Foreign listings contain dots (NA.KQ, MTEK.TO, 509A.JP)
-        if "." in s:
-            return True
-        # Warrants typically end in W or WS (FGIIW, SVIVW, ADACW)
-        if len(s) > 4 and s.endswith("W"):
-            return True
-        if s.endswith("WS") or s.endswith("WT"):
-            return True
-        # Rights end in R (IEAGR, CRANR, HCACR)
-        if len(s) > 4 and s.endswith("R"):
-            return True
-        # Units end in U (SUMAU, GLEDU, CTAAU)
-        if len(s) > 4 and s.endswith("U"):
-            return True
-        return False
 
     def _safe_float(val) -> Optional[float]:
         """Safely convert a value to float, return None on failure."""
@@ -883,47 +737,44 @@ async def get_ipos():
         "upcoming": [],
         "recently_active": [],
         "pending": [],
+        "unavailable": [],
     }
 
     MAX_PER_TAB = 25
 
     try:
-        client = get_fmp_client()
-
         # Fetch upcoming and recent IPOs in parallel
-        upcoming_resp, recent_resp = await asyncio.gather(
-            client.get(
-                "ipos-calendar",
-                params={"from": tomorrow, "to": twenty_one_days_ahead, "apikey": API_KEY},
+        upcoming_data, recent_data = await asyncio.gather(
+            market_data_service._fmp_get(
+                "ipos-calendar", {"from": tomorrow, "to": twenty_one_days_ahead},
             ),
-            client.get(
-                "ipos-calendar",
-                params={"from": seven_days_ago, "to": today, "apikey": API_KEY},
+            market_data_service._fmp_get(
+                "ipos-calendar", {"from": seven_days_ago, "to": today},
             ),
             return_exceptions=True,
         )
+        if isinstance(upcoming_data, BaseException):
+            print(f"IPO calendar (upcoming) unavailable: {safe_error(upcoming_data)}")
+            results["unavailable"].append("upcoming")
+            upcoming_data = []
+        if isinstance(recent_data, BaseException):
+            print(f"IPO calendar (recent) unavailable: {safe_error(recent_data)}")
+            results["unavailable"] += ["recently_active", "pending"]
+            recent_data = []
 
-        def _parse_ipo_response(resp, status_label: str, limit: int, label: str) -> list:
-            """Filter an FMP calendar response down to tradeable US listings."""
+        def _parse_ipo_response(data, status_label: str) -> list:
+            """FMP calendar rows for symbols listed on a US exchange."""
             items = []
-            if isinstance(resp, Exception):
-                print(f"IPO fetch error for {label}: {resp}")
-                return items
-            if resp.status_code != 200:
-                return items
-            data = resp.json()
             if not isinstance(data, list):
                 return items
             for ipo in data:
-                sym = ipo.get("symbol", "")
-                exchange = (ipo.get("exchange") or "").upper()
-                if _is_junk_symbol(sym):
+                sym = ipo.get("symbol") or ""
+                exchange = ipo.get("exchange")
+                if sym == "N/A" or not is_us_symbol(sym):
                     continue
-                if exchange and exchange not in US_EXCHANGES:
+                if exchange and not is_us_exchange(exchange):
                     continue
                 items.append(_build_ipo_item(ipo, status_label))
-                if len(items) >= limit:
-                    break
             return items
 
         async def _drop_established_registrants(items: list, label: str) -> list:
@@ -950,7 +801,7 @@ async def get_ipos():
             kept = []
             for item, verdict in zip(items, verdicts):
                 if isinstance(verdict, BaseException):
-                    print(f"IPO filter: {item['ticker']} check failed ({verdict}) — kept")
+                    print(f"IPO filter: {item['ticker']} check failed ({safe_error(verdict)}) — kept")
                     kept.append(item)
                 elif verdict:
                     kept.append(item)
@@ -986,27 +837,31 @@ async def get_ipos():
             )
             for item, fund in zip(items, funds):
                 if isinstance(fund, BaseException):
-                    print(f"IPO asset type: {item['ticker']} check failed ({fund}) — CS")
+                    print(f"IPO asset type: {item['ticker']} check failed ({safe_error(fund)}) — CS")
                     continue
                 item["asset_type"] = "ETF" if fund else "CS"
             return items
 
+        async def _tradeable_listings(data, status_label: str, limit: int) -> list:
+            """The first `limit` fund launches and common-stock IPOs in a calendar
+            response: warrants, rights, units, preferreds and notes go
+            (app/core/listings.py). Tagged first, so a fund launch is never judged
+            by the stock rule."""
+            items = await _tag_asset_types(_parse_ipo_response(data, status_label))
+            return [
+                i for i in items
+                if i["asset_type"] == "ETF" or is_common_stock(i["ticker"], i["issuer_name"])
+            ][:limit]
+
         # Over-pull, then filter, so excluded relistings do not leave the tab
         # short of genuine IPOs.
-        upcoming_items = _parse_ipo_response(
-            upcoming_resp, "upcoming", MAX_PER_TAB * 2, "upcoming"
-        )
-        results["upcoming"] = await _tag_asset_types(
-            (await _drop_established_registrants(upcoming_items, "upcoming"))[:MAX_PER_TAB]
-        )
+        upcoming_items = await _tradeable_listings(upcoming_data, "upcoming", MAX_PER_TAB * 2)
+        results["upcoming"] = (await _drop_established_registrants(upcoming_items, "upcoming"))[:MAX_PER_TAB]
 
         # Recent-window listings get split by whether they are actually trading.
         # Pull up to 2x so neither bucket is starved by the other.
-        recent_items = _parse_ipo_response(
-            recent_resp, "recent", MAX_PER_TAB * 2, "recent"
-        )
+        recent_items = await _tradeable_listings(recent_data, "recent", MAX_PER_TAB * 2)
         recent_items = await _drop_established_registrants(recent_items, "recent")
-        recent_items = await _tag_asset_types(recent_items)
 
         quotes = {}
         if recent_items:
@@ -1031,7 +886,7 @@ async def get_ipos():
         return results
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching IPO data: {_safe_error(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching IPO data: {safe_error(e)}")
 
 
 @router.get("/dividends/{ticker}")
@@ -1081,7 +936,7 @@ async def get_dividends(ticker: str):
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching dividends: {_safe_error(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching dividends: {safe_error(e)}")
 
 
 @router.get("/search")
@@ -1096,22 +951,19 @@ async def search_tickers(q: str = Query(..., min_length=1, description="Search q
     query = q.strip()
 
     try:
-        client = get_fmp_client()
-        search_params = {"query": query, "limit": 10, "apikey": API_KEY}
+        search_params = {"query": query, "limit": 10}
 
-        # Fire both endpoints in parallel
+        # Fire both endpoints in parallel. One that fails is skipped; both failing
+        # is an error, not "no matches".
         name_resp, symbol_resp = await asyncio.gather(
-            client.get("search-name", params=search_params),
-            client.get("search-symbol", params=search_params),
+            market_data_service._fmp_get("search-name", dict(search_params)),
+            market_data_service._fmp_get("search-symbol", dict(search_params)),
             return_exceptions=True,
         )
+        if isinstance(name_resp, BaseException) and isinstance(symbol_resp, BaseException):
+            raise symbol_resp
 
-        def _parse_response(resp) -> list:
-            if isinstance(resp, Exception):
-                return []
-            if resp.status_code != 200:
-                return []
-            data = resp.json()
+        def _parse_response(data) -> list:
             return data if isinstance(data, list) else []
 
         name_data = _parse_response(name_resp)
@@ -1141,8 +993,8 @@ async def search_tickers(q: str = Query(..., min_length=1, description="Search q
         return {"results": results[:15]}
 
     except Exception as e:
-        print(f"Ticker search error: {e}")
-        return {"results": []}
+        print(f"Ticker search error: {safe_error(e)}")
+        raise HTTPException(status_code=500, detail=f"Search failed: {safe_error(e)}")
 
 
 @router.get("/search-by-keywords")
@@ -1290,7 +1142,7 @@ async def search_by_keywords(
 
     except Exception as e:
         print(f"Keyword search error: {e}")
-        raise HTTPException(status_code=500, detail=f"Search failed: {_safe_error(e)}")
+        raise HTTPException(status_code=500, detail=f"Search failed: {safe_error(e)}")
 
 
 @router.get("/etf/{symbol}/info")
@@ -1318,7 +1170,7 @@ async def get_etf_info(symbol: str):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching ETF info: {_safe_error(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching ETF info: {safe_error(e)}")
 
 
 @router.get("/etf/{symbol}/holdings")
@@ -1337,13 +1189,7 @@ async def get_etf_holdings(
     - Array of holdings with ticker, name, weight, shares, and market value
     """
     try:
-        client = get_fmp_client()
-        resp = await client.get(
-            "etf/holdings",
-            params={"symbol": symbol.upper(), "apikey": API_KEY},
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        data = await market_data_service._fmp_get("etf/holdings", {"symbol": symbol.upper()})
 
         if not data or not isinstance(data, list):
             return {"symbol": symbol.upper(), "holdings": [], "count": 0}
@@ -1388,96 +1234,7 @@ async def get_etf_holdings(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching ETF holdings: {_safe_error(e)}")
-
-
-@router.get("/screener")
-async def stock_screener(
-    market_cap_more_than: Optional[float] = Query(default=None, description="Minimum market cap"),
-    market_cap_lower_than: Optional[float] = Query(default=None, description="Maximum market cap"),
-    sector: Optional[str] = Query(default=None, description="Sector filter (e.g. Technology, Healthcare)"),
-    industry: Optional[str] = Query(default=None, description="Industry filter (e.g. Semiconductors)"),
-    beta_more_than: Optional[float] = Query(default=None, description="Minimum beta"),
-    beta_lower_than: Optional[float] = Query(default=None, description="Maximum beta"),
-    price_more_than: Optional[float] = Query(default=None, description="Minimum price"),
-    price_lower_than: Optional[float] = Query(default=None, description="Maximum price"),
-    dividend_more_than: Optional[float] = Query(default=None, description="Minimum annual dividend"),
-    dividend_lower_than: Optional[float] = Query(default=None, description="Maximum annual dividend"),
-    volume_more_than: Optional[float] = Query(default=None, description="Minimum volume"),
-    volume_lower_than: Optional[float] = Query(default=None, description="Maximum volume"),
-    exchange: Optional[str] = Query(default=None, description="Exchange (e.g. NASDAQ, NYSE)"),
-    is_etf: Optional[bool] = Query(default=None, description="Filter ETFs"),
-    is_fund: Optional[bool] = Query(default=None, description="Filter mutual funds"),
-    is_actively_trading: Optional[bool] = Query(default=True, description="Only actively trading"),
-    limit: int = Query(default=50, ge=1, le=200, description="Number of results"),
-):
-    """
-    Screen stocks using FMP company screener.
-    Filter by market cap, sector, price, beta, volume, dividends, and more.
-    """
-    # Build params — only include non-None values
-    params: dict = {"apikey": API_KEY, "limit": limit}
-    param_map = {
-        "marketCapMoreThan": market_cap_more_than,
-        "marketCapLowerThan": market_cap_lower_than,
-        "sector": sector,
-        "industry": industry,
-        "betaMoreThan": beta_more_than,
-        "betaLowerThan": beta_lower_than,
-        "priceMoreThan": price_more_than,
-        "priceLowerThan": price_lower_than,
-        "dividendMoreThan": dividend_more_than,
-        "dividendLowerThan": dividend_lower_than,
-        "volumeMoreThan": volume_more_than,
-        "volumeLowerThan": volume_lower_than,
-        "exchange": exchange,
-        "isEtf": is_etf,
-        "isFund": is_fund,
-        "isActivelyTrading": is_actively_trading,
-    }
-    for key, val in param_map.items():
-        if val is not None:
-            params[key] = val
-
-    try:
-        client = get_fmp_client()
-        resp = await client.get("company-screener", params=params)
-        resp.raise_for_status()
-        data = resp.json()
-
-        if not isinstance(data, list):
-            data = []
-
-        # Filter out non-US exchanges client-side for cleaner results
-        results = []
-        for item in data:
-            sym = item.get("symbol", "")
-            # Skip foreign-listed symbols (contain dots like .BA, .T)
-            if "." in sym:
-                continue
-            results.append({
-                "symbol": sym,
-                "name": item.get("companyName"),
-                "market_cap": item.get("marketCap"),
-                "sector": item.get("sector"),
-                "industry": item.get("industry"),
-                "beta": item.get("beta"),
-                "price": item.get("price"),
-                "last_annual_dividend": item.get("lastAnnualDividend"),
-                "volume": item.get("volume"),
-                # /stable/company-screener returns `exchange`; older API used `exchangeShortName`.
-                "exchange": item.get("exchange") or item.get("exchangeShortName"),
-                "is_etf": item.get("isEtf"),
-                "is_actively_trading": item.get("isActivelyTrading"),
-            })
-
-        return {
-            "results": results,
-            "count": len(results),
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error running stock screener: {_safe_error(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching ETF holdings: {safe_error(e)}")
 
 
 @router.get("/analyst-estimates/{ticker}")
@@ -1559,7 +1316,7 @@ async def get_analyst_estimates(ticker: str):
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching analyst estimates: {_safe_error(e)}")
+        raise HTTPException(status_code=500, detail=f"Error fetching analyst estimates: {safe_error(e)}")
 
 
 @router.get("/ownership/{ticker}")
@@ -1569,18 +1326,17 @@ async def get_ownership(
 ):
     """
     Fetch SEC dilution filings (S-3, 424B5) and top institutional holders for a ticker.
+
+    A section whose fetch failed comes back empty and is named in `unavailable`
+    ("filings", "institutional_holders"), the convention financials_service uses:
+    an empty list alone would read as "none on record". The bankruptcy check needs
+    the CIK the filings carry, so it is None whenever filings are unavailable.
     """
     ticker = ticker.strip().upper()
-    client = get_fmp_client()
 
-    async def _get(path: str, params: dict):
-        try:
-            r = await client.get(path, params={"apikey": API_KEY, **params})
-            r.raise_for_status()
-            data = r.json()
-            return data if isinstance(data, list) else []
-        except Exception:
-            return []
+    async def _get(path: str, params: dict) -> list:
+        data = await market_data_service._fmp_get(path, dict(params))
+        return data if isinstance(data, list) else []
 
     def _recent_quarters(count: int = 5) -> list[tuple[int, int]]:
         """Last `count` (year, quarter) pairs, counting back from the quarter
@@ -1597,14 +1353,23 @@ async def get_ownership(
         return out
 
     async def _load_holders() -> list:
-        # 13F data lags ~45 days; walk back quarters until one has rows.
+        # 13F data lags ~45 days; walk back quarters until one has rows. A quarter
+        # that fails to load is skipped, but when no quarter had rows the failure is
+        # the answer: "no institutional holders" would be a claim about the company.
+        failure = None
         for y, q in _recent_quarters():
-            rows = await _get(
-                "institutional-ownership/extract-analytics/holder",
-                {"symbol": ticker, "year": y, "quarter": q, "page": 0, "limit": 50},
-            )
+            try:
+                rows = await _get(
+                    "institutional-ownership/extract-analytics/holder",
+                    {"symbol": ticker, "year": y, "quarter": q, "page": 0, "limit": 50},
+                )
+            except Exception as e:
+                failure = e
+                continue
             if rows:
                 return rows
+        if failure is not None:
+            raise failure
         return []
 
     today = date.today()
@@ -1620,7 +1385,17 @@ async def get_ownership(
             },
         ),
         _load_holders(),
+        return_exceptions=True,
     )
+    unavailable = []
+    if isinstance(filings_raw, BaseException):
+        print(f"Ownership {ticker}: SEC filings unavailable: {safe_error(filings_raw)}")
+        unavailable.append("filings")
+        filings_raw = []
+    if isinstance(inst_raw, BaseException):
+        print(f"Ownership {ticker}: institutional holders unavailable: {safe_error(inst_raw)}")
+        unavailable.append("institutional_holders")
+        inst_raw = []
 
     def _is_dilution(form_type: str | None) -> bool:
         ft = (form_type or "").upper()
@@ -1660,33 +1435,9 @@ async def get_ownership(
     cik = next((f.get("cik") for f in filings_raw if f.get("cik")), None)
     bankruptcy = await detect_bankruptcy(cik)
 
-    return {"filings": filings, "institutional_holders": holders, "bankruptcy": bankruptcy}
-
-
-@router.get("/{ticker}", response_model=dict)
-async def get_stock_overview(ticker: str):
-    """
-    Get complete stock overview (quote + company info)
-    
-    **Parameters:**
-    - **ticker**: Stock symbol
-    
-    **Returns:**
-    - Combined quote and company information
-    """
-    try:
-        # Fetch both quote and company info concurrently
-        quote_task = market_data_service.get_quote(ticker)
-        company_task = market_data_service.get_company_info(ticker)
-        
-        quote, company = await asyncio.gather(quote_task, company_task)
-        
-        return {
-            "ticker": ticker.upper(),
-            "quote": quote,
-            "company": company
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=_safe_error(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching stock overview: {_safe_error(e)}")
+    return {
+        "filings": filings,
+        "institutional_holders": holders,
+        "bankruptcy": bankruptcy,
+        "unavailable": unavailable,
+    }

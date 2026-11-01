@@ -25,6 +25,7 @@ from typing import Optional
 import httpx
 
 from app.config import get_settings
+from app.core.redaction import safe_error
 
 logger = logging.getLogger(__name__)
 
@@ -118,10 +119,10 @@ async def fetch_latest_observation(series_id: str) -> Optional[FredObservation]:
                 try:
                     return await _fetch_via_api(client, series_id, api_key)
                 except Exception as api_err:
-                    logger.warning(f"FRED API fetch failed for {series_id}, falling back to CSV: {api_err}")
+                    logger.warning(f"FRED API fetch failed for {series_id}, falling back to CSV: {safe_error(api_err)}")
             return await _fetch_via_csv(client, series_id)
     except Exception as exc:
-        logger.warning(f"FRED fetch failed for {series_id}: {exc}")
+        logger.warning(f"FRED fetch failed for {series_id}: {safe_error(exc)}")
         return None
 
 
@@ -136,7 +137,7 @@ async def fetch_observations_csv(series_id: str, max_rows: int = 24) -> list[Fre
             resp = await client.get(FREDGRAPH_CSV_BASE, params={"id": series_id})
             resp.raise_for_status()
     except Exception as exc:
-        logger.warning(f"FRED CSV bulk fetch failed for {series_id}: {exc}")
+        logger.warning(f"FRED CSV bulk fetch failed for {series_id}: {safe_error(exc)}")
         return []
 
     reader = csv.reader(io.StringIO(resp.text))

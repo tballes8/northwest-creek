@@ -39,6 +39,8 @@ import re
 import time
 from typing import Any, Optional
 
+from app.core.redaction import safe_error
+
 _TICKER_MAP_URL = "https://www.sec.gov/files/company_tickers.json"
 # Registered investment companies — ETFs, ETNs and mutual funds. A separate file
 # because their identity unit is the series/class, not an operating registrant.
@@ -167,7 +169,7 @@ async def resolve_ticker_cik(ticker: str) -> Optional[tuple[int, str | None]]:
     except Exception as e:
         # EDGAR unreachable, throttled out, or misconfigured UA. Degrade to
         # cannot_resolve — never fail the financials request over it.
-        print(f"WARN: EDGAR ticker map unavailable ({type(e).__name__}: {e})")
+        print(f"WARN: EDGAR ticker map unavailable ({type(e).__name__}: {safe_error(e)})")
         return None
     return _ticker_map_cache.get(ticker.upper().strip())
 
@@ -221,7 +223,7 @@ async def resolve_fund_ticker(ticker: str) -> Optional[tuple[int, str, str]]:
     try:
         await _ensure_fund_map()
     except Exception as e:
-        print(f"WARN: EDGAR fund map unavailable ({type(e).__name__}: {e})")
+        print(f"WARN: EDGAR fund map unavailable ({type(e).__name__}: {safe_error(e)})")
         return None
     return _fund_map_cache.get(ticker.upper().strip())
 
@@ -232,12 +234,12 @@ async def warm_ticker_map() -> None:
         await _ensure_ticker_map()
         print(f"SEC EDGAR ticker map warmed ({len(_ticker_map_cache)} tickers)")
     except Exception as e:
-        print(f"WARN: EDGAR ticker map warm failed ({type(e).__name__}: {e})")
+        print(f"WARN: EDGAR ticker map warm failed ({type(e).__name__}: {safe_error(e)})")
     try:
         await _ensure_fund_map()
         print(f"SEC EDGAR fund map warmed ({len(_fund_map_cache)} tickers)")
     except Exception as e:
-        print(f"WARN: EDGAR fund map warm failed ({type(e).__name__}: {e})")
+        print(f"WARN: EDGAR fund map warm failed ({type(e).__name__}: {safe_error(e)})")
 
 
 def build_entity_trust(
@@ -479,7 +481,7 @@ async def resolve_contradiction(entity_trust: dict) -> dict:
             _submissions_cached(vendor_cik),
         )
     except Exception as e:
-        print(f"WARN: could not classify contradiction ({type(e).__name__}: {e})")
+        print(f"WARN: could not classify contradiction ({type(e).__name__}: {safe_error(e)})")
         return entity_trust
 
     return refine_contradiction(entity_trust, edgar_sub, vendor_sub)
