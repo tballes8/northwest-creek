@@ -6,7 +6,7 @@ import FeatureSection from '../components/landing/FeatureSection';
 import PricingTiers from '../components/landing/PricingTiers';
 import TickerTape from '../components/landing/TickerTape';
 import HeroDemoCard from '../components/landing/HeroDemoCard';
-import { PRICING_TIERS, planNamesWith, tiersWith } from '../data/pricingTiers';
+import { NEW_SIGNUPS_OPEN, PRICING_TIERS, planNamesWith, tiersWith } from '../data/pricingTiers';
 
 // Feature copy that quotes plan limits, from the one plan source
 const TOP_PLAN = PRICING_TIERS[PRICING_TIERS.length - 1];
@@ -94,12 +94,14 @@ const Landing: React.FC = () => {
               >
                 Sign In
               </Link>
-              <button
-                onClick={scrollToPricing}
-                className="bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm cursor-pointer"
-              >
-                Get Started
-              </button>
+              {NEW_SIGNUPS_OPEN && (
+                <button
+                  onClick={scrollToPricing}
+                  className="bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm cursor-pointer"
+                >
+                  Get Started
+                </button>
+              )}
               <ThemeToggle />
             </div>
           </div>
@@ -133,12 +135,14 @@ const Landing: React.FC = () => {
               analysis on every US stock.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
-              <Link
-                to="/register"
-                className="px-6 py-3 rounded-lg font-semibold bg-primary-600 hover:bg-primary-700 text-white transition-colors shadow-lg shadow-primary-500/30"
-              >
-                Start Free Trial →
-              </Link>
+              {NEW_SIGNUPS_OPEN && (
+                <Link
+                  to="/register"
+                  className="px-6 py-3 rounded-lg font-semibold bg-primary-600 hover:bg-primary-700 text-white transition-colors shadow-lg shadow-primary-500/30"
+                >
+                  Start Free Trial →
+                </Link>
+              )}
               <button
                 onClick={scrollToPricing}
                 className="px-6 py-3 rounded-lg font-semibold border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:border-primary-500 dark:hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"

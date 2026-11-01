@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { NEW_SIGNUPS_OPEN } from '../data/pricingTiers';
 import ThemeToggle from '../components/ThemeToggle';
 import BackToTop from '../components/BackToTop';
 
@@ -26,9 +27,11 @@ const TermsConditions: React.FC = () => {
               <Link to="/login" className="text-gray-300 hover:text-primary-400 px-3 py-2 rounded-md text-sm font-medium transition-colors">
                 Sign In
               </Link>
-              <Link to="/pricing" className="bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm">
-                Get Started
-              </Link>
+              {NEW_SIGNUPS_OPEN && (
+                <Link to="/pricing" className="bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm">
+                  Get Started
+                </Link>
+              )}
               <ThemeToggle />
             </div>
           </div>

@@ -5,7 +5,7 @@ import { User } from '../types';
 import ThemeToggle from '../components/ThemeToggle';
 import BackToTop from '../components/BackToTop';
 import { getTierBadge } from '../components/NavBar';
-import { PRICING_TIERS, TRIAL_PLAN_NAMES, COMPARISON_ROWS, ALL_PLAN_NAMES } from '../data/pricingTiers';
+import { NEW_SIGNUPS_OPEN, PRICING_TIERS, TRIAL_PLAN_NAMES, COMPARISON_ROWS, ALL_PLAN_NAMES } from '../data/pricingTiers';
 
 const Pricing: React.FC = () => {
   const navigate = useNavigate();
@@ -89,9 +89,11 @@ const Pricing: React.FC = () => {
                   <Link to="/login" className="text-gray-300 hover:text-white text-sm font-medium">
                     Login
                   </Link>
-                  <Link to="/register" className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium">
-                    Sign Up
-                  </Link>
+                  {NEW_SIGNUPS_OPEN && (
+                    <Link to="/register" className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium">
+                      Sign Up
+                    </Link>
+                  )}
                 </>
               )}
             </div>
@@ -187,7 +189,7 @@ const Pricing: React.FC = () => {
                   >
                     Current Plan
                   </button>
-                ) : (
+                ) : (NEW_SIGNUPS_OPEN || user) && (
                   <button
                     onClick={() => handleUpgrade(tier.slug, tier.slug)}
                     className={`w-full px-6 py-3 font-semibold rounded-lg transition-colors ${

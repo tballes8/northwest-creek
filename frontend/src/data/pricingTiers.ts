@@ -141,6 +141,15 @@ export const PRICING_TIERS: PricingTier[] = TIER_DEFINITIONS.map(({ extraBullets
   bullets: [...limitBullets(tier.limits), ...(extraBullets ?? [])],
 }));
 
+/**
+ * Whether the public site invites new sign-ups. False while NWC-Analytics is paused
+ * (2026-10-31): every public sign-up button and link (Landing, Pricing, Login, the
+ * FAQ/Terms/Privacy headers) is hidden. /register and /registerwithpayment still work
+ * for anyone who types the URL, and logged-in users keep their plan-change buttons.
+ * Set true to reopen.
+ */
+export const NEW_SIGNUPS_OPEN = false;
+
 export const getTierBySlug = (slug: TierSlug): PricingTier =>
   PRICING_TIERS.find((t) => t.slug === slug) ?? PRICING_TIERS[0];
 

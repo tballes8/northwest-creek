@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { PRICING_TIERS, TRIAL_PLAN_NAMES } from '../../data/pricingTiers';
+import { NEW_SIGNUPS_OPEN, PRICING_TIERS, TRIAL_PLAN_NAMES } from '../../data/pricingTiers';
 
 const Check = () => (
   <svg
@@ -64,12 +64,14 @@ const PricingTiers: React.FC = () => {
                 </li>
               ))}
             </ul>
-            <Link
-              to={`/registerwithpayment?tier=${tier.slug}`}
-              className="block w-full text-center bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold py-3 rounded-lg transition-colors"
-            >
-              {tier.ctaLabel}
-            </Link>
+            {NEW_SIGNUPS_OPEN && (
+              <Link
+                to={`/registerwithpayment?tier=${tier.slug}`}
+                className="block w-full text-center bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 text-white font-semibold py-3 rounded-lg transition-colors"
+              >
+                {tier.ctaLabel}
+              </Link>
+            )}
           </div>
         ))}
       </div>

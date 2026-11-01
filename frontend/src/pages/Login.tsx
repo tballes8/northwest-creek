@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { NEW_SIGNUPS_OPEN } from '../data/pricingTiers';
 import { authAPI } from '../services/api';
 import ResendVerification from '../components/ResendVerification';
 
@@ -90,12 +91,14 @@ const Login: React.FC = () => {
         <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
           Sign in to your account
         </h2>
-        <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
-          Or{' '}
-          <Link to="/register" className="font-medium text-primary-600 dark:text-primary-400 hover:text-primary-500 dark:hover:text-primary-300">
-            start your free trial
-          </Link>
-        </p>
+        {NEW_SIGNUPS_OPEN && (
+          <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-400">
+            Or{' '}
+            <Link to="/register" className="font-medium text-primary-600 dark:text-primary-400 hover:text-primary-500 dark:hover:text-primary-300">
+              start your free trial
+            </Link>
+          </p>
+        )}
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
@@ -269,6 +272,7 @@ const Login: React.FC = () => {
             </div>
           )}
 
+          {NEW_SIGNUPS_OPEN && (
           <div className="mt-6">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
@@ -288,6 +292,7 @@ const Login: React.FC = () => {
               </Link>
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>

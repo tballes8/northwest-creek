@@ -111,6 +111,8 @@ API docs: `http://localhost:8000/api/v1/docs`
 
 **`frontend/server.js`** (Node, serves the build): OG/prerender pages for blog posts, 301s for retired paths (`/waitlist`, `/termsconditions`, `/privacypolicy`, `/payment-success`), and `/sitemap.xml`, which it fetches from the backend (`OG_API_BASE`) and serves from the site's own host, answering 503 with `Retry-After` rather than an empty or partial sitemap.
 
+**Sign-ups:** `NEW_SIGNUPS_OPEN` in `data/pricingTiers.ts` is **false while the project is paused (since 2026-10-31)**. It hides every public sign-up button and link (Landing nav and hero, the pricing cards, the Pricing page's buttons and Sign Up link for logged-out visitors, Login's two links, the FAQ/Terms/Privacy "Get Started"); `/register` still works by direct URL and logged-in users keep their plan-change buttons. Any new sign-up CTA must check it. Set it true on relaunch.
+
 **Key pages:**
 - `Stocks.tsx` — stock screener backed by `stock_snapshots` (`StockSnapshot`, refreshed by `tasks/refresh_stock_snapshots.py`) through `/screener`; includes Price History chart (Chart.js with 50/200-day MA overlays)
 - `TechnicalAnalysis.tsx` — Chart.js line/bar indicator panels (the intraday VWAP modal uses Recharts)
