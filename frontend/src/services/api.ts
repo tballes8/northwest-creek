@@ -524,6 +524,42 @@ export const intradayAPI = {
     }),
 };
 
+// EXPERIMENTAL, may be removed (see backend services/price_projection.py).
+// Percentile bands of a zero-drift GBM Monte Carlo, 252 trading days ahead.
+export interface ProjectionPoint {
+  date: string;
+  p5: number;
+  p25: number;
+  p50: number;
+  p75: number;
+  p95: number;
+}
+
+export interface PriceProjection {
+  ticker: string;
+  as_of: string;
+  last_price: number;
+  method: 'gbm_monte_carlo';
+  n_paths: number;
+  horizon_days: number;
+  percentiles: number[];
+  drift_annual: number;
+  sigma_annual: number;
+  returns_used: 'daily' | 'weekly';
+  observations: number;
+  zero_return_frac: number;
+  median_dollar_volume: number | null;
+  confidence: 'normal' | 'reduced' | 'low';
+  confidence_notes: string[];
+  history: { date: string; close: number }[]; // dividend-adjusted closes
+  points: ProjectionPoint[];
+}
+
+export const projectionAPI = {
+  get: (ticker: string) =>
+    axiosInstance.get<PriceProjection>(`/projection/${encodeURIComponent(ticker)}`),
+};
+
 // Batch rows keyed by ticker. A row can come back without a price, so callers
 // check `price` before using one.
 export const quotesByTicker = (rows: unknown): Record<string, IntradayQuote> => {

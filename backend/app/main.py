@@ -10,6 +10,7 @@ from app.api.v1.endpoints import (
     intraday, live_prices, financials, technical_alerts,
     portfolio_analysis, stock_analysis, screener, market,
     sector_rotation, relative_valuation,
+    price_projection,  # EXPERIMENTAL, may be removed (see services/price_projection.py)
 )
 from app.api.v1.endpoints.content import router as content_router
 from app.api.v1.endpoints.sitemap import router as sitemap_router
@@ -214,4 +215,6 @@ app.include_router(stock_analysis.router, prefix="/api/v1", tags=["Stock Analysi
 app.include_router(screener.router, prefix="/api/v1/screener", tags=["Screener"])
 app.include_router(market.router, prefix="/api/v1/market", tags=["Market"])
 app.include_router(sector_rotation.router, prefix="/api/v1/sector-rotation", tags=["Sector Rotation"])
+# EXPERIMENTAL, may be removed (see services/price_projection.py)
+app.include_router(price_projection.router, prefix="/api/v1/projection", tags=["Price Projection (experimental)"])
 app.include_router(sitemap_router, tags=["sitemap"])

@@ -52,6 +52,7 @@ def build_sample_params() -> dict[str, dict]:
         "quote": {"symbol": "AAPL"},
         "batch-quote": {"symbols": "AAPL,MSFT"},
         "historical-price-eod/full": {"symbol": "AAPL", "from": _iso(today - timedelta(days=35)), "to": _iso(today)},
+        "historical-price-eod/dividend-adjusted": {"symbol": "AAPL", "from": _iso(today - timedelta(days=35)), "to": _iso(today)},
         "historical-chart/1min": {"symbol": "AAPL", "from": _iso(today - timedelta(days=5)), "to": _iso(today)},
         "batch-aftermarket-trade": {"symbols": "AAPL"},
         "profile": {"symbol": "AAPL"},

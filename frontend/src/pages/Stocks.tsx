@@ -8,6 +8,7 @@ import { Line } from 'react-chartjs-2';
 import { authAPI, stocksAPI, watchlistAPI, screenerAPI, intradayAPI, EntityTrust, isEntityContradicted } from '../services/api';
 import ScreenerChartPanel from '../components/ScreenerChartPanel';
 import EntityTrustBlock from '../components/EntityTrustBlock';
+import PriceProjection from '../components/PriceProjection'; // EXPERIMENTAL, may be removed
 import { SECTOR_COLORS } from '../utils/sectorMap';
 import { planIncludes } from '../data/pricingTiers';
 import { formatDateOnly, parseLocalDate } from '../utils/dates';
@@ -2597,6 +2598,9 @@ const Stocks: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {/* EXPERIMENTAL, may be removed (see components/PriceProjection.tsx) */}
+            <PriceProjection key={ticker} ticker={ticker} />
 
             {/* Company Info + Dividends */}
             <div className="grid md:grid-cols-3 gap-6">
