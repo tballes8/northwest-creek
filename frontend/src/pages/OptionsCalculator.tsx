@@ -85,7 +85,6 @@ const CDark = {
   bg: "#1f2937",          // gray-800 — main page bg
   card: "#374151",        // gray-700 — card bg
   cardAlt: "#1f2937",     // gray-800 — nested/alt bg
-  sidebar: "#111827",     // gray-900 — nav bg
   border: "#4b5563",      // gray-600
   borderLight: "#6b7280", // gray-500
   accent: "#2dd4bf",      // teal-400
@@ -111,7 +110,6 @@ const CLight = {
   bg: "#f9fafb",          // gray-50
   card: "#ffffff",        // white
   cardAlt: "#f3f4f6",    // gray-100
-  sidebar: "#ffffff",     // white
   border: "#d1d5db",      // gray-300
   borderLight: "#e5e7eb", // gray-200
   accent: "#0d9488",      // teal-600
@@ -135,18 +133,6 @@ const CLight = {
 
 // Mutable reference — set by the main component before each render
 let C = CDark;
-
-const sidebarStyle = () => ({
-  width: 220, minHeight: "100%", background: C.sidebar, borderRight: `1px solid ${C.border}`,
-  display: "flex", flexDirection: "column", padding: "20px 0", flexShrink: 0,
-});
-
-const navBtn = (active) => ({
-  padding: "10px 20px", cursor: "pointer", fontSize: 13, fontWeight: active ? 600 : 400,
-  color: active ? C.accent : C.textDim, background: active ? C.accentGlow : "transparent",
-  border: "none", borderLeft: `3px solid ${active ? C.accent : "transparent"}`,
-  textAlign: "left", transition: "all 0.15s",
-});
 
 const inputGroup = { display: "flex", flexDirection: "column", gap: 4 };
 const labelStyle = () => ({ fontSize: 11, color: C.textDim, fontWeight: 500, textTransform: "uppercase", letterSpacing: "0.05em" });
@@ -899,11 +885,11 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
 
 // ─── Main App ───
 const pages = [
-  { id: "pricing", label: "Option Pricing", icon: "⚡" },
-  { id: "greeks", label: "Greeks", icon: "Δ" },
-  { id: "payoff", label: "P&L Payoff", icon: "📈" },
-  { id: "iv", label: "IV Solver", icon: "σ" },
-  { id: "spreads", label: "Spreads", icon: "🔀" },
+  { id: "pricing", label: "Option Pricing" },
+  { id: "greeks", label: "Greeks" },
+  { id: "payoff", label: "P&L Payoff" },
+  { id: "iv", label: "IV Solver" },
+  { id: "spreads", label: "Spreads" },
 ];
 
 export default function OptionsCalculator() {
@@ -1031,38 +1017,19 @@ export default function OptionsCalculator() {
     );
   }
 
+  // Layout mirrors Stocks.tsx (the app's multi-tab page): same container,
+  // gutters, heading and tab bar, so the two pages read as one system.
   return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white transition-colors">
       {/* SEO — React 19 hoists to <head> */}
       <title>Options Calculator — NWC-Analytics</title>
       <meta name="description" content="Price options strategies with Black-Scholes — greeks, payoff diagrams, and multi-leg strategy analysis." />
       <link rel="canonical" href="https://nwc-analytics.com/options-calculator" />
       <NavBar currentPage="options-calculator" user={user} onLogout={handleLogout} />
-      <div style={{ display: "flex", flex: 1 }}>
-      {/* Sidebar — matches nav bg-gray-900 with border-gray-700 */}
-      <div style={sidebarStyle()}>
-        <div style={{ padding: "0 20px 24px", borderBottom: `1px solid ${C.border}`, marginBottom: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.text, letterSpacing: "-0.01em" }}>Options Calculator</div>
-          <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>Institutional-grade tools</div>
-        </div>
-        {pages.map(p => (
-          <button key={p.id} style={navBtn(page === p.id)} onClick={() => setPage(p.id)}>
-            <span style={{ marginRight: 8 }}>{p.icon}</span>{p.label}
-          </button>
-        ))}
-        <div style={{ flex: 1 }} />
-        <div style={{ padding: "16px 20px", borderTop: `1px solid ${C.border}`, fontSize: 10, color: C.textMuted, lineHeight: 1.5 }}>
-          Black-Scholes &amp; Binomial models. For educational purposes. Not financial advice.
-        </div>
-      </div>
 
-      {/* Main content — matches bg-gray-800 page area */}
-      <div style={{ flex: 1, padding: 24, overflowY: "auto", display: "flex", flexDirection: "column", gap: 16 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>
-            {pages.find(p => p.id === page)?.icon}{" "}
-            {pages.find(p => p.id === page)?.label}
-          </h2>
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-between gap-4 mb-6">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Options Calculator</h1>
           {page !== "spreads" && (
             <div style={{ display: "flex", gap: 6 }}>
               <button style={pillBtn(params.type === "call")} onClick={() => setParams(p => ({...p, type: "call"}))}>Call</button>
@@ -1070,13 +1037,36 @@ export default function OptionsCalculator() {
             </div>
           )}
         </div>
-        <InputPanel params={params} setParams={setParams} page={page} />
-        {page === "pricing" && <PricingPage params={params} />}
-        {page === "greeks" && <GreeksPage params={params} />}
-        {page === "payoff" && <PayoffPage params={params} />}
-        {page === "iv" && <IVSolverPage params={params} />}
-        {page === "spreads" && <SpreadsPage params={params} initialStrategy={urlStrategy} initialStrikes={urlStrikes} />}
-      </div>
+
+        {/* Tab Bar — same classes as the Stocks page */}
+        <div className="flex flex-wrap gap-1 border-b border-gray-200 dark:border-gray-700 mb-6">
+          {pages.map(p => (
+            <button
+              key={p.id}
+              onClick={() => setPage(p.id)}
+              className={`px-4 sm:px-8 py-3.5 text-base font-semibold whitespace-nowrap transition-colors ${
+                page === p.id
+                  ? 'border-b-2 border-teal-600 text-teal-600 dark:text-teal-400 -mb-px'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <InputPanel params={params} setParams={setParams} page={page} />
+          {page === "pricing" && <PricingPage params={params} />}
+          {page === "greeks" && <GreeksPage params={params} />}
+          {page === "payoff" && <PayoffPage params={params} />}
+          {page === "iv" && <IVSolverPage params={params} />}
+          {page === "spreads" && <SpreadsPage params={params} initialStrategy={urlStrategy} initialStrikes={urlStrikes} />}
+        </div>
+
+        <p className="mt-6 text-xs text-gray-500 dark:text-gray-400">
+          Black-Scholes &amp; Binomial models. For educational purposes. Not financial advice.
+        </p>
       </div>
     </div>
   );
