@@ -43,6 +43,7 @@ interface BarsResponse {
   market_status: string;
   moving_averages: { ma_20: number | null; ma_50: number | null };
   count: number;
+  multiplier: number; // minutes per bar
   note?: string;
 }
 
@@ -735,7 +736,7 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                 <span className="text-xs text-gray-400">
                   {zoomRange
                     ? `${zoomRange.end - zoomRange.start + 1} / ${displayChartData.length} bars`
-                    : `${barsData?.count ?? 0} bars`} · 1-min
+                    : `${barsData?.count ?? 0} bars`}{barsData ? ` · ${barsData.multiplier}-min` : ''}
                   {!zoomRange && liveTicks.length > 0 && (
                     <span className="text-teal-400"> + {liveTicks.length} live</span>
                   )}

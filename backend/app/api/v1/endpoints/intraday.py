@@ -26,6 +26,11 @@ MAX_BATCH_TICKERS = 200
 # Eastern time for display
 ET = pytz.timezone('US/Eastern')
 
+# Bar size for /{ticker}/bars-with-ma. 1-minute bars need a higher FMP plan
+# (historical-chart/1min answers 402 since the 2026-10-31 downgrade); set back
+# to 1 on relaunch. The response's `multiplier` carries it to the UI labels.
+INTRADAY_BAR_MINUTES = 5
+
 
 async def _get_market_status() -> Optional[str]:
     """Fetch NASDAQ market status from FMP. Returns 'open', 'closed', or None."""
@@ -323,29 +328,32 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
             if not _is_trading_day(check_date, holidays):
                 continue
 
+            # Only an empty day means "look further back". A failed fetch raises:
+            # skipping past it showed an older day as the most recent one, and a
+            # plan rejection on every day read as "no recent trading data".
             try:
                 intraday_data = await market_data_service._fmp_get(
-                    "historical-chart/1min",
+                    f"historical-chart/{INTRADAY_BAR_MINUTES}min",
                     {
                         "symbol": ticker_upper,
                         "from": check_date.isoformat(),
                         "to": check_date.isoformat(),
                     }
                 )
-
-                if intraday_data and isinstance(intraday_data, list) and len(intraday_data) > 0:
-                    bars_data_raw = intraday_data
-                    bars_found = True
-                    data_date = check_date
-                    break
-
             except httpx.HTTPStatusError as e:
-                if e.response.status_code == 403:
+                # FMP answers 402 for an endpoint outside the plan
+                if e.response.status_code in (402, 403):
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
-                        detail="API key doesn't have access to intraday data. Please verify your FMP plan."
+                        detail="Intraday bars aren't available on the current FMP plan."
                     )
-                continue
+                raise
+
+            if intraday_data and isinstance(intraday_data, list) and len(intraday_data) > 0:
+                bars_data_raw = intraday_data
+                bars_found = True
+                data_date = check_date
+                break
 
         if not bars_found:
             raise HTTPException(
@@ -420,7 +428,7 @@ async def get_intraday_bars_with_moving_averages(ticker: str) -> Dict[str, Any]:
             "ticker": ticker_upper,
             "bars": bars_data,
             "timespan": "minute",
-            "multiplier": 1,
+            "multiplier": INTRADAY_BAR_MINUTES,
             "count": len(bars_data),
             "data_date": data_date.isoformat(),
             "is_today": is_today,

@@ -171,7 +171,7 @@ interface TrueVwapBar {
 }
 
 const TrueVwapModal: React.FC<{ ticker: string; onClose: () => void }> = ({ ticker, onClose }) => {
-  const [barsData, setBarsData] = useState<{ bars: TrueVwapBar[]; data_date: string; is_today: boolean; count: number } | null>(null);
+  const [barsData, setBarsData] = useState<{ bars: TrueVwapBar[]; data_date: string; is_today: boolean; count: number; multiplier: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -258,7 +258,7 @@ const TrueVwapModal: React.FC<{ ticker: string; onClose: () => void }> = ({ tick
             <>
               <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
                 Session VWAP resets at market open and accumulates throughout the day. Price above VWAP = institutional buy pressure; below = sell pressure.
-                Calculated from <strong>{barsData?.count ?? chartData.length}</strong> bars (1-min intervals).
+                Calculated from <strong>{barsData?.count ?? chartData.length}</strong> bars ({barsData?.multiplier}-min intervals).
               </p>
               <ResponsiveContainer width="100%" height={300}>
                 <AreaChart data={chartData}>
