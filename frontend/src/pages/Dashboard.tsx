@@ -289,16 +289,17 @@ const Dashboard: React.FC = () => {
     [positions]
   );
 
-  // Subscribe to portfolio tickers for live prices
+  // Subscribe to portfolio tickers for live prices. Not gated on isConnected:
+  // subscribe() is what opens the socket when it is down, and it resubscribes on open.
   useEffect(() => {
-    if (tickerList && isConnected) {
+    if (tickerList) {
       const tickers = tickerList.split(',');
       subscribe(tickers);
       return () => {
         unsubscribe(tickers);
       };
     }
-  }, [tickerList, isConnected, subscribe, unsubscribe]);
+  }, [tickerList, subscribe, unsubscribe]);
 
   // Track previous portfolio value for flash animation (avoids stale closure on stats)
   const prevPortfolioValueRef = useRef<number>(0);

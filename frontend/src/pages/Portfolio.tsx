@@ -106,16 +106,18 @@ const Portfolio: React.FC = () => {
     [portfolio]
   );
 
+  // Not gated on isConnected: subscribe() is what opens the socket when it is
+  // down (signed in after the app loaded, expired token), and it resubscribes on open.
   useEffect(() => {
-    if (tickerList && isConnected) {
+    if (tickerList) {
       const tickers = tickerList.split(',');
       subscribe(tickers);
-      
+
       return () => {
         unsubscribe(tickers);
       };
     }
-  }, [tickerList, isConnected, subscribe, unsubscribe]);
+  }, [tickerList, subscribe, unsubscribe]);
 
   // Fetch dividend data for all portfolio tickers
   useEffect(() => {

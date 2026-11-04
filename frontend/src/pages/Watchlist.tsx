@@ -90,16 +90,18 @@ const Watchlist: React.FC = () => {
 
   // Subscribe to watchlist tickers for live prices.
   // Depends on tickerList (stable string) instead of watchlist (changes on every price update).
+  // Not gated on isConnected: subscribe() is what opens the socket when it is down,
+  // and it resubscribes on open.
   useEffect(() => {
-    if (tickerList && isConnected) {
+    if (tickerList) {
       const tickers = tickerList.split(',');
       subscribe(tickers);
-      
+
       return () => {
         unsubscribe(tickers);
       };
     }
-  }, [tickerList, isConnected, subscribe, unsubscribe]);
+  }, [tickerList, subscribe, unsubscribe]);
 
   // Update watchlist with live prices and trigger flash animations
   useEffect(() => {
