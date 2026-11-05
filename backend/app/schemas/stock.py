@@ -40,6 +40,9 @@ class CompanyInfo(BaseModel):
     fund_expense_ratio: Optional[float] = None
     fund_inception_date: Optional[str] = None
     fund_total_assets: Optional[int] = None
+    # 5-year beta vs. the market, from stock_snapshots (company-screener). None when
+    # the ticker is outside the screener universe or FMP reports none.
+    beta: Optional[float] = None
 
 
 class HistoricalPrice(BaseModel):

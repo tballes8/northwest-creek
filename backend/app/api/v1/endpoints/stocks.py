@@ -183,19 +183,28 @@ async def get_stock_quote(ticker: str):
 
 
 @router.get("/company/{ticker}", response_model=CompanyInfo)
-async def get_company_info(ticker: str):
+async def get_company_info(ticker: str, db: AsyncSession = Depends(get_db)):
     """
     Get company information
-    
+
     **Parameters:**
     - **ticker**: Stock symbol
-    
+
     **Returns:**
     - Company name, description, sector, industry, and other details
     """
     try:
         company = await market_data_service.get_company_info(ticker)
-        return company
+        # Beta is the stored /company-screener value (daily rebuild), the same column
+        # the screener's Beta filter and column read, so the stock page and a screener
+        # row can't show two betas for one ticker. /profile also carries a beta; don't
+        # read it here. None for tickers outside the screener universe. A copy, not an
+        # assignment: `company` is the profile cache's own dict.
+        symbol = (company.get("ticker") or ticker).upper()
+        beta = (await db.execute(
+            select(StockSnapshot.beta).where(StockSnapshot.symbol == symbol)
+        )).scalar_one_or_none()
+        return {**company, "beta": float(beta) if beta is not None else None}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=safe_error(e))
     except Exception as e:

@@ -48,6 +48,7 @@ interface CompanyInfo {
   fund_expense_ratio?: number | null; // percent, e.g. 0.75 = 0.75% (populated by loadEtfInfo)
   fund_inception_date?: string | null;
   fund_total_assets?: number | null;
+  beta?: number | null; // 5-year beta, the screener's stored company-screener value
 }
 
 interface HistoricalPrice {
@@ -2449,7 +2450,7 @@ const Stocks: React.FC = () => {
             </div>
 
             {/* Quote Details */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-4 border dark:border-gray-500">
                 <div className="text-sm text-gray-600 dark:text-gray-400">Open</div>
                 <div className="text-xl font-semibold text-gray-900 dark:text-white">${quote.open.toFixed(2)}</div>
@@ -2465,6 +2466,16 @@ const Stocks: React.FC = () => {
               <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-4 border dark:border-gray-500">
                 <div className="text-sm text-gray-600 dark:text-gray-400">Volume</div>
                 <div className="text-xl font-semibold text-gray-900 dark:text-white">{quote.volume.toLocaleString()}</div>
+              </div>
+              {/* Fifth tile spans the row on mobile so the 2-column grid doesn't end on a lone half-width card. */}
+              <div
+                className="col-span-2 md:col-span-1 bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 p-4 border dark:border-gray-500"
+                title="5-year beta vs. the market: 1.0 moves with the market, above 1 swings more, below 1 less, negative moves opposite."
+              >
+                <div className="text-sm text-gray-600 dark:text-gray-400">Beta (5Y)</div>
+                <div className="text-xl font-semibold text-gray-900 dark:text-white">
+                  {company?.beta != null ? company.beta.toFixed(2) : '—'}
+                </div>
               </div>
             </div>
 
