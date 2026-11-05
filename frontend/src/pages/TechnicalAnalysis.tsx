@@ -24,6 +24,7 @@ import {
 import { Line, Chart } from 'react-chartjs-2';
 import { AreaChart, Area, Line as RLine, XAxis, YAxis, CartesianGrid, Tooltip as RTooltip, Legend as RLegend, ResponsiveContainer } from 'recharts';
 import { formatDateOnly } from '../utils/dates';
+import { setActiveTicker } from '../utils/activeTicker';
 
 
 // Register Chart.js components
@@ -593,6 +594,7 @@ const TechnicalAnalysis: React.FC = () => {
     try {
       const response = await technicalAPI.analyze(symbol.toUpperCase());
       setAnalysisData(response.data);
+      setActiveTicker(symbol);
       loadEntryAnchors(symbol.toUpperCase());
       
       // API-driven warrant detection — overrides any pre-fetch hint

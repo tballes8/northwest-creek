@@ -3,6 +3,7 @@ import { relvalAPI, screenerAPI, EntityTrust, isEntityContradicted } from '../se
 import { User } from '../types';
 import UpgradeRequired from './UpgradeRequired';
 import EntityTrustBlock from './EntityTrustBlock';
+import { setActiveTicker } from '../utils/activeTicker';
 
 // ─── Types ───────────────────────────────────────────────────────────────
 interface Peer {
@@ -222,6 +223,7 @@ const RelativeValuation: React.FC<Props> = ({ ticker, currentPrice, user, onTick
     try {
       const res = await relvalAPI.getInputs(ticker);
       const data: RelvalInputs = res.data;
+      setActiveTicker(ticker);
 
       // On an identity contradiction the backend returns a *partial* payload
       // rather than an empty one — forward estimates and the market-cap share

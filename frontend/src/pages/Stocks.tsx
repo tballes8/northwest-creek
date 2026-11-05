@@ -12,6 +12,7 @@ import PriceProjection from '../components/PriceProjection'; // EXPERIMENTAL, ma
 import { SECTOR_COLORS } from '../utils/sectorMap';
 import { planIncludes } from '../data/pricingTiers';
 import { formatDateOnly, parseLocalDate } from '../utils/dates';
+import { setActiveTicker } from '../utils/activeTicker';
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
@@ -993,6 +994,8 @@ const Stocks: React.FC = () => {
         setLoading(false);
         return;
       }
+      // A real quote came back: this is now the ticker that follows the user.
+      setActiveTicker(symbol);
 
       // Company is essential — if it failed, show error
       if (companyResult.status === 'rejected') {

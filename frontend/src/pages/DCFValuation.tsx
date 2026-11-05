@@ -8,6 +8,7 @@ import UpgradeRequired from '../components/UpgradeRequired';
 import RelativeValuation from '../components/RelativeValuation';
 import EntityTrustBlock from '../components/EntityTrustBlock';
 import { planIncludes, planNamesWith } from '../data/pricingTiers';
+import { setActiveTicker } from '../utils/activeTicker';
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid,
@@ -459,6 +460,9 @@ const DCFValuation: React.FC = () => {
     try {
       const response = await dcfAPI.getSuggestions(symbol.toUpperCase());
       setSuggestions(response.data);
+      // Recorded even when the DCF can't value the company (negative FCF), so
+      // the ticker still follows the user to Options or Technical Analysis.
+      setActiveTicker(symbol);
       
       // API-driven warrant detection — overrides any pre-fetch hint
       const apiType = response.data.security_type || '';
@@ -606,6 +610,7 @@ const DCFValuation: React.FC = () => {
 
       setDcfData(response.data);
       setShowSuggestions(false);
+      setActiveTicker(ticker);
     } catch (err: any) {
       console.error('DCF calculation error:', err);
       if (err.response?.status === 403 && err.response?.data?.detail?.current_usage !== undefined) {

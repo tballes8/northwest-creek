@@ -6,6 +6,7 @@ import NavBar from "../components/NavBar";
 import { useTheme } from "../contexts/ThemeContext";
 import UpgradeRequired from "../components/UpgradeRequired";
 import { lowestTierWith, planIncludes } from "../data/pricingTiers";
+import { setActiveTicker } from "../utils/activeTicker";
 
 // ─── Math Utilities ───
 const norm = {
@@ -183,7 +184,7 @@ function nearestTreasuryRate(rates, days) {
   return best ? Number(best.value) : null;
 }
 
-function InputPanel({ params, setParams, page }) {
+function InputPanel({ params, setParams, page, autoLookup }) {
   const set = (k) => (e) => setParams(p => ({ ...p, [k]: e.target.value }));
   const [tickerInput, setTickerInput] = useState(params.ticker || "");
   const [lookupLoading, setLookupLoading] = useState(false);
@@ -223,6 +224,7 @@ function InputPanel({ params, setParams, page }) {
         if (ivVal != null) next.sigma = (Number(ivVal) * 100).toFixed(1);
         return next;
       });
+      if (newPrice != null) setActiveTicker(sym);
       const priceMsg = newPrice != null ? `$${Number(newPrice).toFixed(2)}` : "price n/a";
       const ivMsg = ivVal != null ? `${(Number(ivVal) * 100).toFixed(1)}% vol (${ivSource === "realized" ? "30D realized" : "default"})` : "vol n/a";
       setLookupStatus({ ok: true, msg: `${sym} · ${priceMsg} · ${ivMsg}`, source: ivSource });
@@ -232,6 +234,16 @@ function InputPanel({ params, setParams, page }) {
       setLookupLoading(false);
     }
   };
+
+  // Arriving with a ticker from another page (the nav carries the active
+  // ticker): fill in its price and volatility instead of leaving the defaults.
+  // Once per visit; the ref also absorbs StrictMode's double effect run.
+  const autoLookupDone = useRef(false);
+  useEffect(() => {
+    if (!autoLookup || autoLookupDone.current || !tickerInput.trim()) return;
+    autoLookupDone.current = true;
+    runLookup();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div style={{ ...cardBox(), display: "flex", flexDirection: "column", gap: 12 }}>
@@ -1062,7 +1074,14 @@ export default function OptionsCalculator() {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <InputPanel params={params} setParams={setParams} page={page} />
+          <InputPanel
+            params={params}
+            setParams={setParams}
+            page={page}
+            // A ticker with no price means the nav brought it; "Trade This"
+            // sends its own price and volatility, which must not be replaced.
+            autoLookup={!!searchParams.get("ticker") && !searchParams.get("S")}
+          />
           {/* Spreads defines its own legs; every other tab needs a Call or Put */}
           {page !== "spreads" && !params.type ? (
             <div style={{ ...cardBox(), textAlign: "center", padding: 32, color: C.textDim, fontSize: 14 }}>

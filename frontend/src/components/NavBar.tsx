@@ -4,6 +4,7 @@ import ThemeToggle from './ThemeToggle';
 import TickerTape from './landing/TickerTape';
 import { User } from '../types';
 import { getTierBySlug, toTierSlug, TierSlug } from '../data/pricingTiers';
+import { useActiveTicker } from '../utils/activeTicker';
 
 type PageKey =
   | 'dashboard'
@@ -74,7 +75,8 @@ const getTierBadge = (tier: string) => {
   );
 };
 
-const TICKER_PAGES: Set<PageKey> = new Set(['stocks', 'technical-analysis', 'dcf-valuation']);
+// Pages whose nav link carries the active ticker (utils/activeTicker.ts).
+const TICKER_PAGES: Set<PageKey> = new Set(['stocks', 'technical-analysis', 'dcf-valuation', 'options-calculator']);
 
 const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -82,10 +84,13 @@ const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
   const [searchParams] = useSearchParams();
-  const currentTicker = searchParams.get('ticker') || '';
+  // The last ticker a page actually loaded; the URL's only covers a fresh tab
+  // whose page hasn't finished loading its ticker yet.
+  const activeTicker = useActiveTicker();
+  const currentTicker = activeTicker || searchParams.get('ticker') || '';
 
   const buildTo = (to: string, key: PageKey) =>
-    currentTicker && TICKER_PAGES.has(key) ? `${to}?ticker=${currentTicker}` : to;
+    currentTicker && TICKER_PAGES.has(key) ? `${to}?ticker=${encodeURIComponent(currentTicker)}` : to;
 
   // Close menus on outside click
   useEffect(() => {
