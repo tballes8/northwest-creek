@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { authAPI, stocksAPI } from "../services/api";
 import NavBar from "../components/NavBar";
@@ -7,79 +7,10 @@ import { useTheme } from "../contexts/ThemeContext";
 import UpgradeRequired from "../components/UpgradeRequired";
 import { lowestTierWith, planIncludes } from "../data/pricingTiers";
 import { setActiveTicker } from "../utils/activeTicker";
+import { bsPrice, bsGreeks, binomialPrice, impliedVol } from "../utils/blackScholes";
 
-// ─── Math Utilities ───
-const norm = {
-  pdf: (x) => Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI),
-  cdf: (x) => {
-    const a1=0.254829592, a2=-0.284496736, a3=1.421413741, a4=-1.453152027, a5=1.061405429, p=0.3275911;
-    const sign = x < 0 ? -1 : 1;
-    const t = 1 / (1 + p * Math.abs(x));
-    const y = 1 - (((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t * Math.exp(-x*x/2);
-    return 0.5 * (1 + sign * y);
-  }
-};
-
-function bsPrice(S, K, T, r, sigma, type) {
-  if (T <= 0 || sigma <= 0) return Math.max(type === "call" ? S - K : K - S, 0);
-  const d1 = (Math.log(S/K) + (r + sigma*sigma/2)*T) / (sigma*Math.sqrt(T));
-  const d2 = d1 - sigma*Math.sqrt(T);
-  if (type === "call") return S*norm.cdf(d1) - K*Math.exp(-r*T)*norm.cdf(d2);
-  return K*Math.exp(-r*T)*norm.cdf(-d2) - S*norm.cdf(-d1);
-}
-
-function bsGreeks(S, K, T, r, sigma, type) {
-  if (T <= 0 || sigma <= 0) return { delta:0, gamma:0, theta:0, vega:0, rho:0 };
-  const sqrtT = Math.sqrt(T);
-  const d1 = (Math.log(S/K) + (r + sigma*sigma/2)*T) / (sigma*sqrtT);
-  const d2 = d1 - sigma*sqrtT;
-  const nd1 = norm.pdf(d1);
-  const delta = type === "call" ? norm.cdf(d1) : norm.cdf(d1) - 1;
-  const gamma = nd1 / (S * sigma * sqrtT);
-  const thetaCommon = -(S * nd1 * sigma) / (2 * sqrtT);
-  const theta = type === "call"
-    ? (thetaCommon - r*K*Math.exp(-r*T)*norm.cdf(d2)) / 365
-    : (thetaCommon + r*K*Math.exp(-r*T)*norm.cdf(-d2)) / 365;
-  const vega = S * nd1 * sqrtT / 100;
-  const rho = type === "call"
-    ? K*T*Math.exp(-r*T)*norm.cdf(d2) / 100
-    : -K*T*Math.exp(-r*T)*norm.cdf(-d2) / 100;
-  return { delta, gamma, theta, vega, rho };
-}
-
-function binomialPrice(S, K, T, r, sigma, type, steps = 100) {
-  if (T <= 0) return Math.max(type === "call" ? S - K : K - S, 0);
-  const dt = T / steps;
-  const u = Math.exp(sigma * Math.sqrt(dt));
-  const d = 1 / u;
-  const p = (Math.exp(r * dt) - d) / (u - d);
-  const disc = Math.exp(-r * dt);
-  let prices = Array(steps + 1);
-  for (let i = 0; i <= steps; i++) {
-    const st = S * Math.pow(u, steps - i) * Math.pow(d, i);
-    prices[i] = Math.max(type === "call" ? st - K : K - st, 0);
-  }
-  for (let j = steps - 1; j >= 0; j--) {
-    for (let i = 0; i <= j; i++) {
-      const european = disc * (p * prices[i] + (1 - p) * prices[i + 1]);
-      const st = S * Math.pow(u, j - i) * Math.pow(d, i);
-      const exercise = Math.max(type === "call" ? st - K : K - st, 0);
-      prices[i] = Math.max(european, exercise);
-    }
-  }
-  return prices[0];
-}
-
-function impliedVol(S, K, T, r, marketPrice, type) {
-  let lo = 0.001, hi = 5, mid;
-  for (let i = 0; i < 100; i++) {
-    mid = (lo + hi) / 2;
-    const p = bsPrice(S, K, T, r, mid, type);
-    if (Math.abs(p - marketPrice) < 0.0001) return mid;
-    if (p > marketPrice) hi = mid; else lo = mid;
-  }
-  return mid;
-}
+// Pricing math (Black-Scholes, binomial, implied vol) lives in utils/blackScholes.ts,
+// shared with the DCF page's "Trade This" suggestion.
 
 // ─── Color System ───
 const CDark = {
@@ -197,9 +128,16 @@ function InputPanel({ params, setParams, page, autoLookup }) {
     }
   }, [params.ticker]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The ticker whose price and vol the inputs hold, and the last one asked for.
+  // A ticker that arrived with its own values ("Trade This") counts as loaded,
+  // so clicking in and out of the box doesn't replace them.
+  const loadedTicker = useRef(autoLookup ? null : (params.ticker || null));
+  const requestedTicker = useRef(loadedTicker.current);
+
   const runLookup = async () => {
     const sym = tickerInput.trim().toUpperCase();
     if (!sym) return;
+    requestedTicker.current = sym;
     setLookupLoading(true);
     setLookupStatus(null);
     try {
@@ -214,17 +152,23 @@ function InputPanel({ params, setParams, page, autoLookup }) {
         setLookupStatus({ ok: false, msg: `No data for ${sym}` });
         return;
       }
+      // A new company needs a strike near its price. Re-fetching the one already
+      // loaded is a refresh: price and vol update, the strike the user set stays.
+      const isNewTicker = sym !== loadedTicker.current;
       setParams(p => {
         const next = { ...p, ticker: sym };
         if (newPrice != null) {
           next.S = Number(newPrice).toFixed(2);
-          const k = nearestStrike(newPrice);
+          const k = isNewTicker ? nearestStrike(newPrice) : null;
           if (k != null) next.K = k.toFixed(2);
         }
         if (ivVal != null) next.sigma = (Number(ivVal) * 100).toFixed(1);
         return next;
       });
-      if (newPrice != null) setActiveTicker(sym);
+      if (newPrice != null) {
+        loadedTicker.current = sym;
+        setActiveTicker(sym);
+      }
       const priceMsg = newPrice != null ? `$${Number(newPrice).toFixed(2)}` : "price n/a";
       const ivMsg = ivVal != null ? `${(Number(ivVal) * 100).toFixed(1)}% vol (${ivSource === "realized" ? "30D realized" : "default"})` : "vol n/a";
       setLookupStatus({ ok: true, msg: `${sym} · ${priceMsg} · ${ivMsg}`, source: ivSource });
@@ -245,6 +189,13 @@ function InputPanel({ params, setParams, page, autoLookup }) {
     runLookup();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Leaving the box fetches only a ticker that isn't already loaded or on its
+  // way. Enter and the button always fetch: that is an explicit refresh.
+  const onTickerBlur = () => {
+    const sym = tickerInput.trim().toUpperCase();
+    if (sym && sym !== requestedTicker.current) runLookup();
+  };
+
   return (
     <div style={{ ...cardBox(), display: "flex", flexDirection: "column", gap: 12 }}>
       {/* Ticker lookup — fetches current price + 30-day realized volatility */}
@@ -257,11 +208,13 @@ function InputPanel({ params, setParams, page, autoLookup }) {
             value={tickerInput}
             placeholder="e.g. CRCL"
             onChange={e => setTickerInput(e.target.value.toUpperCase())}
-            onBlur={runLookup}
+            onBlur={onTickerBlur}
             onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); runLookup(); } }}
           />
         </div>
         <button
+          // Keep focus in the box: otherwise the box's blur fetches, then the click fetches again
+          onMouseDown={e => e.preventDefault()}
           onClick={runLookup}
           disabled={lookupLoading || !tickerInput.trim()}
           style={{
@@ -693,6 +646,16 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
     setStrategy(key);
     setStrikes(STRATEGIES[key].defaults(S));
   };
+
+  // A new company fetched while on this tab gets strikes around its price; the
+  // previous company's strikes would sit far off the chart. Typing a different
+  // stock price is a what-if on the same contracts, so it leaves them alone.
+  const strikesTicker = useRef(params.ticker);
+  useEffect(() => {
+    if (params.ticker === strikesTicker.current) return;
+    strikesTicker.current = params.ticker;
+    setStrikes(STRATEGIES[strategy].defaults(+params.S));
+  }, [params.ticker]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setStrike = (k) => (e) => setStrikes(prev => ({ ...prev, [k]: e.target.value }));
 

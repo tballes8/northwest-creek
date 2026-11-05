@@ -9,31 +9,14 @@ import RelativeValuation from '../components/RelativeValuation';
 import EntityTrustBlock from '../components/EntityTrustBlock';
 import { planIncludes, planNamesWith } from '../data/pricingTiers';
 import { setActiveTicker } from '../utils/activeTicker';
+import { bsPrice, normCdf } from '../utils/blackScholes';
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, Cell
 } from 'recharts';
 
-// ─── Black-Scholes utilities (for Trade This strategy suggestions) ───
-const _norm = {
-  cdf: (x: number): number => {
-    const a1=0.254829592, a2=-0.284496736, a3=1.421413741, a4=-1.453152027, a5=1.061405429, p=0.3275911;
-    const sign = x < 0 ? -1 : 1;
-    const t = 1 / (1 + p * Math.abs(x));
-    const y = 1 - (((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t * Math.exp(-x*x/2);
-    return 0.5 * (1 + sign * y);
-  }
-};
-
-function _bsPrice(S: number, K: number, T: number, r: number, sigma: number, type: "call" | "put"): number {
-  if (T <= 0 || sigma <= 0) return Math.max(type === "call" ? S - K : K - S, 0);
-  const d1 = (Math.log(S/K) + (r + sigma*sigma/2)*T) / (sigma*Math.sqrt(T));
-  const d2 = d1 - sigma*Math.sqrt(T);
-  if (type === "call") return S*_norm.cdf(d1) - K*Math.exp(-r*T)*_norm.cdf(d2);
-  return K*Math.exp(-r*T)*_norm.cdf(-d2) - S*_norm.cdf(-d1);
-}
-
+// ─── Trade This strategy suggestions (pricing math: utils/blackScholes.ts) ───
 function _roundStrike(price: number): number {
   if (price >= 50) return Math.round(price / 5) * 5;
   if (price >= 25) return Math.round(price / 2.5) * 2.5;
@@ -134,11 +117,11 @@ function suggestStrategy(
 
   let spreadCost: number, maxProfit: number, breakeven: number;
   if (isBullish) {
-    spreadCost = _bsPrice(currentPrice, K1, T, r, sigma, "call") - _bsPrice(currentPrice, K2, T, r, sigma, "call");
+    spreadCost = bsPrice(currentPrice, K1, T, r, sigma, "call") - bsPrice(currentPrice, K2, T, r, sigma, "call");
     maxProfit = (K2 - K1) - spreadCost;
     breakeven = K1 + spreadCost;
   } else {
-    spreadCost = _bsPrice(currentPrice, K2, T, r, sigma, "put") - _bsPrice(currentPrice, K1, T, r, sigma, "put");
+    spreadCost = bsPrice(currentPrice, K2, T, r, sigma, "put") - bsPrice(currentPrice, K1, T, r, sigma, "put");
     maxProfit = (K2 - K1) - spreadCost;
     breakeven = K2 - spreadCost;
   }
@@ -146,7 +129,7 @@ function suggestStrategy(
 
   const d = (Math.log(currentPrice / breakeven) + (r - 0.5 * sigma * sigma) * T) / (sigma * Math.sqrt(T));
   const probProfit = Math.min(100, Math.max(0,
-    (isBullish ? _norm.cdf(d) : 1 - _norm.cdf(d)) * 100
+    (isBullish ? normCdf(d) : 1 - normCdf(d)) * 100
   ));
 
   const contracts = maxCapital > 0 && spreadCost > 0 ? Math.floor(maxCapital / (spreadCost * 100)) : 0;
