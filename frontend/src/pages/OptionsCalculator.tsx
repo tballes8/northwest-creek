@@ -301,11 +301,24 @@ function InputPanel({ params, setParams, page }) {
           <input style={inputStyle()} type="number" step="0.1" value={params.sigma} onChange={set("sigma")} />
         </div>
         {page !== "spreads" && (
+          // Highlighted: it is the one input with no usable default, and every
+          // result on the non-spread tabs waits for it.
           <div style={inputGroup}>
-            <span style={labelStyle()}>Option Type</span>
-            <select style={selectStyle()} value={params.type} onChange={set("type")}>
-              <option value="call">Call</option>
-              <option value="put">Put</option>
+            <span style={{ ...labelStyle(), color: C.accent, fontWeight: 700 }}>Option Type</span>
+            <select
+              style={{
+                ...selectStyle(),
+                border: `2px solid ${C.accent}`,
+                boxShadow: `0 0 0 3px ${C.accentGlow2}`,
+                padding: "7px 9px", // keeps the box the same height despite the 2px border
+                color: params.type ? C.text : C.textDim,
+              }}
+              value={params.type}
+              onChange={set("type")}
+            >
+              <option value="" disabled>Select Type</option>
+              <option value="call">Call (Right to buy)</option>
+              <option value="put">Put (Right to sell)</option>
             </select>
           </div>
         )}
@@ -908,7 +921,8 @@ export default function OptionsCalculator() {
     days: searchParams.get("days") || "30",
     r: searchParams.get("r") || "5.0",
     sigma: searchParams.get("sigma") || "25.0",
-    type: searchParams.get("type") || "call",
+    // No default: the user picks Call or Put. A link (e.g. "Trade This") may preset it.
+    type: ["call", "put"].includes(searchParams.get("type")) ? searchParams.get("type") : "",
     ticker: searchParams.get("ticker") || "",
   });
 
@@ -1028,15 +1042,7 @@ export default function OptionsCalculator() {
       <NavBar currentPage="options-calculator" user={user} onLogout={handleLogout} />
 
       <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex items-center justify-between gap-4 mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Options Calculator</h1>
-          {page !== "spreads" && (
-            <div style={{ display: "flex", gap: 6 }}>
-              <button style={pillBtn(params.type === "call")} onClick={() => setParams(p => ({...p, type: "call"}))}>Call</button>
-              <button style={pillBtn(params.type === "put")} onClick={() => setParams(p => ({...p, type: "put"}))}>Put</button>
-            </div>
-          )}
-        </div>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-6">Options Calculator</h1>
 
         {/* Tab Bar — same classes as the Stocks page */}
         <div className="flex flex-wrap gap-1 border-b border-gray-200 dark:border-gray-700 mb-6">
@@ -1057,11 +1063,20 @@ export default function OptionsCalculator() {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <InputPanel params={params} setParams={setParams} page={page} />
-          {page === "pricing" && <PricingPage params={params} />}
-          {page === "greeks" && <GreeksPage params={params} />}
-          {page === "payoff" && <PayoffPage params={params} />}
-          {page === "iv" && <IVSolverPage params={params} />}
-          {page === "spreads" && <SpreadsPage params={params} initialStrategy={urlStrategy} initialStrikes={urlStrikes} />}
+          {/* Spreads defines its own legs; every other tab needs a Call or Put */}
+          {page !== "spreads" && !params.type ? (
+            <div style={{ ...cardBox(), textAlign: "center", padding: 32, color: C.textDim, fontSize: 14 }}>
+              Choose an <span style={{ color: C.accent, fontWeight: 600 }}>Option Type</span> above to see results.
+            </div>
+          ) : (
+            <>
+              {page === "pricing" && <PricingPage params={params} />}
+              {page === "greeks" && <GreeksPage params={params} />}
+              {page === "payoff" && <PayoffPage params={params} />}
+              {page === "iv" && <IVSolverPage params={params} />}
+              {page === "spreads" && <SpreadsPage params={params} initialStrategy={urlStrategy} initialStrikes={urlStrikes} />}
+            </>
+          )}
         </div>
 
         <p className="mt-6 text-xs text-gray-500 dark:text-gray-400">
