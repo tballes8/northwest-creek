@@ -204,6 +204,9 @@ function InputPanel({ params, setParams, page, autoLookup }) {
           next.sigma = (Number(ivVal) * 100).toFixed(1);
           next.volSource = ivSource;
         }
+        // Kept apart from the Volatility field so the IV Solver can still compare
+        // against it after the user types the chain's implied volatility there.
+        next.realizedVol = ivVal != null && ivSource === "realized" ? Number(ivVal) * 100 : null;
         return next;
       });
       if (newPrice != null) {
@@ -511,157 +514,213 @@ function GreeksPage({ params }) {
 function PayoffPage({ params }) {
   const S = +params.S, K = +params.K, T = +params.days/365, r = +params.r/100, sig = +params.sigma/100, tp = params.type, q = +params.q/100 || 0;
   const premium = bsPrice(S, K, T, r, sig, tp, q);
-  const lo = S * 0.7, hi = S * 1.3, steps = 120;
-  const pts = [];
-  let minPnl = Infinity, maxPnl = -Infinity;
-  for (let i = 0; i <= steps; i++) {
-    const st = lo + (hi - lo) * i / steps;
-    const intrinsic = Math.max(tp === "call" ? st - K : K - st, 0);
-    const pnlExp = intrinsic - premium;
-    const pnlNow = bsPrice(st, K, T, r, sig, tp, q) - premium;
-    pts.push({ st, pnlExp, pnlNow });
-    minPnl = Math.min(minPnl, pnlExp, pnlNow);
-    maxPnl = Math.max(maxPnl, pnlExp, pnlNow);
-  }
-  const pad = (maxPnl - minPnl) * 0.1 || 5;
-  const yMin = minPnl - pad, yMax = maxPnl + pad;
-  const W = 600, H = 300, mx = 50, my = 30;
-  const toX = (v) => mx + (v - lo) / (hi - lo) * (W - 2 * mx);
-  const toY = (v) => my + (1 - (v - yMin) / (yMax - yMin)) * (H - 2 * my);
-  const pathExp = pts.map((p, i) => `${i===0?"M":"L"}${toX(p.st).toFixed(1)},${toY(p.pnlExp).toFixed(1)}`).join("");
-  const pathNow = pts.map((p, i) => `${i===0?"M":"L"}${toX(p.st).toFixed(1)},${toY(p.pnlNow).toFixed(1)}`).join("");
-  const zeroY = toY(0);
-  const breakeven = tp === "call" ? K + premium : K - premium;
+  const legs = [{ type: tp, K, dir: 1 }];
+  const payoff = summarizePayoff(legs, premium);
+  const be = payoff.breakevens[0];
 
-  const { ticks: yTicks, step: yTickStep } = niceTicks(yMin, yMax);
-  const tickDecimals = yTickStep >= 1 ? 0 : yTickStep >= 0.1 ? 1 : 2;
+  // Past the strike a single option's line keeps climbing (or falling), so the
+  // chart shows more of it than a spread's flat tails: half the expected move.
+  const sd = S * sig * Math.sqrt(T); // 1σ move by expiration, $
+  const [lo, hi] = fitPriceRange(S, sd, [K, S, ...payoff.breakevens], 0.5);
+
+  // Four cards, not the Spreads tab's five: a bought option's max loss is the
+  // premium (one card, not two), and reward : risk says nothing here (a call's
+  // upside is unlimited; a put's "max" needs the stock at $0). In its place,
+  // what the trade loses if the stock goes nowhere: the time value.
+  const stayPut = expiryPnl(legs, premium, S);
+  const stats = [
+    { label: "PREMIUM PAID", val: usd(-premium), sub: `${perContract(-premium)}; your max loss`, perShare: true, color: C.redText, bg: LOSS_BG },
+    {
+      label: "MAX PROFIT", val: fmtCap(payoff.maxProfit), perShare: true,
+      sub: Number.isFinite(payoff.maxProfit) ? `${perContract(payoff.maxProfit)}, if the stock hits $0` : "if the stock keeps rising",
+      color: C.greenText, bg: PROFIT_BG,
+    },
+    {
+      label: "BREAKEVEN",
+      val: be != null ? usd(be) : "None",
+      // How far the stock has to move: the number a single-option buyer is betting on.
+      sub: be != null ? `${be >= S ? "+" : "-"}${Math.abs((be / S - 1) * 100).toFixed(1)}% from today, at expiration` : "never profitable at this price",
+      color: C.accent, bg: C.accentGlow,
+    },
+    {
+      label: "IF THE STOCK DOESN'T MOVE",
+      val: signedUsd(stayPut),
+      sub: `${perContract(stayPut)} at expiration`,
+      color: stayPut < 0 ? C.redText : C.greenText, bg: C.cardAlt,
+    },
+  ];
 
   return (
-    <div style={cardBox()}>
-      <div style={{ display: "flex", gap: 16, marginBottom: 12, justifyContent: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-          <div style={{ width: 16, height: 3, background: C.accent, borderRadius: 2 }} />
-          <span style={{ color: C.textDim }}>At Expiration</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-          <div style={{ width: 16, height: 3, background: C.greenText, borderRadius: 2, opacity: 0.6 }} />
-          <span style={{ color: C.textDim }}>Current (theoretical)</span>
-        </div>
-      </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
-        {yTicks.map(v => (
-          <g key={v}>
-            <line x1={mx} x2={W-mx} y1={toY(v)} y2={toY(v)} stroke={C.border} strokeWidth={0.5} />
-            <text x={mx-6} y={toY(v)+4} fill={C.textMuted} fontSize={10} textAnchor="end">{usd(v, tickDecimals)}</text>
-          </g>
-        ))}
-        <line x1={mx} x2={W-mx} y1={zeroY} y2={zeroY} stroke={C.textDim} strokeWidth={1} strokeDasharray="4,3" />
-        <text x={W-mx+4} y={zeroY+4} fill={C.textDim} fontSize={9}>$0</text>
-        <line x1={toX(K)} x2={toX(K)} y1={my} y2={H-my} stroke={C.textMuted} strokeWidth={1} strokeDasharray="4,3" />
-        <text x={toX(K)} y={H-my+14} fill={C.textMuted} fontSize={10} textAnchor="middle">K=${K}</text>
-        {breakeven >= lo && breakeven <= hi && (
-          <>
-            <line x1={toX(breakeven)} x2={toX(breakeven)} y1={my} y2={H-my} stroke={C.accent} strokeWidth={1} strokeDasharray="2,3" opacity={0.5} />
-            <text x={toX(breakeven)} y={my-6} fill={C.accent} fontSize={9} textAnchor="middle">BE=${breakeven.toFixed(2)}</text>
-          </>
-        )}
-        <path d={pathNow} fill="none" stroke={C.greenText} strokeWidth={2} opacity={0.55} />
-        <path d={pathExp} fill="none" stroke={C.accent} strokeWidth={2.5} />
-        <text x={mx} y={H-4} fill={C.textMuted} fontSize={10}>Stock: ${lo.toFixed(0)}</text>
-        <text x={W-mx} y={H-4} fill={C.textMuted} fontSize={10} textAnchor="end">${hi.toFixed(0)}</text>
-      </svg>
-      <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
-        {[
-          { label: "PREMIUM PAID", val: `$${premium.toFixed(2)}`, color: C.text, bg: C.accentGlow },
-          { label: "BREAKEVEN", val: `$${breakeven.toFixed(2)}`, color: C.accent, bg: C.accentGlow },
-          { label: "MAX LOSS", val: `$${premium.toFixed(2)}`, color: C.redText, bg: `rgba(239,68,68,0.08)` },
-          { label: "MAX PROFIT", val: tp === "call" ? "Unlimited" : `$${(K - premium).toFixed(2)}`, color: C.greenText, bg: `rgba(34,197,94,0.08)` },
-        ].map(s => (
-          <div key={s.label} style={{ flex: 1, textAlign: "center", padding: 10, borderRadius: 8, background: s.bg }}>
-            <div style={{ fontSize: 10, color: C.textMuted, marginBottom: 2 }}>{s.label}</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: s.color }}>{s.val}</div>
-          </div>
-        ))}
-      </div>
-    </div>
+    <PayoffPanel
+      stats={stats}
+      S={S} sd={sd} lo={lo} hi={hi}
+      strikes={[K]}
+      breakevens={payoff.breakevens}
+      pnlExpAt={st => expiryPnl(legs, premium, st)}
+      pnlNowAt={st => bsPrice(st, K, T, r, sig, tp, q) - premium}
+      clipId="payoff"
+    />
   );
 }
 
 // ─── IV Solver Page ───
+// How expensive or cheap an option is compared with how much the stock has
+// actually moved: solve the volatility the market price implies, then set it
+// against the 30-day realized volatility the ticker lookup fetched.
+const IV_RICH = 1.1, IV_CHEAP = 0.9; // IV ÷ realized beyond these reads as expensive / cheap
+
 function IVSolverPage({ params }) {
-  const S = +params.S, K = +params.K, T = +params.days/365, r = +params.r/100, sig = +params.sigma/100, tp = params.type, q = +params.q/100 || 0;
+  const S = +params.S, K = +params.K, T = +params.days/365, r = +params.r/100, tp = params.type, q = +params.q/100 || 0;
+  const rv = params.realizedVol; // %, or null when no realized volatility was fetched
 
-  // Seed the market price with the Black-Scholes theoretical value for the
-  // current inputs, so the solved IV round-trips to ~the volatility input on
-  // load instead of showing a meaningless number from an arbitrary default.
-  // We keep it in sync with the inputs until the user enters a real premium.
-  const theoPrice = (T > 0 && sig > 0) ? bsPrice(S, K, T, r, sig, tp, q) : 0;
-  const [mktPrice, setMktPrice] = useState(theoPrice > 0 ? theoPrice.toFixed(2) : "5.00");
-  const userSetPrice = useRef(false);
-
+  // No pre-fill. Seeding it with the model's own price solved straight back to
+  // the volatility input (52.5% in, 52.5% out), which read as a result. A price
+  // belongs to one contract, so a new company or option type clears it.
+  const [mktPrice, setMktPrice] = useState("");
+  const priceFor = useRef(`${params.ticker}|${tp}`);
   useEffect(() => {
-    if (userSetPrice.current || theoPrice <= 0) return;
-    setMktPrice(theoPrice.toFixed(2));
-  }, [theoPrice]);
+    const key = `${params.ticker}|${tp}`;
+    if (key === priceFor.current) return;
+    priceFor.current = key;
+    setMktPrice("");
+  }, [params.ticker, tp]);
 
-  const onPriceChange = (e) => { userSetPrice.current = true; setMktPrice(e.target.value); };
-
+  const entered = mktPrice.trim() !== "";
   const mp = +mktPrice;
-  const iv = mp > 0 && T > 0 ? impliedVol(S, K, T, r, mp, tp, q) : null;
-  const ivPct = iv ? (iv * 100).toFixed(2) : "—";
+  // The prices the model can produce run from ~zero volatility to the solver's 500% cap.
+  const floorPrice = T > 0 ? bsPrice(S, K, T, r, 0.001, tp, q) : 0;
+  const capPrice = T > 0 ? bsPrice(S, K, T, r, 5, tp, q) : 0;
+  const problem = !entered ? null
+    : !(mp > 0) ? "Enter the price as a positive number."
+    : !(T > 0) ? "Days to expiry must be at least 1."
+    : mp < floorPrice - 0.005 ? `No volatility gives a price this low: with no volatility at all this option is worth ${usd(floorPrice)}. Check the price and the inputs above.`
+    : mp > capPrice + 0.005 ? "No volatility gives a price this high. Check the price and the inputs above."
+    : null;
+  const iv = entered && !problem ? impliedVol(S, K, T, r, mp, tp, q) : null;
+  const ivPct = iv != null ? iv * 100 : null;
 
+  const move = iv != null ? S * iv * Math.sqrt(T) : null;
+  const who = params.ticker || "the stock";
+  const priceAtRv = rv != null && T > 0 ? bsPrice(S, K, T, r, rv / 100, tp, q) : null;
+  const verdict = ivPct == null || rv == null ? null
+    : ivPct / rv >= IV_RICH ? "expensive"
+    : ivPct / rv <= IV_CHEAP ? "cheap"
+    : "about in line";
+
+  // Price at each volatility, 1–150%.
   const points = [];
   if (T > 0) {
-    for (let v = 1; v <= 150; v += 1) {
-      const sig = v / 100;
-      points.push({ vol: v, price: bsPrice(S, K, T, r, sig, tp, q) });
-    }
+    for (let v = 1; v <= 150; v += 1) points.push({ vol: v, price: bsPrice(S, K, T, r, v / 100, tp, q) });
   }
-  const W = 600, H = 250, mx = 55, my = 30;
-  const maxP = Math.max(...points.map(p => p.price), mp * 1.2 || 20);
+  // Wide and short: it supports the numbers above, so it shouldn't outweigh them.
+  const W = 1000, H = 230, mx = 60, my = 30;
+  const maxP = Math.max(...points.map(p => p.price), iv != null ? mp * 1.1 : 0) || 1;
   const toX = (v) => mx + (v - 1) / 149 * (W - 2 * mx);
   const toY = (v) => my + (1 - v / maxP) * (H - 2 * my);
   const path = points.map((p, i) => `${i===0?"M":"L"}${toX(p.vol).toFixed(1)},${toY(p.price).toFixed(1)}`).join("");
+  const { ticks: yTicks, step: yStep } = niceTicks(0, maxP);
+  const yDecimals = yStep >= 1 ? 0 : yStep >= 0.1 ? 1 : 2;
+  const rvOnChart = rv != null && rv >= 1 && rv <= 150;
+
+  const heading = { fontSize: 12, fontWeight: 600, color: C.textSec, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div style={{ ...cardBox(), display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
-        <div style={{ ...inputGroup, flex: "1 1 140px" }}>
-          <span style={labelStyle()}>Market Option Price ($)</span>
-          <input style={inputStyle()} type="number" step="0.01" value={mktPrice} onChange={onPriceChange} />
+      <div style={{ ...cardBox(), display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div style={{ ...inputGroup, flex: "1 1 200px" }}>
+          <span style={{ ...labelStyle(), color: C.accent, fontWeight: 700 }}>Market Option Price ($)</span>
+          <input
+            style={{ ...inputStyle(), borderColor: C.accent }}
+            type="number"
+            step="0.01"
+            min="0"
+            value={mktPrice}
+            placeholder="Bid/ask midpoint from your broker"
+            onChange={(e) => setMktPrice(e.target.value)}
+          />
+          {problem
+            ? <FieldHint warn>{problem}</FieldHint>
+            : <FieldHint>The midpoint of the bid and ask in your broker's options chain, for this strike and expiry.</FieldHint>}
         </div>
-        <div style={{ flex: "1 1 140px", textAlign: "center", padding: "8px 0" }}>
-          <div style={{ fontSize: 11, color: C.textDim, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Implied Volatility</div>
-          <div style={{ fontSize: 32, fontWeight: 700, color: C.accent, fontFamily: "monospace" }}>{ivPct}%</div>
-        </div>
-        <div style={{ flex: "1 1 180px", textAlign: "center", padding: "8px 0" }}>
-          <div style={{ fontSize: 11, color: C.textDim, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.05em" }}>Expected Move</div>
-          <div style={{ fontSize: 18, fontWeight: 600, color: C.textSec, fontFamily: "monospace" }}>
-            {iv ? `±$${(S * iv * Math.sqrt(T)).toFixed(2)}` : "—"}
+        <div style={{ flex: "1 1 160px", textAlign: "center", padding: "4px 0" }}>
+          <div style={heading}>Implied Volatility</div>
+          <div style={{ fontSize: 32, fontWeight: 700, color: ivPct != null ? C.accent : C.textMuted, fontFamily: "monospace" }}>
+            {ivPct != null ? `${ivPct.toFixed(1)}%` : "—"}
           </div>
+          {ivPct == null && !problem && <div style={{ fontSize: 12, color: C.textSec }}>Enter a market price to solve it</div>}
         </div>
-        <div style={{ flexBasis: "100%", fontSize: 11, color: C.textMuted, lineHeight: 1.5 }}>
-          Defaults to the Black-Scholes theoretical price computed from your inputs above (stock price, strike, days, rate, volatility) — so the solved IV starts out matching your volatility input. For an accurate read, replace it with the option's actual market price (the bid/ask mid) from your trading platform.
+        <div style={{ flex: "1 1 220px", textAlign: "center", padding: "4px 0" }}>
+          <div style={heading}>Expected Move</div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: C.text, fontFamily: "monospace" }}>{move != null ? `±${usd(move)}` : "—"}</div>
+          {move != null && (
+            <div style={{ fontSize: 12, color: C.textSec, lineHeight: 1.4, marginTop: 2 }}>
+              1 standard deviation: about a 68% chance {who} finishes between {usd(Math.max(S - move, 0))} and {usd(S + move)} by expiry
+            </div>
+          )}
         </div>
-      </div>
-      <div style={cardBox()}>
-        <div style={{ fontSize: 12, color: C.textDim, marginBottom: 8, textAlign: "center" }}>Option Price vs. Implied Volatility</div>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
-          {[0, 0.25, 0.5, 0.75, 1].map(f => {
-            const y = my + f * (H - 2 * my);
-            const val = maxP * (1 - f);
-            return <g key={f}><line x1={mx} x2={W-mx} y1={y} y2={y} stroke={C.border} strokeWidth={0.5} /><text x={mx-6} y={y+4} fill={C.textMuted} fontSize={10} textAnchor="end">${val.toFixed(1)}</text></g>;
-          })}
-          <path d={path} fill="none" stroke={C.accent} strokeWidth={2.5} />
-          {iv && (
+
+        {/* The point of the tab: is the market charging more or less than the stock's own movement justifies? */}
+        <div style={{ flexBasis: "100%", borderTop: `1px solid ${C.border}`, paddingTop: 12, fontSize: 13, color: C.textSec, lineHeight: 1.5 }}>
+          {ivPct == null ? (
+            rv != null
+              ? <>Enter the market price to compare its implied volatility with {who}'s 30-day realized volatility ({rv.toFixed(1)}%).</>
+              : <>Fetch a ticker above to compare the implied volatility with the stock's 30-day realized volatility: whether options are priced above or below how much it has actually moved.</>
+          ) : rv == null ? (
+            <>No realized volatility to compare with. Fetch a ticker above to see whether this price is expensive or cheap next to how much the stock has actually moved.</>
+          ) : (
             <>
-              <line x1={toX(iv*100)} x2={toX(iv*100)} y1={my} y2={H-my} stroke={C.greenText} strokeWidth={1} strokeDasharray="4,3" />
-              <line x1={mx} x2={W-mx} y1={toY(mp)} y2={toY(mp)} stroke={C.greenText} strokeWidth={1} strokeDasharray="4,3" />
-              <circle cx={toX(iv*100)} cy={toY(mp)} r={5} fill={C.greenText} />
-              <text x={toX(iv*100)} y={my-6} fill={C.greenText} fontSize={10} textAnchor="middle">{ivPct}%</text>
+              <span style={{ color: C.text, fontWeight: 700 }}>
+                IV {ivPct.toFixed(1)}% vs. 30-day realized {rv.toFixed(1)}%: options priced {Math.abs(ivPct - rv).toFixed(1)} points {ivPct >= rv ? "above" : "below"} the stock's recent movement ({verdict}).
+              </span>{" "}
+              {priceAtRv != null && Math.abs(mp - priceAtRv) >= 0.005 && (
+                <>At the realized volatility this option would be worth {usd(priceAtRv)}; the market is charging {usd(Math.abs(mp - priceAtRv))} {mp > priceAtRv ? "more" : "less"} ({usd(Math.abs(mp - priceAtRv) * 100, 0)} per contract).</>
+              )}
+              <div style={{ fontSize: 12, color: C.textDim, marginTop: 4 }}>
+                Implied volatility usually runs a little above realized, and an earnings report or other event before expiry raises it. Realized volatility looks back; implied looks ahead.
+              </div>
             </>
           )}
-          <text x={(mx + W - mx)/2} y={H - 2} fill={C.textMuted} fontSize={10} textAnchor="middle">Volatility (%)</text>
+        </div>
+      </div>
+
+      <div style={cardBox()}>
+        <div style={{ fontSize: 12, color: C.textDim, marginBottom: 8, textAlign: "center" }}>Option Price at Each Volatility</div>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
+          {yTicks.map(v => (
+            <g key={v}>
+              <line x1={mx} x2={W-mx} y1={toY(v)} y2={toY(v)} stroke={C.border} strokeWidth={0.5} />
+              <text x={mx-6} y={toY(v)+4} fill={C.textMuted} fontSize={10} textAnchor="end">{usd(v, yDecimals)}</text>
+            </g>
+          ))}
+          {[25, 50, 75, 100, 125, 150].map(v => (
+            <text key={v} x={toX(v)} y={H-my+14} fill={C.textMuted} fontSize={10} textAnchor="middle">{v}%</text>
+          ))}
+          <path d={path} fill="none" stroke={C.accent} strokeWidth={2.5} />
+          {rvOnChart && priceAtRv != null && (
+            <>
+              <line x1={toX(rv)} x2={toX(rv)} y1={my} y2={H-my} stroke={C.textDim} strokeWidth={1} strokeDasharray="2,3" />
+              <circle cx={toX(rv)} cy={toY(priceAtRv)} r={4.5} fill={C.card} stroke={C.textSec} strokeWidth={1.5} />
+              {/* Inside the plot, on the side away from the IV marker, so the two labels never collide */}
+              <text
+                x={toX(rv) + (ivPct != null && ivPct < rv ? 5 : -5)}
+                y={my + 12}
+                fill={C.textSec}
+                fontSize={10}
+                textAnchor={ivPct != null && ivPct < rv ? "start" : "end"}
+              >
+                Realized {rv.toFixed(1)}%: {usd(priceAtRv)}
+              </text>
+            </>
+          )}
+          {ivPct != null && ivPct <= 150 && (
+            <>
+              <line x1={toX(ivPct)} x2={toX(ivPct)} y1={my} y2={H-my} stroke={C.greenText} strokeWidth={1} strokeDasharray="4,3" />
+              <line x1={mx} x2={W-mx} y1={toY(mp)} y2={toY(mp)} stroke={C.greenText} strokeWidth={1} strokeDasharray="4,3" />
+              <circle cx={toX(ivPct)} cy={toY(mp)} r={5} fill={C.greenText} />
+              <text x={toX(ivPct)} y={my-6} fill={C.greenText} fontSize={10} textAnchor="middle">Implied {ivPct.toFixed(1)}%: {usd(mp)}</text>
+            </>
+          )}
+          <text x={(mx + W - mx)/2} y={H - 2} fill={C.textMuted} fontSize={10} textAnchor="middle">Volatility</text>
         </svg>
       </div>
     </div>
@@ -726,7 +785,7 @@ const STRATEGIES = {
   },
 };
 
-// ─── Spreads Page ───
+// ─── Money formatting, axis ticks and the payoff panel (P&L Payoff and Spreads tabs) ───
 const usd = (v, decimals = 2) => formatUsd(v, { compact: false, decimals });
 const signedUsd = (v) => (v > 0 ? "+" : "") + usd(v);
 const fmtStrike = (k) => (Number.isInteger(k) ? `$${k}` : `$${k.toFixed(2)}`);
@@ -746,6 +805,153 @@ function niceTicks(min, max) {
   return { ticks, step };
 }
 
+const perContract = (v) => `${usd(v * 100, 0)} per contract`;
+const fmtCap = (v) => (v === Infinity || v === -Infinity ? "Unlimited" : usd(v));
+const fmtRatio = (rr) => (rr != null ? `${rr.toFixed(rr >= 10 ? 0 : 1)} : 1` : "—");
+const PROFIT_BG = "rgba(34,197,94,0.08)", LOSS_BG = "rgba(239,68,68,0.08)";
+
+// Stock-price range for a payoff chart, fitted to the prices that matter
+// (strikes, today's price, breakevens) so the payoff's shape fills it, padded
+// by a share of the 1σ expected move. A fixed ±30% of the price squeezed a $5
+// spread into a vertical line and left a single option's kink in a corner.
+function fitPriceRange(S, sd, core, sdShare) {
+  const cLo = Math.min(...core), cHi = Math.max(...core);
+  const pad = Math.max((cHi - cLo) * 0.5, sd * sdShare, S * 0.01);
+  return [Math.max(cLo - pad, 0), cHi + pad];
+}
+
+// The expiration P&L chart on the left, the numbers the trade is decided on
+// stacked beside it. Below xl there's no room for both side by side: the stats
+// go first, as a wrapping row, so they stay right under the inputs that move
+// them. Stats are per share, with per contract below.
+function PayoffPanel({ stats, S, sd, lo, hi, strikes, breakevens, pnlExpAt, pnlNowAt, expLabel = "At expiration", clipId }) {
+  const steps = 200;
+  const pts = [];
+  let minPnl = Infinity, maxPnl = -Infinity;
+  for (let i = 0; i <= steps; i++) {
+    const st = lo + (hi - lo) * i / steps;
+    const pnlExp = pnlExpAt(st), pnlNow = pnlNowAt(st);
+    pts.push({ st, pnlExp, pnlNow });
+    minPnl = Math.min(minPnl, pnlExp, pnlNow);
+    maxPnl = Math.max(maxPnl, pnlExp, pnlNow);
+  }
+  const yPad = (maxPnl - minPnl) * 0.1 || 1;
+  const yMin = Math.min(minPnl - yPad, -yPad), yMax = Math.max(maxPnl + yPad, yPad);
+
+  // The dollar axis is on the left; the right margin only has to fit half a strike label.
+  const W = 640, H = 250, mLeft = 58, mRight = 20, mTop = 26, mBottom = 40;
+  const plotBottom = H - mBottom;
+  const toX = (v) => mLeft + (v - lo) / (hi - lo) * (W - mLeft - mRight);
+  const toY = (v) => mTop + (1 - (v - yMin) / (yMax - yMin)) * (plotBottom - mTop);
+  const pathExp = pts.map((p, i) => `${i === 0 ? "M" : "L"}${toX(p.st).toFixed(1)},${toY(p.pnlExp).toFixed(1)}`).join("");
+  const pathNow = pts.map((p, i) => `${i === 0 ? "M" : "L"}${toX(p.st).toFixed(1)},${toY(p.pnlNow).toFixed(1)}`).join("");
+  const zeroY = toY(0);
+  const { ticks: yTicks, step: yStep } = niceTicks(yMin, yMax);
+  const tickDecimals = yStep >= 1 ? 0 : yStep >= 0.1 ? 1 : 2;
+  const sdLo = Math.max(S - sd, lo), sdHi = Math.min(S + sd, hi);
+
+  // Strike labels: one per distinct strike, dropped to a second row when two
+  // would overlap.
+  const strikeLabels = [];
+  for (const k of Array.from(new Set(strikes)).sort((a, b) => a - b)) {
+    const x = toX(k);
+    const prev = strikeLabels[strikeLabels.length - 1];
+    strikeLabels.push({ k, x, row: prev && x - prev.x < 36 && prev.row === 0 ? 1 : 0 });
+  }
+
+  return (
+    <div className="flex flex-col xl:flex-row gap-2.5">
+      <div
+        className="order-first xl:order-last flex flex-wrap gap-2 xl:flex-col xl:flex-nowrap xl:w-72 xl:shrink-0"
+        style={{ ...cardBox(), padding: 10 }}
+      >
+        {stats.map(s => (
+          <div
+            key={s.label}
+            className="flex-[1_1_160px] xl:flex-1"
+            style={{ display: "flex", flexDirection: "column", justifyContent: "center", textAlign: "center", padding: "8px 12px", borderRadius: 8, background: s.bg }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 600, color: C.textSec, letterSpacing: "0.04em", marginBottom: 4 }}>
+              {s.label}{s.perShare && <span style={{ fontWeight: 400 }}> / SHARE</span>}
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: s.color, fontFamily: "monospace", lineHeight: 1.25 }}>{s.val}</div>
+            <div style={{ fontSize: 12, color: C.textSec, marginTop: 2 }}>{s.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="xl:flex-1 min-w-0 flex flex-col justify-center" style={{ ...cardBox(), padding: 12 }}>
+        <div style={{ display: "flex", gap: 16, marginBottom: 6, justifyContent: "center", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            <div style={{ width: 16, height: 3, background: C.accent, borderRadius: 2 }} />
+            <span style={{ color: C.textDim }}>{expLabel}</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            <div style={{ width: 16, height: 3, background: C.greenText, borderRadius: 2, opacity: 0.6 }} />
+            <span style={{ color: C.textDim }}>Today (theoretical)</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            <div style={{ width: 16, height: 10, background: C.accent, opacity: 0.12, borderRadius: 2 }} />
+            <span style={{ color: C.textDim }}>Expected move by expiration: ±{usd(sd)} (1σ)</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+            <span style={{ color: C.text, fontSize: 10 }}>▲</span>
+            <span style={{ color: C.textDim }}>Stock now {usd(S)}</span>
+          </div>
+        </div>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
+          <defs>
+            <clipPath id={`${clipId}ProfitZone`}><rect x={0} y={0} width={W} height={Math.max(zeroY, 0)} /></clipPath>
+            <clipPath id={`${clipId}LossZone`}><rect x={0} y={zeroY} width={W} height={Math.max(H - zeroY, 0)} /></clipPath>
+          </defs>
+          {/* 1σ expected-move band */}
+          {sdHi > sdLo && (
+            <rect x={toX(sdLo)} y={mTop} width={toX(sdHi) - toX(sdLo)} height={plotBottom - mTop} fill={C.accent} opacity={0.07} />
+          )}
+          {yTicks.map(v => (
+            <g key={v}>
+              <line x1={mLeft} x2={W - mRight} y1={toY(v)} y2={toY(v)} stroke={C.border} strokeWidth={0.5} />
+              <text x={mLeft - 6} y={toY(v) + 4} fill={C.textMuted} fontSize={10} textAnchor="end">{usd(v, tickDecimals)}</text>
+            </g>
+          ))}
+          <line x1={mLeft} x2={W - mRight} y1={zeroY} y2={zeroY} stroke={C.textDim} strokeWidth={1} strokeDasharray="4,3" />
+          {/* Strike markers */}
+          {strikeLabels.map(s => (
+            <g key={s.k}>
+              <line x1={s.x} x2={s.x} y1={mTop} y2={plotBottom} stroke={C.textMuted} strokeWidth={0.7} strokeDasharray="3,4" opacity={0.5} />
+              <text x={s.x} y={plotBottom + 13 + s.row * 11} fill={C.textMuted} fontSize={9} textAnchor="middle">{fmtStrike(s.k)}</text>
+            </g>
+          ))}
+          {/* Breakeven markers */}
+          {breakevens.filter(be => be >= lo && be <= hi).map((be, i) => (
+            <g key={`be${i}`}>
+              <line x1={toX(be)} x2={toX(be)} y1={mTop} y2={plotBottom} stroke={C.accent} strokeWidth={1} strokeDasharray="2,3" opacity={0.6} />
+              <text x={toX(be)} y={mTop - 8} fill={C.accent} fontSize={9} textAnchor="middle">BE {usd(be)}</text>
+            </g>
+          ))}
+          {/* Profit (green) and loss (red) areas between the expiration line and $0 */}
+          {(() => {
+            const area = pathExp + `L${toX(hi).toFixed(1)},${zeroY.toFixed(1)}L${toX(lo).toFixed(1)},${zeroY.toFixed(1)}Z`;
+            return (
+              <>
+                <path d={area} fill={C.green} opacity={0.15} clipPath={`url(#${clipId}ProfitZone)`} />
+                <path d={area} fill={C.red} opacity={0.15} clipPath={`url(#${clipId}LossZone)`} />
+              </>
+            );
+          })()}
+          <path d={pathNow} fill="none" stroke={C.greenText} strokeWidth={2} opacity={0.55} />
+          <path d={pathExp} fill="none" stroke={C.accent} strokeWidth={2.5} />
+          {/* Today's stock price */}
+          <polygon points={`${toX(S) - 5},${plotBottom} ${toX(S) + 5},${plotBottom} ${toX(S)},${plotBottom - 8}`} fill={C.text} />
+          <text x={mLeft} y={H - 3} fill={C.textMuted} fontSize={10}>Stock {usd(lo, 0)}</text>
+          <text x={W - mRight} y={H - 3} fill={C.textMuted} fontSize={10} textAnchor="end">{usd(hi, 0)}</text>
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+// ─── Spreads Page ───
 function SpreadsPage({ params, initialStrategy, initialStrikes }) {
   const S = +params.S, T = +params.days / 365, r = +params.r / 100, sig = +params.sigma / 100, q = +params.q / 100 || 0;
   const initStrat = initialStrategy && STRATEGIES[initialStrategy] ? initialStrategy : "bullCall";
@@ -806,54 +1012,11 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
   const payoff = summarizePayoff(legDetails, netCost);
   const pnlNowAt = (st) => legDetails.reduce((s, l) => s + l.dir * bsPrice(st, l.K, T, r, sig, l.type, q), 0) - netCost;
 
-  // Price range: fitted to the trade (strikes, today's price, breakevens) so
-  // the payoff's transition fills the chart, padded by at least a quarter of
-  // the expected move. A fixed ±30% of the price squeezed a $5 spread into a
-  // vertical line.
+  // Chart range: past the outer strikes a spread is flat, so a quarter of the
+  // expected move beyond the strikes and breakevens is enough.
   const sd = S * sig * Math.sqrt(T); // 1σ move by expiration, $
-  const core = [...legDetails.map(l => l.K), S, ...payoff.breakevens];
-  const cLo = Math.min(...core), cHi = Math.max(...core);
-  const pad = Math.max((cHi - cLo) * 0.5, sd * 0.25, S * 0.01);
-  const lo = Math.max(cLo - pad, 0), hi = cHi + pad;
+  const [lo, hi] = fitPriceRange(S, sd, [...legDetails.map(l => l.K), S, ...payoff.breakevens], 0.25);
 
-  const steps = 200;
-  const pts = [];
-  let minPnl = Infinity, maxPnl = -Infinity;
-  for (let i = 0; i <= steps; i++) {
-    const st = lo + (hi - lo) * i / steps;
-    const pnlExp = expiryPnl(legDetails, netCost, st);
-    const pnlNow = pnlNowAt(st);
-    pts.push({ st, pnlExp, pnlNow });
-    minPnl = Math.min(minPnl, pnlExp, pnlNow);
-    maxPnl = Math.max(maxPnl, pnlExp, pnlNow);
-  }
-  const yPad = (maxPnl - minPnl) * 0.1 || 1;
-  const yMin = Math.min(minPnl - yPad, -yPad), yMax = Math.max(maxPnl + yPad, yPad);
-
-  // SVG chart
-  // The dollar axis is on the left; the right margin only has to fit half a strike label.
-  const W = 640, H = 250, mLeft = 58, mRight = 20, mTop = 26, mBottom = 40;
-  const plotBottom = H - mBottom;
-  const toX = (v) => mLeft + (v - lo) / (hi - lo) * (W - mLeft - mRight);
-  const toY = (v) => mTop + (1 - (v - yMin) / (yMax - yMin)) * (plotBottom - mTop);
-  const pathExp = pts.map((p, i) => `${i === 0 ? "M" : "L"}${toX(p.st).toFixed(1)},${toY(p.pnlExp).toFixed(1)}`).join("");
-  const pathNow = pts.map((p, i) => `${i === 0 ? "M" : "L"}${toX(p.st).toFixed(1)},${toY(p.pnlNow).toFixed(1)}`).join("");
-  const zeroY = toY(0);
-  const { ticks: yTicks, step: yStep } = niceTicks(yMin, yMax);
-  const tickDecimals = yStep >= 1 ? 0 : yStep >= 0.1 ? 1 : 2;
-  const sdLo = Math.max(S - sd, lo), sdHi = Math.min(S + sd, hi);
-
-  // Strike labels: one per distinct strike, dropped to a second row when two
-  // would overlap.
-  const strikeLabels = [];
-  for (const k of Array.from(new Set(legDetails.map(l => l.K))).sort((a, b) => a - b)) {
-    const x = toX(k);
-    const prev = strikeLabels[strikeLabels.length - 1];
-    strikeLabels.push({ k, x, row: prev && x - prev.x < 36 && prev.row === 0 ? 1 : 0 });
-  }
-
-  const perContract = (v) => `${usd(v * 100, 0)} per contract`;
-  const fmtCap = (v) => (v === Infinity || v === -Infinity ? "Unlimited" : usd(v));
   const summaryStats = [
     {
       label: fillValid ? "YOUR NET PREMIUM" : "NET PREMIUM",
@@ -861,10 +1024,10 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
       sub: perContract(-netCost),
       perShare: true,
       color: netCost > 0 ? C.redText : C.greenText,
-      bg: netCost > 0 ? "rgba(239,68,68,0.08)" : "rgba(34,197,94,0.08)",
+      bg: netCost > 0 ? LOSS_BG : PROFIT_BG,
     },
-    { label: "MAX PROFIT", val: fmtCap(payoff.maxProfit), perShare: true, sub: Number.isFinite(payoff.maxProfit) ? perContract(payoff.maxProfit) : "if the stock keeps rising", color: C.greenText, bg: "rgba(34,197,94,0.08)" },
-    { label: "MAX LOSS", val: fmtCap(payoff.maxLoss), perShare: true, sub: Number.isFinite(payoff.maxLoss) ? perContract(payoff.maxLoss) : "if the stock keeps rising", color: C.redText, bg: "rgba(239,68,68,0.08)" },
+    { label: "MAX PROFIT", val: fmtCap(payoff.maxProfit), perShare: true, sub: Number.isFinite(payoff.maxProfit) ? perContract(payoff.maxProfit) : "if the stock keeps rising", color: C.greenText, bg: PROFIT_BG },
+    { label: "MAX LOSS", val: fmtCap(payoff.maxLoss), perShare: true, sub: Number.isFinite(payoff.maxLoss) ? perContract(payoff.maxLoss) : "if the stock keeps rising", color: C.redText, bg: LOSS_BG },
     {
       label: payoff.breakevens.length > 1 ? "BREAKEVENS" : "BREAKEVEN",
       val: payoff.breakevens.length ? payoff.breakevens.map(b => usd(b)).join(" / ") : "None",
@@ -875,7 +1038,7 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
     },
     {
       label: "REWARD : RISK",
-      val: payoff.rewardToRisk != null ? `${payoff.rewardToRisk.toFixed(payoff.rewardToRisk >= 10 ? 0 : 1)} : 1` : "—",
+      val: fmtRatio(payoff.rewardToRisk),
       sub: payoff.rewardToRisk != null ? "max profit ÷ max loss" : "one side is unlimited or empty",
       color: C.text, bg: C.cardAlt,
     },
@@ -894,7 +1057,7 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {/* Three-up: Strategy selector (left) + Strike and fill inputs (middle) + Leg breakdown (right),
-          then the summary stats, the chart and the net Greeks */}
+          then the chart with its stats, and the net Greeks */}
       <div style={{ display: "flex", gap: 10, alignItems: "stretch", flexWrap: "wrap" }}>
         {/* Strategy selector — pills stacked vertically */}
         <div style={{ ...cardBox(), padding: 12, flex: "1 1 0", minWidth: 200, display: "flex", flexDirection: "column", gap: 6 }}>
@@ -993,99 +1156,16 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
         </div>
       </div>
 
-      {/* Chart on the left, the numbers the trade is decided on stacked beside
-          it, both right under the inputs that move them. Below xl there's no
-          room for both side by side: the stats go first, as a wrapping row, so
-          they stay in view while editing. Per share, per contract below. */}
-      <div className="flex flex-col xl:flex-row gap-2.5">
-        <div
-          className="order-first xl:order-last flex flex-wrap gap-2 xl:flex-col xl:flex-nowrap xl:w-72 xl:shrink-0"
-          style={{ ...cardBox(), padding: 10 }}
-        >
-          {summaryStats.map(s => (
-            <div
-              key={s.label}
-              className="flex-[1_1_160px] xl:flex-1"
-              style={{ display: "flex", flexDirection: "column", justifyContent: "center", textAlign: "center", padding: "8px 12px", borderRadius: 8, background: s.bg }}
-            >
-              <div style={{ fontSize: 12, fontWeight: 600, color: C.textSec, letterSpacing: "0.04em", marginBottom: 4 }}>
-                {s.label}{s.perShare && <span style={{ fontWeight: 400 }}> / SHARE</span>}
-              </div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: s.color, fontFamily: "monospace", lineHeight: 1.25 }}>{s.val}</div>
-              <div style={{ fontSize: 12, color: C.textSec, marginTop: 2 }}>{s.sub}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* P&L Chart */}
-        <div className="xl:flex-1 min-w-0 flex flex-col justify-center" style={{ ...cardBox(), padding: 12 }}>
-          <div style={{ display: "flex", gap: 16, marginBottom: 6, justifyContent: "center", flexWrap: "wrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-              <div style={{ width: 16, height: 3, background: C.accent, borderRadius: 2 }} />
-              <span style={{ color: C.textDim }}>At expiration{fillValid ? " (your fill)" : ""}</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-              <div style={{ width: 16, height: 3, background: C.greenText, borderRadius: 2, opacity: 0.6 }} />
-              <span style={{ color: C.textDim }}>Today (theoretical)</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-              <div style={{ width: 16, height: 10, background: C.accent, opacity: 0.12, borderRadius: 2 }} />
-              <span style={{ color: C.textDim }}>Expected move by expiration: ±{usd(sd)} (1σ)</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-              <span style={{ color: C.text, fontSize: 10 }}>▲</span>
-              <span style={{ color: C.textDim }}>Stock now {usd(S)}</span>
-            </div>
-          </div>
-          <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
-            <defs>
-              <clipPath id="spreadProfitZone"><rect x={0} y={0} width={W} height={Math.max(zeroY, 0)} /></clipPath>
-              <clipPath id="spreadLossZone"><rect x={0} y={zeroY} width={W} height={Math.max(H - zeroY, 0)} /></clipPath>
-            </defs>
-            {/* 1σ expected-move band */}
-            {sdHi > sdLo && (
-              <rect x={toX(sdLo)} y={mTop} width={toX(sdHi) - toX(sdLo)} height={plotBottom - mTop} fill={C.accent} opacity={0.07} />
-            )}
-            {yTicks.map(v => (
-              <g key={v}>
-                <line x1={mLeft} x2={W - mRight} y1={toY(v)} y2={toY(v)} stroke={C.border} strokeWidth={0.5} />
-                <text x={mLeft - 6} y={toY(v) + 4} fill={C.textMuted} fontSize={10} textAnchor="end">{usd(v, tickDecimals)}</text>
-              </g>
-            ))}
-            <line x1={mLeft} x2={W - mRight} y1={zeroY} y2={zeroY} stroke={C.textDim} strokeWidth={1} strokeDasharray="4,3" />
-            {/* Strike markers */}
-            {strikeLabels.map(s => (
-              <g key={s.k}>
-                <line x1={s.x} x2={s.x} y1={mTop} y2={plotBottom} stroke={C.textMuted} strokeWidth={0.7} strokeDasharray="3,4" opacity={0.5} />
-                <text x={s.x} y={plotBottom + 13 + s.row * 11} fill={C.textMuted} fontSize={9} textAnchor="middle">{fmtStrike(s.k)}</text>
-              </g>
-            ))}
-            {/* Breakeven markers */}
-            {payoff.breakevens.filter(be => be >= lo && be <= hi).map((be, i) => (
-              <g key={`be${i}`}>
-                <line x1={toX(be)} x2={toX(be)} y1={mTop} y2={plotBottom} stroke={C.accent} strokeWidth={1} strokeDasharray="2,3" opacity={0.6} />
-                <text x={toX(be)} y={mTop - 8} fill={C.accent} fontSize={9} textAnchor="middle">BE {usd(be)}</text>
-              </g>
-            ))}
-            {/* Profit (green) and loss (red) areas between the expiration line and $0 */}
-            {(() => {
-              const area = pathExp + `L${toX(hi).toFixed(1)},${zeroY.toFixed(1)}L${toX(lo).toFixed(1)},${zeroY.toFixed(1)}Z`;
-              return (
-                <>
-                  <path d={area} fill={C.green} opacity={0.15} clipPath="url(#spreadProfitZone)" />
-                  <path d={area} fill={C.red} opacity={0.15} clipPath="url(#spreadLossZone)" />
-                </>
-              );
-            })()}
-            <path d={pathNow} fill="none" stroke={C.greenText} strokeWidth={2} opacity={0.55} />
-            <path d={pathExp} fill="none" stroke={C.accent} strokeWidth={2.5} />
-            {/* Today's stock price */}
-            <polygon points={`${toX(S) - 5},${plotBottom} ${toX(S) + 5},${plotBottom} ${toX(S)},${plotBottom - 8}`} fill={C.text} />
-            <text x={mLeft} y={H - 3} fill={C.textMuted} fontSize={10}>Stock {usd(lo, 0)}</text>
-            <text x={W - mRight} y={H - 3} fill={C.textMuted} fontSize={10} textAnchor="end">{usd(hi, 0)}</text>
-          </svg>
-        </div>
-      </div>
+      <PayoffPanel
+        stats={summaryStats}
+        S={S} sd={sd} lo={lo} hi={hi}
+        strikes={legDetails.map(l => l.K)}
+        breakevens={payoff.breakevens}
+        pnlExpAt={st => expiryPnl(legDetails, netCost, st)}
+        pnlNowAt={pnlNowAt}
+        expLabel={fillValid ? "At expiration (your fill)" : "At expiration"}
+        clipId="spread"
+      />
 
       {/* Net Greeks: per share, and per contract below */}
       <div style={{ ...cardBox(), padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1137,6 +1217,7 @@ export default function OptionsCalculator() {
     ticker: searchParams.get("ticker") || "",
     q: searchParams.get("q") || "0.0", // dividend yield, %
     volSource: null, // "realized" | "default" once fetched; null when typed or passed in
+    realizedVol: null, // the fetched 30-day realized volatility, %; survives edits to sigma
     divSource: null, // what the dividend lookup found; null when typed
   });
 
