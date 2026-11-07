@@ -10,18 +10,15 @@ import EntityTrustBlock from '../components/EntityTrustBlock';
 import { planIncludes, planNamesWith } from '../data/pricingTiers';
 import { setActiveTicker } from '../utils/activeTicker';
 import { bsPrice, normCdf } from '../utils/blackScholes';
+import { strikeStep, roundStrike } from '../utils/strikes';
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, Cell
 } from 'recharts';
 
-// ─── Trade This strategy suggestions (pricing math: utils/blackScholes.ts) ───
-function _roundStrike(price: number): number {
-  if (price >= 50) return Math.round(price / 5) * 5;
-  if (price >= 25) return Math.round(price / 2.5) * 2.5;
-  return Math.round(price);
-}
+// ─── Trade This strategy suggestions (pricing math: utils/blackScholes.ts,
+// strike grid: utils/strikes.ts, shared with the Options Calculator) ───
 
 // Approximate calendar days for each Treasury maturity the rates endpoint returns.
 const _TREASURY_MATURITY_DAYS: Record<string, number> = {
@@ -81,6 +78,9 @@ function suggestStrategy(
   // short strike can realistically end up — DCF intrinsic value is a multi-year
   // estimate and is not a near-term price target.
   const expectedMove = currentPrice * sigma * Math.sqrt(T);
+  // Both legs on the strike grid for the stock's price, at least one step apart.
+  const minGap = strikeStep(currentPrice);
+  const _roundStrike = (p: number) => roundStrike(p, minGap);
   let K1: number, K2: number, strategyType: string, strategyName: string;
 
   if (isBullish) {
@@ -96,7 +96,6 @@ function suggestStrategy(
       K1 = _roundStrike(currentPrice + 0.25 * expectedMove);
       K2 = _roundStrike(currentPrice + 0.75 * expectedMove);
     }
-    const minGap = currentPrice >= 50 ? 5 : currentPrice >= 25 ? 2.5 : 1;
     if (K2 <= K1) K2 = K1 + minGap;
   } else {
     strategyType = "bearPut";
@@ -111,7 +110,6 @@ function suggestStrategy(
       K1 = _roundStrike(currentPrice - 0.75 * expectedMove);
       K2 = _roundStrike(currentPrice - 0.25 * expectedMove);
     }
-    const minGap = currentPrice >= 50 ? 5 : currentPrice >= 25 ? 2.5 : 1;
     if (K1 >= K2) K1 = K2 - minGap;
   }
 

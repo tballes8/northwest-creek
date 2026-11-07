@@ -10,6 +10,7 @@ import { setActiveTicker } from "../utils/activeTicker";
 import { bsPrice, bsGreeks, binomialPrice, impliedVol } from "../utils/blackScholes";
 import { expiryPnl, summarizePayoff } from "../utils/spreadPayoff";
 import { formatUsd } from "../utils/currency";
+import { strikeStep, roundStrike, defaultVerticalStrikes, defaultCondorStrikes, isPlausibleStrike } from "../utils/strikes";
 
 // Pricing math (Black-Scholes, binomial, implied vol) lives in utils/blackScholes.ts,
 // shared with the DCF page's "Trade This" suggestion.
@@ -84,14 +85,12 @@ const pillBtn = (active) => ({
 });
 
 // ─── Input Panel (shared) ───
-// Nearest realistic option strike for a given underlying price — mimics real
-// option-chain increments ($1 under $25, $5 to $500, $10 above) so the default
-// strike sits near-the-money instead of a fixed value.
+// Nearest listed-looking strike to the stock price (grid in utils/strikes.ts),
+// so the default strike sits at the money on a strike that usually exists.
 function nearestStrike(price) {
   const p = Number(price);
   if (!isFinite(p) || p <= 0) return null;
-  const inc = p < 25 ? 1 : p < 500 ? 5 : 10;
-  return Math.round(p / inc) * inc;
+  return roundStrike(p, strikeStep(p));
 }
 
 // Approximate calendar days for each Treasury maturity the API returns.
@@ -120,6 +119,16 @@ function nearestTreasuryRate(rates, days) {
 // Small note under an input saying where its value came from.
 function FieldHint({ children, warn = false }) {
   return <span style={{ fontSize: 11, color: warn ? C.yellow : C.textMuted, lineHeight: 1.4 }}>{children}</span>;
+}
+
+// Strike fields take any number, but only listed strikes can be traded, and
+// there is no options-chain feed to offer them. So: a standing reminder, and a
+// warning when a strike has cents no listed strike has.
+function StrikeHint({ strikes }) {
+  const odd = strikes.find(k => k > 0 && !isPlausibleStrike(k));
+  return odd != null
+    ? <FieldHint warn>${odd.toFixed(2)} is almost certainly not a listed strike, so this prices a contract you can't trade. Use the exact strikes in your broker's options chain.</FieldHint>
+    : <FieldHint>Use strikes listed in your broker's options chain.</FieldHint>;
 }
 
 function InputPanel({ params, setParams, page, autoLookup }) {
@@ -309,6 +318,7 @@ function InputPanel({ params, setParams, page, autoLookup }) {
           <div style={inputGroup}>
             <span style={labelStyle()}>Strike Price ($)</span>
             <input style={inputStyle()} type="number" step="0.01" value={params.K} onChange={set("K")} />
+            <StrikeHint strikes={[+params.K]} />
           </div>
         )}
         <div style={inputGroup}>
@@ -659,6 +669,10 @@ function IVSolverPage({ params }) {
 }
 
 // ─── Spread Strategy Definitions ───
+// Default strikes sit on the listed-strike grid (utils/strikes.ts) at the
+// usual distances from the price, so the starting spread is one that exists.
+const toStrikeFields = (ks) => (ks ? Object.fromEntries(ks.map((k, i) => [`K${i + 1}`, String(k)])) : {});
+
 const STRATEGIES = {
   bullCall: {
     label: "Bull Call Spread",
@@ -670,7 +684,7 @@ const STRATEGIES = {
     ],
     strikes: ["K1", "K2"],
     strikeLabels: { K1: "Lower Strike ($)", K2: "Upper Strike ($)" },
-    defaults: (S) => ({ K1: (S * 0.97).toFixed(2), K2: (S * 1.03).toFixed(2) }),
+    defaults: (S) => toStrikeFields(defaultVerticalStrikes(S)),
   },
   bearPut: {
     label: "Bear Put Spread",
@@ -682,7 +696,7 @@ const STRATEGIES = {
     ],
     strikes: ["K1", "K2"],
     strikeLabels: { K1: "Lower Strike ($)", K2: "Upper Strike ($)" },
-    defaults: (S) => ({ K1: (S * 0.97).toFixed(2), K2: (S * 1.03).toFixed(2) }),
+    defaults: (S) => toStrikeFields(defaultVerticalStrikes(S)),
   },
   ironCondor: {
     label: "Iron Condor",
@@ -696,7 +710,7 @@ const STRATEGIES = {
     ],
     strikes: ["K1", "K2", "K3", "K4"],
     strikeLabels: { K1: "Put Wing ($)", K2: "Put Short ($)", K3: "Call Short ($)", K4: "Call Wing ($)" },
-    defaults: (S) => ({ K1: (S * 0.90).toFixed(2), K2: (S * 0.95).toFixed(2), K3: (S * 1.05).toFixed(2), K4: (S * 1.10).toFixed(2) }),
+    defaults: (S) => toStrikeFields(defaultCondorStrikes(S)),
   },
   straddle: {
     label: "Straddle",
@@ -708,7 +722,7 @@ const STRATEGIES = {
     ],
     strikes: ["K1"],
     strikeLabels: { K1: "Strike Price ($)" },
-    defaults: (S) => ({ K1: S.toFixed(2) }),
+    defaults: (S) => toStrikeFields(S > 0 ? [nearestStrike(S)] : null),
   },
 };
 
@@ -878,7 +892,8 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {/* Three-up: Strategy selector (left) + Strike and fill inputs (middle) + Leg breakdown (right) */}
+      {/* Three-up: Strategy selector (left) + Strike and fill inputs (middle) + Leg breakdown (right),
+          then the summary stats, the chart and the net Greeks */}
       <div style={{ display: "flex", gap: 10, alignItems: "stretch", flexWrap: "wrap" }}>
         {/* Strategy selector — pills stacked vertically */}
         <div style={{ ...cardBox(), padding: 12, flex: "1 1 0", minWidth: 200, display: "flex", flexDirection: "column", gap: 6 }}>
@@ -899,6 +914,7 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
               <input style={inputStyle()} type="number" step="0.50" value={strikes[k] || ""} onChange={setStrike(k)} />
             </div>
           ))}
+          <StrikeHint strikes={strat.strikes.map(k => +strikes[k])} />
           <div style={{ ...inputGroup, borderTop: `1px solid ${C.border}`, paddingTop: 10 }}>
             <span style={{ ...labelStyle(), color: C.accent, fontWeight: 700 }}>
               Your fill: net {isCredit ? "credit received" : "debit paid"} ($/share)
@@ -916,7 +932,6 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
               <FieldHint warn>Enter the amount as a positive number.</FieldHint>
             ) : fillValid ? (
               <FieldHint>
-                Model fair value {usd(modelAmount)}.{" "}
                 {Math.abs(fillEdge) < 0.005 ? "You got fair value." : (
                   <span style={{ color: fillEdge > 0 ? C.greenText : C.redText }}>
                     {usd(Math.abs(fillEdge))} {fillEdge > 0 ? "better" : "worse"} than fair value
@@ -925,8 +940,20 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
                 )}
               </FieldHint>
             ) : (
-              <FieldHint>Blank uses the model's fair value ({usd(modelAmount)}). Enter what you actually {isCredit ? "received" : "paid"} to see your real risk and reward.</FieldHint>
+              <FieldHint>Blank uses fair value. Enter what you actually {isCredit ? "received" : "paid"} to see your real risk and reward.</FieldHint>
             )}
+            {/* Fair value is a reference to check the broker's price against, not
+                a limit price: there are no option quotes behind it, and it is only
+                as good as the volatility field (realized unless the user typed IV). */}
+            <FieldHint>
+              <strong style={{ color: C.textSec }}>Model fair value {usd(modelAmount)}</strong> at {+params.sigma}% volatility:{" "}
+              {isCredit
+                ? "collecting less than this means taking less than the model's odds justify."
+                : "paying more than this means paying more than the model's odds justify."}{" "}
+              Compare it with your broker's mid price. If they're far apart, the market is pricing a different
+              volatility: enter the chain's implied volatility for your strikes (their average, if they differ)
+              in the Volatility field and the model should land near the mid.
+            </FieldHint>
           </div>
         </div>
 
@@ -963,6 +990,20 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
             {modelCost > 0 ? `Model net debit: ${usd(modelCost)} paid` : `Model net credit: ${usd(-modelCost)} received`}
           </div>
         </div>
+      </div>
+
+      {/* The numbers the trade is decided on, right under the inputs that move
+          them so they're in view while editing. Per share, per contract below. */}
+      <div style={{ ...cardBox(), padding: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {summaryStats.map(s => (
+          <div key={s.label} style={{ flex: "1 1 160px", textAlign: "center", padding: "10px 12px", borderRadius: 8, background: s.bg }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: C.textSec, letterSpacing: "0.04em", marginBottom: 4 }}>
+              {s.label}{s.perShare && <span style={{ fontWeight: 400 }}> / SHARE</span>}
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: s.color, fontFamily: "monospace", lineHeight: 1.25 }}>{s.val}</div>
+            <div style={{ fontSize: 12, color: C.textSec, marginTop: 4 }}>{s.sub}</div>
+          </div>
+        ))}
       </div>
 
       {/* P&L Chart */}
@@ -1034,27 +1075,18 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
         </svg>
       </div>
 
-      {/* Summary stats (top row) + net Greeks (bottom row), per share with per-contract below */}
+      {/* Net Greeks: per share, and per contract below */}
       <div style={{ ...cardBox(), padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {summaryStats.map(s => (
-            <div key={s.label} style={{ flex: "1 1 140px", textAlign: "center", padding: "6px 8px", borderRadius: 6, background: s.bg }}>
-              <div style={{ fontSize: 9, color: C.textMuted, marginBottom: 2, letterSpacing: "0.04em" }}>{s.label}{s.perShare && <span style={{ opacity: 0.7 }}> / SHARE</span>}</div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: s.color, fontFamily: "monospace" }}>{s.val}</div>
-              <div style={{ fontSize: 10, color: C.textMuted, marginTop: 2 }}>{s.sub}</div>
-            </div>
-          ))}
-        </div>
-        <div style={{ fontSize: 10, color: C.textMuted, letterSpacing: "0.04em", padding: "0 2px" }}>NET GREEKS: PER SHARE, AND PER CONTRACT (×100 SHARES)</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: C.textSec, letterSpacing: "0.04em", padding: "0 2px" }}>NET GREEKS: PER SHARE, AND PER CONTRACT (×100 SHARES)</div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {greekRows.map(g => (
-            <div key={g.name} style={{ flex: "1 1 150px", padding: "6px 8px", borderRadius: 6, background: C.cardAlt }}>
+            <div key={g.name} style={{ flex: "1 1 160px", padding: "8px 10px", borderRadius: 8, background: C.cardAlt }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: g.color, fontFamily: "serif" }}>{g.sym}</span>
-                <span style={{ fontSize: 10, color: C.textMuted }}>{g.name}</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: "monospace", marginLeft: "auto" }}>{g.val.toFixed(4)}</span>
+                <span style={{ fontSize: 16, fontWeight: 700, color: g.color, fontFamily: "serif" }}>{g.sym}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: C.textSec }}>{g.name}</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: "monospace", marginLeft: "auto" }}>{g.val.toFixed(4)}</span>
               </div>
-              <div style={{ fontSize: 11, color: C.textSec, textAlign: "right", marginTop: 2 }}>{g.contract}</div>
+              <div style={{ fontSize: 12, color: C.textSec, textAlign: "right", marginTop: 2 }}>{g.contract}</div>
             </div>
           ))}
         </div>
