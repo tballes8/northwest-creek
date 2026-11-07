@@ -831,9 +831,10 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
   const yMin = Math.min(minPnl - yPad, -yPad), yMax = Math.max(maxPnl + yPad, yPad);
 
   // SVG chart
-  const W = 640, H = 250, mx = 58, mTop = 26, mBottom = 40;
+  // The dollar axis is on the left; the right margin only has to fit half a strike label.
+  const W = 640, H = 250, mLeft = 58, mRight = 20, mTop = 26, mBottom = 40;
   const plotBottom = H - mBottom;
-  const toX = (v) => mx + (v - lo) / (hi - lo) * (W - 2 * mx);
+  const toX = (v) => mLeft + (v - lo) / (hi - lo) * (W - mLeft - mRight);
   const toY = (v) => mTop + (1 - (v - yMin) / (yMax - yMin)) * (plotBottom - mTop);
   const pathExp = pts.map((p, i) => `${i === 0 ? "M" : "L"}${toX(p.st).toFixed(1)},${toY(p.pnlExp).toFixed(1)}`).join("");
   const pathNow = pts.map((p, i) => `${i === 0 ? "M" : "L"}${toX(p.st).toFixed(1)},${toY(p.pnlNow).toFixed(1)}`).join("");
@@ -992,87 +993,98 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
         </div>
       </div>
 
-      {/* The numbers the trade is decided on, right under the inputs that move
-          them so they're in view while editing. Per share, per contract below. */}
-      <div style={{ ...cardBox(), padding: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {summaryStats.map(s => (
-          <div key={s.label} style={{ flex: "1 1 160px", textAlign: "center", padding: "10px 12px", borderRadius: 8, background: s.bg }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: C.textSec, letterSpacing: "0.04em", marginBottom: 4 }}>
-              {s.label}{s.perShare && <span style={{ fontWeight: 400 }}> / SHARE</span>}
+      {/* Chart on the left, the numbers the trade is decided on stacked beside
+          it, both right under the inputs that move them. Below xl there's no
+          room for both side by side: the stats go first, as a wrapping row, so
+          they stay in view while editing. Per share, per contract below. */}
+      <div className="flex flex-col xl:flex-row gap-2.5">
+        <div
+          className="order-first xl:order-last flex flex-wrap gap-2 xl:flex-col xl:flex-nowrap xl:w-72 xl:shrink-0"
+          style={{ ...cardBox(), padding: 10 }}
+        >
+          {summaryStats.map(s => (
+            <div
+              key={s.label}
+              className="flex-[1_1_160px] xl:flex-1"
+              style={{ display: "flex", flexDirection: "column", justifyContent: "center", textAlign: "center", padding: "8px 12px", borderRadius: 8, background: s.bg }}
+            >
+              <div style={{ fontSize: 12, fontWeight: 600, color: C.textSec, letterSpacing: "0.04em", marginBottom: 4 }}>
+                {s.label}{s.perShare && <span style={{ fontWeight: 400 }}> / SHARE</span>}
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: s.color, fontFamily: "monospace", lineHeight: 1.25 }}>{s.val}</div>
+              <div style={{ fontSize: 12, color: C.textSec, marginTop: 2 }}>{s.sub}</div>
             </div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: s.color, fontFamily: "monospace", lineHeight: 1.25 }}>{s.val}</div>
-            <div style={{ fontSize: 12, color: C.textSec, marginTop: 4 }}>{s.sub}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* P&L Chart */}
-      <div style={{ ...cardBox(), padding: 12 }}>
-        <div style={{ display: "flex", gap: 16, marginBottom: 6, justifyContent: "center", flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-            <div style={{ width: 16, height: 3, background: C.accent, borderRadius: 2 }} />
-            <span style={{ color: C.textDim }}>At expiration{fillValid ? " (your fill)" : ""}</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-            <div style={{ width: 16, height: 3, background: C.greenText, borderRadius: 2, opacity: 0.6 }} />
-            <span style={{ color: C.textDim }}>Today (theoretical)</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-            <div style={{ width: 16, height: 10, background: C.accent, opacity: 0.12, borderRadius: 2 }} />
-            <span style={{ color: C.textDim }}>Expected move by expiration: ±{usd(sd)} (1σ)</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-            <span style={{ color: C.text, fontSize: 10 }}>▲</span>
-            <span style={{ color: C.textDim }}>Stock now {usd(S)}</span>
-          </div>
+          ))}
         </div>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
-          <defs>
-            <clipPath id="spreadProfitZone"><rect x={0} y={0} width={W} height={Math.max(zeroY, 0)} /></clipPath>
-            <clipPath id="spreadLossZone"><rect x={0} y={zeroY} width={W} height={Math.max(H - zeroY, 0)} /></clipPath>
-          </defs>
-          {/* 1σ expected-move band */}
-          {sdHi > sdLo && (
-            <rect x={toX(sdLo)} y={mTop} width={toX(sdHi) - toX(sdLo)} height={plotBottom - mTop} fill={C.accent} opacity={0.07} />
-          )}
-          {yTicks.map(v => (
-            <g key={v}>
-              <line x1={mx} x2={W - mx} y1={toY(v)} y2={toY(v)} stroke={C.border} strokeWidth={0.5} />
-              <text x={mx - 6} y={toY(v) + 4} fill={C.textMuted} fontSize={10} textAnchor="end">{usd(v, tickDecimals)}</text>
-            </g>
-          ))}
-          <line x1={mx} x2={W - mx} y1={zeroY} y2={zeroY} stroke={C.textDim} strokeWidth={1} strokeDasharray="4,3" />
-          {/* Strike markers */}
-          {strikeLabels.map(s => (
-            <g key={s.k}>
-              <line x1={s.x} x2={s.x} y1={mTop} y2={plotBottom} stroke={C.textMuted} strokeWidth={0.7} strokeDasharray="3,4" opacity={0.5} />
-              <text x={s.x} y={plotBottom + 13 + s.row * 11} fill={C.textMuted} fontSize={9} textAnchor="middle">{fmtStrike(s.k)}</text>
-            </g>
-          ))}
-          {/* Breakeven markers */}
-          {payoff.breakevens.filter(be => be >= lo && be <= hi).map((be, i) => (
-            <g key={`be${i}`}>
-              <line x1={toX(be)} x2={toX(be)} y1={mTop} y2={plotBottom} stroke={C.accent} strokeWidth={1} strokeDasharray="2,3" opacity={0.6} />
-              <text x={toX(be)} y={mTop - 8} fill={C.accent} fontSize={9} textAnchor="middle">BE {usd(be)}</text>
-            </g>
-          ))}
-          {/* Profit (green) and loss (red) areas between the expiration line and $0 */}
-          {(() => {
-            const area = pathExp + `L${toX(hi).toFixed(1)},${zeroY.toFixed(1)}L${toX(lo).toFixed(1)},${zeroY.toFixed(1)}Z`;
-            return (
-              <>
-                <path d={area} fill={C.green} opacity={0.15} clipPath="url(#spreadProfitZone)" />
-                <path d={area} fill={C.red} opacity={0.15} clipPath="url(#spreadLossZone)" />
-              </>
-            );
-          })()}
-          <path d={pathNow} fill="none" stroke={C.greenText} strokeWidth={2} opacity={0.55} />
-          <path d={pathExp} fill="none" stroke={C.accent} strokeWidth={2.5} />
-          {/* Today's stock price */}
-          <polygon points={`${toX(S) - 5},${plotBottom} ${toX(S) + 5},${plotBottom} ${toX(S)},${plotBottom - 8}`} fill={C.text} />
-          <text x={mx} y={H - 3} fill={C.textMuted} fontSize={10}>Stock {usd(lo, 0)}</text>
-          <text x={W - mx} y={H - 3} fill={C.textMuted} fontSize={10} textAnchor="end">{usd(hi, 0)}</text>
-        </svg>
+
+        {/* P&L Chart */}
+        <div className="xl:flex-1 min-w-0 flex flex-col justify-center" style={{ ...cardBox(), padding: 12 }}>
+          <div style={{ display: "flex", gap: 16, marginBottom: 6, justifyContent: "center", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+              <div style={{ width: 16, height: 3, background: C.accent, borderRadius: 2 }} />
+              <span style={{ color: C.textDim }}>At expiration{fillValid ? " (your fill)" : ""}</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+              <div style={{ width: 16, height: 3, background: C.greenText, borderRadius: 2, opacity: 0.6 }} />
+              <span style={{ color: C.textDim }}>Today (theoretical)</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+              <div style={{ width: 16, height: 10, background: C.accent, opacity: 0.12, borderRadius: 2 }} />
+              <span style={{ color: C.textDim }}>Expected move by expiration: ±{usd(sd)} (1σ)</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+              <span style={{ color: C.text, fontSize: 10 }}>▲</span>
+              <span style={{ color: C.textDim }}>Stock now {usd(S)}</span>
+            </div>
+          </div>
+          <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
+            <defs>
+              <clipPath id="spreadProfitZone"><rect x={0} y={0} width={W} height={Math.max(zeroY, 0)} /></clipPath>
+              <clipPath id="spreadLossZone"><rect x={0} y={zeroY} width={W} height={Math.max(H - zeroY, 0)} /></clipPath>
+            </defs>
+            {/* 1σ expected-move band */}
+            {sdHi > sdLo && (
+              <rect x={toX(sdLo)} y={mTop} width={toX(sdHi) - toX(sdLo)} height={plotBottom - mTop} fill={C.accent} opacity={0.07} />
+            )}
+            {yTicks.map(v => (
+              <g key={v}>
+                <line x1={mLeft} x2={W - mRight} y1={toY(v)} y2={toY(v)} stroke={C.border} strokeWidth={0.5} />
+                <text x={mLeft - 6} y={toY(v) + 4} fill={C.textMuted} fontSize={10} textAnchor="end">{usd(v, tickDecimals)}</text>
+              </g>
+            ))}
+            <line x1={mLeft} x2={W - mRight} y1={zeroY} y2={zeroY} stroke={C.textDim} strokeWidth={1} strokeDasharray="4,3" />
+            {/* Strike markers */}
+            {strikeLabels.map(s => (
+              <g key={s.k}>
+                <line x1={s.x} x2={s.x} y1={mTop} y2={plotBottom} stroke={C.textMuted} strokeWidth={0.7} strokeDasharray="3,4" opacity={0.5} />
+                <text x={s.x} y={plotBottom + 13 + s.row * 11} fill={C.textMuted} fontSize={9} textAnchor="middle">{fmtStrike(s.k)}</text>
+              </g>
+            ))}
+            {/* Breakeven markers */}
+            {payoff.breakevens.filter(be => be >= lo && be <= hi).map((be, i) => (
+              <g key={`be${i}`}>
+                <line x1={toX(be)} x2={toX(be)} y1={mTop} y2={plotBottom} stroke={C.accent} strokeWidth={1} strokeDasharray="2,3" opacity={0.6} />
+                <text x={toX(be)} y={mTop - 8} fill={C.accent} fontSize={9} textAnchor="middle">BE {usd(be)}</text>
+              </g>
+            ))}
+            {/* Profit (green) and loss (red) areas between the expiration line and $0 */}
+            {(() => {
+              const area = pathExp + `L${toX(hi).toFixed(1)},${zeroY.toFixed(1)}L${toX(lo).toFixed(1)},${zeroY.toFixed(1)}Z`;
+              return (
+                <>
+                  <path d={area} fill={C.green} opacity={0.15} clipPath="url(#spreadProfitZone)" />
+                  <path d={area} fill={C.red} opacity={0.15} clipPath="url(#spreadLossZone)" />
+                </>
+              );
+            })()}
+            <path d={pathNow} fill="none" stroke={C.greenText} strokeWidth={2} opacity={0.55} />
+            <path d={pathExp} fill="none" stroke={C.accent} strokeWidth={2.5} />
+            {/* Today's stock price */}
+            <polygon points={`${toX(S) - 5},${plotBottom} ${toX(S) + 5},${plotBottom} ${toX(S)},${plotBottom - 8}`} fill={C.text} />
+            <text x={mLeft} y={H - 3} fill={C.textMuted} fontSize={10}>Stock {usd(lo, 0)}</text>
+            <text x={W - mRight} y={H - 3} fill={C.textMuted} fontSize={10} textAnchor="end">{usd(hi, 0)}</text>
+          </svg>
+        </div>
       </div>
 
       {/* Net Greeks: per share, and per contract below */}

@@ -126,7 +126,7 @@ const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
 
         {/* Nav links + user menu fill remaining space */}
         <div className="flex-1 flex items-center justify-between pr-4 sm:pr-6 lg:pr-8 min-w-0">
-          <div className="hidden md:flex items-center justify-center flex-1 space-x-8 lg:space-x-12" ref={navRef}>
+          <div className="hidden md:flex items-center justify-center flex-1 space-x-6 xl:space-x-12" ref={navRef}>
             {NAV_ITEMS.map((item) => {
               if (item.children) {
                 const isChildActive = item.children.some((c) => c.key === currentPage);
@@ -137,12 +137,12 @@ const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
                       onClick={() => setOpenDropdown(isOpen ? null : item.label)}
                       className={
                         isChildActive
-                          ? 'text-base text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1 whitespace-nowrap flex items-center gap-1'
-                          : 'text-base font-medium text-gray-300 hover:text-white whitespace-nowrap flex items-center gap-1'
+                          ? 'text-base xl:text-lg text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1 whitespace-nowrap flex items-center gap-1'
+                          : 'text-base xl:text-lg font-medium text-gray-300 hover:text-white whitespace-nowrap flex items-center gap-1'
                       }
                     >
                       {item.label}
-                      <svg className={`w-3.5 h-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className={`w-3.5 h-3.5 xl:w-4 xl:h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                       </svg>
                     </button>
@@ -175,8 +175,8 @@ const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
                   to={buildTo(item.to!, item.key!)}
                   className={
                     currentPage === item.key
-                      ? 'text-base text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1 whitespace-nowrap'
-                      : 'text-base font-medium text-gray-300 hover:text-white whitespace-nowrap'
+                      ? 'text-base xl:text-lg text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1 whitespace-nowrap'
+                      : 'text-base xl:text-lg font-medium text-gray-300 hover:text-white whitespace-nowrap'
                   }
                 >
                   {item.label}
@@ -191,8 +191,8 @@ const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
                 className="flex items-center gap-2 text-sm text-gray-300 hover:text-teal-400 transition-colors focus:outline-none"
               >
-                <span className="hidden lg:inline">{user?.email}</span>
-                <span className="lg:hidden">{user?.email?.split('@')[0]}</span>
+                <span className="hidden xl:inline">{user?.email}</span>
+                <span className="xl:hidden">{user?.email?.split('@')[0]}</span>
                 {user && getTierBadge(user.subscription_tier)}
                 <svg className={`w-4 h-4 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
