@@ -115,11 +115,23 @@ function nearestTreasuryRate(rates, days) {
   return best ? Number(best.value) : null;
 }
 
+// Small note under an input saying where its value came from.
+function FieldHint({ children, warn = false }) {
+  return <span style={{ fontSize: 11, color: warn ? C.yellow : C.textMuted, lineHeight: 1.4 }}>{children}</span>;
+}
+
 function InputPanel({ params, setParams, page, autoLookup }) {
-  const set = (k) => (e) => setParams(p => ({ ...p, [k]: e.target.value }));
+  // Typing over a fetched volatility or dividend yield makes it the user's own
+  // number, so its "where this came from" note no longer applies.
+  const SOURCE_KEY = { sigma: "volSource", q: "divSource" };
+  const set = (k) => (e) => setParams(p => ({
+    ...p,
+    [k]: e.target.value,
+    ...(SOURCE_KEY[k] ? { [SOURCE_KEY[k]]: null } : {}),
+  }));
   const [tickerInput, setTickerInput] = useState(params.ticker || "");
   const [lookupLoading, setLookupLoading] = useState(false);
-  const [lookupStatus, setLookupStatus] = useState<{ ok: boolean; msg: string; source?: string } | null>(null);
+  const [lookupStatus, setLookupStatus] = useState<{ ok: boolean; msg: string } | null>(null);
 
   // Sync ticker prefill when URL params populate it post-mount
   useEffect(() => {
@@ -141,37 +153,53 @@ function InputPanel({ params, setParams, page, autoLookup }) {
     setLookupLoading(true);
     setLookupStatus(null);
     try {
-      const [quoteRes, ivRes] = await Promise.all([
+      const [quoteRes, ivRes, divRes] = await Promise.all([
         stocksAPI.getQuote(sym).catch(() => null),
         stocksAPI.getImpliedVolatility(sym, 30).catch(() => null),
+        stocksAPI.getDividends(sym).catch(() => null),
       ]);
       const newPrice = quoteRes?.data?.price;
       const ivVal = ivRes?.data?.value;
-      const ivSource = ivRes?.data?.source;
+      const ivSource = ivRes?.data?.source === "realized" ? "realized" : "default";
       if (newPrice == null && ivVal == null) {
         setLookupStatus({ ok: false, msg: `No data for ${sym}` });
         return;
+      }
+      // Dividend yield from /stocks/dividends, which already refuses a stale
+      // or suspended dividend. A failed or un-annualizable lookup is flagged
+      // and modelled as 0% rather than carrying over the last ticker's yield.
+      const div = divRes?.data;
+      const divStatus = div?.dividend_status;
+      let q = "0.0", divSource;
+      if (divStatus === "active" && div.annual_yield != null) {
+        q = Number(div.annual_yield).toFixed(2);
+        divSource = { kind: "active", freq: (div.frequency_label || "").toLowerCase() };
+      } else if (divStatus === "none" || divStatus === "suspended") {
+        divSource = { kind: divStatus };
+      } else {
+        divSource = { kind: "unavailable" };
       }
       // A new company needs a strike near its price. Re-fetching the one already
       // loaded is a refresh: price and vol update, the strike the user set stays.
       const isNewTicker = sym !== loadedTicker.current;
       setParams(p => {
-        const next = { ...p, ticker: sym };
+        const next = { ...p, ticker: sym, q, divSource };
         if (newPrice != null) {
           next.S = Number(newPrice).toFixed(2);
           const k = isNewTicker ? nearestStrike(newPrice) : null;
           if (k != null) next.K = k.toFixed(2);
         }
-        if (ivVal != null) next.sigma = (Number(ivVal) * 100).toFixed(1);
+        if (ivVal != null) {
+          next.sigma = (Number(ivVal) * 100).toFixed(1);
+          next.volSource = ivSource;
+        }
         return next;
       });
       if (newPrice != null) {
         loadedTicker.current = sym;
         setActiveTicker(sym);
       }
-      const priceMsg = newPrice != null ? `$${Number(newPrice).toFixed(2)}` : "price n/a";
-      const ivMsg = ivVal != null ? `${(Number(ivVal) * 100).toFixed(1)}% vol (${ivSource === "realized" ? "30D realized" : "default"})` : "vol n/a";
-      setLookupStatus({ ok: true, msg: `${sym} · ${priceMsg} · ${ivMsg}`, source: ivSource });
+      setLookupStatus({ ok: true, msg: newPrice != null ? `${sym} · $${Number(newPrice).toFixed(2)}` : `${sym} · price unavailable` });
     } catch {
       setLookupStatus({ ok: false, msg: `Lookup failed for ${sym}` });
     } finally {
@@ -196,10 +224,43 @@ function InputPanel({ params, setParams, page, autoLookup }) {
     if (sym && sym !== requestedTicker.current) runLookup();
   };
 
+  const div = params.divSource;
+  const divHint = !div ? null
+    : div.kind === "active" ? <FieldHint>Latest {div.freq ? `${div.freq} ` : ""}payment, annualized</FieldHint>
+    : div.kind === "none" ? <FieldHint>No dividend</FieldHint>
+    : div.kind === "suspended" ? <FieldHint>Dividend suspended</FieldHint>
+    : <FieldHint warn>Couldn't load dividends; assumed 0%. Enter it if the stock pays one.</FieldHint>;
+  const volHint = params.volSource === "realized"
+    ? <FieldHint>Last 30 days' actual (realized) volatility, not implied</FieldHint>
+    : params.volSource === "default"
+      ? <FieldHint warn>Realized volatility unavailable; 30% placeholder</FieldHint>
+      : null;
+
   return (
     <div style={{ ...cardBox(), display: "flex", flexDirection: "column", gap: 12 }}>
-      {/* Ticker lookup — fetches current price + 30-day realized volatility */}
       <div style={{ display: "flex", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
+        {page !== "spreads" && (
+          // Highlighted and first: it is the one input with no usable default,
+          // and every result on the non-spread tabs waits for it.
+          <div style={{ ...inputGroup, flex: "0 0 220px" }}>
+            <span style={{ ...labelStyle(), color: C.accent, fontWeight: 700 }}>Option Type</span>
+            <select
+              style={{
+                ...selectStyle(),
+                border: `2px solid ${C.accent}`,
+                boxShadow: `0 0 0 3px ${C.accentGlow2}`,
+                padding: "7px 9px", // keeps the box the same height despite the 2px border
+                color: params.type ? C.text : C.textDim,
+              }}
+              value={params.type}
+              onChange={set("type")}
+            >
+              <option value="" disabled>Select Type</option>
+              <option value="call">Call (Right to buy)</option>
+              <option value="put">Put (Right to sell)</option>
+            </select>
+          </div>
+        )}
         <div style={{ ...inputGroup, flex: "0 0 160px" }}>
           <span style={labelStyle()}>Ticker (optional)</span>
           <input
@@ -224,23 +285,18 @@ function InputPanel({ params, setParams, page, autoLookup }) {
             opacity: lookupLoading || !tickerInput.trim() ? 0.5 : 1,
           }}
         >
-          {lookupLoading ? "Loading…" : "Fetch price + vol"}
+          {lookupLoading ? "Loading…" : "Fetch price, vol + dividend"}
         </button>
         {lookupStatus && (
           <span style={{ fontSize: 12, color: lookupStatus.ok ? C.greenText : C.redText, alignSelf: "center" }}>
             {lookupStatus.msg}
-            {lookupStatus.ok && lookupStatus.source === "default" && (
-              <span style={{ color: C.textMuted, marginLeft: 6, fontStyle: "italic" }}>
-                — couldn't compute realized vol, using 30% default
-              </span>
-            )}
           </span>
         )}
       </div>
 
       <div style={{
         display: "grid",
-        gridTemplateColumns: page === "spreads" ? "1fr 1fr 1fr 1fr" : "1fr 1fr 1fr",
+        gridTemplateColumns: page === "spreads" ? "repeat(5, 1fr)" : "1fr 1fr 1fr",
         gap: 12,
       }}>
         <div style={inputGroup}>
@@ -264,43 +320,41 @@ function InputPanel({ params, setParams, page, autoLookup }) {
         <div style={inputGroup}>
           <span style={labelStyle()}>Volatility (%)</span>
           <input style={inputStyle()} type="number" step="0.1" value={params.sigma} onChange={set("sigma")} />
+          {volHint}
         </div>
-        {page !== "spreads" && (
-          // Highlighted: it is the one input with no usable default, and every
-          // result on the non-spread tabs waits for it.
-          <div style={inputGroup}>
-            <span style={{ ...labelStyle(), color: C.accent, fontWeight: 700 }}>Option Type</span>
-            <select
-              style={{
-                ...selectStyle(),
-                border: `2px solid ${C.accent}`,
-                boxShadow: `0 0 0 3px ${C.accentGlow2}`,
-                padding: "7px 9px", // keeps the box the same height despite the 2px border
-                color: params.type ? C.text : C.textDim,
-              }}
-              value={params.type}
-              onChange={set("type")}
-            >
-              <option value="" disabled>Select Type</option>
-              <option value="call">Call (Right to buy)</option>
-              <option value="put">Put (Right to sell)</option>
-            </select>
-          </div>
-        )}
+        <div style={inputGroup}>
+          <span style={labelStyle()}>Dividend Yield (%)</span>
+          <input style={inputStyle()} type="number" step="0.01" min="0" value={params.q} onChange={set("q")} />
+          {divHint}
+        </div>
       </div>
     </div>
   );
 }
 
+// Within this distance of the strike an option is called at the money. A
+// 0.4%-out-of-the-money option behaves like an at-the-money one, and a red
+// "OTM" badge made it read worse than it is.
+const ATM_BAND = 0.01;
+
 // ─── Pricing Page ───
-function PricingPage({ params }) {
-  const S = +params.S, K = +params.K, T = +params.days/365, r = +params.r/100, sig = +params.sigma/100, tp = params.type;
-  const bs = bsPrice(S, K, T, r, sig, tp);
-  const bn = binomialPrice(S, K, T, r, sig, tp, 200);
+function PricingPage({ params, onOpenIV }) {
+  const S = +params.S, K = +params.K, T = +params.days/365, r = +params.r/100, sig = +params.sigma/100, tp = params.type, q = +params.q/100 || 0;
+  const bs = bsPrice(S, K, T, r, sig, tp, q);
+  // Both from one 200-step tree: American minus European is the early-exercise
+  // premium with the tree's rounding cancelled. Measuring it against
+  // Black-Scholes instead reported that rounding as a premium.
+  const american = binomialPrice(S, K, T, r, sig, tp, { steps: 200, q });
+  const european = binomialPrice(S, K, T, r, sig, tp, { steps: 200, q, american: false });
+  const earlyExercise = Math.max(american - european, 0);
+  const noEarlyExercise = tp === "call" && q <= 0;
   const intrinsic = Math.max(tp === "call" ? S - K : K - S, 0);
   const timeVal = bs - intrinsic;
-  const moneyness = tp === "call" ? (S > K ? "ITM" : S < K ? "OTM" : "ATM") : (S < K ? "ITM" : S > K ? "OTM" : "ATM");
+  const gap = K > 0 ? (S - K) / K : 0;
+  const moneyness = Math.abs(gap) <= ATM_BAND ? "ATM"
+    : (tp === "call" ? S > K : S < K) ? "ITM" : "OTM";
   const mColor = moneyness === "ITM" ? C.greenText : moneyness === "OTM" ? C.redText : C.accent;
+  const gapText = S === K ? "Stock at the strike" : `Stock ${Math.abs(gap * 100).toFixed(1)}% ${S > K ? "above" : "below"} strike`;
 
   const Stat = ({ label: l, value: v, sub, color }) => (
     <div style={{ ...cardBox(), flex: 1, textAlign: "center" }}>
@@ -314,13 +368,40 @@ function PricingPage({ params }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "flex", gap: 12 }}>
         <Stat label="Black-Scholes" value={`$${bs.toFixed(4)}`} sub="European-style" />
-        <Stat label="Binomial (200 steps)" value={`$${bn.toFixed(4)}`} sub="American-style" />
-        <Stat label="Difference" value={`$${Math.abs(bs - bn).toFixed(4)}`} sub="Early exercise premium" />
+        <Stat label="Binomial (200 steps)" value={`$${american.toFixed(4)}`} sub="American-style" />
+        <Stat
+          label="Early Exercise Premium"
+          value={`$${earlyExercise.toFixed(4)}`}
+          sub={noEarlyExercise
+            ? "None: exercising a call early never pays without a dividend"
+            : "Extra value from the right to exercise before expiry"}
+        />
       </div>
       <div style={{ display: "flex", gap: 12 }}>
         <Stat label="Intrinsic Value" value={`$${intrinsic.toFixed(2)}`} />
         <Stat label="Time Value" value={`$${timeVal.toFixed(4)}`} />
-        <Stat label="Moneyness" value={moneyness} color={mColor} />
+        <Stat label="Moneyness" value={moneyness} color={mColor} sub={gapText} />
+      </div>
+      {/* What these numbers are, and aren't: a theoretical value at the
+          volatility above, not a forecast of the market's quote. */}
+      <div style={{ ...cardBox(), display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", fontSize: 13, color: C.textSec, lineHeight: 1.55 }}>
+        <div style={{ flex: "1 1 420px" }}>
+          {params.volSource === "realized" ? (
+            <>
+              These values use <strong>{(+params.sigma).toFixed(1)}%</strong> volatility: {params.ticker || "the stock"}'s
+              actual volatility over the last 30 days. They show what the option is worth if the next month moves like the
+              last one. They are not a prediction of the market quote, which is priced on <em>implied</em> volatility and
+              can differ a lot, especially around earnings.
+            </>
+          ) : (
+            <>
+              These are theoretical values at the volatility you entered. A market quote is priced on <em>implied</em>{" "}
+              volatility, which may differ.
+            </>
+          )}{" "}
+          To compare with a real quote, enter its price in the IV Solver.
+        </div>
+        <button onClick={onOpenIV} style={{ ...pillBtn(true), padding: "8px 16px" }}>Open IV Solver</button>
       </div>
     </div>
   );
@@ -328,8 +409,8 @@ function PricingPage({ params }) {
 
 // ─── Greeks Page ───
 function GreeksPage({ params }) {
-  const S = +params.S, K = +params.K, T = +params.days/365, r = +params.r/100, sig = +params.sigma/100, tp = params.type;
-  const g = bsGreeks(S, K, T, r, sig, tp);
+  const S = +params.S, K = +params.K, T = +params.days/365, r = +params.r/100, sig = +params.sigma/100, tp = params.type, q = +params.q/100 || 0;
+  const g = bsGreeks(S, K, T, r, sig, tp, q);
   const [openInfo, setOpenInfo] = useState(null);
 
   const greekData = [
@@ -416,8 +497,8 @@ function GreeksPage({ params }) {
 
 // ─── P&L Payoff Page ───
 function PayoffPage({ params }) {
-  const S = +params.S, K = +params.K, T = +params.days/365, r = +params.r/100, sig = +params.sigma/100, tp = params.type;
-  const premium = bsPrice(S, K, T, r, sig, tp);
+  const S = +params.S, K = +params.K, T = +params.days/365, r = +params.r/100, sig = +params.sigma/100, tp = params.type, q = +params.q/100 || 0;
+  const premium = bsPrice(S, K, T, r, sig, tp, q);
   const lo = S * 0.7, hi = S * 1.3, steps = 120;
   const pts = [];
   let minPnl = Infinity, maxPnl = -Infinity;
@@ -425,7 +506,7 @@ function PayoffPage({ params }) {
     const st = lo + (hi - lo) * i / steps;
     const intrinsic = Math.max(tp === "call" ? st - K : K - st, 0);
     const pnlExp = intrinsic - premium;
-    const pnlNow = bsPrice(st, K, T, r, sig, tp) - premium;
+    const pnlNow = bsPrice(st, K, T, r, sig, tp, q) - premium;
     pts.push({ st, pnlExp, pnlNow });
     minPnl = Math.min(minPnl, pnlExp, pnlNow);
     maxPnl = Math.max(maxPnl, pnlExp, pnlNow);
@@ -502,13 +583,13 @@ function PayoffPage({ params }) {
 
 // ─── IV Solver Page ───
 function IVSolverPage({ params }) {
-  const S = +params.S, K = +params.K, T = +params.days/365, r = +params.r/100, sig = +params.sigma/100, tp = params.type;
+  const S = +params.S, K = +params.K, T = +params.days/365, r = +params.r/100, sig = +params.sigma/100, tp = params.type, q = +params.q/100 || 0;
 
   // Seed the market price with the Black-Scholes theoretical value for the
   // current inputs, so the solved IV round-trips to ~the volatility input on
   // load instead of showing a meaningless number from an arbitrary default.
   // We keep it in sync with the inputs until the user enters a real premium.
-  const theoPrice = (T > 0 && sig > 0) ? bsPrice(S, K, T, r, sig, tp) : 0;
+  const theoPrice = (T > 0 && sig > 0) ? bsPrice(S, K, T, r, sig, tp, q) : 0;
   const [mktPrice, setMktPrice] = useState(theoPrice > 0 ? theoPrice.toFixed(2) : "5.00");
   const userSetPrice = useRef(false);
 
@@ -520,14 +601,14 @@ function IVSolverPage({ params }) {
   const onPriceChange = (e) => { userSetPrice.current = true; setMktPrice(e.target.value); };
 
   const mp = +mktPrice;
-  const iv = mp > 0 && T > 0 ? impliedVol(S, K, T, r, mp, tp) : null;
+  const iv = mp > 0 && T > 0 ? impliedVol(S, K, T, r, mp, tp, q) : null;
   const ivPct = iv ? (iv * 100).toFixed(2) : "—";
 
   const points = [];
   if (T > 0) {
     for (let v = 1; v <= 150; v += 1) {
       const sig = v / 100;
-      points.push({ vol: v, price: bsPrice(S, K, T, r, sig, tp) });
+      points.push({ vol: v, price: bsPrice(S, K, T, r, sig, tp, q) });
     }
   }
   const W = 600, H = 250, mx = 55, my = 30;
@@ -633,7 +714,7 @@ const STRATEGIES = {
 
 // ─── Spreads Page ───
 function SpreadsPage({ params, initialStrategy, initialStrikes }) {
-  const S = +params.S, T = +params.days / 365, r = +params.r / 100, sig = +params.sigma / 100;
+  const S = +params.S, T = +params.days / 365, r = +params.r / 100, sig = +params.sigma / 100, q = +params.q / 100 || 0;
   const initStrat = initialStrategy && STRATEGIES[initialStrategy] ? initialStrategy : "bullCall";
   const [strategy, setStrategy] = useState(initStrat);
   const strat = STRATEGIES[strategy];
@@ -664,8 +745,8 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
 
   // Calculate prices and Greeks per leg
   const legDetails = legs.map(leg => {
-    const price = bsPrice(S, leg.K, T, r, sig, leg.type);
-    const greeks = bsGreeks(S, leg.K, T, r, sig, leg.type);
+    const price = bsPrice(S, leg.K, T, r, sig, leg.type, q);
+    const greeks = bsGreeks(S, leg.K, T, r, sig, leg.type, q);
     return { ...leg, price, greeks };
   });
 
@@ -688,7 +769,7 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
     for (const leg of legDetails) {
       const intrinsic = Math.max(leg.type === "call" ? st - leg.K : leg.K - st, 0);
       pnlExp += leg.dir * (intrinsic - leg.price);
-      pnlNow += leg.dir * (bsPrice(st, leg.K, T, r, sig, leg.type) - leg.price);
+      pnlNow += leg.dir * (bsPrice(st, leg.K, T, r, sig, leg.type, q) - leg.price);
     }
     pts.push({ st, pnlExp, pnlNow });
     minPnl = Math.min(minPnl, pnlExp, pnlNow);
@@ -899,6 +980,9 @@ export default function OptionsCalculator() {
     // No default: the user picks Call or Put. A link (e.g. "Trade This") may preset it.
     type: ["call", "put"].includes(searchParams.get("type")) ? searchParams.get("type") : "",
     ticker: searchParams.get("ticker") || "",
+    q: searchParams.get("q") || "0.0", // dividend yield, %
+    volSource: null, // "realized" | "default" once fetched; null when typed or passed in
+    divSource: null, // what the dividend lookup found; null when typed
   });
 
   // Live risk-free rate: pulled from the Treasury-rates endpoint and matched to
@@ -1052,7 +1136,7 @@ export default function OptionsCalculator() {
             </div>
           ) : (
             <>
-              {page === "pricing" && <PricingPage params={params} />}
+              {page === "pricing" && <PricingPage params={params} onOpenIV={() => setPage("iv")} />}
               {page === "greeks" && <GreeksPage params={params} />}
               {page === "payoff" && <PayoffPage params={params} />}
               {page === "iv" && <IVSolverPage params={params} />}
