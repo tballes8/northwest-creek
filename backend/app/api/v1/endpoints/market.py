@@ -7,7 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.listings import is_common_stock, is_us_symbol
+from app.config import get_settings
+from app.core.listings import is_common_stock, is_leveraged_or_inverse_fund, is_us_symbol
 from app.core.redaction import safe_error
 from app.db.models import StockSnapshot
 from app.db.session import get_db
@@ -21,6 +22,15 @@ TICKER_TAPE_LIMIT = 15
 SCREENS_TAPE_LIMIT = 15
 SCREENS_BREAKOUT_MAX = 8
 SCREENS_SQUEEZE_MIN_BARS = 3   # skip 1–2 day blips; only show established coils
+# Both tapes run on the landing page and atop every app page. Sub-$5 names (half of
+# FMP's most-actives on 2026-11-06: RCT at $0.04, SDA at +145%) make the site read as
+# a penny-stock list to a first-time visitor.
+TAPE_MIN_PRICE = 5.0
+# SPAC shells (FMP industry "Shell Companies") trade pinned near their trust value, so
+# they sit in a volatility squeeze by construction: 3 of the 7 squeeze picks the tape
+# served on 2026-11-07 (ALOV, KFII, ALF). Matched on industry because ALOV's name ("Aldabra 4
+# Liquidity Opportunity Vehicle") carries no SPAC word.
+SHELL_INDUSTRY = "Shell Companies"
 
 # Corporate boilerplate + share-class designators ignored when comparing company
 # names, so share classes (GOOG/GOOGL, FOX/FOXA) collapse to one tape slot.
@@ -43,7 +53,9 @@ _screens_tape_cache = SimpleCache(ttl_seconds=60)
 
 @router.get("/ticker-tape")
 async def get_ticker_tape():
-    """Most-active US tickers (sorted by volume) for the public landing tape."""
+    """Most-active US tickers (sorted by volume) for the public landing tape: $5 and
+    up, no leveraged or inverse funds. FMP's list is 50 deep and about half of it
+    passes, so the 15 slots fill."""
     cached = _ticker_tape_cache.get("tape")
     if cached is not None:
         return cached
@@ -57,11 +69,14 @@ async def get_ticker_tape():
         items = []
         for item in raw:
             ticker = item.get("symbol", "")
-            if not (is_us_symbol(ticker) and is_common_stock(ticker, item.get("name"))):
+            name = item.get("name")
+            if not (is_us_symbol(ticker) and is_common_stock(ticker, name)):
+                continue
+            if is_leveraged_or_inverse_fund(name):
                 continue
             price = item.get("price")
             change_pct = item.get("changesPercentage")
-            if price is None or change_pct is None:
+            if price is None or change_pct is None or float(price) < TAPE_MIN_PRICE:
                 continue
             items.append({
                 "ticker": ticker,
@@ -86,14 +101,22 @@ async def get_screens_ticker_tape(db: AsyncSession = Depends(get_db)):
     including their implicit ETF exclusion — except squeeze picks rank by
     bandwidth ratio (tightest coil first) instead of the preset's market-cap
     sort, require a few bars in squeeze, and share classes of the same company
-    collapse to a single entry.
+    collapse to a single entry. Both legs skip sub-$5 names and SPAC shells.
+
+    Empty while FMP_BATCH_ENDPOINTS is off: stock_snapshots only refreshes with batch
+    quotes, so the tape would replay the last stored session's movers as today's.
+    TickerTape renders nothing for an empty list, and the tape returns with the flag.
     """
+    if not get_settings().FMP_BATCH_ENDPOINTS:
+        return {"data": []}
+
     cached = _screens_tape_cache.get("tape")
     if cached is not None:
         return cached
 
     try:
         no_etf = or_(StockSnapshot.is_etf.is_(None), StockSnapshot.is_etf == False)
+        not_shell = or_(StockSnapshot.industry.is_(None), StockSnapshot.industry != SHELL_INDUSTRY)
 
         # Over-fetch both screens slightly to absorb dedupe/warrant drops.
         breakout_q = (
@@ -103,7 +126,9 @@ async def get_screens_ticker_tape(db: AsyncSession = Depends(get_db)):
                 StockSnapshot.change_percentage >= 3,
                 StockSnapshot.price * StockSnapshot.volume >= 50_000_000,
                 StockSnapshot.market_cap >= 200_000_000,
+                StockSnapshot.price >= TAPE_MIN_PRICE,
                 no_etf,
+                not_shell,
             )
             .order_by(StockSnapshot.change_percentage.desc())
             .limit(SCREENS_BREAKOUT_MAX + 4)
@@ -115,9 +140,10 @@ async def get_screens_ticker_tape(db: AsyncSession = Depends(get_db)):
                 StockSnapshot.squeeze_state == 'on',
                 StockSnapshot.squeeze_bars >= SCREENS_SQUEEZE_MIN_BARS,
                 StockSnapshot.market_cap >= 250_000_000,
-                StockSnapshot.price.isnot(None),
+                StockSnapshot.price >= TAPE_MIN_PRICE,
                 StockSnapshot.change_percentage.isnot(None),
                 no_etf,
+                not_shell,
             )
             .order_by(StockSnapshot.squeeze_ratio.asc().nulls_last())
             .limit(SCREENS_TAPE_LIMIT + 4)

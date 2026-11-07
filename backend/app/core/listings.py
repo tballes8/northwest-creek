@@ -4,7 +4,8 @@ builds from vendor data. The screener universe (tasks/refresh_stock_snapshots.py
 daily snapshot cron (tasks/fetch_daily_snapshots.py), the gainers/losers and ticker
 tapes (services/market_data.py, endpoints/market.py) and the IPO calendar
 (endpoints/stocks.py) all read these rules, so a symbol one of them drops is not
-offered by another.
+offered by another. The most-active tape also drops leveraged and inverse funds
+(is_leveraged_or_inverse_fund).
 
 Pure: stdlib only, no app.config. The daily-snapshot cron imports it, and cron services
 lack most settings.
@@ -110,6 +111,27 @@ def is_common_stock(symbol: str, name: str | None) -> bool:
     return True
 
 
+# Leveraged and inverse funds: daily-reset trading products, not investments, and on
+# a volume-sorted list they crowd out everything else (2026-11-06: SOXL, SOXS, NVD,
+# SPDN, TQQQ, SQQQ, KORU, TSLL and TSLG were 9 of FMP's 50 most-actives). FMP gives no
+# fund type on these lists, so the name decides. The leverage words are only read on
+# a name that is plainly a fund, which keeps Ultra Clean Holdings and Build-A-Bear in.
+# "Short" names an inverse fund except as Short-Term/Short Duration/Short Maturity,
+# which are plain bond and volatility funds (VXX stays).
+_FUND_NAME = re.compile(r"\b(etfs?|etns?|fund|trust|proshares|direxion|graniteshares)\b", re.I)
+_LEVERAGE_NAME = re.compile(
+    r"(?<![\w.])-?\d+(\.\d+)?x\b|\bultra(pro|short)?\b|\b(bull|bear|inverse|leveraged?)\b"
+    r"|\bshort\b(?![- ](term|duration|maturity)\b)",
+    re.I,
+)
+
+
+def is_leveraged_or_inverse_fund(name: str | None) -> bool:
+    """True for a leveraged (2X, 3X, Ultra) or inverse (Short, Bear, -1X) fund."""
+    name = name or ""
+    return bool(_FUND_NAME.search(name) and _LEVERAGE_NAME.search(name))
+
+
 def _selftest() -> None:
     # is_common_stock: real companies, share classes and awkward names stay in
     for sym, name in [
@@ -157,6 +179,27 @@ def _selftest() -> None:
         assert is_us_exchange(ex), ex
     for ex in ("OTC", "TSX", "LSE", "Nasdaq Global Select", "", None):
         assert not is_us_exchange(ex), ex
+
+    # is_leveraged_or_inverse_fund: FMP's names from the 2026-11-06 most-actives list
+    for name in (
+        "Direxion Daily Semiconductor Bull 3X ETF", "Direxion Daily Semiconductor Bear 3X ETF",
+        "GraniteShares 2x Short NVDA Daily ETF", "Direxion Daily S&P 500 Bear 1X ETF",
+        "ProShares UltraPro QQQ", "ProShares - UltraPro Short QQQ",
+        "Direxion Daily MSCI South Korea Bull 3X ETF", "Direxion Daily TSLA Bull 2X ETF",
+        "Themes ETF Trust - Leverage Shares 2X Long TSLA Daily ETF",
+        "ProShares Ultra VIX Short-Term Futures ETF", "ProShares Short S&P500",
+        "Volatility Shares -1x Short VIX Futures ETF", "MicroSectors FANG+ Index 3X Leveraged ETN",
+        "Direxion Daily S&P Oil & Gas Exp. & Prod. Bull 1.5X Shares",
+    ):
+        assert is_leveraged_or_inverse_fund(name), name
+    for name in (
+        "Invesco QQQ Trust, Series 1", "State Street SPDR S&P 500 ETF", "iShares Semiconductor ETF",
+        "iShares Bitcoin Trust ETF", "ProShares Bitcoin ETF", "Vanguard Short-Term Bond ETF",
+        "iPath Series B S&P 500 VIX Short-Term Futures ETN", "PIMCO Enhanced Short Maturity Active ETF",
+        "Ultra Clean Holdings, Inc.", "Build-A-Bear Workshop, Inc.", "Northern Trust Corporation",
+        "NVIDIA Corporation", "3M Company", "Bullfrog AI Holdings, Inc.", "", None,
+    ):
+        assert not is_leveraged_or_inverse_fund(name), name
     print("listings selftest OK")
 
 

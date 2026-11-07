@@ -128,8 +128,6 @@ const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
         <div className="flex-1 flex items-center justify-between pr-4 sm:pr-6 lg:pr-8 min-w-0">
           <div className="hidden md:flex items-center justify-center flex-1 space-x-8 lg:space-x-12" ref={navRef}>
             {NAV_ITEMS.map((item) => {
-              const fontStyle = { fontFamily: "'Viner Hand ITC', 'Caveat', cursive", fontSize: '1.35rem' };
-
               if (item.children) {
                 const isChildActive = item.children.some((c) => c.key === currentPage);
                 const isOpen = openDropdown === item.label;
@@ -139,10 +137,9 @@ const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
                       onClick={() => setOpenDropdown(isOpen ? null : item.label)}
                       className={
                         isChildActive
-                          ? 'text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1 whitespace-nowrap flex items-center gap-1'
-                          : 'text-gray-300 hover:text-white whitespace-nowrap flex items-center gap-1'
+                          ? 'text-base text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1 whitespace-nowrap flex items-center gap-1'
+                          : 'text-base font-medium text-gray-300 hover:text-white whitespace-nowrap flex items-center gap-1'
                       }
-                      style={fontStyle}
                     >
                       {item.label}
                       <svg className={`w-3.5 h-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -178,10 +175,9 @@ const NavBar: React.FC<NavBarProps> = ({ currentPage, user, onLogout }) => {
                   to={buildTo(item.to!, item.key!)}
                   className={
                     currentPage === item.key
-                      ? 'text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1 whitespace-nowrap'
-                      : 'text-gray-300 hover:text-white whitespace-nowrap'
+                      ? 'text-base text-primary-400 dark:text-primary-400 font-medium border-b-2 border-primary-600 dark:border-primary-400 pb-1 whitespace-nowrap'
+                      : 'text-base font-medium text-gray-300 hover:text-white whitespace-nowrap'
                   }
-                  style={fontStyle}
                 >
                   {item.label}
                 </Link>

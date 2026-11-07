@@ -8,24 +8,13 @@ interface TapeQuote {
   tag?: 'breakout' | 'squeeze';
 }
 
-const FALLBACK: TapeQuote[] = [
-  { ticker: 'AAPL', price: 0, change_percent: 0 },
-  { ticker: 'MSFT', price: 0, change_percent: 0 },
-  { ticker: 'GOOGL', price: 0, change_percent: 0 },
-  { ticker: 'AMZN', price: 0, change_percent: 0 },
-  { ticker: 'NVDA', price: 0, change_percent: 0 },
-  { ticker: 'META', price: 0, change_percent: 0 },
-  { ticker: 'TSLA', price: 0, change_percent: 0 },
-  { ticker: 'SPY', price: 0, change_percent: 0 },
-  { ticker: 'QQQ', price: 0, change_percent: 0 },
-  { ticker: 'DIA', price: 0, change_percent: 0 },
-];
-
 interface TickerTapeProps {
   /** When true, render dark-consistent styling that blends into the (always-dark) NavBar. */
   embedded?: boolean;
-  /** 'most-active' (default): FMP volume-sorted most-actives. 'screens': High
-   *  Volume Breakout + Volatility Squeeze quick-screen results. */
+  /** 'most-active' (default): FMP volume-sorted most-actives, $5 and up, no
+   *  leveraged or inverse funds. 'screens': High Volume Breakout + Volatility
+   *  Squeeze quick-screen results (empty while FMP_BATCH_ENDPOINTS is off).
+   *  Both filters are server-side, in endpoints/market.py. */
   source?: 'most-active' | 'screens';
 }
 
@@ -44,21 +33,15 @@ const TickerTape: React.FC<TickerTapeProps> = ({
       const req = isScreens
         ? marketAPI.getScreensTickerTape()
         : marketAPI.getTickerTape();
+      // Keep showing whatever we have on an empty or failed refresh. With
+      // nothing yet, the strip stays blank (or collapses, for screens): no
+      // made-up quotes. The old fallback showed AAPL, MSFT... at $0.00.
       req
         .then((res) => {
-          if (cancelled) return;
           const data: TapeQuote[] = res.data?.data || [];
-          // Keep showing whatever we have on an empty/failed refresh; only fall
-          // back to the hardcoded list when we have nothing yet. The screens
-          // tape has no fallback — it can be legitimately empty.
-          setQuotes((prev) =>
-            data.length > 0 ? data : prev.length > 0 || isScreens ? prev : FALLBACK
-          );
+          if (!cancelled && data.length > 0) setQuotes(data);
         })
-        .catch(() => {
-          if (!cancelled)
-            setQuotes((prev) => (prev.length > 0 || isScreens ? prev : FALLBACK));
-        });
+        .catch(() => {});
     };
     load();
     const id = setInterval(load, POLL_MS);

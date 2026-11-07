@@ -12,14 +12,27 @@ import { Line } from 'react-chartjs-2';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip);
 
-const SUMMARY =
-  "AAPL is consolidating near $192 after a strong earnings beat. RSI at 58 shows healthy momentum without overbought conditions, while the 50-day MA crossing above the 200-day MA last week signals a continuation of the uptrend. DCF puts fair value around $215 — roughly 12% upside from here.";
-
+// A labelled sample, not a quote: the AI summary runs only on a click inside the
+// app (CLAUDE.md), so the landing page can't show a live one. Its figures follow
+// the product's own outputs and the brief's rules: the AI target range as a
+// bear-to-bull range (no single fair value, no "upside"), indicator readings
+// described as conditions, and a Bullish/Bearish trend label.
+// Scaled to AAPL's level in Nov 2026 ($342) so it doesn't contradict the live
+// tape above it; rescale MOCK_PRICES and the range if AAPL moves far from it.
 const MOCK_PRICES = [
-  178.2, 179.4, 180.1, 178.9, 181.3, 183.0, 184.5, 183.2, 185.1, 186.4,
-  187.8, 186.2, 188.5, 189.1, 188.0, 190.2, 191.5, 190.3, 192.1, 191.8,
-  193.0, 192.4, 191.2, 192.8, 193.9, 192.5, 191.0, 192.3, 193.2, 192.1,
+  317.6, 319.8, 321.0, 318.9, 323.2, 326.2, 328.9, 326.5, 329.9, 332.2,
+  334.7, 331.9, 336.0, 337.1, 335.1, 339.0, 341.3, 339.2, 342.4, 341.9,
+  344.0, 342.9, 340.8, 343.6, 345.6, 343.1, 340.4, 342.8, 344.4, 342.4,
 ];
+const LAST = MOCK_PRICES[MOCK_PRICES.length - 1];
+const CHANGE_PCT = (LAST / MOCK_PRICES[MOCK_PRICES.length - 2] - 1) * 100;
+const RANGE_BEAR = 310;
+const RANGE_BULL = 385;
+
+const SUMMARY =
+  `AAPL is consolidating near $${Math.round(LAST)}. RSI at 58 is in neutral territory, below the 70 level traders call overbought. ` +
+  `The 50-day moving average sits above the 200-day, a pattern traders read as bullish. ` +
+  `NWC's AI target range runs from $${RANGE_BEAR} in the bear case to $${RANGE_BULL} in the bull case.`;
 
 const prefersReducedMotion = (): boolean =>
   typeof window !== 'undefined' &&
@@ -76,10 +89,15 @@ const HeroDemoCard: React.FC = () => {
         <div className="flex items-center gap-2">
           <span className="font-bold text-gray-900 dark:text-white">AAPL</span>
           <span className="text-xs text-gray-500 dark:text-gray-400">Apple Inc.</span>
+          <span className="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+            Sample
+          </span>
         </div>
         <div className="text-right">
-          <div className="font-bold text-gray-900 dark:text-white tabular-nums">$192.10</div>
-          <div className="text-xs text-green-500 font-semibold">+1.84%</div>
+          <div className="font-bold text-gray-900 dark:text-white tabular-nums">${LAST.toFixed(2)}</div>
+          <div className={`text-xs font-semibold tabular-nums ${CHANGE_PCT >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+            {CHANGE_PCT >= 0 ? '+' : ''}{CHANGE_PCT.toFixed(2)}%
+          </div>
         </div>
       </div>
 
@@ -108,14 +126,20 @@ const HeroDemoCard: React.FC = () => {
           <div className="text-sm font-semibold text-gray-900 dark:text-white">58</div>
         </div>
         <div>
-          <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wide">DCF Fair</div>
-          <div className="text-sm font-semibold text-green-500">$215</div>
+          <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wide">AI Target Range</div>
+          <div className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">
+            ${RANGE_BEAR}–${RANGE_BULL}
+          </div>
         </div>
         <div>
           <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wide">Trend</div>
           <div className="text-sm font-semibold text-primary-600 dark:text-primary-400">Bullish</div>
         </div>
       </div>
+
+      <p className="mt-4 text-[11px] text-center text-gray-400 dark:text-gray-500">
+        Sample output for illustration, not live data.
+      </p>
     </div>
   );
 };
