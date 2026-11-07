@@ -4,17 +4,19 @@
 
 /**
  * Format a dollar amount. Compact by default ("$391.04B", "-$1.20B");
- * `compact: false` for per-share figures ("$22.54", "$1,180.23").
+ * `compact: false` for per-share figures ("$22.54", "$1,180.23"), where
+ * `decimals` (default 2) sets the places, e.g. 0 for chart axis labels.
+ * Negatives always read "-$8.42", never "$-8.42".
  */
 export const formatUsd = (
   val: number | null | undefined,
-  opts: { compact?: boolean } = {},
+  opts: { compact?: boolean; decimals?: number } = {},
 ): string => {
   if (val == null) return '—';
-  const { compact = true } = opts;
+  const { compact = true, decimals = 2 } = opts;
   const abs = Math.abs(val);
   let body: string;
-  if (!compact) body = abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (!compact) body = abs.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
   else if (abs >= 1e12) body = `${(abs / 1e12).toFixed(2)}T`;
   else if (abs >= 1e9) body = `${(abs / 1e9).toFixed(2)}B`;
   else if (abs >= 1e6) body = `${(abs / 1e6).toFixed(1)}M`;
