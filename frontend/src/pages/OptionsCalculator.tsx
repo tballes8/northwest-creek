@@ -529,10 +529,10 @@ function PayoffPage({ params }) {
   // what the trade loses if the stock goes nowhere: the time value.
   const stayPut = expiryPnl(legs, premium, S);
   const stats = [
-    { label: "PREMIUM PAID", val: usd(-premium), sub: `${perContract(-premium)}; your max loss`, perShare: true, color: C.redText, bg: LOSS_BG },
+    { label: "PREMIUM PAID", val: contractUsd(-premium), sub: `${perShareNote(-premium)}; your max loss`, perContract: true, color: C.redText, bg: LOSS_BG },
     {
-      label: "MAX PROFIT", val: fmtCap(payoff.maxProfit), perShare: true,
-      sub: Number.isFinite(payoff.maxProfit) ? `${perContract(payoff.maxProfit)}, if the stock hits $0` : "if the stock keeps rising",
+      label: "MAX PROFIT", val: fmtCap(payoff.maxProfit), perContract: true,
+      sub: Number.isFinite(payoff.maxProfit) ? `${perShareNote(payoff.maxProfit)}, if the stock hits $0` : "if the stock keeps rising",
       color: C.greenText, bg: PROFIT_BG,
     },
     {
@@ -544,8 +544,9 @@ function PayoffPage({ params }) {
     },
     {
       label: "IF THE STOCK DOESN'T MOVE",
-      val: signedUsd(stayPut),
-      sub: `${perContract(stayPut)} at expiration`,
+      val: contractUsd(stayPut, true),
+      sub: `${perShareNote(stayPut)} at expiration`,
+      perContract: true,
       color: stayPut < 0 ? C.redText : C.greenText, bg: C.cardAlt,
     },
   ];
@@ -810,8 +811,11 @@ function niceTicks(min, max) {
   return { ticks, step };
 }
 
-const perContract = (v) => `${usd(v * 100, 0)} per contract`;
-const fmtCap = (v) => (v === Infinity || v === -Infinity ? "Unlimited" : usd(v));
+// Money stat cards lead with one contract (100 shares), the per-share amount
+// underneath. Inputs and the leg breakdown stay per share, as brokers quote.
+const contractUsd = (v, signed = false) => (signed && v > 0 ? "+" : "") + usd(v * 100, 0);
+const perShareNote = (v) => `${usd(v)} per share`;
+const fmtCap = (v) => (v === Infinity || v === -Infinity ? "Unlimited" : contractUsd(v));
 const fmtRatio = (rr) => (rr != null ? `${rr.toFixed(rr >= 10 ? 0 : 1)} : 1` : "—");
 const PROFIT_BG = "rgba(34,197,94,0.08)", LOSS_BG = "rgba(239,68,68,0.08)";
 
@@ -845,14 +849,14 @@ function ChartWithSide({ side, children }) {
 }
 
 // One number in that column: a label, the value, and a line of context.
-function StatCard({ label, val, sub, color, bg, perShare = false, big = false, className = "flex-[1_1_160px] xl:flex-1" }) {
+function StatCard({ label, val, sub, color, bg, perContract = false, big = false, className = "flex-[1_1_160px] xl:flex-1" }) {
   return (
     <div
       className={className}
       style={{ display: "flex", flexDirection: "column", justifyContent: "center", textAlign: "center", padding: "8px 12px", borderRadius: 8, background: bg }}
     >
       <div style={{ fontSize: 12, fontWeight: 600, color: C.textSec, letterSpacing: "0.04em", marginBottom: 4 }}>
-        {label}{perShare && <span style={{ fontWeight: 400 }}> / SHARE</span>}
+        {label}{perContract && <span style={{ fontWeight: 400 }}> / CONTRACT</span>}
       </div>
       <div style={{ fontSize: big ? 28 : 20, fontWeight: 700, color, fontFamily: "monospace", lineHeight: 1.25 }}>{val}</div>
       {sub && <div style={{ fontSize: 12, color: C.textSec, marginTop: 2, lineHeight: 1.4 }}>{sub}</div>}
@@ -861,7 +865,7 @@ function StatCard({ label, val, sub, color, bg, perShare = false, big = false, c
 }
 
 // The expiration P&L chart with the numbers the trade is decided on beside it.
-// Stats are per share, with per contract below.
+// Money stats are per contract, with per share below.
 function PayoffPanel({ stats, S, sd, lo, hi, strikes, breakevens, pnlExpAt, pnlNowAt, expLabel = "At expiration", clipId }) {
   const steps = 200;
   const pts = [];
@@ -1037,14 +1041,14 @@ function SpreadsPage({ params, initialStrategy, initialStrikes }) {
   const summaryStats = [
     {
       label: fillValid ? "YOUR NET PREMIUM" : "NET PREMIUM",
-      val: signedUsd(-netCost),
-      sub: perContract(-netCost),
-      perShare: true,
+      val: contractUsd(-netCost, true),
+      sub: perShareNote(-netCost),
+      perContract: true,
       color: netCost > 0 ? C.redText : C.greenText,
       bg: netCost > 0 ? LOSS_BG : PROFIT_BG,
     },
-    { label: "MAX PROFIT", val: fmtCap(payoff.maxProfit), perShare: true, sub: Number.isFinite(payoff.maxProfit) ? perContract(payoff.maxProfit) : "if the stock keeps rising", color: C.greenText, bg: PROFIT_BG },
-    { label: "MAX LOSS", val: fmtCap(payoff.maxLoss), perShare: true, sub: Number.isFinite(payoff.maxLoss) ? perContract(payoff.maxLoss) : "if the stock keeps rising", color: C.redText, bg: LOSS_BG },
+    { label: "MAX PROFIT", val: fmtCap(payoff.maxProfit), perContract: true, sub: Number.isFinite(payoff.maxProfit) ? perShareNote(payoff.maxProfit) : "if the stock keeps rising", color: C.greenText, bg: PROFIT_BG },
+    { label: "MAX LOSS", val: fmtCap(payoff.maxLoss), perContract: true, sub: Number.isFinite(payoff.maxLoss) ? perShareNote(payoff.maxLoss) : "if the stock keeps rising", color: C.redText, bg: LOSS_BG },
     {
       label: payoff.breakevens.length > 1 ? "BREAKEVENS" : "BREAKEVEN",
       val: payoff.breakevens.length ? payoff.breakevens.map(b => usd(b)).join(" / ") : "None",
