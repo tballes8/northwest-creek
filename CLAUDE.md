@@ -123,6 +123,8 @@ API docs: `http://localhost:8000/api/v1/docs`
 
 **Charting:** Two libraries in use — **Chart.js** (`react-chartjs-2`) for daily Price History on `Stocks.tsx`, the indicator panels on `TechnicalAnalysis.tsx` and the landing demo card; **Recharts** for the intraday chart (`components/ScreenerChartPanel.tsx`, opened from Stocks, Watchlist and Portfolio and open to every plan), the TA page's VWAP modal, `DCFValuation.tsx` and `SectorHeatmap.tsx`. One library per chart component; a new chart follows its kind (daily/indicator charts Chart.js, intraday Recharts).
 
+**Drawing tools** (Trend Line, Channel, Fibonacci) exist once, in `components/DrawingTools.tsx`: `useDrawingTools` (state, reset by a key such as the ticker), `DrawingToolbar` and `DrawingOverlay`, which draws in pixels over either library. A chart only supplies a `ChartFrame` (plot rect + data↔pixel mapping): `useChartJsFrame(chartRef)` for Chart.js, with its `plugin` passed to the chart so the overlay follows re-layouts, or one built from Recharts' captured plot rect as `ScreenerChartPanel` does. Used by Stocks Price History, the intraday popup and the TA Moving Averages chart; never add drawing code to a page. `DrawingTools.test.tsx` covers the geometry.
+
 **Theme:** Tailwind dark mode via `ThemeContext`. Dark variant: `dark:bg-gray-800`, `dark:text-white`. Teal accent: `#0d9488` / `teal-600`.
 
 ---

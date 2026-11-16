@@ -7,6 +7,7 @@ import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement
 import { Line } from 'react-chartjs-2';
 import { authAPI, stocksAPI, watchlistAPI, screenerAPI, intradayAPI, EntityTrust, isEntityContradicted } from '../services/api';
 import ScreenerChartPanel from '../components/ScreenerChartPanel';
+import { DrawingOverlay, DrawingToolbar, useChartJsFrame, useDrawingTools } from '../components/DrawingTools';
 import EntityTrustBlock from '../components/EntityTrustBlock';
 import PriceProjection from '../components/PriceProjection'; // EXPERIMENTAL, may be removed
 import { SECTOR_COLORS } from '../utils/sectorMap';
@@ -295,12 +296,6 @@ interface SavedScreenItem {
   criteria: Record<string, any>;
   created_at: string;
 }
-
-type DrawPoint = { xi: number; price: number };
-type DrawingShape =
-  | { type: 'trendline'; p1: DrawPoint; p2: DrawPoint }
-  | { type: 'channel'; p1: DrawPoint; p2: DrawPoint; p3: DrawPoint }
-  | { type: 'fibonacci'; p1: DrawPoint; p2: DrawPoint };
 
 const defaultScreenerForm: ScreenerFormState = {
   priceMin: '', priceMax: '',
@@ -663,12 +658,9 @@ const Stocks: React.FC = () => {
   const [forecastLoading, setForecastLoading] = useState(false);
   const [forecastError, setForecastError] = useState<string | null>(null);
   const chartRef = useRef<ChartJS<'line', (number | null)[], string> | null>(null);
-  const overlayRef = useRef<HTMLCanvasElement>(null);
-  const [drawTool, setDrawTool] = useState<'trendline' | 'channel' | 'fibonacci' | null>(null);
-  const [pendingPoints, setPendingPoints] = useState<DrawPoint[]>([]);
-  const [drawings, setDrawings] = useState<DrawingShape[]>([]);
-  const mousePixelRef = useRef<{ x: number; y: number } | null>(null);
-  const rafRef = useRef<number>(0);
+  // Price History drawing tools; a new ticker or range starts a clean chart
+  const drawing = useDrawingTools(`${ticker}|${historyDays}`);
+  const priceFrame = useChartJsFrame(chartRef);
 
   const detectWarrantHint = (tickerSymbol: string): boolean => {
     const upper = tickerSymbol.toUpperCase();
@@ -1506,256 +1498,6 @@ const Stocks: React.FC = () => {
     },
   };
 
-  // ── Drawing tools ────────────────────────────────────────────────────────────
-
-  const redrawOverlay = useCallback(() => {
-    const chart = chartRef.current;
-    const canvas = overlayRef.current;
-    if (!chart || !canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    const cssW = Math.round(rect.width);
-    const cssH = Math.round(rect.height);
-    if (canvas.width !== cssW || canvas.height !== cssH) {
-      canvas.width = cssW;
-      canvas.height = cssH;
-    }
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.clearRect(0, 0, cssW, cssH);
-    const xScale = chart.scales['x'];
-    const yScale = chart.scales['y'];
-    if (!xScale || !yScale) return;
-    const ca = chart.chartArea;
-
-    const toPixel = (xi: number, price: number) => ({
-      x: xScale.getPixelForValue(xi),
-      y: yScale.getPixelForValue(price),
-    });
-
-    const extendLine = (
-      a: { x: number; y: number },
-      b: { x: number; y: number }
-    ): [{ x: number; y: number }, { x: number; y: number }] => {
-      const dx = b.x - a.x;
-      if (Math.abs(dx) < 0.001) {
-        return [{ x: a.x, y: ca.top }, { x: a.x, y: ca.bottom }];
-      }
-      const slope = (b.y - a.y) / dx;
-      return [
-        { x: ca.left, y: a.y + slope * (ca.left - a.x) },
-        { x: ca.right, y: a.y + slope * (ca.right - a.x) },
-      ];
-    };
-
-    const strokeLine = (
-      p1: DrawPoint, p2: DrawPoint,
-      color: string, width: number, dash: number[] = []
-    ) => {
-      const [s, e] = extendLine(toPixel(p1.xi, p1.price), toPixel(p2.xi, p2.price));
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(ca.left, ca.top, ca.right - ca.left, ca.bottom - ca.top);
-      ctx.clip();
-      ctx.beginPath();
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(e.x, e.y);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = width;
-      ctx.setLineDash(dash);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
-    };
-
-    const dot = (p: DrawPoint, color: string) => {
-      const px = toPixel(p.xi, p.price);
-      ctx.beginPath();
-      ctx.arc(px.x, px.y, 4, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
-    };
-
-    const FIB_COLOR = '#ffffff';
-    const FIB_RETRACEMENTS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0];
-    const FIB_EXTENSIONS = [1.272, 1.618, 2.618];
-
-    const drawFibLevel = (price: number, ratio: number, dashed: boolean) => {
-      const y = yScale.getPixelForValue(price);
-      if (y < ca.top - 1 || y > ca.bottom + 1) return;
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(ca.left, ca.top, ca.right - ca.left, ca.bottom - ca.top);
-      ctx.clip();
-      ctx.beginPath();
-      ctx.moveTo(ca.left, y);
-      ctx.lineTo(ca.right, y);
-      ctx.strokeStyle = FIB_COLOR;
-      ctx.lineWidth = 1;
-      ctx.globalAlpha = 0.9;
-      ctx.setLineDash(dashed ? [4, 3] : []);
-      ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.restore();
-      ctx.save();
-      ctx.font = '600 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'bottom';
-      const label = `${(ratio * 100).toFixed(1)}%  $${price.toFixed(2)}`;
-      // Dark stroke first (text-shadow equivalent), then white fill
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = 'rgba(0,0,0,0.9)';
-      ctx.lineJoin = 'round';
-      ctx.strokeText(label, ca.left + 8, y - 2);
-      ctx.fillStyle = FIB_COLOR;
-      ctx.fillText(label, ca.left + 8, y - 2);
-      ctx.restore();
-    };
-
-    for (const d of drawings) {
-      if (d.type === 'trendline') {
-        strokeLine(d.p1, d.p2, 'rgba(251,191,36,0.9)', 1.5);
-        dot(d.p1, 'rgba(251,191,36,0.9)');
-        dot(d.p2, 'rgba(251,191,36,0.9)');
-      } else if (d.type === 'fibonacci') {
-        const range = d.p2.price - d.p1.price;
-        for (const r of FIB_RETRACEMENTS) {
-          drawFibLevel(d.p1.price + range * r, r, false);
-        }
-        for (const r of FIB_EXTENSIONS) {
-          drawFibLevel(d.p1.price + range * r, r, true);
-        }
-        dot(d.p1, FIB_COLOR);
-        dot(d.p2, FIB_COLOR);
-      } else {
-        const slope = d.p2.xi !== d.p1.xi
-          ? (d.p2.price - d.p1.price) / (d.p2.xi - d.p1.xi) : 0;
-        const offset = d.p3.price - (d.p1.price + slope * (d.p3.xi - d.p1.xi));
-        const sp1: DrawPoint = { xi: d.p1.xi, price: d.p1.price + offset };
-        const sp2: DrawPoint = { xi: d.p2.xi, price: d.p2.price + offset };
-        // Fill between lines
-        const [s1, e1] = extendLine(toPixel(d.p1.xi, d.p1.price), toPixel(d.p2.xi, d.p2.price));
-        const [s2, e2] = extendLine(toPixel(sp1.xi, sp1.price), toPixel(sp2.xi, sp2.price));
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(ca.left, ca.top, ca.right - ca.left, ca.bottom - ca.top);
-        ctx.clip();
-        ctx.beginPath();
-        ctx.moveTo(s1.x, s1.y);
-        ctx.lineTo(e1.x, e1.y);
-        ctx.lineTo(e2.x, e2.y);
-        ctx.lineTo(s2.x, s2.y);
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(249,115,22,0.07)';
-        ctx.fill();
-        ctx.restore();
-        strokeLine(d.p1, d.p2, 'rgba(249,115,22,0.9)', 1.5);
-        strokeLine(sp1, sp2, 'rgba(249,115,22,0.9)', 1.5);
-        dot(d.p1, 'rgba(249,115,22,0.9)');
-        dot(d.p2, 'rgba(249,115,22,0.9)');
-        dot(d.p3, 'rgba(249,115,22,0.9)');
-      }
-    }
-
-    // Rubber-band while drawing
-    const mp = mousePixelRef.current;
-    if (pendingPoints.length >= 1 && mp) {
-      const mpData: DrawPoint = {
-        xi: xScale.getValueForPixel(mp.x) ?? 0,
-        price: yScale.getValueForPixel(mp.y) ?? 0,
-      };
-      if (pendingPoints.length === 1) {
-        if (drawTool === 'fibonacci') {
-          const y0 = yScale.getPixelForValue(pendingPoints[0].price);
-          const y1 = yScale.getPixelForValue(mpData.price);
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(ca.left, ca.top, ca.right - ca.left, ca.bottom - ca.top);
-          ctx.clip();
-          ctx.beginPath();
-          ctx.moveTo(ca.left, y0);
-          ctx.lineTo(ca.right, y0);
-          ctx.moveTo(ca.left, y1);
-          ctx.lineTo(ca.right, y1);
-          ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-          ctx.lineWidth = 1;
-          ctx.setLineDash([5, 5]);
-          ctx.stroke();
-          ctx.setLineDash([]);
-          ctx.restore();
-          dot(pendingPoints[0], 'rgba(255,255,255,0.9)');
-        } else {
-          strokeLine(pendingPoints[0], mpData, 'rgba(255,255,255,0.35)', 1, [5, 5]);
-          dot(pendingPoints[0], 'rgba(255,255,255,0.6)');
-        }
-      } else if (pendingPoints.length === 2 && drawTool === 'channel') {
-        strokeLine(pendingPoints[0], pendingPoints[1], 'rgba(249,115,22,0.7)', 1.5);
-        const slope = pendingPoints[1].xi !== pendingPoints[0].xi
-          ? (pendingPoints[1].price - pendingPoints[0].price) / (pendingPoints[1].xi - pendingPoints[0].xi) : 0;
-        const offset = mpData.price - (pendingPoints[0].price + slope * (mpData.xi - pendingPoints[0].xi));
-        strokeLine(
-          { xi: pendingPoints[0].xi, price: pendingPoints[0].price + offset },
-          { xi: pendingPoints[1].xi, price: pendingPoints[1].price + offset },
-          'rgba(249,115,22,0.4)', 1, [5, 5]
-        );
-        dot(pendingPoints[0], 'rgba(249,115,22,0.9)');
-        dot(pendingPoints[1], 'rgba(249,115,22,0.9)');
-      }
-    }
-  }, [drawings, pendingPoints, drawTool]);
-
-  useEffect(() => { redrawOverlay(); }, [redrawOverlay]);
-
-  useEffect(() => {
-    const onResize = () => redrawOverlay();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, [redrawOverlay]);
-
-  useEffect(() => {
-    setDrawings([]);
-    setPendingPoints([]);
-  }, [ticker, historyDays]);
-
-  const handleOverlayClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!drawTool || !chartRef.current) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const px = e.clientX - rect.left;
-    const py = e.clientY - rect.top;
-    const chart = chartRef.current;
-    const xi = chart.scales['x'].getValueForPixel(px) ?? 0;
-    const price = chart.scales['y'].getValueForPixel(py) ?? 0;
-    const pt: DrawPoint = { xi, price };
-    setPendingPoints(prev => {
-      const next = [...prev, pt];
-      if (drawTool === 'trendline' && next.length === 2) {
-        setDrawings(d => [...d, { type: 'trendline', p1: next[0], p2: next[1] }]);
-        return [];
-      }
-      if (drawTool === 'channel' && next.length === 3) {
-        setDrawings(d => [...d, { type: 'channel', p1: next[0], p2: next[1], p3: next[2] }]);
-        return [];
-      }
-      if (drawTool === 'fibonacci' && next.length === 2) {
-        setDrawings(d => [...d, { type: 'fibonacci', p1: next[1], p2: next[0] }]);
-        return [];
-      }
-      return next;
-    });
-  }, [drawTool]);
-
-  const handleOverlayMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    mousePixelRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(redrawOverlay);
-  }, [redrawOverlay]);
-
-  const handleOverlayMouseLeave = useCallback(() => {
-    mousePixelRef.current = null;
-    redrawOverlay();
-  }, [redrawOverlay]);
-
   // ── Screener state ──────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<'search' | 'screener'>('search');
   const [screenerMode, setScreenerMode] = useState<ScreenerMode>('stocks');
@@ -2506,98 +2248,10 @@ const Stocks: React.FC = () => {
                     ))}
                   </div>
                 </div>
-                {/* Drawing toolbar */}
-                <div className="flex flex-col gap-1.5 mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500 dark:text-gray-400 select-none">Draw:</span>
-                    <button
-                      onClick={() => { setDrawTool(t => t === 'trendline' ? null : 'trendline'); setPendingPoints([]); }}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                        drawTool === 'trendline'
-                          ? 'bg-amber-500/20 text-amber-500 border border-amber-500/50'
-                          : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
-                      }`}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                        <line x1="1" y1="13" x2="13" y2="1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                      </svg>
-                      Trend Line
-                    </button>
-                    <button
-                      onClick={() => { setDrawTool(t => t === 'channel' ? null : 'channel'); setPendingPoints([]); }}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                        drawTool === 'channel'
-                          ? 'bg-orange-500/20 text-orange-500 border border-orange-500/50'
-                          : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
-                      }`}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                        <line x1="1" y1="10" x2="13" y2="3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                        <line x1="1" y1="13" x2="13" y2="6" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeDasharray="2 1.5"/>
-                      </svg>
-                      Channel
-                    </button>
-                    <button
-                      onClick={() => { setDrawTool(t => t === 'fibonacci' ? null : 'fibonacci'); setPendingPoints([]); }}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                        drawTool === 'fibonacci'
-                          ? 'bg-violet-500/20 text-violet-500 border border-violet-500/50'
-                          : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
-                      }`}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                        <line x1="1" y1="2" x2="13" y2="2" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
-                        <line x1="1" y1="5" x2="13" y2="5" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
-                        <line x1="1" y1="8" x2="13" y2="8" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
-                        <line x1="1" y1="11" x2="13" y2="11" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeDasharray="2 1.5"/>
-                      </svg>
-                      Fibonacci
-                    </button>
-                  </div>
-                  {(drawings.length > 0 || drawTool) && (
-                    <div className="flex items-center gap-3">
-                      {drawings.length > 0 && (
-                        <button
-                          onClick={() => { setDrawings([]); setPendingPoints([]); }}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium bg-red-500/10 text-red-500 border border-red-500/30 hover:bg-red-500/20 transition-colors"
-                        >
-                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                            <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                          </svg>
-                          Clear
-                        </button>
-                      )}
-                      {drawTool && (
-                        <span className="text-xs text-gray-400 dark:text-gray-500">
-                          {drawTool === 'trendline'
-                            ? pendingPoints.length === 0 ? 'Click to set start point' : 'Click to set end point'
-                            : drawTool === 'fibonacci'
-                            ? pendingPoints.length === 0 ? 'Click start of move' : 'Click end of move (0%)'
-                            : pendingPoints.length === 0 ? 'Click to set start point'
-                            : pendingPoints.length === 1 ? 'Click to set end point'
-                            : 'Click to set channel width'}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <DrawingToolbar drawing={drawing} className="mb-3" />
                 <div style={{ height: '400px', position: 'relative' }}>
-                  <Line ref={chartRef} data={chartData} options={chartOptions} />
-                  <canvas
-                    ref={overlayRef}
-                    onMouseMove={handleOverlayMouseMove}
-                    onClick={drawTool ? handleOverlayClick : undefined}
-                    onMouseLeave={handleOverlayMouseLeave}
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      width: '100%',
-                      height: '100%',
-                      cursor: drawTool ? 'crosshair' : 'default',
-                      pointerEvents: drawTool ? 'auto' : 'none',
-                      zIndex: 10,
-                    }}
-                  />
+                  <Line ref={chartRef} data={chartData} options={chartOptions} plugins={[priceFrame.plugin]} />
+                  <DrawingOverlay drawing={drawing} frame={priceFrame} />
                 </div>
               </div>
             ) : (

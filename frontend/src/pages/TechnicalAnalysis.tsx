@@ -7,6 +7,7 @@ import BackToTop from '../components/BackToTop';
 import UpgradeRequired from '../components/UpgradeRequired';
 import EntityTrustBlock from '../components/EntityTrustBlock';
 import AtrRiskModal, { AtrRisk } from '../components/AtrRiskLevels';
+import { DrawingOverlay, DrawingToolbar, useChartJsFrame, useDrawingTools } from '../components/DrawingTools';
 import { formatUsd } from '../utils/currency';
 import {
   Chart as ChartJS,
@@ -447,13 +448,10 @@ const TechnicalAnalysis: React.FC = () => {
   // Populated from the 403 detail, same as DCFValuation.tsx.
   const [limitData, setLimitData] = useState<{ currentUsage: number; maxUsage: number; period: string } | null>(null);
 
-  // Trend line drawing state (Moving Averages chart)
+  // Drawing tools on the Moving Averages chart; new data starts a clean chart
   const maChartRef = useRef<any>(null);
-  const [trendDrawingMode, setTrendDrawingMode] = useState(false);
-  const [trendAwaitingSecond, setTrendAwaitingSecond] = useState(false);
-  const pendingTrendPointRef = useRef<{ xFraction: number; yValue: number } | null>(null);
-  const drawnTrendLinesRef = useRef<Array<{ x1: number; y1: number; x2: number; y2: number }>>([]);
-  const [trendLineCount, setTrendLineCount] = useState(0); // triggers chart re-draw
+  const maDrawing = useDrawingTools(analysisData);
+  const maFrame = useChartJsFrame(maChartRef);
 
   // Shared vertical reference line across every TA chart.
   // `verticalLineTimestamp` is the single source of truth (epoch ms of the snapped
@@ -1016,7 +1014,7 @@ const TechnicalAnalysis: React.FC = () => {
 
   // Read-only: is any drawing tool currently armed? Vertical-line clicks defer
   // to the tool's own click handler. New tools should be OR'd in here.
-  const isDrawingToolActive = trendDrawingMode;
+  const isDrawingToolActive = maDrawing.tool !== null;
 
   const setVerticalLine = (index: number | null) => {
     verticalLineIndexRef.current = index;
@@ -1179,82 +1177,6 @@ const TechnicalAnalysis: React.FC = () => {
         },
         },
     },
-  };
-
-  // Custom Chart.js plugin that draws user-defined trend lines on the MA chart
-  const trendLinePlugin = {
-    id: 'trendLineDrawer',
-    afterDraw: (chart: any) => {
-      const ctx = chart.ctx;
-      const area = chart.chartArea;
-      if (!area) return;
-      const isDark = document.documentElement.classList.contains('dark');
-      const lineColor = isDark ? '#ffffff' : '#000000';
-      const areaWidth = area.right - area.left;
-
-      const toPixel = (pt: { xFraction: number; yValue: number }) => ({
-        px: area.left + pt.xFraction * areaWidth,
-        py: chart.scales.y.getPixelForValue(pt.yValue),
-      });
-
-      // Draw completed lines
-      drawnTrendLinesRef.current.forEach(line => {
-        const p1 = toPixel({ xFraction: line.x1, yValue: line.y1 });
-        const p2 = toPixel({ xFraction: line.x2, yValue: line.y2 });
-        ctx.save();
-        ctx.beginPath();
-        ctx.moveTo(p1.px, p1.py);
-        ctx.lineTo(p2.px, p2.py);
-        ctx.strokeStyle = lineColor;
-        ctx.lineWidth = 3;
-        ctx.lineCap = 'round';
-        ctx.stroke();
-        ctx.restore();
-      });
-
-      // Draw pending first-point indicator
-      if (pendingTrendPointRef.current) {
-        const p = toPixel(pendingTrendPointRef.current);
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(p.px, p.py, 5, 0, 2 * Math.PI);
-        ctx.fillStyle = lineColor;
-        ctx.fill();
-        ctx.restore();
-      }
-    },
-  };
-
-  const handleMAChartClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!trendDrawingMode || !maChartRef.current) return;
-    const chart = maChartRef.current;
-    const area = chart.chartArea;
-    if (!area) return;
-    const canvas = e.currentTarget.querySelector('canvas');
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const pixelX = e.clientX - rect.left;
-    const pixelY = e.clientY - rect.top;
-    // Clamp to chart area
-    const clampedX = Math.max(area.left, Math.min(area.right, pixelX));
-    const clampedY = Math.max(area.top, Math.min(area.bottom, pixelY));
-    const xFraction = (clampedX - area.left) / (area.right - area.left);
-    const yValue = chart.scales.y.getValueForPixel(clampedY);
-
-    if (!pendingTrendPointRef.current) {
-      pendingTrendPointRef.current = { xFraction, yValue };
-      setTrendAwaitingSecond(true);
-      chart.update('none');
-    } else {
-      drawnTrendLinesRef.current = [
-        ...drawnTrendLinesRef.current,
-        { x1: pendingTrendPointRef.current.xFraction, y1: pendingTrendPointRef.current.yValue, x2: xFraction, y2: yValue },
-      ];
-      pendingTrendPointRef.current = null;
-      setTrendAwaitingSecond(false);
-      setTrendLineCount(c => c + 1);
-      chart.update('none');
-    }
   };
 
   const maChartOptions = {
@@ -2121,56 +2043,21 @@ const TechnicalAnalysis: React.FC = () => {
                     ⚠️ <strong>Warrant Note:</strong> MA crossovers on warrants can produce more false signals due to higher volatility. Confirm with volume and broader market context.
                   </p>
                 )}
+                <DrawingToolbar drawing={maDrawing} className="mb-3" />
                 <div className="relative" style={{ height: '300px' }}>
                   {clearLineButton}
-                  {/* Trend line controls — overlaid at top-right, flush with the legend row */}
-                  <div className="absolute top-0 right-0 z-10 flex items-center gap-2" style={{ marginTop: '2px' }}>
-                    <button
-                      onClick={() => {
-                        setTrendDrawingMode(m => !m);
-                        pendingTrendPointRef.current = null;
-                        setTrendAwaitingSecond(false);
-                        if (maChartRef.current) maChartRef.current.update('none');
-                      }}
-                      className={`px-2 py-0.5 text-xs font-medium rounded border transition-colors ${
-                        trendDrawingMode
-                          ? 'bg-blue-600 text-white border-blue-600'
-                          : 'bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-500'
-                      }`}
-                    >
-                      {trendDrawingMode
-                        ? trendAwaitingSecond ? 'Click second point…' : 'Click first point…'
-                        : 'Draw Trend Line'}
-                    </button>
-                    {trendLineCount > 0 && (
-                      <button
-                        onClick={() => {
-                          drawnTrendLinesRef.current = [];
-                          pendingTrendPointRef.current = null;
-                          setTrendAwaitingSecond(false);
-                          setTrendLineCount(0);
-                          if (maChartRef.current) maChartRef.current.update('none');
-                        }}
-                        className="px-2 py-0.5 text-xs font-medium rounded border bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-500 hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors"
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                  <div
-                    style={{ height: '100%', cursor: trendDrawingMode ? 'crosshair' : 'default' }}
-                    onClick={handleMAChartClick}
-                  >
+                  <div style={{ height: '100%' }}>
                     {getMAChartData() && (
                       <Chart
                         ref={maChartRef}
                         type="line"
                         data={getMAChartData()!}
                         options={maChartOptions}
-                        plugins={[trendLinePlugin, verticalLinePlugin]}
+                        plugins={[maFrame.plugin, verticalLinePlugin]}
                       />
                     )}
                   </div>
+                  <DrawingOverlay drawing={maDrawing} frame={maFrame} />
                 </div>
             </div>
 
