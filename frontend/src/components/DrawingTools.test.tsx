@@ -1,7 +1,13 @@
+/* eslint-disable testing-library/no-node-access, testing-library/no-container --
+   these tests check drawn geometry: SVG lines, dots and labels have no accessible
+   role, so their coordinates can only be read off the nodes. */
 import React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { Area, AreaChart, Legend, XAxis, YAxis } from 'recharts';
 import { ThemeProvider } from '../contexts/ThemeContext';
-import { DrawingOverlay, DrawingToolbar, FrameSource, useDrawingTools } from './DrawingTools';
+import {
+  DrawingOverlay, DrawingToolbar, FrameSource, PlotRect, RechartsPlotArea, useDrawingTools,
+} from './DrawingTools';
 
 // A fake chart: 41 bars across x 50→450 (10px per bar), prices 0→100 over y 210→10.
 const frame: FrameSource = {
@@ -98,7 +104,32 @@ test('a new reset key clears drawings and disarms the tool', () => {
   click(100, 110);
   click(300, 60);
   expect(lines()).toHaveLength(1);
-  act(() => { rerender(<ThemeProvider><Harness resetKey="B" /></ThemeProvider>); });
+  rerender(<ThemeProvider><Harness resetKey="B" /></ThemeProvider>);
   expect(lines()).toHaveLength(0);
   expect(overlay().style.pointerEvents).toBe('none');
+});
+
+// The popup's frame is null until this reports, and a null frame ignores every
+// click. Recharts 3 stopped passing `offset` to <Customized> children, which
+// silently broke the popup's tools; this renders a real chart to catch that.
+test('RechartsPlotArea reports the plot rect inside the axes and legend', () => {
+  const onChange = jest.fn<void, [PlotRect]>();
+  const data = [{ t: 'a', p: 1 }, { t: 'b', p: 3 }, { t: 'c', p: 2 }];
+  render(
+    <AreaChart width={400} height={200} data={data}>
+      <XAxis dataKey="t" />
+      <YAxis orientation="right" width={55} />
+      <Legend />
+      <Area dataKey="p" isAnimationActive={false} />
+      <RechartsPlotArea onChange={onChange} />
+    </AreaChart>,
+  );
+  expect(onChange).toHaveBeenCalled();
+  const rect = onChange.mock.calls[onChange.mock.calls.length - 1][0];
+  expect(rect.left).toBeGreaterThanOrEqual(0);
+  expect(rect.top).toBeGreaterThanOrEqual(0);
+  expect(rect.left + rect.width).toBeLessThanOrEqual(400 - 55); // right axis is outside the plot
+  expect(rect.top + rect.height).toBeLessThan(200);             // so are the x axis and legend
+  expect(rect.width).toBeGreaterThan(0);
+  expect(rect.height).toBeGreaterThan(0);
 });

@@ -8,9 +8,9 @@
  * ChartFrame (its plot rectangle plus data↔pixel conversions):
  *   - Chart.js: `useChartJsFrame(chartRef)`, and pass its `plugin` to the chart
  *     so the overlay follows every re-layout (resize, new data, rescale).
- *   - Recharts: build the FrameSource from the chart's own layout state (the
- *     plot rect captured with <Customized>, the y domain, the zoom window); see
- *     ScreenerChartPanel.
+ *   - Recharts: render <RechartsPlotArea onChange={setPlotRect} /> inside the
+ *     chart and build the FrameSource from that rect, the y domain and the zoom
+ *     window; see ScreenerChartPanel.
  *
  * Usage:
  *   const drawing = useDrawingTools(resetKey);
@@ -18,6 +18,7 @@
  *   <div className="relative">{chart}<DrawingOverlay drawing={drawing} frame={frame} /></div>
  */
 import React, { useCallback, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react';
+import { usePlotArea } from 'recharts';
 import { useTheme } from '../contexts/ThemeContext';
 
 // ─── model ──────────────────────────────────────────────────────────────────
@@ -148,6 +149,30 @@ export function useChartJsFrame(chartRef: React.RefObject<any>, yAxisId = 'y'): 
     },
   }), [chartRef, yAxisId]);
 }
+
+// ─── Recharts adapter ───────────────────────────────────────────────────────
+
+/** A plot rectangle in px, relative to the chart's own box. */
+export interface PlotRect { left: number; top: number; width: number; height: number }
+
+/**
+ * Reports a Recharts chart's plot area, the rect its axes and legend leave for
+ * the data. Render it as a child of the chart: `<RechartsPlotArea onChange={setPlotRect} />`.
+ * Recharts 3 gives custom children no layout props (v2's <Customized> injected
+ * `offset`); the plot area comes from usePlotArea(), which only works inside a chart.
+ */
+export const RechartsPlotArea: React.FC<{ onChange: (rect: PlotRect) => void }> = ({ onChange }) => {
+  const area = usePlotArea();
+  const left = area?.x;
+  const top = area?.y;
+  const width = area?.width;
+  const height = area?.height;
+  useEffect(() => {
+    if (left == null || top == null || width == null || height == null) return;
+    onChange({ left, top, width, height });
+  }, [left, top, width, height, onChange]);
+  return null;
+};
 
 // ─── toolbar ────────────────────────────────────────────────────────────────
 

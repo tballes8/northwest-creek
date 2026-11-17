@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import {
   AreaChart, Area, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer, Customized, ReferenceLine,
+  Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { intradayAPI } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { formatDateOnly } from '../utils/dates';
 import {
-  DrawingOverlay, DrawingToolbar, useDrawingTools, DrawTool, FrameSource,
+  DrawingOverlay, DrawingToolbar, RechartsPlotArea, useDrawingTools, DrawTool, FrameSource, PlotRect,
 } from './DrawingTools';
 
 interface IntradaySnapshot {
@@ -92,22 +92,6 @@ const fmtNow = () =>
 const fmtDate = (d: string) => {
   try { return formatDateOnly(d); }
   catch { return d; }
-};
-
-// Recharts <Customized> child: reports the computed plot-area `offset` (px) up to
-// the parent so the drawing overlay can be pinned to the real plot rectangle.
-// Cloned by Recharts with the chart's internal props (incl. `offset`).
-const CaptureOffset: React.FC<any> = ({ offset, onRect }) => {
-  const prev = useRef('');
-  useEffect(() => {
-    if (!offset || !onRect) return;
-    const key = `${offset.left}|${offset.top}|${offset.width}|${offset.height}`;
-    if (key !== prev.current) {
-      prev.current = key;
-      onRect({ left: offset.left, top: offset.top, width: offset.width, height: offset.height });
-    }
-  });
-  return null;
 };
 
 // ─── component ──────────────────────────────────────────────────────────────
@@ -306,11 +290,11 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
     [displayChartData, zoomRange],
   );
 
-  // Recharts' actual plot rectangle (px, relative to the chart wrapper), captured
-  // via <Customized> below. The drawing frame maps prices into this rect — Recharts
-  // insets the plot area for the X-axis + legend, so mapping onto the full
-  // container would push every drawing below its true price.
-  const [plotRect, setPlotRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  // Recharts' actual plot rectangle (px, relative to the chart wrapper), reported
+  // by <RechartsPlotArea> inside the chart. The drawing frame maps prices into this
+  // rect — Recharts insets the plot area for the axes + legend, so mapping onto
+  // the full container would push every drawing below its true price.
+  const [plotRect, setPlotRect] = useState<PlotRect | null>(null);
 
   // Day's open for the above/below-open split. The snapshot's session open is
   // only trustworthy when the bars are today's; on a closed-market fallback day
@@ -642,11 +626,15 @@ const ScreenerChartPanel: React.FC<ScreenerChartPanelProps> = ({
                         tickFormatter={v => `$${v < 10 ? v.toFixed(2) : v < 100 ? v.toFixed(1) : v.toFixed(0)}`}
                         width={55}
                       />
-                      {/* Report the real plot rect so the drawing overlay aligns with the axis */}
-                      <Customized component={<CaptureOffset onRect={setPlotRect} />} />
+                      {/* Report the real plot rect so the drawing overlay aligns with the axes */}
+                      <RechartsPlotArea onChange={setPlotRect} />
                       {/* 3-second delay tooltip */}
                       <Tooltip content={<ChartTooltip />} />
-                      <Legend wrapperStyle={{ fontSize: '11px' }} />
+                      {/* Text in the axis grey; by default it takes the series' gradient stroke */}
+                      <Legend
+                        wrapperStyle={{ fontSize: '11px' }}
+                        formatter={value => <span style={{ color: '#9ca3af' }}>{value}</span>}
+                      />
 
                       {/* Day-open reference line, full width */}
                       {dayOpen != null && (
