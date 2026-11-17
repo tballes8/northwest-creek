@@ -5,6 +5,7 @@ import NavBar from '../components/NavBar';
 import BackToTop from '../components/BackToTop';
 import { authAPI, sectorRotationAPI } from '../services/api';
 import { User } from '../types';
+import { formatDateOnly } from '../utils/dates';
 
 interface SectorReturn {
   ticker: string;
@@ -34,8 +35,12 @@ interface TimelapsePayload {
 }
 
 interface CyclePhaseSignal {
+  key?: string;
   label: string;
   value: string;
+  /** The period the reading covers: "Q3 2026", "Sep 2026", "Nov 14, 2026" */
+  period?: string;
+  observation_date?: string;
   interpretation: string;
 }
 
@@ -45,6 +50,10 @@ interface CyclePhasePayload {
   summary: string;
   supporting_signals: CyclePhaseSignal[];
   sector_alignment: string;
+  /** The sector returns the alignment reads: window (e.g. "3M") and its last session */
+  sector_window?: string;
+  sector_as_of?: string | null;
+  /** The day the analysis was generated */
   as_of: string;
   disclaimer: string;
 }
@@ -388,6 +397,11 @@ const SectorHeatmap: React.FC = () => {
                       <span className="text-xs text-gray-500 dark:text-gray-400">
                         confidence: {cyclePhase.confidence}
                       </span>
+                      {cyclePhase.as_of && (
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          · Updated {formatDateOnly(cyclePhase.as_of)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -399,10 +413,16 @@ const SectorHeatmap: React.FC = () => {
                 {cyclePhase.supporting_signals.length > 0 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
                     {cyclePhase.supporting_signals.map((s, i) => (
-                      <div key={i} className="bg-gray-50 dark:bg-gray-800/60 rounded px-3 py-2">
+                      <div key={s.key ?? i} className="bg-gray-50 dark:bg-gray-800/60 rounded px-3 py-2">
                         <div className="flex items-baseline justify-between gap-2">
                           <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{s.label}</span>
-                          <span className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{s.value}</span>
+                          {/* The readings come out on different schedules, so each names its period */}
+                          <span className="flex items-baseline gap-1.5 shrink-0">
+                            {s.period && (
+                              <span className="text-xs text-gray-500 dark:text-gray-400">{s.period}</span>
+                            )}
+                            <span className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{s.value}</span>
+                          </span>
                         </div>
                         <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">{s.interpretation}</div>
                       </div>
@@ -414,6 +434,14 @@ const SectorHeatmap: React.FC = () => {
                   <div className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed border-t border-gray-200 dark:border-gray-600 pt-3 mb-3">
                     <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1">
                       Sector alignment
+                      {cyclePhase.sector_window && cyclePhase.sector_as_of && (
+                        <span className="normal-case tracking-normal font-normal">
+                          {' · '}
+                          {(WINDOWS.find(w => w.value === cyclePhase.sector_window)?.label ?? cyclePhase.sector_window).toLowerCase()}
+                          {' to '}
+                          {formatDateOnly(cyclePhase.sector_as_of)}
+                        </span>
+                      )}
                     </span>
                     {cyclePhase.sector_alignment}
                   </div>
