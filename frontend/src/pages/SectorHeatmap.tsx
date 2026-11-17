@@ -331,46 +331,6 @@ const SectorHeatmap: React.FC = () => {
           </p>
         </div>
 
-        {/* Controls */}
-        <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 border dark:border-gray-500 p-5 mb-6">
-          <div className="flex flex-wrap items-end gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Window</label>
-              <select
-                value={selectedWindow}
-                onChange={e => setSelectedWindow(e.target.value)}
-                className="px-3 py-2 rounded-md border border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-              >
-                {WINDOWS.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">As-of date</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={e => setEndDate(e.target.value)}
-                className="px-3 py-2 rounded-md border border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
-              />
-            </div>
-            <button
-              onClick={loadTimelapse}
-              disabled={timelapseLoading}
-              className="px-4 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium"
-            >
-              {timelapseLoading ? 'Loading…' : '⏱ Load Time-Lapse'}
-            </button>
-            {snapshot && (
-              <div className="ml-auto text-sm text-gray-600 dark:text-gray-300">
-                <div>SPY {snapshot.window}: <span className={`font-semibold ${(snapshot.spy_return_pct ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                  {snapshot.spy_return_pct !== null ? `${snapshot.spy_return_pct >= 0 ? '+' : ''}${snapshot.spy_return_pct.toFixed(2)}%` : '—'}
-                </span></div>
-                <div className="text-xs text-gray-500 dark:text-gray-400">As of {activeAsOf}</div>
-              </div>
-            )}
-          </div>
-        </div>
-
         {/* Economic cycle phase — AI synthesis. Hidden silently if the endpoint fails
             so a missing card never sits above the actual heatmap. */}
         {!cyclePhaseFailed && (cyclePhaseLoading || cyclePhase) && (
@@ -463,6 +423,46 @@ const SectorHeatmap: React.FC = () => {
             ) : null}
           </div>
         )}
+
+        {/* Controls — directly above the heatmap they drive */}
+        <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 border dark:border-gray-500 p-5 mb-6">
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Window</label>
+              <select
+                value={selectedWindow}
+                onChange={e => setSelectedWindow(e.target.value)}
+                className="px-3 py-2 rounded-md border border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+              >
+                {WINDOWS.map(w => <option key={w.value} value={w.value}>{w.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">As-of date</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={e => setEndDate(e.target.value)}
+                className="px-3 py-2 rounded-md border border-gray-300 dark:border-gray-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+              />
+            </div>
+            <button
+              onClick={loadTimelapse}
+              disabled={timelapseLoading}
+              className="px-4 py-2 bg-primary-600 hover:bg-primary-700 dark:bg-primary-500 dark:hover:bg-primary-600 disabled:opacity-50 text-white rounded-lg text-sm font-medium"
+            >
+              {timelapseLoading ? 'Loading…' : '⏱ Load Time-Lapse'}
+            </button>
+            {snapshot && (
+              <div className="ml-auto text-sm text-gray-600 dark:text-gray-300">
+                <div>SPY {snapshot.window}: <span className={`font-semibold ${(snapshot.spy_return_pct ?? 0) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                  {snapshot.spy_return_pct !== null ? `${snapshot.spy_return_pct >= 0 ? '+' : ''}${snapshot.spy_return_pct.toFixed(2)}%` : '—'}
+                </span></div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">As of {activeAsOf}</div>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Heatmap */}
         <div className="bg-white dark:bg-gray-700 rounded-lg shadow-lg dark:shadow-gray-200/20 border dark:border-gray-500 p-5">
